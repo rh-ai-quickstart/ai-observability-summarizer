@@ -8,6 +8,7 @@ import json
 import logging
 import importlib.util
 from typing import Optional, List, Dict, Any
+import re
 import anthropic
 
 try:
@@ -171,6 +172,25 @@ class PrometheusChatBot:
                     },
                     "required": ["data"]
                 }
+            },
+            {
+                "name": "korrel8r_get_correlated",
+                "description": "Get correlated objects by first listing goal queries then fetching objects for each via Korrel8r.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "goals": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Korrel8r goal classes to correlate. Examples: ['trace:span','log:application','log:infrastructure','metric:metric']"
+                        },
+                        "query": {
+                            "type": "string",
+                            "description": 'Starting Korrel8r domain query (same format as korrel8r_query_objects). Examples: alert:alert:{"alertname":"PodDisruptionBudgetAtLimit"}, k8s:Pod:{"namespace":"llm-serving"}, loki:log:{"kubernetes.namespace_name":"llm-serving","kubernetes.pod_name":"p-abc"}, trace:span:{".k8s.namespace.name":"llm-serving"}'
+                        }
+                    },
+                    "required": ["goals", "query"]
+                }
             }
         ]
         
@@ -198,7 +218,21 @@ class PrometheusChatBot:
             
             mcp_client = MCPClientHelper()
             
-            # Call the tool via MCP
+            # Normalize Korrel8r query inputs when needed before calling MCP
+            if tool_name == "korrel8r_get_correlated":
+                try:
+                    q = arguments.get("query") if isinstance(arguments, dict) else None
+                    if isinstance(q, str) and q:
+                        normalized_q = self._normalize_korrel8r_query(q)
+                        if normalized_q != q:
+                            logger.info(f"Normalized korrel8r query from '{q}' to '{normalized_q}'")
+                            arguments = dict(arguments)
+                            arguments["query"] = normalized_q
+                except Exception as _:
+                    # Best-effort normalization; continue with original arguments on error
+                    pass
+
+            # Call the tool via MCP (after optional normalization)
             result = mcp_client.call_tool_sync(tool_name, arguments)
             
             if result and len(result) > 0:
@@ -209,6 +243,55 @@ class PrometheusChatBot:
         except Exception as e:
             logger.error(f"Error calling MCP tool {tool_name}: {e}")
             return f"Error executing {tool_name}: {str(e)}"
+
+    def _normalize_korrel8r_query(self, q: str) -> str:
+        """Normalize common Korrel8r query issues for Claude-provided inputs.
+
+        - Ensure domain:class present for alert domain (alert -> alert:alert)
+        - Convert selector keys of form key="value" to JSON-style "key":="value"
+        """
+        logger.info(f"Normalizing korrel8r query: {q}")
+        try:
+            s = (q or "").strip()
+            # Unescape accidentally escaped quotes if present (e.g., \" -> ")
+            if '\\"' in s:
+                s = s.replace('\\"', '"')
+            # Insert missing class for alert domain
+            if s.startswith("alert:{"):
+                s = s.replace("alert:{", "alert:alert:{", 1)
+
+            # Determine domain prefix to tailor selector formatting
+            domain = s.split(":", 1)[0] if ":" in s else ""
+
+            # Fix misclassified alerts like k8s:Alert:{...} to alert:alert:{...}
+            if s.lower().startswith("k8s:alert:"):
+                s = "alert:alert:" + s.split(":", 2)[2]
+                domain = "alert"
+
+            # Transform unquoted selector keys inside first {...}
+            m = re.search(r"\{(.*)\}", s)
+            if m:
+                inner = m.group(1)
+
+                # For alert domain, use JSON key:value (":")
+                if domain == "alert":
+                    def repl_alert(match: re.Match) -> str:
+                        key = match.group(1)
+                        return f'"{key}":' + match.group(2)
+                    inner2 = re.sub(r"\b([A-Za-z0-9_\.]+)\s*=\s*(\")", repl_alert, inner)
+                else:
+                    # Other domains may use operator syntax; default to ":=" form
+                    def repl_generic(match: re.Match) -> str:
+                        key = match.group(1)
+                        return f'"{key}":=' + match.group(2)
+                    inner2 = re.sub(r"\b([A-Za-z0-9_\.]+)\s*=\s*(\")", repl_generic, inner)
+
+                if inner2 != inner:
+                    s = s[: m.start(1)] + inner2 + s[m.end(1) :]
+            logger.info(f"Normalized korrel8r query: {s}")
+            return s
+        except Exception:
+            return q
     
     def chat(self, user_question: str, namespace: Optional[str] = None, scope: Optional[str] = None, progress_callback=None) -> str:
         """

@@ -20,12 +20,15 @@ env:
   MCP_HOST: "0.0.0.0"
   MCP_PORT: 8085
   MCP_TRANSPORT_PROTOCOL: "http"
-  PYTHON_LOG_LEVEL: "INFO"
+  PYTHON_LOG_LEVEL: "DEBUG"
   PROMETHEUS_URL: "https://thanos-querier.openshift-monitoring.svc.cluster.local:9091"
   TEMPO_URL: "https://tempo-tempostack-gateway.observability-hub.svc.cluster.local:8080"
   TEMPO_TENANT_ID: "dev"
   MAX_TIME_RANGE_DAYS: 90
   DEFAULT_TIME_RANGE_DAYS: 7
+  KORREL8R_ENABLED: "true"
+  KORREL8R_URL: "https://korrel8r.openshift-cluster-observability-operator.svc.cluster.local:9443"
+  MAX_NUM_LOG_ROWS: 10
 
 tls:
   enabled: false

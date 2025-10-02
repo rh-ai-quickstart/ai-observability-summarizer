@@ -51,6 +51,12 @@ spec:
               value: "{{ .Values.env.TEMPO_URL }}"
             - name: TEMPO_TENANT_ID
               value: "{{ .Values.env.TEMPO_TENANT_ID }}"
+            - name: KORREL8R_ENABLED
+              value: "{{ .Values.env.KORREL8R_ENABLED }}"
+            - name: KORREL8R_URL
+              value: "{{ .Values.env.KORREL8R_URL }}"
+            - name: MAX_NUM_LOG_ROWS
+              value: "{{ .Values.env.MAX_NUM_LOG_ROWS }}"
             - name: NAMESPACE
               value: "{{ .Release.Namespace }}"
             - name: THANOS_TOKEN
