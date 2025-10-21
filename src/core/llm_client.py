@@ -62,6 +62,25 @@ def _validate_and_extract_response(
                 raise ValueError(f"Invalid {provider} response content")
 
             return parts[0]["text"].strip()
+        elif provider == "anthropic":
+            # Anthropic response format
+            if "content" not in response_json or not response_json["content"]:
+                raise ValueError(f"Invalid {provider} response format")
+
+            content = response_json["content"]
+            if not isinstance(content, list) or not content:
+                raise ValueError(f"Invalid {provider} response structure")
+
+            # Extract text from content blocks
+            text_parts = []
+            for block in content:
+                if block.get("type") == "text" and "text" in block:
+                    text_parts.append(block["text"])
+
+            if not text_parts:
+                raise ValueError(f"Invalid {provider} response content")
+
+            return "".join(text_parts).strip()
         else:
             # OpenAI and other providers using "choices" format
             if "choices" not in response_json or not response_json["choices"]:
@@ -139,6 +158,39 @@ def summarize_with_llm(
             payload = {
                 "contents": [{"parts": [{"text": prompt}]}],
             }
+        elif provider == "anthropic":
+            # Use official Anthropic client instead of raw HTTP requests
+            try:
+                import anthropic
+                client = anthropic.Anthropic(api_key=api_key)
+
+                # Convert messages to Anthropic format
+                anthropic_messages = []
+                for msg in llm_messages:
+                    if msg["role"] == "user":
+                        anthropic_messages.append({"role": "user", "content": msg["content"]})
+                    elif msg["role"] == "assistant":
+                        anthropic_messages.append({"role": "assistant", "content": msg["content"]})
+
+                response = client.messages.create(
+                    model=model_name,
+                    max_tokens=max_tokens,
+                    temperature=DETERMINISTIC_TEMPERATURE,
+                    messages=anthropic_messages
+                )
+
+                # Extract text content from response
+                text_content = []
+                for content_block in response.content:
+                    if content_block.type == "text":
+                        text_content.append(content_block.text)
+
+                return "".join(text_content).strip()
+
+            except ImportError:
+                raise ValueError("Anthropic client not available. Please install anthropic package.")
+            except Exception as e:
+                raise ValueError(f"Anthropic API error: {str(e)}")
         else:
             # OpenAI and compatible APIs
             headers["Authorization"] = f"Bearer {api_key}"
@@ -150,13 +202,17 @@ def summarize_with_llm(
                 "max_tokens": max_tokens,
             }
 
-        response_json = _make_api_request(api_url, headers, payload, verify_ssl=DEFAULT_SSL_VERIFICATION)
-        raw_response = _validate_and_extract_response(
-            response_json, is_external=True, provider=provider
-        )
+        if provider == "anthropic":
+            # Anthropic response already handled above
+            pass
+        else:
+            response_json = _make_api_request(api_url, headers, payload, verify_ssl=DEFAULT_SSL_VERIFICATION)
+            raw_response = _validate_and_extract_response(
+                response_json, is_external=True, provider=provider
+            )
 
-        # For external models, no need to do response validation and cleanup
-        return raw_response
+            # For external models, no need to do response validation and cleanup
+            return raw_response
 
     else:
         # Local model (deployed in cluster)
