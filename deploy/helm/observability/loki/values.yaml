@@ -1,0 +1,233 @@
+# Default values for loki-stack
+# This configuration reflects the production-tested setup that resolved:
+# - MinIO storage crisis (99% -> 69% usage)
+# - Ingester ring issues (2 replicas for HA)
+# - Namespace filtering for sustainable log volume
+# - Optimized retention policies
+replicaCount: 1
+
+nameOverride: ""
+fullnameOverride: ""
+
+# Global configuration
+global:
+  namespace: openshift-logging
+
+# LokiStack configuration
+lokiStack:
+  name: logging-loki
+  size: 1x.demo # Options: 1x.demo, 1x.extra-small, 1x.small, 1x.medium
+  storageClassName: "gp3"
+
+  # Tenant configuration - OpenShift Logging mode for proper RBAC
+  tenants:
+    mode: openshift-logging # Use openshift-logging mode for RBAC integration
+
+  # Retention and limits configuration
+  limits:
+    global:
+      retention:
+        days: 3 # Reduced from 7 to 3 days default
+      ingestionRateLimit: 10485760 # 10MB in bytes per second
+      ingestionBurstLimit: 20971520 # 20MB in bytes
+      queriesMaxEntriesLimitPerQuery: 50000
+
+    # Per-tenant retention policies (reduced to save storage)
+    tenants:
+      audit:
+        retention:
+          days: 1 # Reduced from 3 to 1 day for high-volume audit logs
+        ingestionRateLimit: 5242880 # 5MB in bytes per second
+      application:
+        retention:
+          days: 3 # Reduced from 7 to 3 days
+        ingestionRateLimit: 3145728 # 3MB in bytes per second
+      infrastructure:
+        retention:
+          days: 7 # Reduced from 14 to 7 days
+        ingestionRateLimit: 5242880 # 5MB in bytes per second
+
+  # Template configuration
+  template:
+    distributor:
+      replicas: 1 # Reduced for resource efficiency
+    ingester:
+      replicas: 1 # Reduced to 1 for resource-constrained clusters (2 recommended for HA)
+    querier:
+      replicas: 1
+    queryFrontend:
+      replicas: 1
+    gateway:
+      replicas: 1
+    indexGateway:
+      replicas: 1
+    compactor:
+      replicas: 1
+
+# MinIO storage configuration (reuses existing shared MinIO)
+minio:
+  # Reference to existing shared MinIO service
+  shared:
+    serviceName: minio-observability-storage
+    namespace: observability-hub
+    ports:
+      api: 9000
+      console: 9001
+
+  # S3 configuration for Loki (matches existing Tempo credentials)
+  s3:
+    accessKeyId: "admin"
+    accessKeySecret: "minio123"
+    bucket: loki
+    endpoint: http://minio-observability-storage.observability-hub.svc.cluster.local:9000
+
+# UI Plugin configuration for OpenShift Console integration
+uiPlugin:
+  # Enable the UIPlugin resource to show "Observe → Logs" in OpenShift Console
+  enabled: true
+  name: logging
+  logging:
+    # Timeout for log queries in the console
+    timeout: 30s
+    # Reference to the LokiStack for the console plugin
+    lokiStack:
+      name: logging-loki
+      namespace: openshift-logging
+
+# RBAC configuration
+rbac:
+  create: true
+
+  # Collector service account and RBAC setup
+  collector:
+    # Set to true to create collector SA and RBAC (required for new deployments)
+    # Set to false if collector SA already exists (e.g., managed by OpenShift Logging Operator)
+    # NOTE: The Makefile automatically detects this and sets the appropriate value
+    create: true
+    serviceAccount:
+      name: collector
+      namespace: openshift-logging
+
+  # Service accounts for log collection
+  serviceAccounts:
+    logForwarder:
+      name: loki-log-forwarder
+      create: true
+
+  # Cluster roles for tenant access
+  clusterRoles:
+    tenantLogs:
+      create: true
+
+# Security configuration
+podSecurityContext:
+  runAsNonRoot: true
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: false
+  runAsNonRoot: true
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity
+affinity: {}
+
+# Additional labels and annotations
+commonLabels: {}
+commonAnnotations: {}
+
+# Cluster logging configuration
+clusterLogging:
+  enabled: true
+
+  # ClusterLogForwarder configuration
+  logForwarder:
+    enabled: true
+
+    # Service account for log collection
+    serviceAccount:
+      name: collector
+      create: false # Use existing service account from OpenShift Logging
+
+    # Target LokiStack configuration
+    target:
+      name: logging-loki
+      namespace: openshift-logging
+
+    # TLS configuration for secure communication
+    tls:
+      # CURRENT WORKING CONFIG: Uses insecureSkipVerify for internal cluster communication
+      # Set to false and configure CA for production security
+      insecureSkipVerify: true
+      # CA configuration for validating Loki gateway certificates (when insecureSkipVerify: false)
+      ca:
+        configMapName: openshift-service-ca.crt
+        key: service-ca.crt
+
+    # Input configuration for log filtering
+    inputs:
+      application:
+        # Collect from all namespaces (no filtering)
+        allNamespaces: true
+        customName: application-all-namespaces
+      infrastructure:
+        # Filter infrastructure logs to reduce volume
+        filtered: true
+        customName: infrastructure-minimal
+        sources:
+          - node # Node-level infrastructure logs
+          - container # Container runtime logs
+      audit:
+        # Audit logs disabled due to high volume (can be re-enabled)
+        enabled: false
+
+    # Batch configuration for log forwarding
+    batch:
+      maxSize: 1MB
+      maxRecords: 1000
+      timeout: 5s
+
+    # Rate limiting per tenant
+    rateLimiting:
+      enabled: true
+      audit:
+        maxLogsPerSecond: 1000
+      application:
+        maxLogsPerSecond: 500
+      infrastructure:
+        maxLogsPerSecond: 500
+
+# External Access Configuration
+# For external services (e.g., Korrel8) that need to query logs from Loki
+externalAccess:
+  enabled: true
+
+  # Loki gateway connection details
+  loki:
+    url: "https://logging-loki-gateway-http.openshift-logging.svc.cluster.local:8080"
+    # Tenant-specific API paths for multi-tenant queries
+    tenantPaths:
+      application: "/api/logs/v1/application/loki/api/v1"
+      infrastructure: "/api/logs/v1/infrastructure/loki/api/v1"
+      audit: "/api/logs/v1/audit/loki/api/v1"
+
+  # Authentication configuration
+  authentication:
+    # Use collector token for proper tenant access
+    useCollectorToken: true
+    collectorTokenPath: "/var/run/secrets/loki/collector-token"
+
+    # Service account configuration for external services
+    # External services should be granted access via RBAC to read the collector token
+    serviceAccount:
+      # Token secret that external services can mount
+      tokenSecretName: "collector-token"
+      tokenSecretNamespace: "openshift-logging"
