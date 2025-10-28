@@ -26,6 +26,9 @@ env:
   TEMPO_TENANT_ID: "dev"
   MAX_TIME_RANGE_DAYS: 90
   DEFAULT_TIME_RANGE_DAYS: 7
+  KORREL8R_ENABLED: "true"
+  KORREL8R_URL: "https://korrel8r.openshift-cluster-observability-operator.svc.cluster.local:9443"
+  MAX_NUM_LOG_ROWS: 10
 
 tls:
   enabled: false

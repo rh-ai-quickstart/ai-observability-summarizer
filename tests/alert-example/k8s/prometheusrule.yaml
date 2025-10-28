@@ -1,0 +1,18 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: alert-example-rules
+spec:
+  groups:
+  - name: alert-example.rules
+    rules:
+    - alert: AlertExampleDown
+      expr: |
+        kube_deployment_status_replicas_unavailable{deployment="alert-example"} > 0
+      for: 2m
+      labels:
+        severity: critical
+      annotations:
+        summary: "alert-example deployment has unavailable replicas (app down)"
+        description: "Deployment alert-example has {{ $value }} unavailable replicas."
+

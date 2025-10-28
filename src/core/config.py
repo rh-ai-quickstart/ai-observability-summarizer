@@ -92,3 +92,20 @@ MAX_TIME_RANGE_DAYS: int = int(os.getenv("MAX_TIME_RANGE_DAYS", "90"))
 
 # Default time range when none is provided (in days)
 DEFAULT_TIME_RANGE_DAYS: int = int(os.getenv("DEFAULT_TIME_RANGE_DAYS", "90"))
+
+# Korrel8r integration (feature-flagged)
+KORREL8R_ENABLED: bool = os.getenv("KORREL8R_ENABLED", "true").lower() == "true"
+KORREL8R_URL: str = os.getenv("KORREL8R_URL", "")
+KORREL8R_TIMEOUT_SECONDS: int = int(os.getenv("KORREL8R_TIMEOUT_SECONDS", "8"))
+KORREL8R_MAX_ITEMS: int = int(os.getenv("KORREL8R_MAX_ITEMS", "50"))
+KORREL8R_DEPTH: int = int(os.getenv("KORREL8R_DEPTH", "2"))
+KORREL8R_TIME_SKEW_SEC: int = int(os.getenv("KORREL8R_TIME_SKEW_SEC", "600"))
+KORREL8R_SEVERITY_THRESHOLD: str = os.getenv("KORREL8R_SEVERITY_THRESHOLD", "critical")
+KORREL8R_TARGETS: str = os.getenv("KORREL8R_TARGETS", "k8s/object,k8s/event,loki/log,tempo/trace")
+
+# Deep-link configuration
+CONSOLE_BASE_URL: str = os.getenv("CONSOLE_BASE_URL", "")
+GRAFANA_BASE_URL: str = os.getenv("GRAFANA_BASE_URL", "")
+TEMPO_BASE_URL: str = os.getenv("TEMPO_BASE_URL", "")
+TEMPO_DATASOURCE_UID: str = os.getenv("TEMPO_DATASOURCE_UID", "")
+LOKI_DATASOURCE_UID: str = os.getenv("LOKI_DATASOURCE_UID", "")
