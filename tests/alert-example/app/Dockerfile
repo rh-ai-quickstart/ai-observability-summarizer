@@ -1,12 +1,15 @@
-FROM golang:1.22-alpine AS builder
-WORKDIR /workspace
-COPY . .
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /workspace/alert-example main.go
+FROM python:3.11-slim
+WORKDIR /app
 
-FROM gcr.io/distroless/base-debian12:nonroot
-WORKDIR /
-COPY --from=builder /workspace/alert-example /alert-example
-USER nonroot:nonroot
+# Install runtime deps
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy app
+COPY app.py ./
+
+ENV PORT=8080
 EXPOSE 8080
-ENTRYPOINT ["/alert-example"]
+
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080"]
 

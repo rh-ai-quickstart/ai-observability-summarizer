@@ -173,26 +173,36 @@ class PrometheusChatBot:
                     "required": ["data"]
                 }
             },
-            {
-                "name": "korrel8r_get_correlated",
-                "description": "Get correlated objects by first listing goal queries then fetching objects for each via Korrel8r.",
-                "input_schema": {
-                    "type": "object",
-                    "properties": {
-                        "goals": {
-                            "type": "array",
-                            "items": {"type": "string"},
-                            "description": "Korrel8r goal classes to correlate. Examples: ['trace:span','log:application','log:infrastructure','metric:metric']"
-                        },
-                        "query": {
-                            "type": "string",
-                            "description": 'Starting Korrel8r domain query (same format as korrel8r_query_objects). Examples: alert:alert:{"alertname":"PodDisruptionBudgetAtLimit"}, k8s:Pod:{"namespace":"llm-serving"}, loki:log:{"kubernetes.namespace_name":"llm-serving","kubernetes.pod_name":"p-abc"}, trace:span:{".k8s.namespace.name":"llm-serving"}'
-                        }
-                    },
-                    "required": ["goals", "query"]
-                }
-            }
         ]
+
+        # Conditionally expose Korrel8r tools to Claude
+        try:
+            from core.config import KORREL8R_ENABLED
+        except Exception:
+            KORREL8R_ENABLED = False
+
+        if KORREL8R_ENABLED:
+            claude_tools.append(
+                {
+                    "name": "korrel8r_get_correlated",
+                    "description": "Get correlated objects by first listing goal queries then fetching objects for each via Korrel8r.",
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {
+                            "goals": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "Korrel8r goal classes to correlate. Examples: ['trace:span','log:application','log:infrastructure','metric:metric']"
+                            },
+                            "query": {
+                                "type": "string",
+                                "description": 'Starting Korrel8r domain query (same format as korrel8r_query_objects). Examples: alert:alert:{"alertname":"PodDisruptionBudgetAtLimit"}, k8s:Pod:{"namespace":"llm-serving"}, loki:log:{"kubernetes.namespace_name":"llm-serving","kubernetes.pod_name":"p-abc"}, trace:span:{".k8s.namespace.name":"llm-serving"}'
+                            }
+                        },
+                        "required": ["goals", "query"]
+                    }
+                }
+            )
         
         logger.info(f"Converted {len(claude_tools)} MCP tools to Claude format")
         return claude_tools

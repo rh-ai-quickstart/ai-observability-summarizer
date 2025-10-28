@@ -67,14 +67,6 @@ print-route:
 		echo "Route not found in namespace $(NAMESPACE)"; \
 	fi
 
-
-deploy-korrel8r:
-	$(KUBECTL) apply -n $(KORREL8R_NS) -f $(K8S_DIR)/korrel8r-sa.yaml
-	$(KUBECTL) apply -n $(KORREL8R_NS) -f $(K8S_DIR)/korrel8r-rbac.yaml
-	$(KUBECTL) apply -n $(KORREL8R_NS) -f $(K8S_DIR)/korrel8r-config.yaml
-	$(KUBECTL) apply -n $(KORREL8R_NS) -f $(K8S_DIR)/korrel8r-cr.yaml
-	$(KUBECTL) rollout status -n $(KORREL8R_NS) deployment/korrel8r
-
 patch-configmap:
 	$(KUBECTL) apply -n $(NAMESPACE) -f $(K8S_DIR)/configmap_patch.yaml
 

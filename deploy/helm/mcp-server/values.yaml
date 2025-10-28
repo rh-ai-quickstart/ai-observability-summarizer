@@ -29,6 +29,7 @@ env:
   KORREL8R_ENABLED: "true"
   KORREL8R_URL: "https://korrel8r.openshift-cluster-observability-operator.svc.cluster.local:9443"
   MAX_NUM_LOG_ROWS: 10
+  KORREL8R_TIMEOUT_SECONDS: 8
 
 tls:
   enabled: false

@@ -51,10 +51,7 @@ class ObservabilityMCPServer:
             get_trace_details_tool,
             chat_tempo_tool
         )
-        from .tools.korrel8r_tools import (
-            korrel8r_query_objects,
-            korrel8r_get_correlated,
-        )
+        from core.config import KORREL8R_ENABLED
 
         # Register vLLM tools
         self.mcp.tool()(list_models)
@@ -89,6 +86,12 @@ class ObservabilityMCPServer:
         self.mcp.tool()(query_tempo_tool)
         self.mcp.tool()(get_trace_details_tool)
         self.mcp.tool()(chat_tempo_tool)
-        # Register Korrel8r tools
-        self.mcp.tool()(korrel8r_query_objects)
-        self.mcp.tool()(korrel8r_get_correlated)
+        
+        # Register Korrel8r tools (only when enabled)
+        if KORREL8R_ENABLED:
+            from .tools.korrel8r_tools import (
+                korrel8r_query_objects,
+                korrel8r_get_correlated,
+            )
+            self.mcp.tool()(korrel8r_query_objects)
+            self.mcp.tool()(korrel8r_get_correlated)
