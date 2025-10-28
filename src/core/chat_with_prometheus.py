@@ -644,49 +644,82 @@ def analyze_metric_with_metadata(
 
 
 def generate_metadata_driven_promql(
-    metric_analysis: Dict[str, Any], 
+    metric_analysis: Dict[str, Any],
     concepts: Dict[str, Any]
 ) -> str:
     """Generate PromQL query based on metric metadata and user intent."""
     metric_name = metric_analysis['name']
     metric_type = metric_analysis['metadata'].get('type', '').lower()
     intent = concepts['intent_type']
-    
+
+    # Helper function to check if metric is a boolean/status metric
+    def is_boolean_metric(name: str) -> bool:
+        """Check if a metric is a boolean/status metric that needs == 1 filter."""
+        boolean_patterns = [
+            'status_phase',      # kube_pod_status_phase
+            'status_condition',  # kube_pod_status_condition
+            '_ready',           # kube_pod_ready
+            '_available',       # kube_deployment_status_replicas_available
+            '_scheduled',       # kube_pod_status_scheduled
+            '_initialized',     # kube_pod_initialized
+            '_waiting',         # kube_pod_container_status_waiting
+            '_running',         # kube_pod_container_status_running
+            '_terminated'       # kube_pod_container_status_terminated
+        ]
+        return any(pattern in name.lower() for pattern in boolean_patterns)
+
+    # Helper function to apply boolean filter if needed
+    def apply_boolean_filter(query: str) -> str:
+        """Add == 1 filter for boolean metrics to show only active states."""
+        if is_boolean_metric(metric_name):
+            # If query is just the metric name, add the filter
+            if query == metric_name:
+                return f"{metric_name} == 1"
+            # If query has aggregation, add filter inside
+            elif query.startswith(('count(', 'sum(', 'avg(', 'max(', 'min(')):
+                return query.replace(f"{metric_name}", f"{metric_name} == 1")
+        return query
+
     # Choose aggregation based on intent and metric type
     if intent == 'count':
         if metric_type == 'counter':
-            return f"sum({metric_name})"
+            query = f"sum({metric_name})"
         else:
-            return f"count({metric_name})"
-    
+            query = f"count({metric_name})"
+        return apply_boolean_filter(query)
+
     elif intent == 'current_value':
         if 'temperature' in concepts['measurements']:
-            return f"avg({metric_name})"  # Temperature should be averaged
+            query = f"avg({metric_name})"  # Temperature should be averaged
         elif 'usage' in concepts['measurements']:
-            return f"avg({metric_name})"  # Usage/utilization should be averaged
+            query = f"avg({metric_name})"  # Usage/utilization should be averaged
         else:
-            return f"{metric_name}"  # Raw current value
-    
+            query = f"{metric_name}"  # Raw current value
+        return apply_boolean_filter(query)
+
     elif intent == 'average':
-        return f"avg({metric_name})"
-    
+        query = f"avg({metric_name})"
+        return apply_boolean_filter(query)
+
     elif intent == 'percentile':
         if metric_type == 'histogram':
-            return f"histogram_quantile(0.95, {metric_name}_bucket)"
+            query = f"histogram_quantile(0.95, {metric_name}_bucket)"
         else:
-            return f"quantile(0.95, {metric_name})"
-    
+            query = f"quantile(0.95, {metric_name})"
+        return apply_boolean_filter(query)
+
     else:
         # Default based on metric type
         if metric_type == 'counter':
-            return f"rate({metric_name}[5m])"
+            query = f"rate({metric_name}[5m])"
         elif metric_type == 'gauge':
             if 'temperature' in concepts['measurements'] or 'usage' in concepts['measurements']:
-                return f"avg({metric_name})"
+                query = f"avg({metric_name})"
             else:
-                return f"{metric_name}"
+                query = f"{metric_name}"
         else:
-            return f"{metric_name}"
+            query = f"{metric_name}"
+        return apply_boolean_filter(query)
 
 
 # =============================================================================

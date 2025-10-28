@@ -68,49 +68,39 @@ except Exception:
 try:
     # Try direct import first (works in container with proper package structure)
     from mcp_server.claude_integration import PrometheusChatBot
-    from mcp_server.chat_bot import GenericChatBot
+    from mcp_server.chatbots import create_chatbot
 except ImportError:
-    # Fallback: Add path and try again (works in local development)
-    sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'mcp_server'))
+    # Fallback: Add both parent paths to ensure relative imports work
+    src_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+    mcp_server_path = os.path.join(src_path, 'mcp_server')
+
+    if src_path not in sys.path:
+        sys.path.insert(0, src_path)
+    if mcp_server_path not in sys.path:
+        sys.path.insert(0, mcp_server_path)
+
     try:
-        from claude_integration import PrometheusChatBot
-        from chat_bot import GenericChatBot
+        from mcp_server.claude_integration import PrometheusChatBot
+        from mcp_server.chatbots import create_chatbot
     except ImportError:
-        # Final fallback: Direct file loading (most robust)
-        claude_integration_path = os.path.join(os.path.dirname(__file__), '..', 'mcp_server', 'claude_integration.py')
-        chat_bot_path = os.path.join(os.path.dirname(__file__), '..', 'mcp_server', 'chat_bot.py')
-        
-        if os.path.exists(claude_integration_path):
-            spec = importlib.util.spec_from_file_location("claude_integration", claude_integration_path)
-            claude_integration = importlib.util.module_from_spec(spec)
-            sys.modules['claude_integration'] = claude_integration
-            spec.loader.exec_module(claude_integration)
-            PrometheusChatBot = claude_integration.PrometheusChatBot
-        else:
-            # If all else fails, create a dummy class to prevent crashes
-            class PrometheusChatBot:
+        # If package imports fail, create dummy classes
+        class PrometheusChatBot:
+            def __init__(self, *args, **kwargs):
+                self.error = "Claude integration not available"
+            def chat(self, *args, **kwargs):
+                return "❌ Claude integration not available. Please check deployment."
+            def test_mcp_tools(self):
+                return False
+
+        def create_chatbot(model_name: str, api_key=None):
+            class DummyChatBot:
                 def __init__(self, *args, **kwargs):
-                    self.error = "Claude integration not available"
+                    self.error = "Chat bot package not available"
                 def chat(self, *args, **kwargs):
-                    return "❌ Claude integration not available. Please check deployment."
-                def test_connection(self):
+                    return "❌ Chat bot package not available. Please check deployment."
+                def test_mcp_tools(self):
                     return False
-        
-        if os.path.exists(chat_bot_path):
-            spec = importlib.util.spec_from_file_location("chat_bot", chat_bot_path)
-            chat_bot = importlib.util.module_from_spec(spec)
-            sys.modules['chat_bot'] = chat_bot
-            spec.loader.exec_module(chat_bot)
-            GenericChatBot = chat_bot.GenericChatBot
-        else:
-            # If all else fails, create a dummy class to prevent crashes
-            class GenericChatBot:
-                def __init__(self, *args, **kwargs):
-                    self.error = "Generic chat bot not available"
-                def chat(self, *args, **kwargs):
-                    return "❌ Generic chat bot not available. Please check deployment."
-                def test_connection(self):
-                    return False
+            return DummyChatBot()
 
 # --- Config ---
 MCP_SERVER_URL = os.getenv("MCP_SERVER_URL", "http://localhost:8085")
@@ -1354,10 +1344,10 @@ elif page == "Chat with Prometheus":
     # Initialize AI chat bot using user-entered API key or environment variable
     ai_chatbot = None
     user_api_key = api_key if api_key else None
-    
+
     if user_api_key or multi_model_name != "No models available":
         try:
-            ai_chatbot = GenericChatBot(model_name=multi_model_name, api_key=user_api_key)
+            ai_chatbot = create_chatbot(model_name=multi_model_name, api_key=user_api_key)
         except Exception as e:
             st.error(f"Failed to initialize AI chat bot: {e}")
     
@@ -1370,7 +1360,7 @@ elif page == "Chat with Prometheus":
     # AI integration status
     if ai_chatbot:
         st.success("✅ AI is connected and ready!")
-        if ai_chatbot.test_connection():
+        if ai_chatbot.test_mcp_tools():
             st.info("🔗 MCP tools are working properly")
         else:
             st.warning("⚠️ MCP tools connection issue")
