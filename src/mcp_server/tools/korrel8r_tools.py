@@ -3,7 +3,6 @@ import json
 import logging
 
 from common.pylogger import get_python_logger
-from core.correlation_service import CorrelationService
 from core.korrel8r_client import Korrel8rClient
 from core.korrel8r_service import fetch_goal_query_objects
 from core.config import (

@@ -34,7 +34,6 @@ from core.metrics import NAMESPACE_SCOPED, CLUSTER_WIDE
 from core.metrics import build_correlated_context_from_metrics
 from core.config import PROMETHEUS_URL, THANOS_TOKEN, VERIFY_SSL, DEFAULT_TIME_RANGE_DAYS
 from core.config import KORREL8R_ENABLED
-from core.correlation_service import CorrelationService
 import requests
 from datetime import datetime, timedelta
 

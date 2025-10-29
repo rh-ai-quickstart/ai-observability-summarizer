@@ -34,7 +34,6 @@ from .llm_client import (
     build_openshift_chat_prompt,
 )
 from .config import KORREL8R_ENABLED
-from .correlation_service import CorrelationService
 from .korrel8r_service import fetch_goal_query_objects
 NAMESPACE_SCOPED = "namespace_scoped"
 CLUSTER_WIDE = "cluster_wide"
@@ -1452,9 +1451,6 @@ def build_correlated_context_from_metrics(
         pairs = extract_namespace_pod_pairs_from_metrics(model_name, metric_dfs)
         logger.debug("In build_correlated_context_from_metrics: pairs=%s", pairs)
         if not pairs:
-            return ""
-        service = CorrelationService()
-        if not service.is_enabled():
             return ""
         goals = ["log:application", "log:infrastructure"]
         # Aggregate logs across all pairs first
