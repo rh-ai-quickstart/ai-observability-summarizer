@@ -59,7 +59,7 @@ spec:
                   name: mcp-analyzer
                   key: token
             - name: LLM_URL
-              value: "http://llama-3-2-3b-instruct-predictor.{{ .Release.Namespace }}.svc.cluster.local:8080/v1/openai/v1"
+              value: "http://{{ .Values.LLM_PREDICTOR }}.{{ .Release.Namespace }}.svc.cluster.local:8080/v1/openai/v1"
             - name: LLM_API_TOKEN
               value: "{{ .Values.llm.apiToken }}"
             {{- if .Values.llm.url }}

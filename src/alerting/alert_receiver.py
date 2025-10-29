@@ -174,7 +174,7 @@ def is_new_vllm_alert(alert: dict[str, Any], time_window: int = TIME_WINDOW) -> 
     return False
 
 def generate_test():
-    alert = json.loads('{"alertname": "VLLMHighAverageInferenceTime", "container": "kserve-container", "endpoint": "vllm-serving-runtime-metrics", "engine": "0", "expr": "rate(vllm:request_inference_time_seconds_sum[5m]) / rate(vllm:request_inference_time_seconds_count[5m]) > 2", "for": "5m", "instance": "10.129.2.73:8080", "job": "llama-3-2-3b-instruct-metrics", "model_name": "meta-llama/Llama-3.2-3B-Instruct", "namespace": "m3", "pod": "llama-3-2-3b-instruct-predictor-9fd74489-c6dwt", "prometheus": "openshift-user-workload-monitoring/user-workload", "service": "llama-3-2-3b-instruct-metrics", "severity": "warning"}')
+    alert = json.loads('{"alertname": "VLLMHighAverageInferenceTime", "container": "kserve-container", "endpoint": "vllm-serving-runtime-metrics", "engine": "0", "expr": "rate(vllm:request_inference_time_seconds_sum[5m]) / rate(vllm:request_inference_time_seconds_count[5m]) > 2", "for": "5m", "instance": "10.129.2.73:8080", "job": "llama-3-1-8b-instruct-metrics", "model_name": "meta-llama/Llama-3.2-3B-Instruct", "namespace": "m3", "pod": "llama-3-1-8b-instruct-predictor-9fd74489-c6dwt", "prometheus": "openshift-user-workload-monitoring/user-workload", "service": "llama-3-1-8b-instruct-metrics", "severity": "warning"}')
     desc = generate_description(alert)
     logger.info("%s", desc)
 

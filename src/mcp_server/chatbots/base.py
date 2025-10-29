@@ -54,7 +54,8 @@ class BaseChatBot(ABC):
         self.model_config = self._get_model_config(model_name)
         self.is_external = self.model_config.get("external", False) if self.model_config else False
         self.provider = self.model_config.get("provider", "local") if self.model_config else "local"
-        self.api_key = api_key or self._get_default_api_key()
+        # Let each subclass decide how to get its API key
+        self.api_key = api_key if api_key is not None else self._get_api_key()
 
         # Initialize MCP server (our tools)
         if ObservabilityMCPServer is not None:
@@ -79,20 +80,17 @@ class BaseChatBot(ABC):
 
         return model_config
 
-    def _get_default_api_key(self) -> Optional[str]:
-        """Get default API key based on provider."""
-        if not self.model_config:
-            return None
-        provider = self.model_config.get("provider", "openai")
+    @abstractmethod
+    def _get_api_key(self) -> Optional[str]:
+        """Get API key for this bot implementation.
 
-        if provider == "openai":
-            return os.getenv("OPENAI_API_KEY")
-        elif provider == "google":
-            return os.getenv("GOOGLE_API_KEY")
-        elif provider == "anthropic":
-            return os.getenv("ANTHROPIC_API_KEY")
-        else:
-            return None
+        Each subclass should implement this to return the appropriate
+        API key from environment variables, config files, or other sources.
+
+        Returns:
+            API key string or None if not needed/available
+        """
+        pass
 
     def _get_mcp_tools(self) -> List[Dict[str, Any]]:
         """Get the base MCP tools that we want to expose."""
@@ -220,6 +218,37 @@ class BaseChatBot(ABC):
         except Exception as e:
             logger.error(f"Error calling MCP tool {tool_name}: {e}")
             return f"Error executing {tool_name}: {str(e)}"
+
+    def _get_max_tool_result_length(self) -> int:
+        """Get maximum length for tool results before truncation.
+
+        Each subclass should override this based on their model's context window.
+        Default is conservative 5000 characters.
+
+        Returns:
+            Maximum length in characters
+        """
+        return 5000
+
+    def _get_tool_result(self, tool_name: str, tool_args: Dict[str, Any]) -> str:
+        """Execute tool call and truncate result if needed.
+
+        Args:
+            tool_name: Name of the tool to call
+            tool_args: Arguments to pass to the tool
+
+        Returns:
+            Tool result, truncated if it exceeds max length
+        """
+        # Route to MCP server
+        tool_result = self._route_tool_call_to_mcp(tool_name, tool_args)
+
+        # Truncate large results to prevent context overflow
+        max_length = self._get_max_tool_result_length()
+        if isinstance(tool_result, str) and len(tool_result) > max_length:
+            tool_result = tool_result[:max_length] + "\n... [Result truncated due to size]"
+
+        return tool_result
 
     def _get_model_specific_instructions(self) -> str:
         """Override this in subclasses for model-specific guidance.

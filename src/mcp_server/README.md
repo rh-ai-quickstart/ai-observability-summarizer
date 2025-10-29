@@ -502,7 +502,7 @@ helm upgrade --install mcp-server deploy/helm/mcp-server -n <namespace> \
   --set image.tag=0.1.2 \
   --set env.PROMETHEUS_URL=https://thanos-querier.openshift-monitoring.svc.cluster.local:9091 \
   --set llm.url=http://llamastack.<namespace>.svc.cluster.local:8321/v1/openai/v1 \
-  --set-json modelConfig='{"meta-llama/Llama-3.2-3B-Instruct":{"external":false,"serviceName":"llama-3-2-3b-instruct"}}'
+  --set-json modelConfig='{"meta-llama/Llama-3.2-3B-Instruct":{"external":false,"serviceName":"llama-3-1-8b-instruct"}}'
 ```
 
 Notes:

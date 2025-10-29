@@ -27,6 +27,9 @@ env:
   MAX_TIME_RANGE_DAYS: 90
   DEFAULT_TIME_RANGE_DAYS: 7
 
+# Name of the LLM used
+LLM_PREDICTOR: "llama-3-1-8b-instruct-predictor"
+
 tls:
   enabled: false
   secretName: mcp-server-tls

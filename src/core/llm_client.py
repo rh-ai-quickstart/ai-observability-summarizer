@@ -221,7 +221,7 @@ def summarize_with_llm(
 
         # Determine correct local model identifier: prefer serviceName if present
         # summarize_model_id may be a human/registry id (e.g., "meta-llama/..."), while
-        # LlamaStack typically expects the backend service name (e.g., "llama-3-2-3b-instruct").
+        # LlamaStack typically expects the backend service name (e.g., "llama-3-1-8b-instruct").
         model_id_to_use = (
             model_info.get("serviceName")
             or model_info.get("modelName")

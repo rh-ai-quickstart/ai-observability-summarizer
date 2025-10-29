@@ -4,6 +4,7 @@ OpenAI GPT Chat Bot Implementation
 This module provides OpenAI GPT-specific implementation using the official SDK.
 """
 
+import os
 import json
 import logging
 from typing import Optional, Callable, List, Dict, Any
@@ -15,6 +16,14 @@ logger = logging.getLogger(__name__)
 
 class OpenAIChatBot(BaseChatBot):
     """OpenAI GPT implementation with native tool calling."""
+
+    def _get_api_key(self) -> Optional[str]:
+        """Get OpenAI API key from environment."""
+        return os.getenv("OPENAI_API_KEY")
+
+    def _get_max_tool_result_length(self) -> int:
+        """GPT-4 supports 128K token context - 10K chars is reasonable."""
+        return 10000
 
     def __init__(self, model_name: str, api_key: Optional[str] = None):
         super().__init__(model_name, api_key)
@@ -148,13 +157,8 @@ class OpenAIChatBot(BaseChatBot):
                         except json.JSONDecodeError:
                             tool_args = {}
 
-                        # Route to MCP server
-                        tool_result = self._route_tool_call_to_mcp(tool_name, tool_args)
-
-                        # Truncate large results to prevent context overflow
-                        # 10K is reasonable for GPT-4 (supports 128K token context)
-                        if isinstance(tool_result, str) and len(tool_result) > 10000:
-                            tool_result = tool_result[:10000] + "\n... [Result truncated due to size]"
+                        # Get tool result with automatic truncation
+                        tool_result = self._get_tool_result(tool_name, tool_args)
 
                         tool_results.append({
                             "role": "tool",

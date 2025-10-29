@@ -4,6 +4,7 @@ Google Gemini Chat Bot Implementation
 This module provides Google Gemini-specific implementation using the official SDK.
 """
 
+import os
 import logging
 from typing import Optional, Callable, List
 
@@ -14,6 +15,14 @@ logger = logging.getLogger(__name__)
 
 class GoogleChatBot(BaseChatBot):
     """Google Gemini implementation with native tool calling."""
+
+    def _get_api_key(self) -> Optional[str]:
+        """Get Google API key from environment."""
+        return os.getenv("GOOGLE_API_KEY")
+
+    def _get_max_tool_result_length(self) -> int:
+        """Gemini supports 1M token context - 10K chars is reasonable."""
+        return 10000
 
     def __init__(self, model_name: str, api_key: Optional[str] = None):
         super().__init__(model_name, api_key)
@@ -190,14 +199,9 @@ class GoogleChatBot(BaseChatBot):
                             if progress_callback:
                                 progress_callback(f"🔧 Using tool: {tool_name}")
 
-                            # Route to MCP server
-                            tool_result = self._route_tool_call_to_mcp(tool_name, tool_args)
+                            # Get tool result with automatic truncation
+                            tool_result = self._get_tool_result(tool_name, tool_args)
                             logger.info(f"Tool result length: {len(str(tool_result))}")
-
-                            # Truncate large results to prevent context overflow
-                            # 10K is reasonable for Gemini (supports 1M token context)
-                            if isinstance(tool_result, str) and len(tool_result) > 10000:
-                                tool_result = tool_result[:10000] + "\n... [Result truncated due to size]"
 
                             # Create function response for Gemini SDK
                             function_responses.append(

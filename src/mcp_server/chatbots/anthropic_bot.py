@@ -4,6 +4,7 @@ Anthropic Claude Chat Bot Implementation
 This module provides Anthropic Claude-specific implementation using the official SDK.
 """
 
+import os
 import logging
 from typing import Optional, Callable
 
@@ -14,6 +15,14 @@ logger = logging.getLogger(__name__)
 
 class AnthropicChatBot(BaseChatBot):
     """Anthropic Claude implementation with native tool calling."""
+
+    def _get_api_key(self) -> Optional[str]:
+        """Get Anthropic API key from environment."""
+        return os.getenv("ANTHROPIC_API_KEY")
+
+    def _get_max_tool_result_length(self) -> int:
+        """Claude supports 200K token context - 15K chars is reasonable."""
+        return 15000
 
     def __init__(self, model_name: str, api_key: Optional[str] = None):
         super().__init__(model_name, api_key)
@@ -106,13 +115,8 @@ class AnthropicChatBot(BaseChatBot):
                             if progress_callback:
                                 progress_callback(f"🔧 Using tool: {tool_name}")
 
-                            # Route to MCP server
-                            tool_result = self._route_tool_call_to_mcp(tool_name, tool_args)
-
-                            # Truncate large results to prevent context overflow
-                            # 15K is reasonable for Claude (supports 200K token context)
-                            if isinstance(tool_result, str) and len(tool_result) > 15000:
-                                tool_result = tool_result[:15000] + "\n... [Result truncated due to size]"
+                            # Get tool result with automatic truncation
+                            tool_result = self._get_tool_result(tool_name, tool_args)
 
                             tool_results.append({
                                 "type": "tool_result",

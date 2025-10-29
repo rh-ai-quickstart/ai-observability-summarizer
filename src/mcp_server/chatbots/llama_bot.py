@@ -23,6 +23,14 @@ logger = logging.getLogger(__name__)
 class LlamaChatBot(BaseChatBot):
     """Llama implementation using LlamaStack with OpenAI-compatible API."""
 
+    def _get_api_key(self) -> Optional[str]:
+        """Local models don't require API keys."""
+        return None
+
+    def _get_max_tool_result_length(self) -> int:
+        """Llama 3.1 supports 128K token context - 8K chars is reasonable."""
+        return 8000
+
     def __init__(self, model_name: str, api_key: Optional[str] = None):
         super().__init__(model_name, api_key)
 
@@ -64,14 +72,6 @@ For GPU queries:
 For Pod Status queries:
 - Use: kube_pod_status_phase == 1 to filter only active states
 - Include namespace filter and grouping
-
-**Namespace Filtering - CRITICAL:**
-- When user specifies a namespace, ALWAYS include it as a label filter in your query
-- Example: If user asks about "sgahlot-test-100", use {{namespace="sgahlot-test-100"}}
-- Pattern for status: kube_pod_status_phase{{namespace="requested-namespace"}} == 1
-- Pattern for CPU: sum(rate(container_cpu_usage_seconds_total{{namespace="requested-namespace"}}[5m])) by (pod)
-- Pattern for Memory: sum(container_memory_usage_bytes{{namespace="requested-namespace"}}) by (pod)
-- If no namespace specified, query cluster-wide with grouping: by (pod, namespace)
 
 **Key PromQL Rules:**
 - Always use aggregation functions: sum(), avg(), max(), etc.
@@ -194,13 +194,8 @@ For Pod Status queries:
                         except json.JSONDecodeError:
                             tool_args = {}
 
-                        # Route to MCP server
-                        tool_result = self._route_tool_call_to_mcp(tool_name, tool_args)
-
-                        # Truncate large results to prevent context overflow
-                        # 8K is reasonable for Llama 3.1 (supports 128K token context)
-                        if isinstance(tool_result, str) and len(tool_result) > 8000:
-                            tool_result = tool_result[:8000] + "\n... [Result truncated due to size]"
+                        # Get tool result with automatic truncation
+                        tool_result = self._get_tool_result(tool_name, tool_args)
 
                         tool_results.append({
                             "role": "tool",

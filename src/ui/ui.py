@@ -64,10 +64,9 @@ try:
 except Exception:
     pass
 
-# Claude Desktop Intelligence - Direct import with robust fallbacks
+# Multi-model chatbot support - Direct import with robust fallbacks
 try:
     # Try direct import first (works in container with proper package structure)
-    from mcp_server.claude_integration import PrometheusChatBot
     from mcp_server.chatbots import create_chatbot
 except ImportError:
     # Fallback: Add both parent paths to ensure relative imports work
@@ -80,18 +79,9 @@ except ImportError:
         sys.path.insert(0, mcp_server_path)
 
     try:
-        from mcp_server.claude_integration import PrometheusChatBot
         from mcp_server.chatbots import create_chatbot
     except ImportError:
-        # If package imports fail, create dummy classes
-        class PrometheusChatBot:
-            def __init__(self, *args, **kwargs):
-                self.error = "Claude integration not available"
-            def chat(self, *args, **kwargs):
-                return "❌ Claude integration not available. Please check deployment."
-            def test_mcp_tools(self):
-                return False
-
+        # If package imports fail, create dummy factory function
         def create_chatbot(model_name: str, api_key=None):
             class DummyChatBot:
                 def __init__(self, *args, **kwargs):

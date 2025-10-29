@@ -60,7 +60,7 @@ Use the included `Makefile` to install everything:
 ```bash
 make install NAMESPACE=your-namespace
 ```
-This will install the project with the default LLM deployment, `llama-3-2-3b-instruct`.
+This will install the project with the default LLM deployment, `llama-3-1-8b-instruct`.
 
 ### Choosing different models during installation
 
@@ -80,12 +80,12 @@ model: llama-guard-3-8b (meta-llama/Llama-Guard-3-8B)
 ```
 You can use the `LLM` flag during installation to set a model from this list for deployment:
 ```
-make install NAMESPACE=your-namespace LLM=llama-3-2-3b-instruct 
+make install NAMESPACE=your-namespace LLM=llama-3-1-8b-instruct 
 ```
 
 ### With GPU tolerations
 ```bash
-make install NAMESPACE=your-namespace LLM=llama-3-2-3b-instruct LLM_TOLERATION="nvidia.com/gpu"
+make install NAMESPACE=your-namespace LLM=llama-3-1-8b-instruct LLM_TOLERATION="nvidia.com/gpu"
 ```
 
 ### With alerting if you want to send on SLACK

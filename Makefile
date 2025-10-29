@@ -74,7 +74,7 @@ MODEL_CONFIG_JSON := $(shell cat deploy/helm/model-config.json | jq -c .)
 DYNAMIC_MODEL_CONFIG_JSON :=
 
 # Extract only non-external models for deployment
-LLM := llama-3-2-3b-instruct
+LLM := llama-3-1-8b-instruct
 LLM_JSON := $(shell echo '["$(LLM_JSON)"]')
 
 # Alerting configuration
@@ -220,7 +220,7 @@ help:
 	@echo "  NAMESPACE          - OpenShift namespace for deployment"
 	@echo "  HF_TOKEN           - Hugging Face Token (will prompt if not provided and LLM_URL not set)"
 	@echo "  DEVICE             - Deploy models on cpu or gpu (default)"
-	@echo "  LLM                - Model id (eg. llama-3-2-3b-instruct)"
+	@echo "  LLM                - Model id (eg. llama-3-1-8b-instruct)"
 	@echo "  LLM_URL            - Use existing model URL (auto-adds :8080/v1 if no port specified)"
 	@echo "  SAFETY             - Safety model id"
 	@echo "  ALERTS             - Set to TRUE to install alerting with main deployment"

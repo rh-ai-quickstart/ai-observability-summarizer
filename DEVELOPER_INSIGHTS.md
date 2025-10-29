@@ -169,7 +169,7 @@ Use the included `Makefile` to install everything:
 ```bash
 make install NAMESPACE=your-namespace
 ```
-This will install the project with the default LLM deployment, `llama-3-2-3b-instruct`.
+This will install the project with the default LLM deployment, `llama-3-1-8b-instruct`.
 
 ### Using an Existing Model
 
@@ -177,10 +177,10 @@ To use an existing model instead of deploying a new one, specify `LLM_URL` as th
 
 ```bash
 # URL with port (no processing applied)
-make install LLM_URL=http://llama-3-2-3b-instruct-predictor.dev.svc.cluster.local:8080/v1 NAMESPACE=your-namespace
+make install LLM_URL=http://llama-3-1-8b-instruct-predictor.dev.svc.cluster.local:8080/v1 NAMESPACE=your-namespace
 
 # URL without port (automatically adds :8080/v1)
-make install LLM_URL=http://llama-3-2-3b-instruct-predictor.dev.svc.cluster.local NAMESPACE=your-namespace
+make install LLM_URL=http://llama-3-1-8b-instruct-predictor.dev.svc.cluster.local NAMESPACE=your-namespace
 ```
 
 **URL Processing**: If the `LLM_URL` doesn't contain a port (`:PORT` format), the system will automatically append `:8080/v1` to the URL. This simplifies configuration while maintaining flexibility for custom ports.

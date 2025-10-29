@@ -18,6 +18,10 @@ logger = logging.getLogger(__name__)
 class DeterministicChatBot(BaseChatBot):
     """Deterministic parsing implementation for small models without reliable tool calling."""
 
+    def _get_api_key(self) -> Optional[str]:
+        """Local models don't require API keys."""
+        return None
+
     def chat(self, user_question: str, namespace: Optional[str] = None, scope: Optional[str] = None, progress_callback: Optional[Callable] = None) -> str:
         """Chat using deterministic parsing approach."""
         if progress_callback:

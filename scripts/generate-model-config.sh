@@ -20,7 +20,7 @@ check_tool_exists() {
 
 # Get the default LLM model name
 get_default_model() {
-  echo "llama-3-2-3b-instruct"
+  echo "llama-3-1-8b-instruct"
 }
 
 # This function generates MODEL_CONFIG by merging LLM-specific config with base config

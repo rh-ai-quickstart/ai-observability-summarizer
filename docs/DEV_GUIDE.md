@@ -303,8 +303,8 @@ Models are configured via `MODEL_CONFIG` environment variable as JSON:
 make list-models
 ```
 Common models include:
-- `llama-3-2-3b-instruct` (default)
-- `llama-3-1-8b-instruct`
+- `llama-3-2-3b-instruct`
+- `llama-3-1-8b-instruct` (default)
 - `llama-3-3-70b-instruct`
 - `llama-guard-3-8b` (safety model)
 
@@ -325,8 +325,8 @@ generate-model-config.sh
 
 **How it works**:
 1. **Template Substitution**: Reads `deploy/helm/default-model.json.template` and substitutes:
-   - `$MODEL_ID` → Full model path (e.g., `meta-llama/Llama-3.2-3B-Instruct`)
-   - `$MODEL_NAME` → Service name (e.g., `llama-3-2-3b-instruct`)
+   - `$MODEL_ID` → Full model path (e.g., `meta-llama/Llama-3.1-8B-Instruct`)
+   - `$MODEL_NAME` → Service name (e.g., `llama-3-1-8b-instruct`)
 
 2. **JSON Merging**: Merges the LLM-specific config with base external models from `deploy/helm/model-config.json`:
    ```bash
@@ -336,7 +336,7 @@ generate-model-config.sh
 3. **Export**: Sets `MODEL_CONFIG` environment variable for use by services
 
 **Parameters**:
-- **LLM model name** (optional): Model identifier (default: `llama-3-2-3b-instruct`)
+- **LLM model name** (optional): Model identifier (default: `llama-3-1-8b-instruct`)
 - **`--helm-format` flag** (optional): Generate Helm values YAML file in addition to JSON
 
 **Output Files** (in `/tmp`):
@@ -374,10 +374,10 @@ make install NAMESPACE=your-ns LLM=llama-3.1-8b-instruct
 
 # 2. After substitution (new_model_config.json)
 {
-  "meta-llama/Llama-3.2-3B-Instruct": {
+  "meta-llama/Llama-3.1-8B-Instruct": {
     "external": false,
     "requiresApiKey": false,
-    "serviceName": "llama-3-2-3b-instruct"
+    "serviceName": "llama-3-1-8b-instruct"
   }
 }
 
@@ -390,7 +390,7 @@ make install NAMESPACE=your-ns LLM=llama-3.1-8b-instruct
 
 # 4. Final merged config (final_config.json)
 {
-  "meta-llama/Llama-3.2-3B-Instruct": { ... },  # ← LLM-specific
+  "meta-llama/Llama-3.1-8B-Instruct": { ... },  # ← LLM-specific
   "openai/gpt-4o-mini": { ... },                 # ← Base external models
   "google/gemini-2.5-flash": { ... },
   "anthropic/claude-sonnet-4-20250514": { ... }
@@ -489,7 +489,7 @@ LLAMASTACK_SERVICE=$(oc get services -n <DEFAULT_NAMESPACE> -o name -l 'app.kube
 oc port-forward $LLAMASTACK_SERVICE 8321:8321 -n <DEFAULT_NAMESPACE> &
 
 # Llama Model service (service-based)
-LLAMA_MODEL_SERVICE=$(oc get services -n <MODEL_NAMESPACE> -o name -l 'app=isvc.llama-3-2-3b-instruct-predictor')
+LLAMA_MODEL_SERVICE=$(oc get services -n <MODEL_NAMESPACE> -o name -l 'app=isvc.llama-3-1-8b-instruct-predictor')
 oc port-forward $LLAMA_MODEL_SERVICE 8080:8080 -n <MODEL_NAMESPACE> &
 
 # Tempo gateway (service-based)

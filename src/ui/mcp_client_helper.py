@@ -833,10 +833,10 @@ def parse_model_config_text(text: str) -> Dict[str, Any]:
     Input format:
         Available Model Config (3 total):
         
-        • meta-llama/Llama-3.2-3B-Instruct
+        • meta-llama/Llama-3.1-8B-Instruct
           - external: False
           - requiresApiKey: False
-          - serviceName: llama-3-2-3b-instruct
+          - serviceName: llama-3-1-8b-instruct
         
         • google/gemini-2.5-flash
           - apiUrl: https://...
@@ -846,10 +846,10 @@ def parse_model_config_text(text: str) -> Dict[str, Any]:
     
     Output format:
         {
-            "meta-llama/Llama-3.2-3B-Instruct": {
+            "meta-llama/Llama-3.1-8B-Instruct": {
                 "external": False,
                 "requiresApiKey": False,
-                "serviceName": "llama-3-2-3b-instruct"
+                "serviceName": "llama-3-1-8b-instruct"
             },
             ...
         }
