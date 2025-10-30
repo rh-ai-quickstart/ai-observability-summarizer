@@ -66,5 +66,19 @@ subjects:
   - kind: ServiceAccount
     name: mcp-analyzer
     namespace: {{ .Release.Namespace }}
-
+---
+{{- if eq .Values.env.KORREL8R_ENABLED "true" }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: mcp-analyzer-korrel8r-view
+subjects:
+- kind: ServiceAccount
+  name: mcp-analyzer
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: korrel8r-view
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}
 
