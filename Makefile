@@ -330,6 +330,7 @@ install-mcp-server: namespace
 			--set image.repository=$(MCP_SERVER_IMAGE) \
 			--set image.tag=$(VERSION) \
 			--set rbac.createGrafanaRole=false \
+			--set LLM_PREDICTOR=$(LLM)-predictor \
 			$(if $(MCP_SERVER_ROUTE_HOST),--set route.host='$(MCP_SERVER_ROUTE_HOST)',) \
 			$(if $(LLAMA_STACK_URL),--set llm.url='$(LLAMA_STACK_URL)',) \
 			-f $(GEN_MODEL_CONFIG_PREFIX)-for_helm.yaml; \
@@ -339,6 +340,7 @@ install-mcp-server: namespace
 			--set image.repository=$(MCP_SERVER_IMAGE) \
 			--set image.tag=$(VERSION) \
 			--set rbac.createGrafanaRole=true \
+			--set LLM_PREDICTOR=$(LLM)-predictor \
 			$(if $(MCP_SERVER_ROUTE_HOST),--set route.host='$(MCP_SERVER_ROUTE_HOST)',) \
 			$(if $(LLAMA_STACK_URL),--set llm.url='$(LLAMA_STACK_URL)',) \
 			-f $(GEN_MODEL_CONFIG_PREFIX)-for_helm.yaml; \
