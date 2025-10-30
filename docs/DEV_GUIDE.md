@@ -35,7 +35,15 @@ summarizer/
 │   │   ├── main.py        # HTTP server entrypoint
 │   │   ├── stdio_server.py # STDIO server for AI assistants
 │   │   ├── tools/         # MCP tools (observability_tools.py)
-│   │   └── integrations/  # AI assistant integration configs
+│   │   ├── integrations/  # AI assistant integration configs
+│   │   └── chatbots/      # Multi-provider chatbot implementations
+│   │       ├── base.py           # Abstract base class with common functionality
+│   │       ├── factory.py        # Model-to-bot routing
+│   │       ├── anthropic_bot.py  # Anthropic Claude support
+│   │       ├── openai_bot.py     # OpenAI GPT support
+│   │       ├── google_bot.py     # Google Gemini support
+│   │       ├── llama_bot.py      # Local Llama models
+│   │       └── deterministic_bot.py # Deterministic parsing for Llama 3.2
 │   └── alerting/          # Alerting service
 │       └── alert_receiver.py # Alert handling
 ├── deploy/helm/           # Helm charts for deployment
@@ -112,7 +120,12 @@ export DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib:$DYLD_FALLBACK_LIBRARY_PATH
 
 ### Core Components
 1. **MCP Server** (`src/mcp_server/`): Model Context Protocol server for metrics analysis, report generation, and AI assistant integration
-2. **UI** (`src/ui/ui.py`): Streamlit multi-dashboard frontend
+   - **Chatbot Architecture** (`src/mcp_server/chatbots/`): Multi-provider LLM support with factory pattern
+     - **Anthropic Claude**: Claude Sonnet 4, Claude 3.5 Haiku, Claude 3 Opus
+     - **OpenAI GPT**: GPT-4o, GPT-4o-mini
+     - **Google Gemini**: Gemini 2.0/2.5 Flash
+     - **Local Llama**: Llama 3.1-8B, Llama 3.2-3B (via LlamaStack)
+2. **UI** (`src/ui/ui.py`): Streamlit multi-dashboard frontend with model selection dropdown
 3. **Core Logic** (`src/core/`): Business logic modules for metrics processing and LLM integration
 4. **Alerting** (`src/alerting/`): Alert handling and Slack notifications
 5. **Helm Charts** (`deploy/helm/`): OpenShift deployment configuration
@@ -153,6 +166,8 @@ open htmlcov/index.html
 
 ### Test Structure
 - **`tests/mcp/`** - Metric Collection & Processing tests
+- **`tests/mcp_server/`** - MCP server and chatbot implementation tests
+  - `test_chatbots.py` - Chatbot factory, API key retrieval, model name extraction, Korrel8r normalization (56 tests)
 - **`tests/core/`** - Core business logic tests
 - **`tests/alerting/`** - Alerting service tests
 - **`tests/api/`** - API endpoint tests
@@ -280,10 +295,15 @@ make list-models
 - `LLAMA_STACK_URL`: LLM backend URL (default: http://localhost:8321/v1/openai/v1)
 - `LLM_API_TOKEN`: API token for LLM service
 - `LLM_URL`: Use existing model URL (skips HF_TOKEN prompt and model deployment)
+- `LLM_PREDICTOR`: Override default LLM model selection (e.g., "anthropic/claude-sonnet-4-20250514")
 - `HF_TOKEN`: Hugging Face token (auto-prompted only when LLM_URL is not set)
 - `MODEL_CONFIG`: JSON configuration for available models
 - `THANOS_TOKEN`: Authentication token (default: reads from service account)
 - `SLACK_WEBHOOK_URL`: Slack webhook for alerting notifications
+- **External Model API Keys** (for multi-provider support):
+  - `ANTHROPIC_API_KEY`: Anthropic Claude API key
+  - `OPENAI_API_KEY`: OpenAI GPT API key
+  - `GOOGLE_API_KEY`: Google Gemini API key
 
 ### Model Configuration
 Models are configured via `MODEL_CONFIG` environment variable as JSON:

@@ -12,7 +12,7 @@ The OpenShift AI Observability Summarizer is an intelligent monitoring platform 
 
 This platform combines advanced AI analysis with comprehensive observability to help organizations optimize their AI infrastructure investments. Instead of drowning in thousands of raw metrics, users can simply ask questions in natural language and receive intelligent, context-aware responses about their AI workloads.
 
-Key capabilities include automated performance analysis, predictive cost optimization, intelligent alerting, and seamless integration with existing OpenShift monitoring infrastructure. The system leverages Llama 3.2-3B for AI-powered insights and supports both real-time monitoring and historical trend analysis.
+Key capabilities include automated performance analysis, predictive cost optimization, intelligent alerting, and seamless integration with existing OpenShift monitoring infrastructure. The system leverages Llama 3.1-8B for AI-powered insights and supports both real-time monitoring and historical trend analysis.
 
 Perfect for AI operations teams, platform engineers, and business stakeholders who need to understand and optimize their AI infrastructure without becoming metrics experts.
 
@@ -62,9 +62,9 @@ Perfect for AI operations teams, platform engineers, and business stakeholders w
 - Enhanced unit formatting (°C, Watts, GB, MB/s, etc.)
 
 ### **3. AI-Powered Insights**
-- Generate summaries using fine-tuned Llama models
+- Generate summaries using multiple LLM providers (Anthropic Claude, OpenAI GPT, Google Gemini, Local Llama)
 - Chat with an MLOps assistant based on real metrics
-- Support for both internal and external LLM models
+- Flexible model selection with support for both internal and external LLM models
 
 ### **4. Report Generation**
 - Export analysis as HTML, PDF, or Markdown reports
@@ -95,14 +95,14 @@ cd src/mcp_server && python setup_integration.py
 ```
 See [`src/mcp_server/README.md`](src/mcp_server/README.md) for complete documentation.
 
-### **8. 🤖 Chat with Prometheus - Claude Desktop Intelligence**
-- **Claude Desktop-style interface** with autonomous tool calling and real-time progress visibility
-- **Dynamic metric selection** from 3500+ available metrics using AI-powered analysis  
+### **8. 🤖 Chat with Prometheus - AI-Powered Intelligence**
+- **AI-powered interface** with autonomous tool calling and real-time progress visibility (works with all supported LLM providers)
+- **Dynamic metric selection** from 3500+ available metrics using AI-powered analysis
 - **Intelligent PromQL generation** with automatic aggregation and filtering
 - **Rich contextual responses** including operational insights, health assessments, and technical details
-- **Multi-iteration analysis** - Claude uses multiple tools sequentially for comprehensive understanding
+- **Multi-iteration analysis** - AI assistant uses multiple tools sequentially for comprehensive understanding
 
-Ask questions like: *"How many pods are running?"*, *"What's the GPU temperature?"*, *"Token generation rate?"* and get Claude Desktop-quality responses with full transparency of the AI reasoning process.
+Ask questions like: *"How many pods are running?"*, *"What's the GPU temperature?"*, *"Token generation rate?"* and get intelligent responses with full transparency of the AI reasoning process.
 
 ---
 
