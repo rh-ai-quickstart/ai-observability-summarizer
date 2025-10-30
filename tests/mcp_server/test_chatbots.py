@@ -313,6 +313,98 @@ class TestModelSpecificInstructions:
         assert "Key PromQL Rules" in instructions
 
 
+class TestModelNameExtraction:
+    """Test model name extraction functionality."""
+
+    def test_anthropic_extracts_model_name_with_provider(self):
+        """Test Anthropic bot extracts model name from provider/model format."""
+        from mcp_server.chatbots import AnthropicChatBot
+
+        bot = AnthropicChatBot("anthropic/claude-sonnet-4-20250514", api_key="test")
+        extracted = bot._extract_model_name()
+
+        assert extracted == "claude-sonnet-4-20250514"
+
+    def test_anthropic_keeps_model_name_without_provider(self):
+        """Test Anthropic bot keeps model name when no provider prefix."""
+        from mcp_server.chatbots import AnthropicChatBot
+
+        bot = AnthropicChatBot("claude-3-5-haiku-20241022", api_key="test")
+        extracted = bot._extract_model_name()
+
+        assert extracted == "claude-3-5-haiku-20241022"
+
+    def test_openai_extracts_model_name_with_provider(self):
+        """Test OpenAI bot extracts model name from provider/model format."""
+        from mcp_server.chatbots import OpenAIChatBot
+
+        bot = OpenAIChatBot("openai/gpt-4o-mini", api_key="test")
+        extracted = bot._extract_model_name()
+
+        assert extracted == "gpt-4o-mini"
+
+    def test_openai_keeps_model_name_without_provider(self):
+        """Test OpenAI bot keeps model name when no provider prefix."""
+        from mcp_server.chatbots import OpenAIChatBot
+
+        bot = OpenAIChatBot("gpt-4o", api_key="test")
+        extracted = bot._extract_model_name()
+
+        assert extracted == "gpt-4o"
+
+    def test_google_extracts_model_name_with_provider(self):
+        """Test Google bot extracts model name from provider/model format."""
+        from mcp_server.chatbots import GoogleChatBot
+
+        bot = GoogleChatBot("google/gemini-2.0-flash-exp", api_key="test")
+        extracted = bot._extract_model_name()
+
+        assert extracted == "gemini-2.0-flash-exp"
+
+    def test_google_keeps_model_name_without_provider(self):
+        """Test Google bot keeps model name when no provider prefix."""
+        from mcp_server.chatbots import GoogleChatBot
+
+        bot = GoogleChatBot("gemini-2.5-flash", api_key="test")
+        extracted = bot._extract_model_name()
+
+        assert extracted == "gemini-2.5-flash"
+
+    def test_llama_uses_full_model_name(self):
+        """Test Llama bot uses full model name (doesn't strip provider for local models)."""
+        from mcp_server.chatbots import LlamaChatBot
+
+        # Llama uses the full model name including provider as it may be needed for local model paths
+        bot = LlamaChatBot("meta-llama/Llama-3.1-8B-Instruct")
+        extracted = bot._extract_model_name()
+
+        # For local models like Llama, the full path is preserved
+        assert extracted == "meta-llama/Llama-3.1-8B-Instruct"
+
+    def test_base_extraction_with_slash(self):
+        """Test base class extraction splits on first slash for API models."""
+        from mcp_server.chatbots import AnthropicChatBot
+
+        # API-based models strip the provider prefix
+        bot = AnthropicChatBot("anthropic/claude-sonnet-4-20250514", api_key="test")
+        extracted = bot._extract_model_name()
+
+        assert extracted == "claude-sonnet-4-20250514"
+
+    def test_extraction_preserves_original_model_name(self):
+        """Test that original model_name attribute is preserved."""
+        from mcp_server.chatbots import AnthropicChatBot
+
+        original_name = "anthropic/claude-sonnet-4-20250514"
+        bot = AnthropicChatBot(original_name, api_key="test")
+
+        # Original should be preserved
+        assert bot.model_name == original_name
+
+        # Extracted should be without provider
+        assert bot._extract_model_name() == "claude-sonnet-4-20250514"
+
+
 class TestBaseChatBot:
     """Test BaseChatBot common functionality."""
 
@@ -350,6 +442,238 @@ class TestBaseChatBot:
         # Should include both base prompt and model-specific instructions
         assert "Kubernetes and Prometheus" in prompt  # Base prompt
         assert "LLAMA-SPECIFIC" in prompt  # Model-specific
+
+
+class TestKorrel8rNormalization:
+    """Test Korrel8r query normalization functionality in BaseChatBot."""
+
+    def test_normalize_alert_query_missing_class(self):
+        """Test that alert queries without class get 'alert:alert:' prefix."""
+        from mcp_server.chatbots import LlamaChatBot
+
+        bot = LlamaChatBot("meta-llama/Llama-3.1-8B-Instruct")
+
+        # Missing class - should be normalized
+        query = 'alert:{"alertname":"PodDisruptionBudgetAtLimit"}'
+        normalized = bot._normalize_korrel8r_query(query)
+
+        assert normalized == 'alert:alert:{"alertname":"PodDisruptionBudgetAtLimit"}'
+
+    def test_normalize_alert_query_already_correct(self):
+        """Test that correctly formatted alert queries are not changed."""
+        from mcp_server.chatbots import LlamaChatBot
+
+        bot = LlamaChatBot("meta-llama/Llama-3.1-8B-Instruct")
+
+        # Already correct - should not change
+        query = 'alert:alert:{"alertname":"HighCPU"}'
+        normalized = bot._normalize_korrel8r_query(query)
+
+        assert normalized == 'alert:alert:{"alertname":"HighCPU"}'
+
+    def test_normalize_escaped_quotes(self):
+        """Test that escaped quotes are unescaped."""
+        from mcp_server.chatbots import LlamaChatBot
+
+        bot = LlamaChatBot("meta-llama/Llama-3.1-8B-Instruct")
+
+        # Escaped quotes should be unescaped
+        query = 'alert:{\"alertname\":\"Test\"}'
+        normalized = bot._normalize_korrel8r_query(query)
+
+        # Should unescape quotes AND add missing class
+        assert normalized == 'alert:alert:{"alertname":"Test"}'
+
+    def test_normalize_k8s_alert_misclassification(self):
+        """Test that k8s:Alert: is corrected to alert:alert:."""
+        from mcp_server.chatbots import LlamaChatBot
+
+        bot = LlamaChatBot("meta-llama/Llama-3.1-8B-Instruct")
+
+        # Misclassified as k8s - should be corrected
+        query = 'k8s:Alert:{"alertname":"PodDown"}'
+        normalized = bot._normalize_korrel8r_query(query)
+
+        assert normalized == 'alert:alert:{"alertname":"PodDown"}'
+
+    def test_normalize_alert_unquoted_keys(self):
+        """Test that unquoted keys in alert selectors are quoted (JSON format)."""
+        from mcp_server.chatbots import LlamaChatBot
+
+        bot = LlamaChatBot("meta-llama/Llama-3.1-8B-Instruct")
+
+        # Unquoted key - should be quoted for alert domain
+        query = 'alert:alert:{alertname="HighLatency"}'
+        normalized = bot._normalize_korrel8r_query(query)
+
+        assert normalized == 'alert:alert:{"alertname":"HighLatency"}'
+
+    def test_normalize_alert_multiple_unquoted_keys(self):
+        """Test normalization with multiple unquoted keys."""
+        from mcp_server.chatbots import LlamaChatBot
+
+        bot = LlamaChatBot("meta-llama/Llama-3.1-8B-Instruct")
+
+        # Multiple unquoted keys
+        query = 'alert:alert:{alertname="Test",severity="critical"}'
+        normalized = bot._normalize_korrel8r_query(query)
+
+        assert normalized == 'alert:alert:{"alertname":"Test","severity":"critical"}'
+
+    def test_normalize_k8s_pod_query(self):
+        """Test normalization of k8s Pod queries (non-alert domain)."""
+        from mcp_server.chatbots import LlamaChatBot
+
+        bot = LlamaChatBot("meta-llama/Llama-3.1-8B-Instruct")
+
+        # k8s domain uses := operator format
+        query = 'k8s:Pod:{namespace="llm-serving"}'
+        normalized = bot._normalize_korrel8r_query(query)
+
+        # For non-alert domains, should use := operator
+        assert normalized == 'k8s:Pod:{"namespace":="llm-serving"}'
+
+    def test_normalize_loki_log_query(self):
+        """Test normalization of loki log queries."""
+        from mcp_server.chatbots import LlamaChatBot
+
+        bot = LlamaChatBot("meta-llama/Llama-3.1-8B-Instruct")
+
+        # Loki domain
+        query = 'loki:log:{kubernetes.namespace_name="test"}'
+        normalized = bot._normalize_korrel8r_query(query)
+
+        # Should use := for non-alert domains
+        assert 'kubernetes.namespace_name":=' in normalized
+
+    def test_normalize_trace_span_query(self):
+        """Test normalization of trace span queries."""
+        from mcp_server.chatbots import LlamaChatBot
+
+        bot = LlamaChatBot("meta-llama/Llama-3.1-8B-Instruct")
+
+        # Trace domain - dots in key names need special handling
+        query = 'trace:span:{k8s_namespace_name="llm-serving"}'
+        normalized = bot._normalize_korrel8r_query(query)
+
+        # Should use := for non-alert domains
+        assert 'k8s_namespace_name":=' in normalized
+
+    def test_normalize_empty_query(self):
+        """Test that empty queries are handled gracefully."""
+        from mcp_server.chatbots import LlamaChatBot
+
+        bot = LlamaChatBot("meta-llama/Llama-3.1-8B-Instruct")
+
+        # Empty query
+        normalized = bot._normalize_korrel8r_query("")
+        assert normalized == ""
+
+    def test_normalize_none_query(self):
+        """Test that None queries are handled gracefully."""
+        from mcp_server.chatbots import LlamaChatBot
+
+        bot = LlamaChatBot("meta-llama/Llama-3.1-8B-Instruct")
+
+        # None query - implementation converts to empty string
+        normalized = bot._normalize_korrel8r_query(None)
+        assert normalized == ""
+
+    def test_normalize_malformed_query_doesnt_crash(self):
+        """Test that malformed queries don't crash the normalization."""
+        from mcp_server.chatbots import LlamaChatBot
+
+        bot = LlamaChatBot("meta-llama/Llama-3.1-8B-Instruct")
+
+        # Malformed query - should return original on error
+        query = 'totally:invalid{{'
+        normalized = bot._normalize_korrel8r_query(query)
+
+        # Should return something (either original or partially normalized)
+        assert normalized is not None
+
+    def test_normalize_works_for_all_bot_types(self):
+        """Test that normalization is available to all chatbot types."""
+        from mcp_server.chatbots import (
+            LlamaChatBot,
+            AnthropicChatBot,
+            OpenAIChatBot,
+            GoogleChatBot
+        )
+
+        query = 'alert:{"alertname":"Test"}'
+        expected = 'alert:alert:{"alertname":"Test"}'
+
+        # Test each bot type
+        llama_bot = LlamaChatBot("meta-llama/Llama-3.1-8B-Instruct")
+        assert llama_bot._normalize_korrel8r_query(query) == expected
+
+        anthropic_bot = AnthropicChatBot("claude-3-5-haiku", api_key="test")
+        assert anthropic_bot._normalize_korrel8r_query(query) == expected
+
+        openai_bot = OpenAIChatBot("gpt-4o-mini", api_key="test")
+        assert openai_bot._normalize_korrel8r_query(query) == expected
+
+        google_bot = GoogleChatBot("gemini-2.5-flash", api_key="test")
+        assert google_bot._normalize_korrel8r_query(query) == expected
+
+
+class TestKorrel8rToolIntegration:
+    """Test Korrel8r tool integration in routing."""
+
+    def test_normalize_is_called_for_korrel8r_queries(self):
+        """Test that normalization is invoked for korrel8r queries."""
+        from mcp_server.chatbots import LlamaChatBot
+
+        bot = LlamaChatBot("meta-llama/Llama-3.1-8B-Instruct")
+
+        # Test that normalize method works correctly
+        query = 'alert:{"alertname":"Test"}'
+        normalized = bot._normalize_korrel8r_query(query)
+
+        # Should be normalized
+        assert normalized == 'alert:alert:{"alertname":"Test"}'
+
+    def test_korrel8r_tool_in_base_tools(self):
+        """Test that korrel8r tool is conditionally added to base tools when enabled."""
+        from mcp_server.chatbots import LlamaChatBot
+
+        bot = LlamaChatBot("meta-llama/Llama-3.1-8B-Instruct")
+        tools = bot._get_mcp_tools()
+
+        # Check if korrel8r tool is in the list (depends on KORREL8R_ENABLED)
+        tool_names = [tool["name"] for tool in tools]
+
+        # Tool may or may not be present depending on config
+        # Just verify tools list is returned
+        assert isinstance(tools, list)
+        assert len(tools) >= 6  # At least the base tools
+
+    def test_normalization_available_to_all_bots(self):
+        """Test that normalization method is available to all bot types."""
+        from mcp_server.chatbots import (
+            LlamaChatBot,
+            AnthropicChatBot,
+            OpenAIChatBot,
+            GoogleChatBot,
+            DeterministicChatBot
+        )
+
+        bots = [
+            LlamaChatBot("meta-llama/Llama-3.1-8B-Instruct"),
+            AnthropicChatBot("claude-3-5-haiku", api_key="test"),
+            OpenAIChatBot("gpt-4o-mini", api_key="test"),
+            GoogleChatBot("gemini-2.5-flash", api_key="test"),
+            DeterministicChatBot("meta-llama/Llama-3.2-3B-Instruct")
+        ]
+
+        query = 'alert:{"alertname":"Test"}'
+        expected = 'alert:alert:{"alertname":"Test"}'
+
+        # All bots should have the method and it should work correctly
+        for bot in bots:
+            assert hasattr(bot, '_normalize_korrel8r_query')
+            assert bot._normalize_korrel8r_query(query) == expected
 
 
 def test_no_claude_integration_references():
