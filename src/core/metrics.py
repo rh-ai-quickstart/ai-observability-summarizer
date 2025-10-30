@@ -13,7 +13,8 @@ import re
 import logging
 import math
 from datetime import datetime
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional, Tuple, Set
+from dataclasses import dataclass
 
 import logging
 from common.pylogger import get_python_logger
@@ -32,8 +33,131 @@ from .llm_client import (
     build_openshift_metrics_context,
     build_openshift_chat_prompt,
 )
+from .config import KORREL8R_ENABLED
+from .korrel8r_service import fetch_goal_query_objects
 NAMESPACE_SCOPED = "namespace_scoped"
 CLUSTER_WIDE = "cluster_wide"
+
+@dataclass(frozen=True)
+class NamespacePodPair:
+    namespace: str
+    pod: Optional[str] = None
+
+
+ 
+
+def extract_namespace_pod_pairs_from_metrics(
+    model_field: str,
+    metric_dfs: Dict[str, Any],
+) -> Set[NamespacePodPair]:
+    """Extract all unique (namespace, pod) pairs from provided metrics.
+
+    Uses DataFrame label columns when available and falls back to parsing
+    namespace from model name formatted as "namespace | model". Deduplicates pairs.
+    """
+    pairs: Set[NamespacePodPair] = set()
+    try:
+        for _label, df in metric_dfs.items():
+            if df is None or not isinstance(df, pd.DataFrame) or df.empty:
+                continue
+            has_ns = "namespace" in df.columns
+            has_pod = "pod" in df.columns
+            try:
+                if has_ns and has_pod:
+                    for _, row in df[["namespace", "pod"]].dropna(how="all").iterrows():
+                        ns_val = str(row["namespace"]).strip() if pd.notna(row.get("namespace")) else None
+                        pod_val = str(row["pod"]).strip() if pd.notna(row.get("pod")) else None
+                        if ns_val or pod_val:
+                            pairs.add(NamespacePodPair(namespace=ns_val or "", pod=pod_val))
+            except Exception:
+                continue
+    except Exception:
+        pass
+    
+    try:
+        if not pairs and "|" in model_field:
+            parts = [p.strip() for p in model_field.split("|", 1)]
+            if len(parts) == 2 and parts[0]:
+                pairs.add(NamespacePodPair(namespace=parts[0], pod=None))
+    except Exception:
+        pass
+    logger.debug("extract_namespace_pod_pairs_from_metrics: pairs=%s", pairs)
+    return pairs
+
+
+def sort_logs_by_severity_then_time(logs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Sort logs by severity (desc) then timestamp (newest first).
+
+    Severity order: FATAL/CRITICAL > ERROR > WARN/WARNING > INFO > DEBUG > TRACE > UNKNOWN.
+    Accepts timestamps in ISO8601, including Z suffix and sub-second precision.
+    """
+    severity_rank = {
+        "FATAL": 7,
+        "CRITICAL": 7,
+        "ERROR": 6,
+        "WARN": 5,
+        "WARNING": 5,
+        "INFO": 3,
+        "DEBUG": 2,
+        "TRACE": 1,
+        "UNKNOWN": 0,
+    }
+
+    from datetime import datetime
+
+    def _parse_ts(ts: str):
+        try:
+            if not ts:
+                return None
+            s = ts.strip()
+            if s.endswith("Z"):
+                s = s[:-1] + "+00:00"
+            if "." in s:
+                head, tail = s.split(".", 1)
+                tz = ""
+                for i, ch in enumerate(tail):
+                    if ch in "+-" and i != 0:
+                        tz = tail[i:]
+                        tail = tail[:i]
+                        break
+                digits = "".join(ch for ch in tail if ch.isdigit())
+                if len(digits) > 6:
+                    digits = digits[:6]
+                s = f"{head}.{digits}{tz}" if digits else f"{head}{tz}"
+            return datetime.fromisoformat(s)
+        except Exception:
+            return None
+
+    def _sort_key(log: Dict[str, Any]):
+        level = str(log.get("level") or "UNKNOWN").upper()
+        rank = severity_rank.get(level, 0)
+        ts = str(log.get("timestamp") or log.get("ts") or "")
+        dt = _parse_ts(ts)
+        return (rank, dt or datetime.fromtimestamp(0))
+
+    return sorted(logs or [], key=_sort_key, reverse=True)
+
+def build_korrel8r_log_query_for_vllm(
+    namespace: Optional[str],
+    pod: Optional[str],
+) -> Optional[str]:
+    """Return a Korrel8r domain query for logs given namespace/pod context.
+
+    - If both namespace and pod are known: use the pod
+    - Else if only namespace is known: k8s Pod selector to pivot to logs
+    - Else: None
+    """
+    try:
+        if namespace and pod:
+            return (
+                f'k8s:Pod.v1:{{"namespace":"{namespace}",'
+                f'"name":"{pod}"}}'
+            )
+        if namespace:
+            return f'k8s:Pod.v1:{{"namespace":"{namespace}"}}'
+        return None
+    except Exception:
+        return None
 
 def choose_prometheus_step(
     start_ts: int,
@@ -824,7 +948,6 @@ def analyze_openshift_metrics(
     metrics_to_fetch, namespace_for_query = _select_openshift_metrics_for_scope(
         metric_category, scope, namespace
     )
-
     # Fetch metrics; if Prometheus fails, raise immediately so MCP tool can surface PROMETHEUS_ERROR
     metric_dfs: Dict[str, Any] = {}
     try:
@@ -844,10 +967,21 @@ def analyze_openshift_metrics(
     if scope == NAMESPACE_SCOPED and namespace:
         scope_description += f" ({namespace})"
 
-    # Build OpenShift metrics prompt
+    # Build correlated log/trace context for OpenShift analysis (only when relevant)
+    log_trace_data = build_log_trace_context_for_pod_issues(
+            namespace_for_query=namespace_for_query,
+            namespace_label=namespace,
+            start_ts=start_ts,
+            end_ts=end_ts,
+            metrics_to_fetch=metrics_to_fetch,
+        )
+    logger.debug("In analyze_openshift_metrics: log_trace_data=%s", log_trace_data)
+    # Build OpenShift metrics prompt (including optional log/trace context)
     prompt = build_openshift_prompt(
-        metric_dfs, metric_category, namespace_for_query, scope_description
+        metric_dfs, metric_category, namespace_for_query, scope_description, log_trace_data
     )
+
+    logger.debug("In analyze_openshift_metrics: prompt=%s", prompt)
     # Summarize; if LLM service fails, raise HTTPException to be mapped to LLMServiceError by MCP
     try:
         summary = summarize_with_llm(
@@ -1133,6 +1267,50 @@ def fetch_openshift_metrics(query, start, end, namespace=None):
 
 # --- Business logic for MCP tools (moved from tools module) ---
 
+def build_log_trace_context_for_pod_issues(
+    namespace_for_query: Optional[str],
+    namespace_label: Optional[str],
+    start_ts: int,
+    end_ts: int,
+    metrics_to_fetch: Optional[Dict[str, str]] = None,
+) -> str:
+    """Return correlated log/trace context for pods in Failed/CrashLoopBackOff states.
+
+    Uses an explicit PromQL to retrieve (namespace,pod) pairs, then delegates to
+    build_correlated_context_from_metrics to construct the prompt lines. Returns
+    an empty string on any error.
+    """
+    try:
+        contains_pods_failed_metric = any(
+            isinstance(label, str) and ("Pods Failed" in label)
+            for label in (metrics_to_fetch or {}).keys()
+        ) if isinstance(metrics_to_fetch, dict) else False
+        if not contains_pods_failed_metric:
+            return ""
+
+        pod_issue_query = (
+            "max by (namespace, pod) ((kube_pod_status_phase{phase=\"Failed\"} == 1) "
+            "or (kube_pod_container_status_waiting_reason{reason=\"CrashLoopBackOff\"} == 1))"
+        )
+        pairs_df = fetch_openshift_metrics(
+            pod_issue_query,
+            start_ts,
+            end_ts,
+            namespace_for_query,
+        )
+        pairs_metric_dfs: Dict[str, Any] = {"pod_status": pairs_df}
+        logger.debug("In build_log_trace_context_for_pod_issues: pairs_metric_dfs=%s", pairs_metric_dfs)
+        if not pairs_metric_dfs:
+            return ""
+        return build_correlated_context_from_metrics(
+            metric_dfs=pairs_metric_dfs,
+            model_name=namespace_label or "",
+            start_ts=start_ts,
+            end_ts=end_ts,
+        )
+    except Exception:
+        return ""
+
 def get_summarization_models() -> List[str]:
     """Return available summarization model IDs from MODEL_CONFIG.
 
@@ -1254,3 +1432,85 @@ def get_namespace_model_deployment_info(namespace: str, model: str) -> Dict[str,
         "namespace": namespace,
         "model": model,
     }
+
+
+def build_correlated_context_from_metrics(
+    metric_dfs: Dict[str, Any],
+    model_name: str,
+    start_ts: int,
+    end_ts: int,
+) -> str:
+    """Return up to 5 log/trace lines for vLLM prompt.
+
+    Each line includes: pod, container, level, and the log message.
+    """
+    if not KORREL8R_ENABLED:
+        return ""
+    try:
+        # Gather all unique (namespace, pod) pairs from metrics
+        pairs = extract_namespace_pod_pairs_from_metrics(model_name, metric_dfs)
+        logger.debug("In build_correlated_context_from_metrics: pairs=%s", pairs)
+        if not pairs:
+            return ""
+        goals = ["log:application", "log:infrastructure"]
+        # Aggregate logs across all pairs first
+        aggregated_logs: List[Dict[str, Any]] = []
+        for pair in pairs:
+            try:
+                query_str = build_korrel8r_log_query_for_vllm(pair.namespace, pair.pod)
+                if not query_str:
+                    continue
+                logger.debug("In build_correlated_context_from_metrics: query_str=%s", query_str)
+                aggregated: List[Any] = fetch_goal_query_objects(goals, query_str)
+                logger.debug("In build_correlated_context_from_metrics: aggregated=%s", aggregated)
+                for obj in aggregated:
+                    try:
+                        message = obj.get("message") or obj.get("line") or ""
+                        if not message:
+                            continue
+                        level = str(obj.get("level") or "UNKNOWN").upper()
+                        # Skip DEBUG, INFO, TRACE, UNKNOWN levels
+                        if level in ("DEBUG", "INFO", "TRACE", "UNKNOWN"):
+                            continue
+                        aggregated_logs.append(obj)
+                    except Exception:
+                        continue
+            except Exception:
+                continue
+        # Sort aggregated logs by severity then timestamp
+        aggregated_logs_sorted = sort_logs_by_severity_then_time(aggregated_logs)
+        logger.debug("In build_correlated_context_from_metrics: aggregated_logs_sorted=%s", aggregated_logs_sorted)
+        # Take top N (configurable) and build lines
+        try:
+            max_rows = int(os.getenv("MAX_NUM_LOG_ROWS", "10"))
+        except Exception:
+            max_rows = 10
+        lines: List[str] = []
+        for obj in aggregated_logs_sorted[:max_rows]:
+            try:
+                message = obj.get("message") or obj.get("line") or ""
+                if not message:
+                    continue
+                pod = obj.get("pod") or ""
+                namespace = obj.get("namespace") or ""
+                level = str(obj.get("level") or "UNKNOWN").upper()
+                lines.append(f"- namespace={namespace} pod={pod} level={level} {message}")
+            except Exception:
+                continue
+
+        result_str = "\n".join(lines)
+        logger.debug("In build_correlated_context_from_metrics: selected_lines=%s", result_str)
+        # Optionally inject a synthetic error log line for testing ONLY
+        try:
+            if os.getenv("INJECT_VLLM_ERROR_LOG_MSG"):
+                injected = (
+                    "- namespace=dev pod=llama-3-2-3b-instruct-predictor-649469cd68-8zn49 "
+                    "level=ERROR Server running out of memory"
+                )
+                result_str = f"{result_str}\n{injected}" if result_str else injected
+        except Exception:
+            pass
+
+        return result_str
+    except Exception:
+        return ""

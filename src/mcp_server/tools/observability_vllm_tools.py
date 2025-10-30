@@ -14,7 +14,7 @@ OpenShift-specific tools live in observability_openshift_tools.py
 import json
 import os
 import pandas as pd
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 
 # Import core observability services
 from core.metrics import (
@@ -25,12 +25,15 @@ from core.metrics import (
     get_summarization_models,
     get_cluster_gpu_info,
     get_namespace_model_deployment_info,
+    build_korrel8r_log_query_for_vllm,
 )
 from core.llm_client import build_prompt, summarize_with_llm, extract_time_range_with_info
 from core.models import AnalyzeRequest
 from core.response_validator import ResponseType
 from core.metrics import NAMESPACE_SCOPED, CLUSTER_WIDE
+from core.metrics import build_correlated_context_from_metrics
 from core.config import PROMETHEUS_URL, THANOS_TOKEN, VERIFY_SSL, DEFAULT_TIME_RANGE_DAYS
+from core.config import KORREL8R_ENABLED
 import requests
 from datetime import datetime, timedelta
 
@@ -305,14 +308,25 @@ def analyze_vllm(
     # Collect metrics and perform analysis
     try:
         vllm_metrics = get_vllm_metrics()
-        
         metric_dfs: Dict[str, Any] = {
             label: fetch_metrics(query, model_name, resolved_start, resolved_end)
                 for label, query in vllm_metrics.items()
         }
 
-        # Build prompt and summarize
-        prompt = build_prompt(metric_dfs, model_name)
+        # --- Phase 1: Optional Korrel8r enrichment (logs only) ---
+        korrel8r_section: Dict[str, Any] = {}
+        korrel8r_prompt_note: str = ""
+        if KORREL8R_ENABLED:
+            log_trace_data = build_correlated_context_from_metrics(
+                metric_dfs=metric_dfs,
+                model_name=model_name,
+                start_ts=resolved_start,
+                end_ts=resolved_end,
+            )
+
+        # Build prompt base and summarize (Korrel8r enrichment may augment prompt later)
+        prompt = build_prompt(metric_dfs, model_name, log_trace_data)
+
         summary = summarize_with_llm(
             prompt,
             summarize_model_id,

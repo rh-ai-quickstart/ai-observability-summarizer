@@ -320,12 +320,12 @@ ANSWER:
     return prompt.strip()
 
 
-def build_prompt(metric_dfs, model_name: str) -> str:
+def build_prompt(metric_dfs, model_name, log_trace_data: str) -> str:
     """Build analysis prompt for vLLM metrics data"""
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
     prompt = f"""
-You are a machine learning model performance analysis expert. Please analyze the following vLLM metrics for model '{model_name}' and provide a comprehensive summary.
+You are a machine learning model performance analysis expert. Please analyze the following vLLM metrics and logs/traces data for model '{model_name}' and provide a comprehensive summary.
 
 Current Analysis Time: {current_time}
 
@@ -342,7 +342,10 @@ METRICS DATA:
                 prompt += f"Average: {df['value'].mean():.2f}\n"
                 prompt += f"Min: {df['value'].min():.2f}, Max: {df['value'].max():.2f}\n"
     
-    prompt += """
+    prompt += f"""
+
+LOGS/TRACES DATA:
+{log_trace_data}
 
 ANALYSIS REQUIREMENTS:
 1. **Performance Summary**: Overall health and performance status
@@ -361,7 +364,7 @@ Please provide a clear, structured analysis that would be useful for both techni
 
 
 def build_openshift_prompt(
-    metric_dfs, metric_category, namespace=None, scope_description=None
+    metric_dfs, metric_category, namespace=None, scope_description=None, log_trace_data: str = ""
 ):
     """
     Build prompt for OpenShift metrics analysis
@@ -374,7 +377,7 @@ def build_openshift_prompt(
     else:
         scope = f"namespace **{namespace}**" if namespace else "cluster-wide"
 
-    header = f"You are an expert in OpenShift platform monitoring and operations. You are evaluating OpenShift **{metric_category}** metrics for {scope}.\n\n📊 **Metrics**:\n"
+    header = f"You are an expert in OpenShift platform monitoring and operations. You are evaluating OpenShift **{metric_category}** metrics and logs/traces for {scope}.\n\n📊 **Metrics**:\n"
     analysis_focus = f"{metric_category.lower()} performance and health"
 
     lines = []
@@ -404,9 +407,11 @@ For each question, state the question in bold font, and then answer each questio
 If there is no direct answer to a question, say so and do not speculate or add additional information. 
 Stop after you have answered question 4 and do not add explainations or notes.
 """
+    logs_section = f"\n\nCorrelated Logs/Traces (top 5):\n{log_trace_data}\n" if log_trace_data else ""
     return f"""{header}
 {chr(10).join(lines)}
 
+{logs_section}
 {analysis_questions}
 """.strip()
 
