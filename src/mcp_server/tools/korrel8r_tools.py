@@ -25,14 +25,6 @@ def korrel8r_query_objects(query: str) -> List[Dict[str, Any]]:
       - loki:log:{"kubernetes.namespace_name":"llm-serving","kubernetes.pod_name":"p-abc"}
       - trace:span:{".k8s.namespace.name":"llm-serving"}
     """
-    if not KORREL8R_ENABLED:
-        err = MCPException(
-            message="Korrel8r integration is disabled",
-            error_code=MCPErrorCode.FEATURE_DISABLED,
-            recovery_suggestion="Enable KORREL8R_ENABLED to use this tool.",
-        )
-        return err.to_mcp_response()
-
     try:
         client = Korrel8rClient()
         result = client.query_objects(query)
@@ -62,13 +54,6 @@ def korrel8r_get_correlated(goals: List[str], query: str) -> List[Dict[str, Any]
         query: A single Korrel8r domain query string (same format as query_objects),
                e.g., "alert:alert:{\"alertname\":\"PodDisruptionBudgetAtLimit\"}"
     """
-    if not KORREL8R_ENABLED:
-        err = MCPException(
-            message="Korrel8r integration is disabled",
-            error_code=MCPErrorCode.FEATURE_DISABLED,
-            recovery_suggestion="Enable KORREL8R_ENABLED to use this tool.",
-        )
-        return err.to_mcp_response()
     try:
         if not isinstance(goals, list) or not all(isinstance(g, str) for g in goals):
             err = MCPException(
