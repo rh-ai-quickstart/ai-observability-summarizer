@@ -1,0 +1,54 @@
+# LokiStack instance with multitenant configuration
+apiVersion: loki.grafana.com/v1
+kind: LokiStack
+metadata:
+  name: {{ .Values.lokiStack.name }}
+  namespace: {{ include "loki-stack.namespace" . }}
+  labels:
+    {{- include "loki-stack.labels" . | nindent 4 }}
+    {{- with .Values.commonLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  storage:
+    secret:
+      name: minio-loki-credentials
+      type: s3
+  storageClassName: {{ .Values.lokiStack.storageClassName | quote }}
+  size: {{ .Values.lokiStack.size }}
+  tenants:
+    mode: {{ .Values.lokiStack.tenants.mode }}
+  limits:
+    global:
+      retention: {{ .Values.lokiStack.limits.global.retention | toYaml | nindent 8 }}
+      queries:
+        maxEntriesLimitPerQuery: {{ .Values.lokiStack.limits.global.queriesMaxEntriesLimitPerQuery }}
+      ingestion:
+        ingestionRate: {{ .Values.lokiStack.limits.global.ingestionRateLimit }}
+        ingestionBurstSize: {{ .Values.lokiStack.limits.global.ingestionBurstLimit }}
+    tenants:
+      {{- range $tenant, $config := .Values.lokiStack.limits.tenants }}
+      {{ $tenant }}:
+        retention: {{ $config.retention | toYaml | nindent 10 }}
+        ingestion:
+          ingestionRate: {{ $config.ingestionRateLimit }}
+      {{- end }}
+  template:
+    distributor:
+      replicas: {{ .Values.lokiStack.template.distributor.replicas }}
+    ingester:
+      replicas: {{ .Values.lokiStack.template.ingester.replicas }}
+    querier:
+      replicas: {{ .Values.lokiStack.template.querier.replicas }}
+    queryFrontend:
+      replicas: {{ .Values.lokiStack.template.queryFrontend.replicas }}
+    gateway:
+      replicas: {{ .Values.lokiStack.template.gateway.replicas }}
+    indexGateway:
+      replicas: {{ .Values.lokiStack.template.indexGateway.replicas }}
+    compactor:
+      replicas: {{ .Values.lokiStack.template.compactor.replicas }}

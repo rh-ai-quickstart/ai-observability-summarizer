@@ -3,7 +3,7 @@
 
 # NAMESPACE validation for deployment targets
 ifeq ($(NAMESPACE),)
-ifeq (,$(filter install-local depend install-ingestion-pipeline list-models% generate-model-config help build build-ui build-alerting build-mcp-server push push-ui push-alerting push-mcp-server clean config test check-observability-drift install-operators uninstall-operators check-operators install-cluster-observability-operator install-opentelemetry-operator install-tempo-operator uninstall-cluster-observability-operator uninstall-opentelemetry-operator uninstall-tempo-operator enable-tracing-ui disable-tracing-ui,$(MAKECMDGOALS)))
+ifeq (,$(filter install-local depend install-ingestion-pipeline list-models% generate-model-config help build build-ui build-alerting build-mcp-server push push-ui push-alerting push-mcp-server clean config test check-observability-drift install-operators uninstall-operators check-operators install-cluster-observability-operator install-opentelemetry-operator install-tempo-operator uninstall-cluster-observability-operator uninstall-opentelemetry-operator uninstall-tempo-operator enable-tracing-ui disable-tracing-ui enable-logging-ui disable-logging-ui install-loki uninstall-loki upgrade-observability,$(MAKECMDGOALS)))
 $(error NAMESPACE is not set)
 endif
 endif
@@ -90,6 +90,7 @@ ALERTING_RELEASE_NAME ?= alerting
 OBSERVABILITY_NAMESPACE ?= observability-hub # currently hard-coded in instrumentation.yaml
 INSTRUMENTATION_PATH ?= observability/otel-collector/scripts/instrumentation.yaml
 MINIO_NAMESPACE ?= observability-hub
+LOKI_NAMESPACE ?= openshift-logging
 
 # LLM URL processing constants
 DEFAULT_LLM_PORT_AND_PATH := :8080/v1
@@ -145,6 +146,23 @@ helm_tempo_args = \
     --set minio.s3.accessKeySecret=$(MINIO_PASSWORD) \
     --set minio.s3.bucket=tempo
 
+# Shell snippet to check if collector SA exists and determine rbac.collector.create value
+# Returns "false" if SA exists, "true" if it doesn't
+# Usage: COLLECTOR_CREATE=$$($(check_collector_sa_and_get_flag))
+check_collector_sa_and_get_flag = \
+	if oc get serviceaccount collector -n $(LOKI_NAMESPACE) >/dev/null 2>&1; then \
+		echo "  → Collector ServiceAccount already exists in $(LOKI_NAMESPACE), will not recreate" >&2; \
+		echo "false"; \
+	else \
+		echo "  → Collector ServiceAccount does not exist, will be created" >&2; \
+		echo "true"; \
+	fi
+
+helm_loki_args = \
+    --set minio.s3.accessKeyId=$(MINIO_USER) \
+    --set minio.s3.accessKeySecret=$(MINIO_PASSWORD) \
+    --set minio.s3.bucket=loki
+
 .PHONY: help
 help:
 	@echo "OpenShift AI Observability Summarizer - Build & Deploy"
@@ -177,31 +195,39 @@ help:
 	@echo "  install-ingestion-pipeline - Install extra ingestion pipelines"
 	@echo ""
 	@echo "Observability Stack:"
-	@echo "  install-observability-stack - Install complete observability stack (MinIO + TempoStack + OTEL + tracing + drift check)"
-	@echo "  uninstall-observability-stack - Uninstall complete observability stack (tracing + TempoStack + OTEL + MinIO)"
+	@echo "  install-observability-stack - Install complete observability stack (MinIO + TempoStack + LokiStack + OTEL + tracing + logging + drift check)"
+	@echo "  uninstall-observability-stack - Uninstall complete observability stack (tracing + logging + TempoStack + LokiStack + OTEL + MinIO)"
 	@echo ""
 	@echo "Operators:"
-	@echo "  install-operators - Install all mandatory operators (observability, otel, tempo)"
+	@echo "  install-operators - Install all mandatory operators (observability, otel, tempo, logging, loki)"
 	@echo "  install-cluster-observability-operator - Install Cluster Observability Operator (observability)"
 	@echo "  install-opentelemetry-operator - Install OpenTelemetry Operator (otel)"
 	@echo "  install-tempo-operator - Install Tempo Operator (tempo)"
+	@echo "  install-logging-operator - Install OpenShift Logging Operator (logging)"
+	@echo "  install-loki-operator - Install Loki Operator (loki)"
 	@echo "  uninstall-operators - Uninstall all mandatory operators (with confirmation)"
 	@echo "  uninstall-cluster-observability-operator - Uninstall Cluster Observability Operator only"
 	@echo "  uninstall-opentelemetry-operator - Uninstall OpenTelemetry Operator only"
 	@echo "  uninstall-tempo-operator - Uninstall Tempo Operator only"
+	@echo "  uninstall-logging-operator - Uninstall OpenShift Logging Operator only"
+	@echo "  uninstall-loki-operator - Uninstall Loki Operator only"
 	@echo "  check-operators - Check status of all mandatory operators"
 	@echo ""
 	@echo "Individual Components:"
-	@echo "  install-observability - Install TempoStack and OTEL Collector only"
-	@echo "  uninstall-observability - Uninstall TempoStack and OTEL Collector only"
+	@echo "  install-observability - Install TempoStack, LokiStack and OTEL Collector only"
+	@echo "  uninstall-observability - Uninstall TempoStack, LokiStack and OTEL Collector only"
 	@echo "  upgrade-observability - Force upgrade observability components (even if already installed)"
 	@echo "  check-observability-drift - Check for configuration drift in observability-hub"
 	@echo "  setup-tracing - Enable auto-instrumentation for tracing in target namespace (idempotent)"
 	@echo "  remove-tracing - Disable auto-instrumentation for tracing in target namespace"
 	@echo "  enable-tracing-ui - Enable 'Observe → Traces' menu in OpenShift Console"
 	@echo "  disable-tracing-ui - Disable 'Observe → Traces' menu in OpenShift Console"
+	@echo "  enable-logging-ui - Enable 'Observe → Logs' menu in OpenShift Console"
+	@echo "  disable-logging-ui - Disable 'Observe → Logs' menu in OpenShift Console"
 	@echo "  install-minio - Install MinIO observability storage backend only"
 	@echo "  uninstall-minio - Uninstall MinIO observability storage backend only"
+	@echo "  install-loki - Install LokiStack for centralized log aggregation (idempotent)"
+	@echo "  uninstall-loki - Uninstall LokiStack (preserves MinIO storage and buckets)"
 	@echo ""
 	@echo "Alerting:"
 	@echo "  install-alerts     - Install alerting Helm chart"
@@ -530,7 +556,7 @@ clean:
 
 # Run tests
 .PHONY: test
-test:	
+test:
 	@echo "🧪 Running tests with coverage..."
 	@uv sync --group test
 	@uv run pytest -v --cov=src --cov-report=html --cov-report=term
@@ -651,7 +677,7 @@ create-secret: namespace
 	@echo "Secret 'alerts-secrets' created/updated in namespace $(NAMESPACE)."
 
 .PHONY: install-alerts
-install-alerts: patch-config create-secret 
+install-alerts: patch-config create-secret
 	@echo "Installing/Upgrading Helm chart $(ALERTING_RELEASE_NAME) in namespace $(NAMESPACE)..."
 	@cd deploy/helm && helm upgrade --install $(ALERTING_RELEASE_NAME) ./alerting --namespace $(NAMESPACE) \
 		--set image.repository=$(METRICS_ALERTING_IMAGE) \
@@ -681,7 +707,7 @@ validate-llm:
 
 .PHONY: install-observability
 install-observability:
-	@echo "→ Checking if OpenTelemetry Collector and Tempo already exist in namespace $(OBSERVABILITY_NAMESPACE)"
+	@echo "→ Checking if OpenTelemetry Collector, Tempo, and Loki already exist in namespace $(OBSERVABILITY_NAMESPACE)"
 	@if helm list -n $(OBSERVABILITY_NAMESPACE) 2>/dev/null | grep -q "^tempo\s"; then \
 		echo "  → TempoStack already installed, skipping..."; \
 	else \
@@ -702,6 +728,9 @@ install-observability:
 			--create-namespace \
 			--set global.namespace=$(OBSERVABILITY_NAMESPACE); \
 	fi
+
+	@# Delegate to install-loki to avoid duplication
+	@$(MAKE) install-loki
 
 .PHONY: install-observability-stack
 install-observability-stack: install-minio setup-tracing install-observability check-observability-drift enable-tracing-ui
@@ -751,25 +780,60 @@ disable-tracing-ui:
 		echo "  → Console plugin is not enabled"; \
 	fi
 
+.PHONY: enable-logging-ui
+enable-logging-ui:
+	@echo "→ Enabling logging console plugin for Observe → Logs menu"
+	@if oc get console.operator.openshift.io cluster -o jsonpath='{.spec.plugins}' 2>/dev/null | grep -q "logging-console-plugin"; then \
+		echo "  → Console plugin already enabled"; \
+	else \
+		echo "  → Enabling console plugin..."; \
+		oc patch console.operator.openshift.io cluster --type=json -p='[{"op": "add", "path": "/spec/plugins/-", "value": "logging-console-plugin"}]' 2>/dev/null && \
+		echo "  → Console plugin enabled. The OpenShift Console will refresh automatically." || \
+		echo "  → Note: Console plugin enablement requires cluster-admin permissions. You may need to run this manually."; \
+	fi
+
+.PHONY: disable-logging-ui
+disable-logging-ui:
+	@echo "→ Disabling logging console plugin for Observe → Logs menu"
+	@if oc get console.operator.openshift.io cluster -o jsonpath='{.spec.plugins}' 2>/dev/null | grep -q "logging-console-plugin"; then \
+		PLUGIN_INDEX=$$(oc get console.operator.openshift.io cluster -o json | jq '.spec.plugins | to_entries | .[] | select(.value=="logging-console-plugin") | .key'); \
+		if [ -n "$$PLUGIN_INDEX" ]; then \
+			oc patch console.operator.openshift.io cluster --type=json -p="[{\"op\": \"remove\", \"path\": \"/spec/plugins/$$PLUGIN_INDEX\"}]" 2>/dev/null && \
+			echo "  → Console plugin disabled. The OpenShift Console will refresh automatically." || \
+			echo "  → Note: Console plugin disabling requires cluster-admin permissions. You may need to run this manually."; \
+		else \
+			echo "  → Could not find plugin index"; \
+		fi \
+	else \
+		echo "  → Console plugin is not enabled"; \
+	fi
+
 .PHONY: uninstall-observability
 uninstall-observability:
 	@echo "Uninstalling TempoStack and Otel Collector in namespace $(OBSERVABILITY_NAMESPACE)"
-	@helm uninstall tempo -n $(OBSERVABILITY_NAMESPACE)
-	@helm uninstall otel-collector -n $(OBSERVABILITY_NAMESPACE)
+	@helm uninstall tempo -n $(OBSERVABILITY_NAMESPACE) --ignore-not-found
+	@helm uninstall otel-collector -n $(OBSERVABILITY_NAMESPACE) --ignore-not-found
 
 	@echo "Removing TempoStack PVCs from $(OBSERVABILITY_NAMESPACE)"
 	- @oc delete pvc -n $(OBSERVABILITY_NAMESPACE) -l app.kubernetes.io/name=tempo --timeout=30s ||:
 
+	@echo "Uninstalling LokiStack in namespace $(LOKI_NAMESPACE)"
+	@helm uninstall loki-stack -n $(LOKI_NAMESPACE) --ignore-not-found
+
+	@echo "Removing LokiStack PVCs from $(LOKI_NAMESPACE)"
+	- @oc delete pvc -n $(LOKI_NAMESPACE) -l app.kubernetes.io/name=loki --timeout=30s ||:
+
 .PHONY: uninstall-observability-stack
 uninstall-observability-stack:
 	@if [ "$(UNINSTALL_OBSERVABILITY)" = "true" ]; then \
-		echo "🗑️  Uninstalling observability stack (includes tracing and MinIO)"; \
+		echo "🗑️  Uninstalling observability stack (includes tracing, logging, and MinIO)"; \
 		echo ""; \
 		echo "⚠️  WARNING: This will remove the following components:"; \
 		echo "  → Auto-instrumentation for tracing in namespace $(NAMESPACE)"; \
-		echo "  → TempoStack and OTEL Collector in namespace $(OBSERVABILITY_NAMESPACE)"; \
+		echo "  → TempoStack, LokiStack, and OTEL Collector in namespace $(OBSERVABILITY_NAMESPACE)"; \
 		echo "  → MinIO observability storage in namespace $(MINIO_NAMESPACE)"; \
 		echo "  → Distributed Tracing Console Plugin (Observe → Traces menu)"; \
+		echo "  → Logging Console Plugin (Observe → Logs menu)"; \
 		echo ""; \
 		echo "This infrastructure is shared by multiple applications."; \
 		echo ""; \
@@ -777,12 +841,13 @@ uninstall-observability-stack:
 		$(MAKE) uninstall-observability; \
 		$(MAKE) uninstall-minio; \
 		$(MAKE) disable-tracing-ui; \
+		$(MAKE) disable-logging-ui; \
 		echo ""; \
 		echo "✅ Observability stack uninstallation completed!"; \
 	else \
 		echo "❌ WARNING: UNINSTALL_OBSERVABILITY is not set to 'true'"; \
 		echo "   Skipping removal of shared observability infrastructure to protect other teams."; \
-		echo "   This infrastructure (TempoStack, OTel Collector) is shared by multiple applications."; \
+		echo "   This infrastructure (TempoStack, LokiStack, OTel Collector) is shared by multiple applications."; \
 		echo ""; \
 		echo "   To remove observability infrastructure, run:"; \
 		echo "     → make uninstall NAMESPACE=$(NAMESPACE) UNINSTALL_OBSERVABILITY=true"; \
@@ -793,7 +858,7 @@ uninstall-observability-stack:
 
 .PHONY: upgrade-observability
 upgrade-observability:
-	@echo "→ Force upgrading OpenTelemetry Collector and Tempo in namespace $(OBSERVABILITY_NAMESPACE)"
+	@echo "→ Force upgrading OpenTelemetry Collector, Tempo, and Loki in namespace $(OBSERVABILITY_NAMESPACE)"
 	@echo "  This will update the configuration even if already installed"
 	cd deploy/helm && helm upgrade --install tempo ./observability/tempo \
 		--namespace $(OBSERVABILITY_NAMESPACE) \
@@ -804,11 +869,20 @@ upgrade-observability:
 		--namespace $(OBSERVABILITY_NAMESPACE) \
 		--create-namespace \
 		--set global.namespace=$(OBSERVABILITY_NAMESPACE)
+	@# Force upgrade Loki (without idempotency check for upgrade scenario)
+	@COLLECTOR_CREATE=$$($(check_collector_sa_and_get_flag)); \
+	cd deploy/helm && helm upgrade --install loki-stack ./observability/loki \
+		--namespace $(LOKI_NAMESPACE) \
+		--create-namespace \
+		--atomic --timeout 15m \
+		--set global.namespace=$(LOKI_NAMESPACE) \
+		--set rbac.collector.create=$$COLLECTOR_CREATE \
+		$(helm_loki_args)
 	@echo "✅ Observability components upgraded successfully"
 
 .PHONY: check-observability-drift
 check-observability-drift:
-	@scripts/check-observability-drift.sh $(OBSERVABILITY_NAMESPACE)
+	@scripts/check-observability-drift.sh $(OBSERVABILITY_NAMESPACE) $(LOKI_NAMESPACE)
 
 
 # ---- Alert Example (Python) ----
@@ -889,6 +963,35 @@ uninstall-minio:
 	@echo "Removing minio PVCs from $(MINIO_NAMESPACE)"
 	- @oc delete pvc -n $(MINIO_NAMESPACE) -l app.kubernetes.io/name=$(MINIO_CHART) --timeout=30s ||:
 
+.PHONY: install-loki
+install-loki:
+	@echo "→ Checking if loki-stack already exists in namespace $(LOKI_NAMESPACE)"
+	@if helm list -n $(LOKI_NAMESPACE) 2>/dev/null | grep -q "^loki-stack\s"; then \
+		echo "  → loki-stack already installed, skipping..."; \
+	else \
+		echo "Installing loki-stack helm chart"; \
+		COLLECTOR_CREATE=$$($(check_collector_sa_and_get_flag)); \
+		cd deploy/helm && helm upgrade --install loki-stack observability/loki \
+			--namespace $(LOKI_NAMESPACE) \
+			--create-namespace \
+			--atomic --timeout 15m \
+			--set global.namespace=$(LOKI_NAMESPACE) \
+			--set rbac.collector.create=$$COLLECTOR_CREATE \
+			$(helm_loki_args); \
+		echo "loki-stack installed successfully"; \
+	fi
+	@$(MAKE) enable-logging-ui
+
+.PHONY: uninstall-loki
+uninstall-loki:
+	@echo "Uninstalling loki-stack in namespace $(LOKI_NAMESPACE)"
+	@helm -n $(LOKI_NAMESPACE) uninstall loki-stack --ignore-not-found
+
+	@echo "Removing LokiStack PVCs from $(LOKI_NAMESPACE)"
+	- @oc delete pvc -n $(LOKI_NAMESPACE) -l app.kubernetes.io/name=loki --timeout=30s ||:
+
+	@$(MAKE) disable-logging-ui
+
 # -- Operator Installation targets --
 
 # Install Cluster Observability Operator
@@ -909,9 +1012,21 @@ install-tempo-operator:
 	@echo ""
 	@$(OPERATOR_MANAGER_SCRIPT) -i tempo -n openshift-tempo-operator
 
-# Install all three mandatory operators for Tempo and OpenTelemetry Collector
+# Install OpenShift Logging Operator
+.PHONY: install-logging-operator
+install-logging-operator:
+	@echo ""
+	@$(OPERATOR_MANAGER_SCRIPT) -i logging -n openshift-logging
+
+# Install Loki Operator
+.PHONY: install-loki-operator
+install-loki-operator:
+	@echo ""
+	@$(OPERATOR_MANAGER_SCRIPT) -i loki -n openshift-loki-operator
+
+# Install all five mandatory operators for Tempo, OpenTelemetry Collector, and Loki
 .PHONY: install-operators
-install-operators: install-cluster-observability-operator install-opentelemetry-operator install-tempo-operator
+install-operators: install-cluster-observability-operator install-opentelemetry-operator install-tempo-operator install-logging-operator install-loki-operator
 
 # Uninstall Cluster Observability Operator
 .PHONY: uninstall-cluster-observability-operator
@@ -928,22 +1043,36 @@ uninstall-opentelemetry-operator:
 uninstall-tempo-operator:
 	@$(OPERATOR_MANAGER_SCRIPT) -u tempo -n openshift-tempo-operator
 
-# Uninstall all three operators
+# Uninstall OpenShift Logging Operator
+.PHONY: uninstall-logging-operator
+uninstall-logging-operator:
+	@$(OPERATOR_MANAGER_SCRIPT) -u logging -n openshift-logging
+
+# Uninstall Loki Operator
+.PHONY: uninstall-loki-operator
+uninstall-loki-operator:
+	@$(OPERATOR_MANAGER_SCRIPT) -u loki -n openshift-loki-operator
+
+# Uninstall all five operators
 .PHONY: uninstall-operators
 uninstall-operators:
 	@if [ "$(UNINSTALL_OPERATORS)" = "true" ]; then \
-		echo "🗑️  Uninstalling operators for Tempo and OpenTelemetry Collector..."; \
+		echo "🗑️  Uninstalling operators for Tempo, OpenTelemetry Collector, and Loki..."; \
 		echo ""; \
 		echo "⚠️  WARNING: This will remove the following operators:"; \
 		echo "  → Cluster Observability Operator"; \
 		echo "  → Red Hat build of OpenTelemetry Operator"; \
 		echo "  → Tempo Operator"; \
+		echo "  → OpenShift Logging Operator"; \
+		echo "  → Loki Operator"; \
 		echo ""; \
 		echo "This may affect other applications using these operators."; \
 		echo ""; \
 		$(MAKE) uninstall-cluster-observability-operator; \
 		$(MAKE) uninstall-opentelemetry-operator; \
 		$(MAKE) uninstall-tempo-operator; \
+		$(MAKE) uninstall-logging-operator; \
+		$(MAKE) uninstall-loki-operator; \
 		echo ""; \
 		echo "✅ All operators uninstallation completed!"; \
 	else \
@@ -962,8 +1091,10 @@ uninstall-operators:
 # Check operator status
 .PHONY: check-operators
 check-operators:
-	@echo "📊 Checking operator status for Tempo and OpenTelemetry Collector..."
+	@echo "📊 Checking operator status for Tempo, OpenTelemetry Collector, and Loki..."
 	@echo ""
 	@printf "🔍 Cluster Observability Operator: " && $(OPERATOR_MANAGER_SCRIPT) -c observability
 	@printf "🔍 OpenTelemetry Operator: " && $(OPERATOR_MANAGER_SCRIPT) -c otel
 	@printf "🔍 Tempo Operator: " && $(OPERATOR_MANAGER_SCRIPT) -c tempo
+	@printf "🔍 OpenShift Logging Operator: " && $(OPERATOR_MANAGER_SCRIPT) -c logging
+	@printf "🔍 Loki Operator: " && $(OPERATOR_MANAGER_SCRIPT) -c loki

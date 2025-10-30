@@ -1,0 +1,128 @@
+{{- if .Values.clusterLogging.logForwarder.enabled }}
+# ClusterLogForwarder to send logs to LokiStack
+apiVersion: observability.openshift.io/v1
+kind: ClusterLogForwarder
+metadata:
+  name: {{ .Values.lokiStack.name }}-forwarder
+  namespace: openshift-logging
+  labels:
+    {{- include "loki-stack.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  managementState: Managed
+  serviceAccount:
+    name: {{ .Values.clusterLogging.logForwarder.serviceAccount.name }}
+  {{- if or .Values.clusterLogging.logForwarder.inputs.application.allNamespaces .Values.clusterLogging.logForwarder.inputs.infrastructure.filtered }}
+  inputs:
+  {{- if .Values.clusterLogging.logForwarder.inputs.application.allNamespaces }}
+  - name: {{ .Values.clusterLogging.logForwarder.inputs.application.customName }}
+    type: application
+    application: {} # Empty spec means all namespaces
+  {{- end }}
+  {{- if .Values.clusterLogging.logForwarder.inputs.infrastructure.filtered }}
+  - name: {{ .Values.clusterLogging.logForwarder.inputs.infrastructure.customName }}
+    type: infrastructure
+    infrastructure:
+      sources:
+      {{- range .Values.clusterLogging.logForwarder.inputs.infrastructure.sources }}
+      - {{ . }}
+      {{- end }}
+  {{- end }}
+  {{- end }}
+  outputs:
+    - name: loki-infrastructure
+      type: lokiStack
+      lokiStack:
+        target:
+          name: {{ .Values.clusterLogging.logForwarder.target.name }}
+          namespace: {{ .Values.clusterLogging.logForwarder.target.namespace }}
+        authentication:
+          token:
+            from: serviceAccount
+      tls:
+        {{- if .Values.clusterLogging.logForwarder.tls.insecureSkipVerify }}
+        insecureSkipVerify: {{ .Values.clusterLogging.logForwarder.tls.insecureSkipVerify }}
+        {{- else }}
+          ca:
+            configMapName: {{ .Values.clusterLogging.logForwarder.tls.ca.configMapName }}
+            key: {{ .Values.clusterLogging.logForwarder.tls.ca.key }}
+        {{- end }}
+    - name: loki-application
+      type: lokiStack
+      lokiStack:
+        target:
+          name: {{ .Values.clusterLogging.logForwarder.target.name }}
+          namespace: {{ .Values.clusterLogging.logForwarder.target.namespace }}
+        authentication:
+          token:
+            from: serviceAccount
+      tls:
+        {{- if .Values.clusterLogging.logForwarder.tls.insecureSkipVerify }}
+        insecureSkipVerify: {{ .Values.clusterLogging.logForwarder.tls.insecureSkipVerify }}
+        {{- else }}
+          ca:
+            configMapName: {{ .Values.clusterLogging.logForwarder.tls.ca.configMapName }}
+            key: {{ .Values.clusterLogging.logForwarder.tls.ca.key }}
+        {{- end }}
+    {{- if .Values.clusterLogging.logForwarder.inputs.audit.enabled }}
+    - name: loki-audit
+      type: lokiStack
+      lokiStack:
+        target:
+          name: {{ .Values.clusterLogging.logForwarder.target.name }}
+          namespace: {{ .Values.clusterLogging.logForwarder.target.namespace }}
+        authentication:
+          token:
+            from: serviceAccount
+      tls:
+        {{- if .Values.clusterLogging.logForwarder.tls.insecureSkipVerify }}
+        insecureSkipVerify: {{ .Values.clusterLogging.logForwarder.tls.insecureSkipVerify }}
+        {{- else }}
+          ca:
+            configMapName: {{ .Values.clusterLogging.logForwarder.tls.ca.configMapName }}
+            key: {{ .Values.clusterLogging.logForwarder.tls.ca.key }}
+        {{- end }}
+    {{- end }}
+  pipelines:
+    {{- if .Values.clusterLogging.logForwarder.inputs.infrastructure.filtered }}
+    - name: infrastructure-logs
+      inputRefs:
+        - {{ .Values.clusterLogging.logForwarder.inputs.infrastructure.customName }}
+      outputRefs:
+        - loki-infrastructure
+      filterRefs: []
+    {{- else }}
+    - name: infrastructure-logs
+      inputRefs:
+        - infrastructure
+      outputRefs:
+        - loki-infrastructure
+      filterRefs: []
+    {{- end }}
+    {{- if .Values.clusterLogging.logForwarder.inputs.application.allNamespaces }}
+    - name: application-logs
+      inputRefs:
+        - {{ .Values.clusterLogging.logForwarder.inputs.application.customName }}
+      outputRefs:
+        - loki-application
+      filterRefs: []
+    {{- else }}
+    - name: application-logs
+      inputRefs:
+        - application
+      outputRefs:
+        - loki-application
+      filterRefs: []
+    {{- end }}
+    {{- if .Values.clusterLogging.logForwarder.inputs.audit.enabled }}
+    - name: audit-logs
+      inputRefs:
+        - audit
+      outputRefs:
+        - loki-audit
+      filterRefs: []
+    {{- end }}
+{{- end }}
