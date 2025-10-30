@@ -112,8 +112,10 @@ class GoogleChatBot(BaseChatBot):
             # Create system prompt
             system_prompt = self._create_system_prompt(namespace)
 
-            # Get model name from config
-            model_name = self.model_config.get("modelName", "gemini-2.5-flash")
+            # Get model name suitable for Google Gemini API
+            model_name = self._extract_model_name()
+
+            logger.info(f"🎯 GoogleChatBot.chat() - Using Google Gemini API with model: {model_name} (from {self.model_name})")
 
             # Convert tools to Gemini format
             gemini_tools = self._convert_tools_to_gemini_format()

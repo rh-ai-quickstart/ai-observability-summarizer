@@ -149,6 +149,38 @@ class TestAPIKeyRetrieval:
             bot = OpenAIChatBot("gpt-4o-mini", api_key="explicit-key")
             assert bot.api_key == "explicit-key"
 
+    def test_openai_bot_can_be_created_without_api_key(self):
+        """Test that OpenAIChatBot can be initialized without an API key."""
+        from mcp_server.chatbots import OpenAIChatBot
+
+        # Clear any environment variables
+        with patch.dict(os.environ, {}, clear=True):
+            bot = OpenAIChatBot("gpt-4o-mini")
+            assert bot.api_key is None
+            assert bot.client is None  # Client should not be created without API key
+
+    def test_openai_bot_with_api_key_creates_client(self):
+        """Test that OpenAIChatBot creates client when API key is provided."""
+        from mcp_server.chatbots import OpenAIChatBot
+
+        with patch('openai.OpenAI') as mock_openai_class:
+            bot = OpenAIChatBot("gpt-4o-mini", api_key="test-key")
+            assert bot.api_key == "test-key"
+            # Verify OpenAI client was instantiated with the API key
+            mock_openai_class.assert_called_once_with(api_key="test-key")
+
+    def test_openai_bot_without_api_key_does_not_create_client(self):
+        """Test that OpenAIChatBot does not create client when no API key is provided."""
+        from mcp_server.chatbots import OpenAIChatBot
+
+        with patch('openai.OpenAI') as mock_openai_class:
+            with patch.dict(os.environ, {}, clear=True):
+                bot = OpenAIChatBot("gpt-4o-mini")
+                assert bot.api_key is None
+                assert bot.client is None
+                # Verify OpenAI client was NOT instantiated
+                mock_openai_class.assert_not_called()
+
 
 class TestToolResultTruncation:
     """Test tool result truncation for all bot types."""

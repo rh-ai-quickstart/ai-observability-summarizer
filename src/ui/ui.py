@@ -1337,8 +1337,11 @@ elif page == "Chat with Prometheus":
 
     if user_api_key or multi_model_name != "No models available":
         try:
+            logger.info(f"🤖 Creating chatbot for model: {multi_model_name}")
             ai_chatbot = create_chatbot(model_name=multi_model_name, api_key=user_api_key)
+            logger.info(f"✅ Chatbot created: {ai_chatbot.__class__.__name__} for model {multi_model_name}")
         except Exception as e:
+            logger.error(f"❌ Failed to create chatbot for {multi_model_name}: {e}")
             st.error(f"Failed to initialize AI chat bot: {e}")
     
     # Simple cluster-wide analysis
@@ -1485,12 +1488,14 @@ elif page == "Chat with Prometheus":
 
                 # Get response from AI with real-time progress (PromQL queries always included)
                 if not skip_ai:
+                    logger.info(f"📤 Calling {ai_chatbot.__class__.__name__}.chat() with model={ai_chatbot.model_name} for question: {user_question[:50]}...")
                     response = ai_chatbot.chat(
                         user_question,
                         namespace=None,  # Cluster-wide analysis
                         scope="cluster-wide",
                         progress_callback=update_progress
                     )
+                    logger.info(f"📥 Received response from {ai_chatbot.model_name}: {len(response) if response else 0} chars")
                 else:
                     response = None  # Skip AI analysis for pure trace questions
                 

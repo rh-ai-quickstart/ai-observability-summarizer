@@ -31,7 +31,12 @@ class OpenAIChatBot(BaseChatBot):
         # Import OpenAI SDK
         try:
             from openai import OpenAI
-            self.client = OpenAI(api_key=self.api_key)
+            # Only create client if API key is provided
+            # This matches the pattern used by other providers
+            if self.api_key:
+                self.client = OpenAI(api_key=self.api_key)
+            else:
+                self.client = None
         except ImportError:
             logger.error("OpenAI SDK not installed. Install with: pip install openai")
             self.client = None
@@ -75,12 +80,14 @@ class OpenAIChatBot(BaseChatBot):
         if not self.api_key:
             return f"API key required for OpenAI model {self.model_name}. Please provide an API key."
 
+        logger.info(f"🎯 OpenAIChatBot.chat() - Using OpenAI API with model: {self.model_name}")
+
         try:
             # Create system prompt
             system_prompt = self._create_system_prompt(namespace)
 
-            # Get model name from config
-            model_name = self.model_config.get("modelName", "gpt-4o-mini")
+            # Get model name suitable for OpenAI API
+            model_name = self._extract_model_name()
 
             # Prepare messages
             messages = [

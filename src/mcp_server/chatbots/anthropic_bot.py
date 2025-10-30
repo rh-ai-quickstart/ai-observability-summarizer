@@ -63,10 +63,10 @@ class AnthropicChatBot(BaseChatBot):
             # Create system prompt
             system_prompt = self._create_system_prompt(namespace)
 
-            # Get model name (strip provider prefix if present)
-            model_name = self.model_name
-            if "/" in model_name:
-                model_name = model_name.split("/", 1)[1]
+            # Get model name suitable for Anthropic API
+            model_name = self._extract_model_name()
+
+            logger.info(f"🎯 AnthropicChatBot.chat() - Using Anthropic API with model: {model_name} (original: {self.model_name})")
 
             # MCP tools are already in Anthropic format
             claude_tools = self._get_mcp_tools()

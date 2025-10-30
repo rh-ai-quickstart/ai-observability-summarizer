@@ -51,9 +51,6 @@ class BaseChatBot(ABC):
     def __init__(self, model_name: str, api_key: Optional[str] = None):
         """Initialize base chat bot."""
         self.model_name = model_name
-        self.model_config = self._get_model_config(model_name)
-        self.is_external = self.model_config.get("external", False) if self.model_config else False
-        self.provider = self.model_config.get("provider", "local") if self.model_config else "local"
         # Let each subclass decide how to get its API key
         self.api_key = api_key if api_key is not None else self._get_api_key()
 
@@ -66,20 +63,6 @@ class BaseChatBot(ABC):
 
         logger.info(f"{self.__class__.__name__} initialized with model: {self.model_name}")
 
-    @staticmethod
-    def _get_model_config(model_name: str) -> Dict[str, Any]:
-        """Get model configuration from MODEL_CONFIG."""
-        if not isinstance(MODEL_CONFIG, dict):
-            logger.warning("MODEL_CONFIG is not a dictionary")
-            return {}
-
-        model_config = MODEL_CONFIG.get(model_name, {})
-        if not model_config:
-            logger.warning(f"Model {model_name} not found in MODEL_CONFIG")
-            return {}
-
-        return model_config
-
     @abstractmethod
     def _get_api_key(self) -> Optional[str]:
         """Get API key for this bot implementation.
@@ -91,6 +74,20 @@ class BaseChatBot(ABC):
             API key string or None if not needed/available
         """
         pass
+
+    def _extract_model_name(self) -> str:
+        """Extract the API-specific model name from the full model identifier.
+
+        By default, strips the provider prefix (e.g., "provider/model" → "model").
+        Subclasses can override this if they need different behavior.
+
+        Returns:
+            Model name suitable for the provider's API
+        """
+        # Default implementation: strip provider prefix if present
+        if "/" in self.model_name:
+            return self.model_name.split("/", 1)[1]
+        return self.model_name
 
     def _get_mcp_tools(self) -> List[Dict[str, Any]]:
         """Get the base MCP tools that we want to expose."""

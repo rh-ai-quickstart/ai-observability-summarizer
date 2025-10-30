@@ -10,6 +10,7 @@ service:
 env:
   PROMETHEUS_URL: "https://thanos-querier.openshift-monitoring.svc.cluster.local:9091"
   LLM_URL: "http://llm-service:8012"
+  LLAMA_STACK_CHAT_URL: "http://llamastack:8321/v1/openai/v1"
   LLM_API_TOKEN: ""
   PYTHON_LOG_LEVEL: "INFO"
   

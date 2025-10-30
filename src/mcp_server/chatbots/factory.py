@@ -36,10 +36,24 @@ def create_chatbot(model_name: str, api_key: Optional[str] = None) -> BaseChatBo
         >>> chatbot = create_chatbot("meta-llama/Llama-3.1-8B-Instruct")
         >>> response = chatbot.chat("Check memory usage")
     """
-    # Get model config from base class (single source of truth)
-    model_config = BaseChatBot._get_model_config(model_name)
-    is_external = model_config.get("external", False)
-    provider = model_config.get("provider", "local")
+    # Detect provider from model name pattern
+    # This allows the factory to work without MODEL_CONFIG dependency
+    is_external = False
+    provider = "local"
+
+    model_lower = model_name.lower()
+    if "anthropic/" in model_lower or "claude" in model_lower:
+        is_external = True
+        provider = "anthropic"
+        logger.info(f"Detected Anthropic model from name: {model_name}")
+    elif "openai/" in model_lower or model_lower.startswith("gpt-") or model_lower.startswith("o1-"):
+        is_external = True
+        provider = "openai"
+        logger.info(f"Detected OpenAI model from name: {model_name}")
+    elif "google/" in model_lower or "gemini" in model_lower:
+        is_external = True
+        provider = "google"
+        logger.info(f"Detected Google model from name: {model_name}")
 
     # Route to appropriate implementation based on provider and capabilities
     if is_external:

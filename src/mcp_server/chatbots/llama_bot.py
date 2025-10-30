@@ -31,6 +31,13 @@ class LlamaChatBot(BaseChatBot):
         """Llama 3.1 supports 128K token context - 8K chars is reasonable."""
         return 8000
 
+    def _extract_model_name(self) -> str:
+        """LlamaStack expects the full model name including provider prefix.
+
+        Override the base class method to return the full name.
+        """
+        return self.model_name
+
     def __init__(self, model_name: str, api_key: Optional[str] = None):
         super().__init__(model_name, api_key)
 
@@ -116,8 +123,8 @@ For Pod Status queries:
             # Create system prompt
             system_prompt = self._create_system_prompt(namespace)
 
-            # Use model_name directly
-            model_id = self.model_name
+            # LlamaStack expects the full model name (override preserves it)
+            model_id = self._extract_model_name()
 
             # Prepare messages
             messages = [
