@@ -22,6 +22,11 @@ METRICS_UI_IMAGE = $(REGISTRY)/$(ORG)/$(IMAGE_PREFIX)-metrics-ui
 METRICS_ALERTING_IMAGE = $(REGISTRY)/$(ORG)/$(IMAGE_PREFIX)-metrics-alerting
 MCP_SERVER_IMAGE = $(REGISTRY)/$(ORG)/$(IMAGE_PREFIX)-mcp-server
 
+# Alert example image
+ALERT_EXAMPLE_IMAGE ?= $(REGISTRY)/$(ORG)/alert-example:$(VERSION)
+ALERT_EXAMPLE_CONTEXT ?= tests/alert-example/app
+ALERT_EXAMPLE_K8S_DIR ?= tests/alert-example/k8s
+
 
 # Build tools
 DOCKER ?= docker
@@ -155,6 +160,8 @@ help:
 	@echo "  push-ui            - Push metric-ui image"
 	@echo "  push-alerting      - Push metric-alerting image"
 	@echo "  push-mcp-server    - Push mcp-server image"
+	@echo "  build-alert-example - Build alert-example test image"
+	@echo "  push-alert-example  - Push alert-example test image"
 	@echo ""
 	@echo "Deployment:"
 	@echo "  install            - Deploy to OpenShift using Helm"
@@ -198,6 +205,8 @@ help:
 	@echo ""
 	@echo "Alerting:"
 	@echo "  install-alerts     - Install alerting Helm chart"
+	@echo "  install-alert-example - Deploy alert-example app and PrometheusRule (NAMESPACE required)"
+	@echo "  uninstall-alert-example - Remove alert-example app, Service, Route, ConfigMap and PrometheusRule"
 	@echo "  uninstall-alerts   - Uninstall alerting and related resources"
 	@echo "  patch-config       - Enable Alertmanager and configure cross-project alerting"
 	@echo "  revert-config      - Remove namespace from cross-project alerting configuration"
@@ -800,6 +809,57 @@ upgrade-observability:
 .PHONY: check-observability-drift
 check-observability-drift:
 	@scripts/check-observability-drift.sh $(OBSERVABILITY_NAMESPACE)
+
+
+# ---- Alert Example (Python) ----
+.PHONY: build-alert-example
+build-alert-example:
+	@echo "→ Building alert-example image: $(ALERT_EXAMPLE_IMAGE)"
+	$(BUILD_TOOL) build --platform=$(PLATFORM) -t $(ALERT_EXAMPLE_IMAGE) $(ALERT_EXAMPLE_CONTEXT)
+
+.PHONY: push-alert-example
+push-alert-example:
+	@echo "→ Pushing alert-example image: $(ALERT_EXAMPLE_IMAGE)"
+	$(BUILD_TOOL) push $(ALERT_EXAMPLE_IMAGE)
+
+.PHONY: install-alert-example
+install-alert-example: namespace
+	@echo "→ Applying PrometheusRule for alert-example"
+	oc apply -n $(NAMESPACE) -f $(ALERT_EXAMPLE_K8S_DIR)/prometheusrule.yaml
+	@echo "→ Deploying alert-example resources to namespace $(NAMESPACE)"
+	oc apply -n $(NAMESPACE) -f $(ALERT_EXAMPLE_K8S_DIR)/configmap.yaml
+	oc apply -n $(NAMESPACE) -f $(ALERT_EXAMPLE_K8S_DIR)/deployment.yaml
+	oc set image -n $(NAMESPACE) deployment/alert-example app=$(ALERT_EXAMPLE_IMAGE)
+	oc apply -n $(NAMESPACE) -f $(ALERT_EXAMPLE_K8S_DIR)/service.yaml
+	oc rollout status -n $(NAMESPACE) deployment/alert-example
+	@echo "→ Patching ConfigMap to trigger crash behavior"
+	oc apply -n $(NAMESPACE) -f $(ALERT_EXAMPLE_K8S_DIR)/configmap_patch.yaml
+	@echo "→ Restarting deployment to pick up patched config"
+	oc rollout restart deployment/alert-example -n $(NAMESPACE)
+	@echo "→ Waiting for pod to enter CrashLoopBackOff"
+	@retries=60; \
+	while [ $$retries -gt 0 ]; do \
+	  reason=$$(oc get pods -n $(NAMESPACE) -l app=alert-example -o jsonpath='{range .items[*]}{.status.containerStatuses[0].state.waiting.reason}{"\n"}{end}' 2>/dev/null | head -n1); \
+	  if [ "$$reason" = "CrashLoopBackOff" ]; then echo "✔ Pod in CrashLoopBackOff"; break; fi; \
+	  sleep 5; retries=$$((retries-1)); \
+	done; \
+	if [ $$retries -eq 0 ]; then \
+	  echo "✖ Timed out waiting for CrashLoopBackOff"; \
+	  exit 1; \
+	else \
+	  echo "✅ alert-example deployed successfully and pod is in CrashLoopBackOff"; \
+	  echo "ℹ You can verify in Prometheus that alert 'AlertExampleDown' is firing."; \
+	fi
+
+.PHONY: uninstall-alert-example
+uninstall-alert-example: namespace
+	@echo "→ Uninstalling alert-example resources from namespace $(NAMESPACE)"
+	- oc delete -n $(NAMESPACE) -f $(ALERT_EXAMPLE_K8S_DIR)/prometheusrule.yaml --ignore-not-found
+	- oc delete deployment alert-example -n $(NAMESPACE) --ignore-not-found
+	- oc delete service alert-example -n $(NAMESPACE) --ignore-not-found
+	- oc delete route alert-example -n $(NAMESPACE) --ignore-not-found
+	- oc delete configmap alert-example-config -n $(NAMESPACE) --ignore-not-found
+	@echo "✅ alert-example resources removed (skipped any that were not found)"
 
 
 .PHONY: install-minio
