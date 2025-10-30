@@ -71,7 +71,7 @@ subjects:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: mcp-analyzer-korrel8r-view
+  name: korrel8r-view-binding-{{ .Release.Namespace }}-mcp
 subjects:
 - kind: ServiceAccount
   name: mcp-analyzer
