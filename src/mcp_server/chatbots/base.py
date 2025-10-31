@@ -92,7 +92,7 @@ class BaseChatBot(ABC):
 
     def _get_mcp_tools(self) -> List[Dict[str, Any]]:
         """Get the base MCP tools that we want to expose."""
-        return [
+        tools = [
             {
                 "name": "search_metrics",
                 "description": "Search for Prometheus metrics by pattern (regex supported). Essential for discovering relevant metrics.",
@@ -185,10 +185,7 @@ class BaseChatBot(ABC):
         ]
 
         # Conditionally expose Korrel8r tools
-        try:
-            from core.config import KORREL8R_ENABLED
-        except Exception:
-            KORREL8R_ENABLED = False
+        KORREL8R_ENABLED = os.getenv("KORREL8R_ENABLED", "false").lower() == "true"
 
         if KORREL8R_ENABLED:
             tools.append({

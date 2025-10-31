@@ -6,7 +6,7 @@ This module provides Google Gemini-specific implementation using the official SD
 
 import os
 import logging
-from typing import Optional, Callable, List
+from typing import Optional, Callable, List, Dict, Any
 
 from .base import BaseChatBot
 
@@ -69,6 +69,70 @@ class GoogleChatBot(BaseChatBot):
         }
         return type_mapping.get(json_type, self.genai.protos.Type.STRING)
 
+    def _convert_schema_to_gemini(self, schema: Dict[str, Any]):
+        """Recursively convert JSON schema to Gemini proto Schema.
+
+        Handles nested schemas like arrays with items, objects with properties, etc.
+        """
+        if not self.genai:
+            return None
+
+        schema_type = schema.get("type", "string")
+        gemini_type = self._json_type_to_gemini_type(schema_type)
+
+        # Build schema kwargs
+        schema_kwargs = {
+            "type": gemini_type,
+            "description": schema.get("description", "")
+        }
+
+        # Handle array items (nested schema)
+        if schema_type == "array" and "items" in schema:
+            items_schema = schema["items"]
+            if isinstance(items_schema, dict):
+                schema_kwargs["items"] = self._convert_schema_to_gemini(items_schema)
+
+        # Handle object properties (nested schemas)
+        if schema_type == "object" and "properties" in schema:
+            schema_kwargs["properties"] = {
+                k: self._convert_schema_to_gemini(v)
+                for k, v in schema["properties"].items()
+            }
+            if "required" in schema:
+                schema_kwargs["required"] = schema["required"]
+
+        return self.genai.protos.Schema(**schema_kwargs)
+
+    def _convert_proto_to_native(self, value: Any) -> Any:
+        """Convert Gemini protobuf types to native Python types.
+
+        Handles Google protobuf RepeatedComposite and other proto types
+        that can't be serialized to JSON for MCP tool calls.
+        """
+        # Handle proto repeated fields (like RepeatedComposite for arrays)
+        if hasattr(value, '__iter__') and not isinstance(value, (str, bytes, dict)):
+            try:
+                # Try to convert to list
+                return [self._convert_proto_to_native(item) for item in value]
+            except:
+                pass
+
+        # Handle proto message types
+        if hasattr(value, 'DESCRIPTOR'):
+            try:
+                # Convert proto message to dict
+                from google.protobuf.json_format import MessageToDict
+                return MessageToDict(value)
+            except:
+                pass
+
+        # Handle dictionaries recursively
+        if isinstance(value, dict):
+            return {k: self._convert_proto_to_native(v) for k, v in value.items()}
+
+        # Return as-is for native types
+        return value
+
     def _convert_tools_to_gemini_format(self) -> List:
         """Convert MCP tools to Google Gemini SDK format."""
         if not self.genai:
@@ -80,21 +144,14 @@ class GoogleChatBot(BaseChatBot):
         for tool in tools:
             parameters = tool.get("input_schema", tool.get("parameters", {}))
 
+            # Convert parameter schema recursively
+            parameter_schema = self._convert_schema_to_gemini(parameters)
+
             sdk_tools.append(
                 self.genai.protos.FunctionDeclaration(
                     name=tool["name"],
                     description=tool["description"],
-                    parameters=self.genai.protos.Schema(
-                        type=self.genai.protos.Type.OBJECT,
-                        properties={
-                            k: self.genai.protos.Schema(
-                                type=self._json_type_to_gemini_type(v.get("type", "string")),
-                                description=v.get("description", "")
-                            )
-                            for k, v in parameters.get("properties", {}).items()
-                        },
-                        required=parameters.get("required", [])
-                    )
+                    parameters=parameter_schema
                 )
             )
 
@@ -195,7 +252,8 @@ class GoogleChatBot(BaseChatBot):
                         if hasattr(part, 'function_call') and part.function_call:
                             func_call = part.function_call
                             tool_name = func_call.name
-                            tool_args = dict(func_call.args)
+                            # Convert proto args to native Python types (dict with proto values -> dict with native values)
+                            tool_args = self._convert_proto_to_native(dict(func_call.args))
 
                             logger.info(f"🔧 Calling tool: {tool_name} with args: {tool_args}")
                             if progress_callback:

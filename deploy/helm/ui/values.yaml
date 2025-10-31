@@ -13,6 +13,7 @@ env:
   LLAMA_STACK_CHAT_URL: "http://llamastack:8321/v1/openai/v1"
   LLM_API_TOKEN: ""
   PYTHON_LOG_LEVEL: "INFO"
+  KORREL8R_ENABLED: "false"
   
 # Configurable MCP server service name and port - can be overridden
 mcpServer:
