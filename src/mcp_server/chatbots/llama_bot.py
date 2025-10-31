@@ -9,13 +9,7 @@ import logging
 from typing import Optional, Callable, List, Dict, Any
 
 from .base import BaseChatBot
-
-try:
-    from ...core.config import LLAMA_STACK_CHAT_URL, LLM_API_TOKEN
-except ImportError:
-    import os
-    LLAMA_STACK_CHAT_URL = os.getenv("LLAMA_STACK_CHAT_URL", "http://localhost:8321/v1/openai/v1")
-    LLM_API_TOKEN = os.getenv("LLM_API_TOKEN", "")
+from core.config import LLAMA_STACK_URL, LLM_API_TOKEN
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +39,7 @@ class LlamaChatBot(BaseChatBot):
         try:
             from openai import OpenAI
             self.client = OpenAI(
-                base_url=f"{LLAMA_STACK_CHAT_URL}/chat/completions".replace("/chat/completions", ""),
+                base_url=f"{LLAMA_STACK_URL}/chat/completions".replace("/chat/completions", ""),
                 api_key=LLM_API_TOKEN or "dummy"
             )
         except ImportError:

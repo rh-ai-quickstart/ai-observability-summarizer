@@ -56,43 +56,27 @@ def test_factory_creates_anthropic_bot():
     """Test that factory creates AnthropicChatBot for Anthropic models."""
     from mcp_server.chatbots import create_chatbot, AnthropicChatBot
 
-    # Mock MODEL_CONFIG to avoid needing actual config
-    with patch('mcp_server.chatbots.base.MODEL_CONFIG', {
-        'claude-3-5-haiku': {
-            'external': True,
-            'provider': 'anthropic'
-        }
-    }):
-        bot = create_chatbot("claude-3-5-haiku", api_key="test-key")
-        assert isinstance(bot, AnthropicChatBot)
+    # Factory determines bot type based on model name patterns
+    bot = create_chatbot("anthropic/claude-3-5-haiku", api_key="test-key")
+    assert isinstance(bot, AnthropicChatBot)
 
 
 def test_factory_creates_openai_bot():
     """Test that factory creates OpenAIChatBot for OpenAI models."""
     from mcp_server.chatbots import create_chatbot, OpenAIChatBot
 
-    with patch('mcp_server.chatbots.base.MODEL_CONFIG', {
-        'gpt-4o-mini': {
-            'external': True,
-            'provider': 'openai'
-        }
-    }):
-        bot = create_chatbot("gpt-4o-mini", api_key="test-key")
-        assert isinstance(bot, OpenAIChatBot)
+    # Factory determines bot type based on model name patterns
+    bot = create_chatbot("openai/gpt-4o-mini", api_key="test-key")
+    assert isinstance(bot, OpenAIChatBot)
 
 
 def test_factory_creates_google_bot():
     """Test that factory creates GoogleChatBot for Google models."""
     from mcp_server.chatbots import create_chatbot, GoogleChatBot
 
-    with patch('mcp_server.chatbots.base.MODEL_CONFIG', {
-        'gemini-2.5-flash': {
-            'external': True,
-            'provider': 'google'
-        }
-    }):
-        bot = create_chatbot("gemini-2.5-flash", api_key="test-key")
-        assert isinstance(bot, GoogleChatBot)
+    # Factory determines bot type based on model name patterns
+    bot = create_chatbot("google/gemini-2.0-flash-exp", api_key="test-key")
+    assert isinstance(bot, GoogleChatBot)
 
 
 class TestAPIKeyRetrieval:

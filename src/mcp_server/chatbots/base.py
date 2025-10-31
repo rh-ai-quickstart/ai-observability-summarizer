@@ -7,43 +7,16 @@ All provider-specific implementations inherit from BaseChatBot.
 
 import os
 import re
-import json
 import logging
 import importlib.util
 from abc import ABC, abstractmethod
 from typing import Optional, List, Dict, Any, Callable
 
-try:
-    from ..observability_mcp import ObservabilityMCPServer
-except ImportError:
-    try:
-        from mcp_server.observability_mcp import ObservabilityMCPServer
-    except ImportError:
-        ObservabilityMCPServer = None
+from mcp_server.observability_mcp import ObservabilityMCPServer
+from common.pylogger import get_python_logger
+from core.config import KORREL8R_ENABLED
 
-# Import logger from common directory
-try:
-    from common.pylogger import get_python_logger
-except ImportError:
-    def get_python_logger(name):
-        return logging.getLogger(name)
-
-try:
-    from ...core.config import MODEL_CONFIG
-except ImportError:
-    # Fallback
-    try:
-        MODEL_CONFIG = json.loads(os.getenv("MODEL_CONFIG", "{}"))
-    except:
-        MODEL_CONFIG = {}
-
-# Initialize logger
-try:
-    logger = get_python_logger(__name__)
-    logger.setLevel(logging.INFO)
-except Exception:
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    logger = logging.getLogger(__name__)
+logger = get_python_logger()
 
 
 class BaseChatBot(ABC):
@@ -56,11 +29,7 @@ class BaseChatBot(ABC):
         self.api_key = api_key if api_key is not None else self._get_api_key()
 
         # Initialize MCP server (our tools)
-        if ObservabilityMCPServer is not None:
-            self.mcp_server = ObservabilityMCPServer()
-        else:
-            self.mcp_server = None
-            logger.warning("ObservabilityMCPServer not available - MCP tools will not work")
+        self.mcp_server = ObservabilityMCPServer()
 
         logger.info(f"{self.__class__.__name__} initialized with model: {self.model_name}")
 
@@ -185,8 +154,6 @@ class BaseChatBot(ABC):
         ]
 
         # Conditionally expose Korrel8r tools
-        KORREL8R_ENABLED = os.getenv("KORREL8R_ENABLED", "false").lower() == "true"
-
         if KORREL8R_ENABLED:
             tools.append({
                 "name": "korrel8r_get_correlated",
