@@ -28,8 +28,11 @@ def korrel8r_query_objects(query: str) -> List[Dict[str, Any]]:
     try:
         client = Korrel8rClient()
         result = client.query_objects(query)
-        logger.debug("korrel8r_query_objects result: %s", result)
-        return make_mcp_text_response(json.dumps(result))
+        # Preserve previous behavior: simplify logs when applicable
+        simplified = client.simplify_log_objects(result)
+        to_return = simplified if simplified is not None else result
+        logger.debug("korrel8r_query_objects result (possibly simplified): %s", to_return)
+        return make_mcp_text_response(json.dumps(to_return))
     except Exception as e:
         logger.error("korrel8r_query_objects failed: %s", e)
         err = MCPException(
@@ -44,13 +47,7 @@ def korrel8r_get_correlated(goals: List[str], query: str) -> List[Dict[str, Any]
     """Return correlated objects for a query by leveraging listGoals + query_objects.
 
     Args:
-        goals: List of goal class names (see docs: https://korrel8r.github.io/korrel8r/#Goals).
-               Examples: [
-                   "trace:span",
-                   "log:application",
-                   "log:infrastructure",
-                   "metric:metric"
-               ]
+        goals: Korrel8r goal classes to correlate. Use ['trace:span','log:application','log:infrastructure'] unless users ask for specific domain.
         query: A single Korrel8r domain query string (same format as query_objects),
                e.g., "alert:alert:{\"alertname\":\"PodDisruptionBudgetAtLimit\"}"
     """
@@ -75,9 +72,10 @@ def korrel8r_get_correlated(goals: List[str], query: str) -> List[Dict[str, Any]
             return err.to_mcp_response()
 
         aggregated = fetch_goal_query_objects(goals, query)
+        # aggregated is now a dict with 'logs' and 'traces' keys
         return make_mcp_text_response(json.dumps(aggregated))
     except Exception as e:
-        logger.error("korrel8r_list_goals failed: %s", e)
+        logger.error("korrel8r_list_goals failed: goals=%s, query=%s, error=%s", goals, query, e)
         err = MCPException(
             message=f"Korrel8r list goals failed: {str(e)}",
             error_code=MCPErrorCode.RESOURCE_UNAVAILABLE,
