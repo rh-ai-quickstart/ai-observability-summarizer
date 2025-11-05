@@ -2,7 +2,7 @@
 
 This module provides MCP tools for interacting with observability data:
 - list_models: Get available AI models
-- list_namespaces: List monitored namespaces
+- list_vllm_namespaces: List monitored namespaces
 - get_model_config: Show configured LLM models for summarization
 - get_vllm_metrics_tool: Get available vLLM metrics with friendly names
 - analyze_vllm: Analyze vLLM metrics and summarize using LLM
@@ -19,7 +19,7 @@ from typing import Dict, Any, List, Optional, Tuple
 # Import core observability services
 from core.metrics import (
     get_models_helper,
-    get_namespaces_helper,
+    get_vllm_namespaces_helper,
     get_vllm_metrics,
     fetch_metrics,
     get_summarization_models,
@@ -123,25 +123,25 @@ def list_models() -> List[Dict[str, Any]]:
         return error.to_mcp_response()
 
 
-def list_namespaces() -> List[Dict[str, Any]]:
-    """Get list of monitored Kubernetes namespaces.
+def list_vllm_namespaces() -> List[Dict[str, Any]]:
+    """Get list of monitored vLLM Kubernetes namespaces.
     
-    Retrieves all namespaces that have observability data available
+    Retrieves all vLLMnamespaces that have vLLM deployed and observability data available
     in the Prometheus/Thanos monitoring system.
     
     Returns:
-        List of namespace names with monitoring status
+        List of vLLM namespace names with monitoring status
     """
     try:
-        namespaces = get_namespaces_helper()
+        namespaces = get_vllm_namespaces_helper()
         if not namespaces:
-            return make_mcp_text_response("No monitored namespaces found.")
+            return make_mcp_text_response("No monitored vLLM namespaces found.")
         namespace_list = "\n".join([f"• {ns}" for ns in namespaces])
-        response_text = f"Monitored Namespaces ({len(namespaces)} total):\n\n{namespace_list}"
+        response_text = f"Monitored vLLM Namespaces ({len(namespaces)} total):\n\n{namespace_list}"
         return make_mcp_text_response(response_text)
     except Exception as e:
         error = MCPException(
-            message=f"Failed to retrieve namespaces: {str(e)}",
+            message=f"Failed to retrieve vLLM namespaces: {str(e)}",
             error_code=MCPErrorCode.PROMETHEUS_ERROR,
             recovery_suggestion="Please check Prometheus/Thanos connectivity."
         )

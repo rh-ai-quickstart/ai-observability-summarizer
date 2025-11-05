@@ -297,14 +297,14 @@ def extract_from_double_encoded_response(parsed_json: List[Dict[str, Any]]) -> O
 
 
 def get_namespaces_mcp() -> List[str]:
-    """Fetch namespaces via MCP list_namespaces tool."""
+    """Fetch namespaces via MCP list_vllm_namespaces tool."""
     try:
         if not mcp_client.check_server_health():
             st.sidebar.error("🌐 **CONNECTION_ERROR**: MCP server is not available")
             st.sidebar.info("💡 **How to fix**: Check if the MCP server is running")
             return []
         
-        result = mcp_client.call_tool_sync("list_namespaces")
+        result = mcp_client.call_tool_sync("list_vllm_namespaces")
         
         error_details = parse_mcp_error(result)
         if error_details:
@@ -336,6 +336,28 @@ def get_models_mcp() -> List[str]:
         return mcp_client.parse_list_response(result)
     except Exception as e:
         logger.error(f"Error fetching models via MCP: {e}")
+        st.sidebar.error(f"❌ **INTERNAL_ERROR**: {str(e)}")
+        return []
+
+
+def get_openshift_namespaces_mcp() -> List[str]:
+    """Fetch OpenShift namespaces via MCP list_openshift_namespaces tool."""
+    try:
+        if not mcp_client.check_server_health():
+            st.sidebar.error("🌐 **CONNECTION_ERROR**: MCP server is not available")
+            st.sidebar.info("💡 **How to fix**: Check if the MCP server is running")
+            return []
+
+        result = mcp_client.call_tool_sync("list_openshift_namespaces")
+
+        error_details = parse_mcp_error(result)
+        if error_details:
+            display_mcp_error(error_details)
+            return []
+
+        return mcp_client.parse_list_response(result)
+    except Exception as e:
+        logger.error(f"Error fetching OpenShift namespaces via MCP: {e}")
         st.sidebar.error(f"❌ **INTERNAL_ERROR**: {str(e)}")
         return []
 

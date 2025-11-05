@@ -360,7 +360,7 @@ def get_models_helper() -> List[str]:
         return []
 
 
-def get_namespaces_helper() -> List[str]:
+def get_vllm_namespaces_helper() -> List[str]:
     """
     Get list of namespaces that have vLLM metrics available.
 
@@ -424,6 +424,32 @@ def get_namespaces_helper() -> List[str]:
         logger.error("Error getting namespaces", exc_info=e)
         return []
 
+
+def get_openshift_namespaces_helper() -> List[str]:
+    """
+    Get list of all namespaces present in Prometheus/Thanos data.
+
+    Uses the label values endpoint to retrieve all observed namespace labels.
+
+    Returns:
+        Sorted list of namespace names
+    """
+    try:
+        headers = _auth_headers()
+        response = requests.get(
+            f"{PROMETHEUS_URL}/api/v1/label/namespace/values",
+            headers=headers,
+            verify=VERIFY_SSL,
+        )
+        response.raise_for_status()
+        values = response.json().get("data", [])
+        if not isinstance(values, list):
+            return []
+        namespaces = sorted({str(v).strip() for v in values if v})
+        return namespaces
+    except Exception as e:
+        logger.error("Error getting OpenShift namespaces", exc_info=e)
+        return []
 
 def calculate_metric_stats(data):
     """

@@ -14,6 +14,7 @@ import logging
 from mcp_client_helper import (
     mcp_client,
     get_namespaces_mcp,
+    get_openshift_namespaces_mcp,
     get_models_mcp,
     get_model_config_mcp,
     get_openshift_metric_groups_mcp,
@@ -372,7 +373,7 @@ def get_openshift_namespace_metric_groups():
 def get_openshift_namespaces():
     """Fetch available OpenShift namespaces via MCP"""
     try:
-        return get_namespaces_mcp() or ["default"]
+        return get_openshift_namespaces_mcp() or ["default"]
     except Exception as e:
         st.sidebar.error(f"Error fetching OpenShift namespaces (MCP): {e}")
         return ["default"]
