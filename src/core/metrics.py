@@ -468,8 +468,9 @@ def discover_vllm_metrics():
         # Create friendly names for metrics
         metric_mapping = {}
 
-        # First, add GPU metrics (DCGM) that are relevant for vLLM monitoring
-        gpu_metrics = {
+        # First, add GPU metrics (DCGM for NVIDIA or habanalabs for Intel Gaudi) that are relevant for vLLM monitoring
+        # Try NVIDIA DCGM metrics first
+        gpu_metrics_nvidia = {
             "GPU Temperature (°C)": "DCGM_FI_DEV_GPU_TEMP",
             "GPU Power Usage (Watts)": "DCGM_FI_DEV_POWER_USAGE",
             "GPU Memory Usage (GB)": "DCGM_FI_DEV_FB_USED / (1024*1024*1024)",
@@ -478,7 +479,18 @@ def discover_vllm_metrics():
             "GPU Utilization (%)": "DCGM_FI_DEV_GPU_UTIL",
         }
 
-        for friendly_name, metric_name in gpu_metrics.items():
+        # Try Intel Gaudi metrics as alternative
+        gpu_metrics_gaudi = {
+            "GPU Temperature (°C)": "habanalabs_temperature_onchip",
+            "GPU Power Usage (Watts)": "habanalabs_power_mW / 1000",
+            "GPU Memory Usage (GB)": "habanalabs_memory_used_bytes / (1024*1024*1024)",
+            "GPU Energy Consumption (Joules)": "habanalabs_energy",
+            "GPU Memory Temperature (°C)": "habanalabs_temperature_threshold_memory",
+            "GPU Utilization (%)": "habanalabs_utilization",
+        }
+
+        # Try NVIDIA metrics first
+        for friendly_name, metric_name in gpu_metrics_nvidia.items():
             # Handle expressions (like memory GB conversion) by checking base metric presence
             if friendly_name == "GPU Memory Usage (GB)":
                 if "DCGM_FI_DEV_FB_USED" in all_metrics:
@@ -488,9 +500,35 @@ def discover_vllm_metrics():
             if metric_name in all_metrics:
                 metric_mapping[friendly_name] = f"avg({metric_name})"
 
-        # If vLLM GPU cache usage is unavailable, alias GPU Usage (%) to DCGM utilization
-        if "GPU Usage (%)" not in metric_mapping and "DCGM_FI_DEV_GPU_UTIL" in all_metrics:
-            metric_mapping["GPU Usage (%)"] = "avg(DCGM_FI_DEV_GPU_UTIL)"
+        # If no NVIDIA metrics, try Intel Gaudi metrics
+        if not metric_mapping:
+            for friendly_name, metric_expr in gpu_metrics_gaudi.items():
+                # Handle expressions (like memory GB conversion and power mW to W)
+                if friendly_name == "GPU Memory Usage (GB)":
+                    if "habanalabs_memory_used_bytes" in all_metrics:
+                        metric_mapping[friendly_name] = "avg(habanalabs_memory_used_bytes) / (1024*1024*1024)"
+                    continue
+                elif friendly_name == "GPU Power Usage (Watts)":
+                    if "habanalabs_power_mW" in all_metrics:
+                        metric_mapping[friendly_name] = "avg(habanalabs_power_mW) / 1000"
+                    continue
+
+                # For simple metric names without expressions
+                metric_name = metric_expr.split()[0] if " " not in metric_expr and "/" not in metric_expr else None
+                if metric_name and metric_name in all_metrics:
+                    metric_mapping[friendly_name] = f"avg({metric_name})"
+
+        # Ensure GPU Usage (%) metric is available by aliasing to vendor-specific utilization metrics
+        # This provides a fallback when vLLM-specific GPU cache usage metric is not available
+        if "GPU Usage (%)" not in metric_mapping:
+            if "DCGM_FI_DEV_GPU_UTIL" in all_metrics:
+                metric_mapping["GPU Usage (%)"] = "avg(DCGM_FI_DEV_GPU_UTIL)"
+            elif "habanalabs_utilization" in all_metrics:
+                metric_mapping["GPU Usage (%)"] = "avg(habanalabs_utilization)"
+            # TODO: Add AMD support here when available.
+            # When AMD GPU metrics are available, add:
+            # elif "amd_smi_utilization" in all_metrics:
+            #     metric_mapping["GPU Usage (%)"] = "avg(amd_smi_utilization)"
 
         # Build vLLM-derived queries based on available metrics
         vllm_metrics = set(m for m in all_metrics if m.startswith("vllm:"))
@@ -679,6 +717,128 @@ def discover_dcgm_metrics():
         return {}
 
 
+def discover_intel_gaudi_metrics():
+    """Dynamically discover available Intel Gaudi accelerator metrics
+    
+    Note: This function follows a vendor-specific discovery pattern.
+    To add AMD support in the future, create a similar discover_amd_metrics() function
+    following the same pattern used here.
+    """
+    try:
+        headers = {"Authorization": f"Bearer {THANOS_TOKEN}"}
+        response = requests.get(
+            f"{PROMETHEUS_URL}/api/v1/label/__name__/values",
+            headers=headers,
+            verify=VERIFY_SSL,
+            timeout=30,
+        )
+        response.raise_for_status()
+        all_metrics = response.json()["data"]
+
+        # Filter for Intel Gaudi (habanalabs) metrics
+        gaudi_metrics = [metric for metric in all_metrics if metric.startswith("habanalabs_")]
+
+        logger.info("Found %d Intel Gaudi (habanalabs) metrics", len(gaudi_metrics))
+
+        # Create a mapping of useful Intel Gaudi metrics for fleet monitoring
+        gaudi_mapping = {}
+        memory_used_metric = None
+        memory_total_metric = None
+
+        for metric in gaudi_metrics:
+            # Temperature metrics
+            if "temperature_onchip" in metric:
+                gaudi_mapping["GPU Temperature (°C)"] = f"avg({metric})"
+            elif "temperature_onboard" in metric:
+                gaudi_mapping["Board Temperature (°C)"] = f"avg({metric})"
+            elif "temperature_threshold_gpu" in metric:
+                gaudi_mapping["GPU Temperature Threshold (°C)"] = f"avg({metric})"
+            elif "temperature_threshold_memory" in metric:
+                gaudi_mapping["GPU Memory Temperature Threshold (°C)"] = f"avg({metric})"
+            
+            # Power metrics (convert mW to Watts)
+            elif metric == "habanalabs_power_mW":
+                gaudi_mapping["GPU Power Usage (Watts)"] = f"avg({metric}) / 1000"
+            elif "power_default_limit_mW" in metric:
+                gaudi_mapping["GPU Power Cap (Watts)"] = f"avg({metric}) / 1000"
+            
+            # Utilization
+            elif metric == "habanalabs_utilization":
+                gaudi_mapping["GPU Utilization (%)"] = f"avg({metric})"
+            
+            # Memory metrics
+            elif metric == "habanalabs_memory_used_bytes":
+                memory_used_metric = metric
+                gaudi_mapping["GPU Memory Used (bytes)"] = f"avg({metric})"
+            elif metric == "habanalabs_memory_total_bytes":
+                memory_total_metric = metric
+                gaudi_mapping["GPU Memory Total (bytes)"] = f"avg({metric})"
+            elif metric == "habanalabs_memory_free_bytes":
+                gaudi_mapping["GPU Memory Free (bytes)"] = f"avg({metric})"
+            
+            # Clock speeds
+            elif metric == "habanalabs_clock_soc_mhz":
+                gaudi_mapping["GPU SoC Clock (MHz)"] = f"avg({metric})"
+            elif metric == "habanalabs_clock_soc_max_mhz":
+                gaudi_mapping["GPU SoC Max Clock (MHz)"] = f"avg({metric})"
+            
+            # Energy
+            elif metric == "habanalabs_energy":
+                gaudi_mapping["GPU Energy Consumption (Joules)"] = f"avg({metric})"
+            
+            # PCIe metrics
+            elif metric == "habanalabs_pcie_rx":
+                gaudi_mapping["PCIe RX Traffic (bytes)"] = f"avg({metric})"
+            elif metric == "habanalabs_pcie_tx":
+                gaudi_mapping["PCIe TX Traffic (bytes)"] = f"avg({metric})"
+            elif "pcie_receive_throughput" in metric:
+                gaudi_mapping["PCIe Receive Throughput"] = f"avg({metric})"
+            elif "pcie_transmit_throughput" in metric:
+                gaudi_mapping["PCIe Transmit Throughput"] = f"avg({metric})"
+            elif "pcie_replay_count" in metric:
+                gaudi_mapping["PCIe Replay Count"] = f"avg({metric})"
+            
+            # PCIe link info
+            elif metric == "habanalabs_pci_link_speed":
+                gaudi_mapping["PCIe Link Speed"] = f"avg({metric})"
+            elif metric == "habanalabs_pci_link_width":
+                gaudi_mapping["PCIe Link Width"] = f"avg({metric})"
+            
+            # ECC and memory health
+            elif "ecc_feature_mode" in metric:
+                gaudi_mapping["ECC Status"] = f"avg({metric})"
+            elif "pending_rows_with_single_bit_ecc_errors" in metric:
+                gaudi_mapping["Single-bit ECC Errors"] = f"sum({metric})"
+            elif "pending_rows_with_double_bit_ecc_errors" in metric:
+                gaudi_mapping["Double-bit ECC Errors"] = f"sum({metric})"
+            
+            # NIC port status
+            elif "nic_port_status" in metric:
+                gaudi_mapping["NIC Port Status"] = f"avg({metric})"
+
+        # Add GPU Memory Usage in GB if we found the memory used metric
+        if memory_used_metric:
+            gaudi_mapping["GPU Memory Usage (GB)"] = (
+                f"avg({memory_used_metric}) / (1024*1024*1024)"
+            )
+        
+        # Add memory usage percentage if we have both used and total
+        if memory_used_metric and memory_total_metric:
+            gaudi_mapping["GPU Memory Usage (%)"] = (
+                f"(avg({memory_used_metric}) / avg({memory_total_metric})) * 100"
+            )
+
+        if gaudi_mapping:
+            logger.info("Successfully discovered %d Intel Gaudi metrics", len(gaudi_mapping))
+        else:
+            logger.warning("No Intel Gaudi metrics found - cluster may not have Intel Gaudi accelerators or monitoring")
+
+        return gaudi_mapping
+    except Exception as e:
+        logger.error("Error discovering Intel Gaudi metrics", exc_info=e)
+        return {}
+
+
 def discover_openshift_metrics():
     """Return comprehensive OpenShift/Kubernetes metrics organized by category"""
     return {
@@ -692,9 +852,9 @@ def discover_openshift_metrics():
             "Container Images": "count(count by (image)(container_spec_image))",
             "Total Services": "sum(kube_service_info)",
             "Total Nodes": "sum(kube_node_info)",
-            # Key GPU metrics for fleet overview
-            "GPU Utilization (%)": "avg(DCGM_FI_DEV_GPU_UTIL)",
-            "GPU Temperature (°C)": "avg(DCGM_FI_DEV_GPU_TEMP)",
+            # Key GPU/Accelerator metrics for fleet overview (multi-vendor support)
+            "GPU Utilization (%)": "avg(DCGM_FI_DEV_GPU_UTIL) or avg(habanalabs_utilization)",
+            "GPU Temperature (°C)": "avg(DCGM_FI_DEV_GPU_TEMP) or avg(habanalabs_temperature_onchip)",
         },
         "Services & Networking": {
             # Services, ingress, and networking metrics
@@ -733,13 +893,14 @@ def discover_openshift_metrics():
             "Container Memory Usage": "sum(container_memory_usage_bytes)",
         },
         "GPU & Accelerators": {
-            # 🚀 Comprehensive GPU fleet monitoring with DCGM metrics
-            "GPU Temperature (°C)": "avg(DCGM_FI_DEV_GPU_TEMP)",
-            "GPU Power Usage (Watts)": "avg(DCGM_FI_DEV_POWER_USAGE)",
-            "GPU Utilization (%)": "avg(DCGM_FI_DEV_GPU_UTIL)",
-            "GPU Memory Usage (GB)": "avg(DCGM_FI_DEV_FB_USED) / (1024*1024*1024)",
-            "GPU Energy Consumption (Joules)": "avg(DCGM_FI_DEV_TOTAL_ENERGY_CONSUMPTION)",
-            "GPU Memory Temperature (°C)": "avg(DCGM_FI_DEV_MEMORY_TEMP)",
+            # 🚀 Comprehensive GPU/Accelerator fleet monitoring (multi-vendor: NVIDIA DCGM + Intel Gaudi)
+            # TODO: Add AMD support by appending "or avg(amd_smi_temperature)" to each query below
+            "GPU Temperature (°C)": "avg(DCGM_FI_DEV_GPU_TEMP) or avg(habanalabs_temperature_onchip)",
+            "GPU Power Usage (Watts)": "avg(DCGM_FI_DEV_POWER_USAGE) or avg(habanalabs_power_mW) / 1000",
+            "GPU Utilization (%)": "avg(DCGM_FI_DEV_GPU_UTIL) or avg(habanalabs_utilization)",
+            "GPU Memory Usage (GB)": "avg(DCGM_FI_DEV_FB_USED) / (1024*1024*1024) or avg(habanalabs_memory_used_bytes) / (1024*1024*1024)",
+            "GPU Energy Consumption (Joules)": "avg(DCGM_FI_DEV_TOTAL_ENERGY_CONSUMPTION) or avg(habanalabs_energy)",
+            "GPU Memory Temperature (°C)": "avg(DCGM_FI_DEV_MEMORY_TEMP) or avg(habanalabs_temperature_threshold_memory)",
         },
         "Storage & Networking": {
             # 6 storage and network metrics
@@ -1325,10 +1486,54 @@ def get_summarization_models() -> List[str]:
         return []
 
 
+def _fetch_vendor_gpu_info(
+    headers: Dict[str, str],
+    temp_metric: str,
+    vendor_name: str,
+    model_name: str,
+    info: Dict[str, Any]
+) -> int:
+    """Helper function to fetch GPU info for a specific vendor.
+    
+    Args:
+        headers: Authentication headers for Prometheus
+        temp_metric: Temperature metric query (e.g., "DCGM_FI_DEV_GPU_TEMP")
+        vendor_name: Vendor display name (e.g., "NVIDIA")
+        model_name: Model display name (e.g., "GPU")
+        info: Dictionary to populate with vendor data
+        
+    Returns:
+        Count of GPUs/accelerators found for this vendor
+    """
+    try:
+        resp = requests.get(
+            f"{PROMETHEUS_URL}/api/v1/query",
+            headers=headers,
+            params={"query": temp_metric},
+            verify=VERIFY_SSL,
+            timeout=30,
+        )
+        resp.raise_for_status()
+        result = resp.json().get("data", {}).get("result", [])
+        count = len(result)
+        if count > 0:
+            temps = [float(series.get("value", [None, None])[1]) for series in result if series.get("value")]
+            info["temperatures"].extend(temps)
+            info["vendors"].append(vendor_name)
+            info["models"].append(model_name)
+        return count
+    except Exception:
+        return 0
+
+
 def get_cluster_gpu_info() -> Dict[str, Any]:
-    """Fetch cluster GPU info from Prometheus (DCGM exporter).
+    """Fetch cluster GPU/accelerator info from Prometheus (multi-vendor: NVIDIA DCGM + Intel Gaudi).
 
     Returns a dict with total_gpus, vendors, models, temperatures, power_usage.
+    
+    To add AMD support: Add a call to _fetch_vendor_gpu_info() with AMD-specific parameters
+    (e.g., temp_metric="GPU_JUNCTION_TEMPERATURE", vendor_name="AMD", model_name="Instinct")
+    and update the mixed vendor logic to include AMD.
     """
     headers = _auth_headers()
     info: Dict[str, Any] = {
@@ -1338,25 +1543,27 @@ def get_cluster_gpu_info() -> Dict[str, Any]:
         "temperatures": [],
         "power_usage": [],
     }
-    try:
-        resp = requests.get(
-            f"{PROMETHEUS_URL}/api/v1/query",
-            headers=headers,
-            params={"query": "DCGM_FI_DEV_GPU_TEMP"},
-            verify=VERIFY_SSL,
-            timeout=30,
-        )
-        resp.raise_for_status()
-        result = resp.json().get("data", {}).get("result", [])
-        info["total_gpus"] = len(result)
-        temps = [float(series.get("value", [None, None])[1]) for series in result if series.get("value")]
-        info["temperatures"] = temps
-        if temps:
-            info["vendors"] = ["NVIDIA"]
-            info["models"] = ["GPU"]
-    except Exception:
-        # Keep defaults on error
-        pass
+    
+    # Fetch info for each vendor
+    nvidia_count = _fetch_vendor_gpu_info(
+        headers, "DCGM_FI_DEV_GPU_TEMP", "NVIDIA", "GPU", info
+    )
+    intel_count = _fetch_vendor_gpu_info(
+        headers, "habanalabs_temperature_onchip", "Intel Gaudi", "Gaudi Accelerator", info
+    )
+    # TODO: AMD - Add AMD support:
+    # amd_count = _fetch_vendor_gpu_info(
+    #     headers, "GPU_JUNCTION_TEMPERATURE", "AMD", "Instinct", info
+    # )
+    
+    # Set total count and handle mixed vendor scenarios
+    info["total_gpus"] = nvidia_count + intel_count
+    
+    # If we have both vendors, indicate mixed environment
+    if nvidia_count > 0 and intel_count > 0:
+        info["vendors"] = ["Mixed (NVIDIA + Intel Gaudi)"]
+        info["models"] = ["Mixed GPU/Accelerator"]
+    
     return info
 
 

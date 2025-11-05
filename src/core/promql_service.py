@@ -379,8 +379,10 @@ def categorize_any_metric(metric_name: str, namespace: Optional[str], model_name
     elif metric_name.startswith("kube_") or metric_name.startswith("openshift_"):
         return categorize_k8s_metric(metric_name, namespace, is_fleet_wide)
     
-    # === GPU/Hardware Metrics ===
-    elif metric_name.startswith("DCGM_") or "gpu" in name_lower or "nvidia" in name_lower:
+    # === GPU/Hardware Metrics (multi-vendor: NVIDIA + Intel Gaudi) ===
+    # Only categorize metrics with known GPU exporter prefixes (DCGM for NVIDIA, habanalabs for Intel Gaudi)
+    # TODO: Add AMD support by adding "amd_smi_" to the tuple when AMD metrics are available
+    elif metric_name.startswith(("DCGM_", "habanalabs_")):
         return categorize_gpu_metric(metric_name)
     
     # === Container/Docker Metrics ===
@@ -589,13 +591,16 @@ def categorize_k8s_metric(metric_name: str, namespace: Optional[str], is_fleet_w
 
 def categorize_gpu_metric(metric_name: str) -> Optional[Dict[str, Any]]:
     """
-    Categorize GPU-specific metrics
+    Categorize GPU-specific metrics (multi-vendor: NVIDIA DCGM + Intel Gaudi)
+    
+    To add AMD support: Add "amd_smi_" check to the guard below and create amd_categories dict
+    following the same pattern as dcgm_categories and gaudi_categories.
     """
-    if not metric_name.startswith("DCGM_"):
+    if not (metric_name.startswith("DCGM_") or metric_name.startswith("habanalabs_")):
         return None
     
-    # Define GPU metric categories
-    gpu_categories = {
+    # Define GPU metric categories for NVIDIA DCGM
+    dcgm_categories = {
         "DCGM_FI_DEV_GPU_TEMP": {
             "type": "gauge",
             "description": "GPU temperature",
@@ -619,27 +624,137 @@ def categorize_gpu_metric(metric_name: str) -> Optional[Dict[str, Any]]:
             "description": "GPU memory copy throughput utilization",
             "aggregation": "avg", 
             "unit": "percent"
+        },
+        "DCGM_FI_DEV_POWER_USAGE": {
+            "type": "gauge",
+            "description": "GPU power usage",
+            "aggregation": "avg",
+            "unit": "watts"
+        },
+        "DCGM_FI_DEV_FB_USED": {
+            "type": "gauge",
+            "description": "GPU framebuffer memory used",
+            "aggregation": "avg",
+            "unit": "bytes"
+        },
+        "DCGM_FI_DEV_SM_CLOCK": {
+            "type": "gauge",
+            "description": "GPU SM clock frequency",
+            "aggregation": "avg",
+            "unit": "mhz"
+        },
+        "DCGM_FI_DEV_MEM_CLOCK": {
+            "type": "gauge",
+            "description": "GPU memory clock frequency",
+            "aggregation": "avg",
+            "unit": "mhz"
         }
     }
     
-    # Find matching category
-    for pattern, category_info in gpu_categories.items():
+    # Define GPU metric categories for Intel Gaudi
+    gaudi_categories = {
+        "habanalabs_temperature_onchip": {
+            "type": "gauge",
+            "description": "Intel Gaudi on-chip temperature",
+            "aggregation": "avg",
+            "unit": "celsius"
+        },
+        "habanalabs_temperature_onboard": {
+            "type": "gauge",
+            "description": "Intel Gaudi board temperature",
+            "aggregation": "avg",
+            "unit": "celsius"
+        },
+        "habanalabs_utilization": {
+            "type": "gauge",
+            "description": "Intel Gaudi accelerator utilization",
+            "aggregation": "avg",
+            "unit": "percent"
+        },
+        "habanalabs_power_mW": {
+            "type": "gauge",
+            "description": "Intel Gaudi power usage (converted to Watts in queries)",
+            "aggregation": "avg",
+            "unit": "milliwatts"
+        },
+        "habanalabs_memory_used_bytes": {
+            "type": "gauge",
+            "description": "Intel Gaudi memory used",
+            "aggregation": "avg",
+            "unit": "bytes"
+        },
+        "habanalabs_memory_total_bytes": {
+            "type": "gauge",
+            "description": "Intel Gaudi total memory",
+            "aggregation": "avg",
+            "unit": "bytes"
+        },
+        "habanalabs_clock_soc_mhz": {
+            "type": "gauge",
+            "description": "Intel Gaudi SoC clock frequency",
+            "aggregation": "avg",
+            "unit": "mhz"
+        },
+        "habanalabs_energy": {
+            "type": "counter",
+            "description": "Intel Gaudi energy consumption",
+            "aggregation": "avg",
+            "unit": "joules"
+        },
+        "habanalabs_pcie_rx": {
+            "type": "counter",
+            "description": "Intel Gaudi PCIe receive traffic",
+            "aggregation": "rate",
+            "unit": "bytes"
+        },
+        "habanalabs_pcie_tx": {
+            "type": "counter",
+            "description": "Intel Gaudi PCIe transmit traffic",
+            "aggregation": "rate",
+            "unit": "bytes"
+        }
+    }
+    
+    # Check NVIDIA DCGM metrics
+    for pattern, category_info in dcgm_categories.items():
         if pattern in metric_name:
             return {
                 "name": metric_name,
                 "type": "gpu",
-                "categories": ["hardware_metric", "gpu_metric"],
+                "categories": ["hardware_metric", "gpu_metric", "nvidia_metric"],
                 "description": category_info["description"],
                 "aggregation": category_info["aggregation"],
                 "unit": category_info["unit"]
             }
     
-    # Generic GPU metric
+    # Check Intel Gaudi metrics
+    for pattern, category_info in gaudi_categories.items():
+        if pattern in metric_name:
+            return {
+                "name": metric_name,
+                "type": "gpu",
+                "categories": ["hardware_metric", "gpu_metric", "intel_gaudi_metric"],
+                "description": category_info["description"],
+                "aggregation": category_info["aggregation"],
+                "unit": category_info["unit"]
+            }
+    
+    # Generic GPU metric with proper vendor detection
+    if metric_name.startswith("DCGM_"):
+        vendor = "NVIDIA"
+        categories = ["hardware_metric", "gpu_metric", "nvidia_metric"]
+    elif metric_name.startswith("habanalabs_"):
+        vendor = "Intel Gaudi"
+        categories = ["hardware_metric", "gpu_metric", "intel_gaudi_metric"]
+    else:
+        vendor = "GPU"
+        categories = ["hardware_metric", "gpu_metric"]
+    
     return {
         "name": metric_name,
         "type": "gpu", 
-        "categories": ["hardware_metric", "gpu_metric"],
-        "description": f"GPU metric: {metric_name}",
+        "categories": categories,
+        "description": f"{vendor} metric: {metric_name}",
         "aggregation": "avg"
     }
 
