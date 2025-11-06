@@ -1,0 +1,16 @@
+{{- if .Values.patch.enabled }}
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: korrel8r
+  namespace: {{ include "korrel8r.namespace" . }}
+  labels:
+    {{- include "korrel8r.labels" . | nindent 4 }}
+spec:
+  to:
+    kind: Service
+    name: korrel8r
+  tls:
+    termination: {{ .Values.route.tls.termination }}
+{{- end }}
+

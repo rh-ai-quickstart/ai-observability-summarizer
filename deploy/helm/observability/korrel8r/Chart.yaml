@@ -1,0 +1,20 @@
+apiVersion: v2
+name: korrel8r
+description: A Helm chart to deploy Korrel8r configuration on OpenShift
+type: application
+version: 0.1.0
+appVersion: "latest"
+keywords:
+  - korrel8r
+  - observability
+  - logs
+  - traces
+  - metrics
+home: https://github.com/korrel8r/korrel8r
+sources:
+  - https://github.com/korrel8r/korrel8r
+maintainers:
+  - name: Observability Team
+annotations:
+  category: Observability
+
