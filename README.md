@@ -1,4 +1,4 @@
-# OpenShift AI Observability Summarizer
+# Summarize and analyze your observability data
 
 Create an interactive dashboard to analyze AI model performance and OpenShift cluster metrics using Prometheus.
 
