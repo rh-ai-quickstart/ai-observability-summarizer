@@ -457,6 +457,8 @@ uninstall:
 	- @helm -n $(NAMESPACE) uninstall $(METRICS_UI_RELEASE_NAME) --ignore-not-found
 	@echo "Uninstalling $(MCP_SERVER_RELEASE_NAME) helm chart (if installed)"
 	- @helm -n $(NAMESPACE) uninstall $(MCP_SERVER_RELEASE_NAME) --ignore-not-found
+	@echo "Uninstalling Korrel8r helm-managed resources (if installed)"
+	@$(MAKE) uninstall-korrel8r || true
 
 	@echo ""
 	@echo "Checking if observability stack should be uninstalled..."
