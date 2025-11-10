@@ -69,7 +69,7 @@ METRICS_UI_CHART_PATH ?= ui
 MCP_SERVER_RELEASE_NAME ?= mcp-server
 MCP_SERVER_CHART_PATH ?= mcp-server
 # Korrel8r chart
-KORREL8R_RELEASE_NAME ?= korrel8r
+KORREL8R_RELEASE_NAME ?= korrel8r-summarizer
 KORREL8R_CHART_PATH ?= observability/korrel8r
 KORREL8R_NAMESPACE ?= openshift-cluster-observability-operator
 
@@ -910,38 +910,14 @@ install-korrel8r:
 		  echo "  → KORREL8R_ENABLED=$$ENABLED; skipping Korrel8r install"; \
 		  exit 0; \
 		fi; \
-		echo "  → KORREL8R_ENABLED=true; proceeding with Korrel8r installation"; \
-		echo "→ Installing Korrel8r UIPlugin (patch.enabled=false) in namespace $(KORREL8R_NAMESPACE)"; \
+		echo "  → KORREL8R_ENABLED=true; deploying Korrel8r directly via Helm"; \
 		cd deploy/helm && helm upgrade --install $(KORREL8R_RELEASE_NAME) $(KORREL8R_CHART_PATH) \
 			--namespace $(KORREL8R_NAMESPACE) \
 			--create-namespace \
-			--set global.namespace=$(KORREL8R_NAMESPACE) \
-			--set patch.enabled=false; \
-		echo "→ Waiting for Cluster Observability Operator to create deployment/$(KORREL8R_RELEASE_NAME)"; \
-		retries=120; \
-		while [ $$retries -gt 0 ]; do \
-		  if oc get deployment/$(KORREL8R_RELEASE_NAME) -n $(KORREL8R_NAMESPACE) >/dev/null 2>&1; then \
-		    echo "  → Deployment detected"; break; \
-		  fi; \
-		  echo "  → Waiting... ($$retries left)"; \
-		  sleep 5; retries=$$((retries-1)); \
-		done; \
-		if [ $$retries -eq 0 ]; then \
-		  echo "✖ Timed out waiting for deployment to be created"; \
-		  exit 1; \
-		fi; \
+			--set global.namespace=$(KORREL8R_NAMESPACE); \
 		echo "→ Waiting for rollout of deployment/$(KORREL8R_RELEASE_NAME)"; \
 		oc rollout status -n $(KORREL8R_NAMESPACE) deployment/$(KORREL8R_RELEASE_NAME) --timeout=10m || true; \
-		echo "→ Upgrading Helm release with patch.enabled=true to apply overrides"; \
-		helm upgrade --install $(KORREL8R_RELEASE_NAME) $(KORREL8R_CHART_PATH) \
-			--namespace $(KORREL8R_NAMESPACE) \
-			--set global.namespace=$(KORREL8R_NAMESPACE) \
-			--set patch.enabled=true; \
-		echo "→ Waiting for rollout of deployment/$(KORREL8R_RELEASE_NAME) after patch"; \
-		oc rollout status -n $(KORREL8R_NAMESPACE) deployment/$(KORREL8R_RELEASE_NAME) --timeout=10m || true; \
-		echo "→ Scaling deployment/$(KORREL8R_RELEASE_NAME) to 0 replicas"; \
-		oc scale deployment/$(KORREL8R_RELEASE_NAME) -n $(KORREL8R_NAMESPACE) --replicas=0 || true; \
-		echo "✅ Korrel8r installed and patched successfully" \
+		echo "✅ Korrel8r installed successfully" \
 	'
 
 .PHONY: uninstall-korrel8r

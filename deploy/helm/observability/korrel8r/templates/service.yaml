@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.korrel8r.name }}
+  namespace: {{ include "korrel8r.namespace" . }}
+  labels:
+    {{- include "korrel8r.labels" . | nindent 4 }}
+  annotations:
+    service.beta.openshift.io/serving-cert-secret-name: {{ .Values.korrel8r.name }}
+spec:
+  selector:
+    app.kubernetes.io/name: {{ include "korrel8r.name" . }}
+    app.kubernetes.io/instance: {{ .Values.korrel8r.name }}
+  ports:
+  - name: web
+    port: {{ .Values.service.port }}
+    targetPort: {{ .Values.service.port }}
+    protocol: TCP
+  type: ClusterIP
+

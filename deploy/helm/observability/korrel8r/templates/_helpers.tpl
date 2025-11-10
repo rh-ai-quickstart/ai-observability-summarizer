@@ -39,9 +39,9 @@ helm.sh/chart: {{ include "korrel8r.chart" . }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
-app.kubernetes.io/managed-by: observability-operator
+app.kubernetes.io/managed-by: {{ .Release.Service }}
 app.kubernetes.io/component: korrel8r
-app.kubernetes.io/part-of: UIPlugin
+app.kubernetes.io/part-of: observability
 {{- with .Values.commonLabels }}
 {{- toYaml . | nindent 0 }}
 {{- end }}

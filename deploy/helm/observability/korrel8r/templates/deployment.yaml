@@ -1,4 +1,3 @@
-{{- if .Values.patch.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -6,24 +5,18 @@ metadata:
   namespace: {{ include "korrel8r.namespace" . }}
   labels:
     {{- include "korrel8r.labels" . | nindent 4 }}
-    app.kubernetes.io/instance: korrel8r
-    app.kubernetes.io/managed-by: observability-operator
-    app.kubernetes.io/part-of: UIPlugin
 spec:
   selector:
     matchLabels:
-      app.kubernetes.io/instance: korrel8r
-      app.kubernetes.io/managed-by: observability-operator
-      app.kubernetes.io/part-of: UIPlugin
+      app.kubernetes.io/name: {{ include "korrel8r.name" . }}
+      app.kubernetes.io/instance: {{ .Values.korrel8r.name }}
   template:
     metadata:
       name: {{ .Values.korrel8r.name }}
       namespace: {{ include "korrel8r.namespace" . }}
       labels:
         app.kubernetes.io/name: {{ include "korrel8r.name" . }}
-        app.kubernetes.io/instance: korrel8r
-        app.kubernetes.io/managed-by: observability-operator
-        app.kubernetes.io/part-of: UIPlugin
+        app.kubernetes.io/instance: {{ .Values.korrel8r.name }}
     spec:
       serviceAccountName: {{ .Values.serviceAccount.name }}
       containers:
@@ -37,6 +30,7 @@ spec:
         - --cert=/secrets/tls.crt
         - --key=/secrets/tls.key
         - --config=/config/korrel8r.yaml
+        - --verbose={{ .Values.korrel8r.verbose }}
         ports:
         - containerPort: 9443
           protocol: TCP
@@ -58,11 +52,9 @@ spec:
       volumes:
       - name: serving-cert
         secret:
-          secretName: korrel8r
+          secretName: {{ .Values.korrel8r.name }}
           defaultMode: 420
       - name: korrel8r-config
         configMap:
           name: {{ .Values.korrel8r.name }}
           defaultMode: 420
-{{- end }}
-

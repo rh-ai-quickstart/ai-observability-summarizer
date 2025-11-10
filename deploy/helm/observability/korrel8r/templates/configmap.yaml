@@ -1,8 +1,7 @@
-{{- if .Values.patch.enabled }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: korrel8r-patch
+  name: {{ .Values.korrel8r.name }}
   namespace: {{ include "korrel8r.namespace" . }}
   labels:
     {{- include "korrel8r.labels" . | nindent 4 }}
@@ -36,8 +35,5 @@ data:
       - domain: trace
         tempoStack: {{ .Values.korrel8r.stores.trace.tempoStackUrl | quote }}
         certificateAuthority: ./run/secrets/kubernetes.io/serviceaccount/service-ca.crt
-
     include:
       - /etc/korrel8r/rules/all.yaml
-{{- end }}
-
