@@ -11,7 +11,7 @@ global:
 korrel8r:
   name: korrel8r-summarizer
   # Verbosity for logging (0: notice/error/warn, 1: info, 2: debug, 3: trace-per-request, 4: trace-per-rule, 5: trace-per-query+
-  verbose: 2
+  verbose: 0
 
   stores:
     log:
