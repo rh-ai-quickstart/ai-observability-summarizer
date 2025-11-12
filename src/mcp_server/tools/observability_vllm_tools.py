@@ -316,6 +316,7 @@ def analyze_vllm(
         # --- Phase 1: Optional Korrel8r enrichment (logs only) ---
         korrel8r_section: Dict[str, Any] = {}
         korrel8r_prompt_note: str = ""
+        log_trace_data: str = ""
         if KORREL8R_ENABLED:
             log_trace_data = build_correlated_context_from_metrics(
                 metric_dfs=metric_dfs,

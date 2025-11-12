@@ -994,14 +994,16 @@ def analyze_openshift_metrics(
         scope_description += f" ({namespace})"
 
     # Build correlated log/trace context for OpenShift analysis (only when relevant)
-    log_trace_data = build_log_trace_context_for_pod_issues(
+    log_trace_data: str = ""
+    if KORREL8R_ENABLED:
+        log_trace_data = build_log_trace_context_for_pod_issues(
             namespace_for_query=namespace_for_query,
             namespace_label=namespace,
             start_ts=start_ts,
             end_ts=end_ts,
             metrics_to_fetch=metrics_to_fetch,
         )
-    logger.debug("In analyze_openshift_metrics: log_trace_data=%s", log_trace_data)
+        logger.debug("In analyze_openshift_metrics: log_trace_data=%s", log_trace_data)
     # Build OpenShift metrics prompt (including optional log/trace context)
     prompt = build_openshift_prompt(
         metric_dfs, metric_category, namespace_for_query, scope_description, log_trace_data
