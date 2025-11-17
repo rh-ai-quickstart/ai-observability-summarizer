@@ -19,7 +19,11 @@ This Helm chart contains the **production-tested configuration** that successful
 
 - **TLS**: Currently uses `insecureSkipVerify: true` for internal cluster communication
 - **Authentication**: Uses `collector` service account token from `openshift-logging` namespace
-- **RBAC**: Proper ClusterRoles for tenant access (`application`, `infrastructure`, `audit`)
+- **RBAC**: Uses OpenShift Logging v6.3+ observability API format for ClusterRoles
+  - `collect-application-logs` - Permission to collect application logs
+  - `collect-infrastructure-logs` - Permission to collect infrastructure logs
+  - `collect-audit-logs` - Permission to collect audit logs
+  - Uses new API: `logging.openshift.io` and `observability.openshift.io` with `logs` resource and `collect` verb
 
 ### Retention Policies (Optimized for Storage)
 
@@ -56,18 +60,27 @@ All prerequisites are automatically installed by the `make install` command:
 
 ### OpenShift Logging Setup (Intelligently Automated)
 
-**✅ SMART DETECTION**: The Makefile automatically detects if the `collector` ServiceAccount already exists:
+**✅ SMART RBAC MANAGEMENT**: The Helm chart intelligently handles RBAC based on whether the `collector` ServiceAccount exists:
 
-- **If collector SA exists** (e.g., managed by OpenShift Logging Operator) → **Reuses existing SA**
-- **If collector SA doesn't exist** → **Creates it automatically with proper RBAC**
+- **ClusterRoles and ClusterRoleBindings**: **Always created/updated** to ensure correct permissions
 
-The Helm chart creates all necessary RBAC components when needed:
+  - This ensures ClusterRoles match the current chart version
+  - Uses OpenShift Logging v6.3+ observability API format
+  - Includes all three log types: application, infrastructure, and audit
 
-- **Collector Service Account** in `openshift-logging` namespace (if not present)
-- **ClusterRoles** for log collection permissions
-- **ClusterRoleBindings** for proper access
+- **Collector Service Account**: Only created if it doesn't already exist
+  - Has `helm.sh/resource-policy: keep` annotation to prevent accidental deletion
+  - Preserved during upgrades to maintain continuity
+  - Makefile detects existing SA and sets `rbac.collector.create=false` automatically
 
-**No manual intervention required** - the installation is intelligent and handles both fresh installs and existing logging setups!
+**Key Benefits**:
+
+- ✅ Works correctly on both fresh installs and reinstalls
+- ✅ No manual ServiceAccount deletion required
+- ✅ ClusterRoles always match the current operator version requirements
+- ✅ Zero downtime during upgrades
+
+**No manual intervention required** - the installation handles all scenarios automatically!
 
 ### Automated Installation (Recommended)
 
@@ -439,14 +452,53 @@ oc get sa collector -n openshift-logging
 kubectl auth can-i create application.loki.grafana.com --as=system:serviceaccount:openshift-logging:collector
 kubectl auth can-i get pods --as=system:serviceaccount:openshift-logging:collector
 kubectl auth can-i get nodes --as=system:serviceaccount:openshift-logging:collector
+```
 
-# If collector SA missing, redeploy the Helm chart:
+### ClusterLogForwarder Permission Issues
+
+**Symptom**: ClusterLogForwarder shows error: `"insufficient permissions on service account, not authorized to collect [\"application\" \"infrastructure\"] logs"`
+
+**Root Cause**: ClusterRoles are missing or using incorrect API format. OpenShift Logging v6.3+ requires specific ClusterRole format using the observability API.
+
+**Solution**: The Helm chart automatically creates the correct ClusterRoles. Verify they exist:
+
+```bash
+# Check if ClusterRoles exist with correct format
+oc get clusterrole collect-application-logs collect-infrastructure-logs collect-audit-logs
+
+# Verify ClusterRole uses correct API (should show observability.openshift.io)
+oc get clusterrole collect-application-logs -o yaml | grep -A 10 "rules:"
+
+# Expected output shows new API format:
+# rules:
+# - apiGroups:
+#   - logging.openshift.io
+#   - observability.openshift.io
+#   resourceNames:
+#   - application
+#   resources:
+#   - logs
+#   verbs:
+#   - collect
+
+# If ClusterRoles are missing or wrong, upgrade the Helm chart:
+make upgrade-observability
+# OR
 helm upgrade loki-stack deploy/helm/observability/loki \
   --namespace openshift-logging \
-  --set rbac.collector.create=true
+  --reuse-values
 
-# The chart will automatically create all necessary RBAC components
+# Verify ClusterLogForwarder is now authorized:
+oc get clusterlogforwarder logging-loki-forwarder -n openshift-logging \
+  -o jsonpath='{.status.conditions[?(@.type=="observability.openshift.io/Authorized")]}'
 ```
+
+**Important Notes**:
+
+- ✅ ClusterRoles are **always created/updated** regardless of whether the collector ServiceAccount exists
+- ✅ The chart uses the **new observability API format** required by OpenShift Logging v6.3+
+- ✅ All three log types (application, infrastructure, audit) have dedicated ClusterRoles
+- ✅ ClusterRoleBindings automatically bind the ClusterRoles to the collector ServiceAccount
 
 ## 📈 Performance Characteristics
 

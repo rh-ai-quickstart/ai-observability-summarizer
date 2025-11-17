@@ -32,6 +32,11 @@ This document contains comprehensive deployment instructions and troubleshooting
 - **TLS**: Currently using `insecureSkipVerify: true` for internal cluster communication
 - **CA Configuration**: OpenShift Service CA (`openshift-service-ca.crt`) available for production
 - **Authentication Token**: Uses `collector-token` from `openshift-logging` namespace
+- **RBAC**: Uses OpenShift Logging v6.3+ observability API format
+  - **ClusterRoles**: Always created/updated with correct API format
+  - **API Groups**: `logging.openshift.io` and `observability.openshift.io`
+  - **Resource**: `logs` with `collect` verb
+  - **Intelligent Handling**: ClusterRoles created even when ServiceAccount already exists
 
 ### Log Collection Strategy
 
@@ -87,10 +92,25 @@ helm install loki-stack deploy/helm/observability/loki \
   --create-namespace
 ```
 
-**Note**: The Makefile automatically detects if the `collector` ServiceAccount already exists in `openshift-logging` and sets `rbac.collector.create` accordingly:
+**Note**: The Helm chart uses intelligent RBAC management:
 
-- If collector SA exists (e.g., managed by OpenShift Logging Operator) → skips creation
-- If collector SA doesn't exist → creates it automatically
+- **ClusterRoles and ClusterRoleBindings**: **Always created/updated** to ensure correct permissions
+
+  - Uses OpenShift Logging v6.3+ observability API format
+  - Includes all three log types: application, infrastructure, audit
+  - Ensures ClusterRoles match current operator version requirements
+
+- **Collector ServiceAccount**: Only created if it doesn't already exist
+  - Makefile automatically detects existing SA and sets `rbac.collector.create=false`
+  - Has `helm.sh/resource-policy: keep` annotation to prevent accidental deletion
+  - Preserved during upgrades for continuity
+
+**Benefits**:
+
+- ✅ Works on both fresh installs and reinstalls without manual intervention
+- ✅ No need to delete collector ServiceAccount before upgrading
+- ✅ ClusterRoles always correct for current OpenShift Logging version
+- ✅ Zero downtime during upgrades
 
 ### Step 4: Manual Collector Service Account Setup (Optional)
 
@@ -100,31 +120,53 @@ If you need to manually manage the collector service account (not using Helm RBA
 # Create collector service account in openshift-logging
 oc create serviceaccount collector -n openshift-logging
 
-# Create ClusterRoles for log collection
+# Create ClusterRoles for log collection (OpenShift Logging v6.3+ format)
+# IMPORTANT: Use the new observability API format required by the operator
 oc apply -f - <<EOF
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: collect-application-logs
 rules:
-- apiGroups: [""]
-  resources: ["pods", "pods/log"]
-  verbs: ["get", "list", "watch"]
-- apiGroups: [""]
-  resources: ["namespaces"]
-  verbs: ["get", "list", "watch"]
+- apiGroups:
+  - logging.openshift.io
+  - observability.openshift.io
+  resourceNames:
+  - application
+  resources:
+  - logs
+  verbs:
+  - collect
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: collect-infrastructure-logs
 rules:
-- apiGroups: [""]
-  resources: ["nodes", "nodes/log", "nodes/metrics"]
-  verbs: ["get", "list", "watch"]
-- apiGroups: [""]
-  resources: ["pods", "pods/log"]
-  verbs: ["get", "list", "watch"]
+- apiGroups:
+  - logging.openshift.io
+  - observability.openshift.io
+  resourceNames:
+  - infrastructure
+  resources:
+  - logs
+  verbs:
+  - collect
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: collect-audit-logs
+rules:
+- apiGroups:
+  - logging.openshift.io
+  - observability.openshift.io
+  resourceNames:
+  - audit
+  resources:
+  - logs
+  verbs:
+  - collect
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -143,6 +185,10 @@ oc create clusterrolebinding collect-application-logs \
 
 oc create clusterrolebinding collect-infrastructure-logs \
   --clusterrole=collect-infrastructure-logs \
+  --serviceaccount=openshift-logging:collector
+
+oc create clusterrolebinding collect-audit-logs \
+  --clusterrole=collect-audit-logs \
   --serviceaccount=openshift-logging:collector
 
 oc create clusterrolebinding logging-collector-logs-writer \
@@ -352,6 +398,60 @@ externalAccess:
 1. Created `uiplugin.yaml` template for logging console integration
 2. Added Makefile targets for enabling/disabling console plugin
 3. Added configuration options in `values.yaml`
+
+### 7. ClusterLogForwarder Permission Errors (v6.3+ Format Issue)
+
+**Problem**: ClusterLogForwarder shows `"insufficient permissions on service account, not authorized to collect [\"application\" \"infrastructure\"] logs"` even though ClusterRoles exist.
+
+**Root Cause**: ClusterRoles were using old format (pods, namespaces resources) instead of new OpenShift Logging v6.3+ observability API format.
+
+**Symptoms**:
+
+- ClusterLogForwarder status shows `ClusterRoleMissing`
+- Collector ServiceAccount exists but permissions denied
+- ClusterRoles exist but use wrong API groups
+
+**Solution**:
+
+Updated Helm chart to use correct API format for ClusterRoles:
+
+- **Old format** (deprecated): Uses `pods`, `namespaces`, `pods/log` resources
+- **New format** (required): Uses `logging.openshift.io` and `observability.openshift.io` API groups with `logs` resource and `collect` verb
+
+**Fix Applied**:
+
+1. Updated `collector-rbac.yaml` template with new observability API format
+2. Separated ServiceAccount creation from ClusterRole creation
+3. ClusterRoles now **always created/updated** regardless of ServiceAccount existence
+4. Added `collect-audit-logs` ClusterRole (was missing)
+
+**Verification**:
+
+```bash
+# Check ClusterRole format
+oc get clusterrole collect-application-logs -o yaml | grep -A 10 "rules:"
+
+# Should show:
+# - apiGroups:
+#   - logging.openshift.io
+#   - observability.openshift.io
+#   resourceNames:
+#   - application
+#   resources:
+#   - logs
+#   verbs:
+#   - collect
+
+# Verify ClusterLogForwarder is authorized
+oc get clusterlogforwarder logging-loki-forwarder -n openshift-logging \
+  -o jsonpath='{.status.conditions[?(@.type=="observability.openshift.io/Authorized")]}'
+```
+
+**Important Notes**:
+
+- This issue only affects OpenShift Logging v6.3+ installations
+- The fix is backward compatible and works for both fresh installs and upgrades
+- No manual deletion of resources required - Helm chart handles everything automatically
 
 ## 🔍 Troubleshooting Commands
 

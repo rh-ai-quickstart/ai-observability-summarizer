@@ -61,9 +61,30 @@ if helm list -n $LOKI_NAMESPACE | grep -q "^loki-stack\s"; then
         if [ "$LOKI_CONDITION" = "True" ]; then
             echo "  ✅ LokiStack: Ready and operational"
         else
-            echo "  ⚠️  LokiStack: Not Ready"
-            echo "     → Check pod status: oc get pods -n $LOKI_NAMESPACE | grep loki"
-            echo "     → This is not treated as configuration drift"
+            # Wait for LokiStack to become ready (up to 5 minutes)
+            echo "  ⏳ LokiStack: Not yet ready, waiting up to 5 minutes..."
+            MAX_WAIT=300  # 5 minutes in seconds
+            ELAPSED=0
+            INTERVAL=10
+
+            while [ $ELAPSED -lt $MAX_WAIT ]; do
+                LOKI_CONDITION=$(oc get lokistack logging-loki -n $LOKI_NAMESPACE -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null)
+                if [ "$LOKI_CONDITION" = "True" ]; then
+                    echo "  ✅ LokiStack: Ready and operational (after ${ELAPSED}s)"
+                    break
+                fi
+                echo "     → Still waiting... (${ELAPSED}s elapsed)"
+                sleep $INTERVAL
+                ELAPSED=$((ELAPSED + INTERVAL))
+            done
+
+            # Final check after timeout
+            LOKI_CONDITION=$(oc get lokistack logging-loki -n $LOKI_NAMESPACE -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null)
+            if [ "$LOKI_CONDITION" != "True" ]; then
+                echo "  ⚠️  LokiStack: Not Ready after ${MAX_WAIT}s"
+                echo "     → Check pod status: oc get pods -n $LOKI_NAMESPACE | grep loki"
+                echo "     → This is not treated as configuration drift"
+            fi
         fi
     else
         echo "  ⚠️  LokiStack: Helm chart installed but LokiStack resource not found"
