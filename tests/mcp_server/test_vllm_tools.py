@@ -23,20 +23,20 @@ def test_list_models_empty(_):
     assert any("No models are currently available" in t for t in texts)
 
 
-@patch("src.mcp_server.tools.observability_vllm_tools.get_namespaces_helper", return_value=["ns1", "ns2"])  # type: ignore[arg-type]
-def test_list_namespaces_success(_):
-    out = tools.list_namespaces()
+@patch("src.mcp_server.tools.observability_vllm_tools.get_vllm_namespaces_helper", return_value=["ns1", "ns2"])  # type: ignore[arg-type]
+def test_list_vllm_namespaces_success(_):
+    out = tools.list_vllm_namespaces()
     texts = _texts(out)
-    assert any("Monitored Namespaces" in t for t in texts)
+    assert any("Monitored vLLM Namespaces" in t for t in texts)
     assert any("ns1" in t for t in texts)
     assert any("ns2" in t for t in texts)
 
 
-@patch("src.mcp_server.tools.observability_vllm_tools.get_namespaces_helper", return_value=[])  # type: ignore[arg-type]
-def test_list_namespaces_empty(_):
-    out = tools.list_namespaces()
+@patch("src.mcp_server.tools.observability_vllm_tools.get_vllm_namespaces_helper", return_value=[])  # type: ignore[arg-type]
+def test_list_vllm_namespaces_empty(_):
+    out = tools.list_vllm_namespaces()
     texts = _texts(out)
-    assert any("No monitored namespaces found" in t for t in texts)
+    assert any("No monitored vLLM namespaces found" in t for t in texts)
 
 
 @patch("os.getenv", return_value='{"m1": {"external": false}, "m2": {"external": true}}')

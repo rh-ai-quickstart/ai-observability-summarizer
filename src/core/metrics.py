@@ -360,7 +360,7 @@ def get_models_helper() -> List[str]:
         return []
 
 
-def get_namespaces_helper() -> List[str]:
+def get_vllm_namespaces_helper() -> List[str]:
     """
     Get list of namespaces that have vLLM metrics available.
 
@@ -424,6 +424,32 @@ def get_namespaces_helper() -> List[str]:
         logger.error("Error getting namespaces", exc_info=e)
         return []
 
+
+def get_openshift_namespaces_helper() -> List[str]:
+    """
+    Get list of all namespaces present in Prometheus/Thanos data.
+
+    Uses the label values endpoint to retrieve all observed namespace labels.
+
+    Returns:
+        Sorted list of namespace names
+    """
+    try:
+        headers = _auth_headers()
+        response = requests.get(
+            f"{PROMETHEUS_URL}/api/v1/label/namespace/values",
+            headers=headers,
+            verify=VERIFY_SSL,
+        )
+        response.raise_for_status()
+        values = response.json().get("data", [])
+        if not isinstance(values, list):
+            return []
+        namespaces = sorted({str(v).strip() for v in values if v})
+        return namespaces
+    except Exception as e:
+        logger.error("Error getting OpenShift namespaces", exc_info=e)
+        return []
 
 def calculate_metric_stats(data):
     """
@@ -968,14 +994,16 @@ def analyze_openshift_metrics(
         scope_description += f" ({namespace})"
 
     # Build correlated log/trace context for OpenShift analysis (only when relevant)
-    log_trace_data = build_log_trace_context_for_pod_issues(
+    log_trace_data: str = ""
+    if KORREL8R_ENABLED:
+        log_trace_data = build_log_trace_context_for_pod_issues(
             namespace_for_query=namespace_for_query,
             namespace_label=namespace,
             start_ts=start_ts,
             end_ts=end_ts,
             metrics_to_fetch=metrics_to_fetch,
         )
-    logger.debug("In analyze_openshift_metrics: log_trace_data=%s", log_trace_data)
+        logger.debug("In analyze_openshift_metrics: log_trace_data=%s", log_trace_data)
     # Build OpenShift metrics prompt (including optional log/trace context)
     prompt = build_openshift_prompt(
         metric_dfs, metric_category, namespace_for_query, scope_description, log_trace_data

@@ -47,8 +47,8 @@ def test_mcp_sync_tool():
     try:
         from mcp_client_helper import mcp_client
         
-        print("Calling list_namespaces tool (HTTP)...")
-        result = mcp_client.call_tool_sync("list_namespaces")
+        print("Calling list_vllm_namespaces tool (HTTP)...")
+        result = mcp_client.call_tool_sync("list_vllm_namespaces")
         
         if result:
             print("✅ HTTP tool call successful")

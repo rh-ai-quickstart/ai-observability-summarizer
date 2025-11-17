@@ -2,7 +2,7 @@ replicaCount: 1
 
 image:
   repository: quay.io/ecosystem-appeng/aiobs-mcp-server
-  tag: 0.15.0
+  tag: 0.15.3
   pullPolicy: IfNotPresent
 
 service:
@@ -27,7 +27,7 @@ env:
   MAX_TIME_RANGE_DAYS: 90
   DEFAULT_TIME_RANGE_DAYS: 7
   KORREL8R_ENABLED: "true"
-  KORREL8R_URL: "https://korrel8r.openshift-cluster-observability-operator.svc.cluster.local:9443"
+  KORREL8R_URL: "https://korrel8r-summarizer.openshift-cluster-observability-operator.svc.cluster.local:9443"
   MAX_NUM_LOG_ROWS: 10
   KORREL8R_TIMEOUT_SECONDS: 8
 

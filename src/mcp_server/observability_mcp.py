@@ -19,7 +19,7 @@ class ObservabilityMCPServer:
     def _register_mcp_tools(self) -> None:
         from .tools.observability_vllm_tools import (
             list_models,
-            list_namespaces,
+            list_vllm_namespaces,
             get_model_config,
             get_vllm_metrics_tool,
             analyze_vllm,
@@ -31,6 +31,7 @@ class ObservabilityMCPServer:
         )
         from .tools.observability_openshift_tools import (
             analyze_openshift,
+            list_openshift_namespaces,
             list_openshift_metric_groups,
             list_openshift_namespace_metric_groups,
             chat_openshift,
@@ -55,7 +56,7 @@ class ObservabilityMCPServer:
 
         # Register vLLM tools
         self.mcp.tool()(list_models)
-        self.mcp.tool()(list_namespaces)
+        self.mcp.tool()(list_vllm_namespaces)
         self.mcp.tool()(get_model_config)
         self.mcp.tool()(get_vllm_metrics_tool)
         self.mcp.tool()(analyze_vllm)
@@ -67,6 +68,7 @@ class ObservabilityMCPServer:
         
         # Register OpenShift tools
         self.mcp.tool()(analyze_openshift)
+        self.mcp.tool()(list_openshift_namespaces)
         self.mcp.tool()(list_openshift_metric_groups)
         self.mcp.tool()(list_openshift_namespace_metric_groups)
         self.mcp.tool()(chat_openshift)

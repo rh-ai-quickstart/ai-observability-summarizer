@@ -7,7 +7,7 @@ Model Context Protocol (MCP) server providing AI assistant integration for OpenS
 The MCP server provides the following tools:
 
 - **`list_models`** - Discover available vLLM models from Prometheus metrics
-- **`list_namespaces`** - List monitored Kubernetes namespaces with observability data
+- **`list_vllm_namespaces`** - List monitored Kubernetes namespaces with observability data
 - **`get_model_config`** - Get available LLM models for summarization and analysis
 - **`list_summarization_models`** - List summarization models from MODEL_CONFIG (internal/external)
 - **`get_gpu_info`** - Return cluster GPU info (count, vendors, models, temperatures)
@@ -312,7 +312,7 @@ Troubleshooting tips:
 | Tool | Description | Returns |
 |------|-------------|---------|
 | `list_models` | Lists available vLLM models from metrics | Format: `"namespace | model_name"` |
-| `list_namespaces` | Lists monitored Kubernetes namespaces | Sorted list of namespace names |
+| `list_vllm_namespaces` | Lists monitored Kubernetes namespaces | Sorted list of namespace names |
 | `get_model_config` | Gets LLM models for summarization | Internal/external model configurations |
 | `list_summarization_models` | Lists summarization model IDs | Bullet list; UI parses to List of strings |
 | `get_gpu_info` | Returns GPU fleet info | JSON: total_gpus, vendors, models, temperatures, power_usage |
@@ -344,7 +344,7 @@ The Tempo tools provide distributed tracing analysis capabilities for OpenShift 
         │                        │                        │
         │                        │                        │
    Natural language      list_models           vLLM metrics
-   queries              list_namespaces       /api/v1/series
+   queries           list_vllm_namespaces      /api/v1/series
 ```
 
 ## 🔧 Development

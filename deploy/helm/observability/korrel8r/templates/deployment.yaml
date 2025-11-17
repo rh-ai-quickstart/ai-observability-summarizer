@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.korrel8r.name }}
+  namespace: {{ include "korrel8r.namespace" . }}
+  labels:
+    {{- include "korrel8r.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "korrel8r.name" . }}
+      app.kubernetes.io/instance: {{ .Values.korrel8r.name }}
+  template:
+    metadata:
+      name: {{ .Values.korrel8r.name }}
+      namespace: {{ include "korrel8r.namespace" . }}
+      labels:
+        app.kubernetes.io/name: {{ include "korrel8r.name" . }}
+        app.kubernetes.io/instance: {{ .Values.korrel8r.name }}
+    spec:
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      containers:
+      - name: korrel8r
+        image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command:
+        - korrel8r
+        - web
+        - --https=:9443
+        - --cert=/secrets/tls.crt
+        - --key=/secrets/tls.key
+        - --config=/config/korrel8r.yaml
+        - --verbose={{ .Values.korrel8r.verbose }}
+        ports:
+        - containerPort: 9443
+          protocol: TCP
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+        volumeMounts:
+        - name: serving-cert
+          mountPath: /secrets/
+          readOnly: true
+        - name: korrel8r-config
+          mountPath: /config/
+          readOnly: true
+      volumes:
+      - name: serving-cert
+        secret:
+          secretName: {{ .Values.korrel8r.name }}
+          defaultMode: 420
+      - name: korrel8r-config
+        configMap:
+          name: {{ .Values.korrel8r.name }}
+          defaultMode: 420

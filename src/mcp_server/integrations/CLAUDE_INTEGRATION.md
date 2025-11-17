@@ -32,7 +32,7 @@ cp src/mcp_server/integrations/claude-desktop-config.json \
    ~/Library/Application\ Support/Claude/claude_desktop_config.json
 ```
 
-**Manual JSON (replace `$OBS_BASE_DIR` with your project path). Tool list shown should match registered tools (`list_models`, `list_namespaces`, `get_model_config`, `analyze_vllm`). Include these env vars:**
+**Manual JSON (replace `$OBS_BASE_DIR` with your project path). Tool list shown should match registered tools (`list_models`, `list_vllm_namespaces`, `get_model_config`, `analyze_vllm`). Include these env vars:**
 
 ```json
 {
@@ -48,13 +48,13 @@ cp src/mcp_server/integrations/claude-desktop-config.json \
       },
       "autoApprove": [
         "list_models",
-        "list_namespaces",
+        "list_vllm_namespaces",
         "get_model_config",
         "analyze_vllm"
       ],
       "alwaysAllow": [
         "list_models",
-        "list_namespaces",
+        "list_vllm_namespaces",
         "get_model_config",
         "analyze_vllm"
       ],

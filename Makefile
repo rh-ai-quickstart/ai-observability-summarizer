@@ -3,7 +3,7 @@
 
 # NAMESPACE validation for deployment targets
 ifeq ($(NAMESPACE),)
-ifeq (,$(filter install-local depend install-ingestion-pipeline list-models% generate-model-config help build build-ui build-alerting build-mcp-server push push-ui push-alerting push-mcp-server clean config test check-observability-drift install-operators uninstall-operators check-operators install-cluster-observability-operator install-opentelemetry-operator install-tempo-operator install-logging-operator install-loki-operator uninstall-cluster-observability-operator uninstall-opentelemetry-operator uninstall-tempo-operator uninstall-logging-operator uninstall-loki-operator enable-tracing-ui disable-tracing-ui enable-logging-ui disable-logging-ui install-loki uninstall-loki upgrade-observability,$(MAKECMDGOALS)))
+ifeq (,$(filter install-local depend install-ingestion-pipeline list-models% generate-model-config help build build-ui build-alerting build-mcp-server push push-ui push-alerting push-mcp-server clean config test check-observability-drift install-operators uninstall-operators check-operators install-cluster-observability-operator install-opentelemetry-operator install-tempo-operator install-logging-operator install-loki-operator uninstall-cluster-observability-operator uninstall-opentelemetry-operator uninstall-tempo-operator uninstall-logging-operator uninstall-loki-operator enable-tracing-ui disable-tracing-ui enable-logging-ui disable-logging-ui install-loki uninstall-loki upgrade-observability install-korrel8r uninstall-korrel8r,$(MAKECMDGOALS)))
 $(error NAMESPACE is not set)
 endif
 endif
@@ -14,7 +14,7 @@ MAKEFLAGS += --no-print-directory
 REGISTRY ?= quay.io
 ORG ?= ecosystem-appeng
 IMAGE_PREFIX ?= aiobs
-VERSION ?= 0.15.0
+VERSION ?= 0.15.3
 PLATFORM ?= linux/amd64
 
 # Container image names
@@ -68,6 +68,11 @@ METRICS_UI_RELEASE_NAME ?= ui
 METRICS_UI_CHART_PATH ?= ui
 MCP_SERVER_RELEASE_NAME ?= mcp-server
 MCP_SERVER_CHART_PATH ?= mcp-server
+# Korrel8r chart
+KORREL8R_RELEASE_NAME ?= korrel8r-summarizer
+KORREL8R_CHART_PATH ?= observability/korrel8r
+KORREL8R_NAMESPACE ?= openshift-cluster-observability-operator
+
 TOLERATIONS_TEMPLATE=[{"key":"$(1)","effect":"NoSchedule","operator":"Exists"}]
 GEN_MODEL_CONFIG_PREFIX = /tmp/gen_model_config
 
@@ -193,6 +198,7 @@ help:
 	@echo "  list-models        - List available models"
 	@echo "  generate-model-config - Generate JSON config for specified LLM using template"
 	@echo "  install-ingestion-pipeline - Install extra ingestion pipelines"
+	@echo "  install-korrel8r   - Install Korrel8r via UIPlugin then patch resources"
 	@echo ""
 	@echo "Observability Stack:"
 	@echo "  install-observability-stack - Install complete observability stack (MinIO + TempoStack + LokiStack + OTEL + tracing + logging + drift check)"
@@ -229,6 +235,10 @@ help:
 	@echo "  uninstall-minio - Uninstall MinIO observability storage backend only"
 	@echo "  install-loki - Install LokiStack for centralized log aggregation (idempotent)"
 	@echo "  uninstall-loki - Uninstall LokiStack (preserves MinIO storage and buckets)"
+	@echo ""
+	@echo "Korrel8r:"
+	@echo "  install-korrel8r     - Install Korrel8r via UIPlugin then patch resources"
+	@echo "  uninstall-korrel8r   - Uninstall Korrel8r helm release and clean leftovers"
 	@echo ""
 	@echo "Alerting:"
 	@echo "  install-alerts     - Install alerting Helm chart"
@@ -400,7 +410,7 @@ install-rag: namespace
 
 
 .PHONY: install
-install: namespace depend validate-llm install-operators install-observability-stack
+install: namespace depend validate-llm install-operators install-observability-stack install-rag install-metric-ui install-mcp-server install-korrel8r delete-jobs
 	@if [ "$(ALERTS)" = "TRUE" ]; then \
 		echo "ALERTS flag is set to TRUE. Installing alerting..."; \
 		$(MAKE) install-alerts NAMESPACE=$(NAMESPACE); \
@@ -474,6 +484,8 @@ uninstall:
 	- @helm -n $(NAMESPACE) uninstall $(METRICS_UI_RELEASE_NAME) --ignore-not-found
 	@echo "Uninstalling $(MCP_SERVER_RELEASE_NAME) helm chart (if installed)"
 	- @helm -n $(NAMESPACE) uninstall $(MCP_SERVER_RELEASE_NAME) --ignore-not-found
+	@echo "Uninstalling Korrel8r helm-managed resources (if installed)"
+	@$(MAKE) uninstall-korrel8r || true
 
 	@echo ""
 	@echo "Checking if observability stack should be uninstalled..."
@@ -976,6 +988,40 @@ install-minio:
 	- @oc delete route minio-api minio-webui -n $(MINIO_NAMESPACE) --ignore-not-found ||:
 	@echo "  → Broken upstream routes cleaned up"
 
+
+# Korrel8r installation via UIPlugin then patch
+.PHONY: install-korrel8r
+install-korrel8r:
+	@bash -c '\
+		MCS_NS="$${NAMESPACE:-$$(oc project -q 2>/dev/null)}"; \
+		echo "→ Checking KORREL8R_ENABLED in Helm release $(MCP_SERVER_RELEASE_NAME) (namespace=$$MCS_NS)"; \
+		if ! helm list -n "$$MCS_NS" -q 2>/dev/null | grep -q "^$(MCP_SERVER_RELEASE_NAME)$$"; then \
+		  echo "  → $(MCP_SERVER_RELEASE_NAME) not found in $$MCS_NS; skipping Korrel8r install"; \
+		  exit 0; \
+		fi; \
+		ENABLED=$$(helm get values $(MCP_SERVER_RELEASE_NAME) -n "$$MCS_NS" --all -o json 2>/dev/null | jq -r ".env.KORREL8R_ENABLED // \"\"" | tr "[:upper:]" "[:lower:]"); \
+		if [ "$$ENABLED" != "true" ]; then \
+		  echo "  → KORREL8R_ENABLED=$$ENABLED; skipping Korrel8r install"; \
+		  exit 0; \
+		fi; \
+		echo "  → KORREL8R_ENABLED=true; deploying Korrel8r directly via Helm"; \
+		cd deploy/helm && helm upgrade --install $(KORREL8R_RELEASE_NAME) $(KORREL8R_CHART_PATH) \
+			--namespace $(KORREL8R_NAMESPACE) \
+			--create-namespace \
+			--set global.namespace=$(KORREL8R_NAMESPACE); \
+		echo "→ Waiting for rollout of deployment/$(KORREL8R_RELEASE_NAME)"; \
+		oc rollout status -n $(KORREL8R_NAMESPACE) deployment/$(KORREL8R_RELEASE_NAME) --timeout=10m || true; \
+		echo "✅ Korrel8r installed successfully" \
+	'
+
+.PHONY: uninstall-korrel8r
+uninstall-korrel8r:
+	@echo "→ Uninstalling Korrel8r Helm release from namespace $(KORREL8R_NAMESPACE)"
+	- @helm -n $(KORREL8R_NAMESPACE) uninstall $(KORREL8R_RELEASE_NAME) --ignore-not-found
+	@echo "→ Cleaning up leftover resources (if any)"
+	- @oc delete configmap korrel8r-patch -n $(KORREL8R_NAMESPACE) --ignore-not-found
+	- @oc delete route korrel8r -n $(KORREL8R_NAMESPACE) --ignore-not-found
+	@echo "✅ Korrel8r helm-managed resources removed"
 
 .PHONY: uninstall-minio
 uninstall-minio:

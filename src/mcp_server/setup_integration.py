@@ -133,7 +133,8 @@ def generate_claude_config(mcp_stdio_path: str) -> Dict[str, Any]:
                 # Add analyze_openshift
                 "autoApprove": [
                     "list_models",
-                    "list_namespaces",
+                    "list_vllm_namespaces",
+                    "list_openshift_namespaces",
                     "get_model_config",
                     "analyze_vllm",
                     "search_metrics",
@@ -147,7 +148,8 @@ def generate_claude_config(mcp_stdio_path: str) -> Dict[str, Any]:
                 ],
                 "alwaysAllow": [
                     "list_models", 
-                    "list_namespaces",
+                    "list_vllm_namespaces",
+                    "list_openshift_namespaces",
                     "get_model_config",
                     "analyze_vllm",
                     "search_metrics",

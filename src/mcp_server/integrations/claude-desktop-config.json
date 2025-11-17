@@ -12,13 +12,15 @@
       },
       "autoApprove": [
         "list_models",
-        "list_namespaces",
+        "list_vllm_namespaces",
+        "list_openshift_namespaces",
         "get_model_config",
         "analyze_vllm"
       ],
       "alwaysAllow": [
         "list_models",
-        "list_namespaces",
+        "list_vllm_namespaces",
+        "list_openshift_namespaces",
         "get_model_config",
         "analyze_vllm"
       ],

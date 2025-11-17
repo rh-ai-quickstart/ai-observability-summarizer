@@ -1,0 +1,39 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.korrel8r.name }}
+  namespace: {{ include "korrel8r.namespace" . }}
+  labels:
+    {{- include "korrel8r.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+data:
+  korrel8r.yaml: |
+    # Default configuration for deploying Korrel8r as a service in an OpenShift cluster.
+    # Store service URLs assume that stores are installed in their default locations.
+    stores:
+      - domain: k8s
+      - domain: alert
+        metrics: https://thanos-querier.openshift-monitoring.svc:9091
+        alertmanager: https://alertmanager-main.openshift-monitoring.svc:9094
+        certificateAuthority: ./run/secrets/kubernetes.io/serviceaccount/service-ca.crt
+      - domain: alert
+        metrics: https://thanos-querier.openshift-monitoring.svc:9091
+        alertmanager: https://alertmanager-user-workload.openshift-user-workload-monitoring.svc:9095
+        certificateAuthority: ./run/secrets/kubernetes.io/serviceaccount/service-ca.crt
+      - domain: log
+        lokiStack: {{ .Values.korrel8r.stores.log.lokiStackUrl | quote }}
+        certificateAuthority: ./run/secrets/kubernetes.io/serviceaccount/service-ca.crt
+      - domain: metric
+        metric: https://thanos-querier.openshift-monitoring.svc:9091
+        certificateAuthority: ./run/secrets/kubernetes.io/serviceaccount/service-ca.crt
+      - domain: netflow
+        lokiStack: {{ .Values.korrel8r.stores.netflow.lokiStackUrl | quote }}
+        certificateAuthority: ./run/secrets/kubernetes.io/serviceaccount/service-ca.crt
+      - domain: trace
+        tempoStack: {{ .Values.korrel8r.stores.trace.tempoStackUrl | quote }}
+        certificateAuthority: ./run/secrets/kubernetes.io/serviceaccount/service-ca.crt
+    include:
+      - /etc/korrel8r/rules/all.yaml
