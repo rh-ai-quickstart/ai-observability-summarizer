@@ -1,12 +1,12 @@
 dependencies:
 - name: llm-service
   repository: https://rh-ai-quickstart.github.io/ai-architecture-charts
-  version: 0.1.0
+  version: 0.5.4
 - name: llama-stack
   repository: https://rh-ai-quickstart.github.io/ai-architecture-charts
-  version: 0.2.22
+  version: 0.5.3
 - name: pgvector
   repository: https://rh-ai-quickstart.github.io/ai-architecture-charts
-  version: 0.1.0
-digest: sha256:41776b0a8928ba93f67bd97c77fdbdaaaace9abc9471e7f0aeb1d78023430819
-generated: "2025-09-26T11:08:00.773988-04:00"
+  version: 0.5.0
+digest: sha256:694c5e0a64fa1d645443a13e21b2e7a011f6d436e7083f8286878e2d73dbb1eb
+generated: "2025-11-20T16:30:45.15449-05:00"

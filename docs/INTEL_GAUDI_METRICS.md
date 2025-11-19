@@ -43,6 +43,11 @@ If any of these operators are missing, refer to the installation documentation:
 - [Intel Gaudi AI Accelerator integration (Red Hat OpenShift AI)](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.0/html/working_with_accelerators/intel-gaudi-ai-accelerator-integration_accelerators)
 - [Intel Gaudi Base Operator for OpenShift (Intel Documentation)](https://docs.habana.ai/en/latest/Installation_Guide/Additional_Installation/OpenShift_Installation/index.html)
 
+**After operator installation**, you must create a hardware profile for Intel Gaudi accelerators:
+- [Creating a hardware profile (Red Hat OpenShift AI)](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.0/html/working_with_accelerators/working-with-hardware-profiles_accelerators#creating-a-hardware-profile_accelerators)
+
+This hardware profile defines resource allocation, tolerations, and node selectors for Intel Gaudi workloads in OpenShift AI.
+
 ## Installing Observability Stack with Intel Gaudi Support
 
 To deploy the OpenShift AI Observability Summarizer with Intel Gaudi (HPU) accelerators, use the included `Makefile` with Intel Gaudi-specific parameters.
@@ -51,6 +56,7 @@ To deploy the OpenShift AI Observability Summarizer with Intel Gaudi (HPU) accel
 
 Before installation, ensure:
 - Intel Gaudi Base Operator is installed and verified (see section above)
+- **Hardware profile for Intel Gaudi is created** in OpenShift AI (see [Creating a hardware profile](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.0/html/working_with_accelerators/working-with-hardware-profiles_accelerators#creating-a-hardware-profile_accelerators))
 - You have cluster-admin access to the OpenShift cluster
 - Hugging Face account with a valid access token
 - Sufficient Intel Gaudi accelerators available in the cluster
@@ -506,8 +512,17 @@ If metrics are available but not appearing in the observability stack:
 
 ## References
 
+### Intel Gaudi Documentation
 - [Intel Gaudi Prometheus Metric Exporter Documentation](https://docs.habana.ai/en/latest/Orchestration/Prometheus_Metric_Exporter.html)
 - [Intel Gaudi Architecture Overview](https://docs.habana.ai/en/latest/Gaudi_Overview/Gaudi_Architecture.html)
+- [Intel Gaudi Base Operator for OpenShift](https://docs.habana.ai/en/latest/Installation_Guide/Additional_Installation/OpenShift_Installation/index.html)
+
+### Red Hat OpenShift AI Documentation
+- [Intel Gaudi AI Accelerator Integration](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.0/html/working_with_accelerators/intel-gaudi-ai-accelerator-integration_accelerators)
+- [Creating a Hardware Profile for Accelerators](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.0/html/working_with_accelerators/working-with-hardware-profiles_accelerators#creating-a-hardware-profile_accelerators)
+- [Working with Hardware Profiles](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.0/html/working_with_accelerators/working-with-hardware-profiles_accelerators)
+
+### Monitoring and Observability
 - [Prometheus Query Language (PromQL)](https://prometheus.io/docs/prometheus/latest/querying/basics/)
 - [OpenShift AI Observability Overview](./OBSERVABILITY_OVERVIEW.md)
 

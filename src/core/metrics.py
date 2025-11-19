@@ -1566,10 +1566,11 @@ def get_cluster_gpu_info() -> Dict[str, Any]:
     # Set total count and handle mixed vendor scenarios
     info["total_gpus"] = nvidia_count + intel_count
     
-    # If we have both vendors, indicate mixed environment
+    # If we have both vendors, add mixed indicator while preserving individual vendor info
     if nvidia_count > 0 and intel_count > 0:
-        info["vendors"] = ["Mixed (NVIDIA + Intel Gaudi)"]
-        info["models"] = ["Mixed GPU/Accelerator"]
+        # Prepend mixed indicator to existing vendor lists
+        info["vendors"].insert(0, "Mixed (NVIDIA + Intel Gaudi)")
+        info["mixed"] = True
     
     return info
 
