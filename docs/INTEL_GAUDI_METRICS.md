@@ -43,6 +43,161 @@ If any of these operators are missing, refer to the installation documentation:
 - [Intel Gaudi AI Accelerator integration (Red Hat OpenShift AI)](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.0/html/working_with_accelerators/intel-gaudi-ai-accelerator-integration_accelerators)
 - [Intel Gaudi Base Operator for OpenShift (Intel Documentation)](https://docs.habana.ai/en/latest/Installation_Guide/Additional_Installation/OpenShift_Installation/index.html)
 
+## Installing Observability Stack with Intel Gaudi Support
+
+To deploy the OpenShift AI Observability Summarizer with Intel Gaudi (HPU) accelerators, use the included `Makefile` with Intel Gaudi-specific parameters.
+
+### Prerequisites
+
+Before installation, ensure:
+- Intel Gaudi Base Operator is installed and verified (see section above)
+- You have cluster-admin access to the OpenShift cluster
+- Hugging Face account with a valid access token
+- Sufficient Intel Gaudi accelerators available in the cluster
+- OpenShift CLI (`oc`) is installed and configured
+
+### Installation Commands
+
+#### Basic Installation
+
+Deploy the observability stack with Intel Gaudi support:
+
+```bash
+make install NAMESPACE=your-namespace DEVICE=hpu HF_TOKEN=your-hf-token
+```
+
+This installs the complete observability stack with the default LLM model (`llama-3-1-8b-instruct`) configured to run on Intel Gaudi accelerators.
+
+#### With Specific LLM Model
+
+To deploy a different model from the available list:
+
+```bash
+# List available models
+make list-models
+
+# Install with specific model
+make install NAMESPACE=test-qs DEVICE=hpu HF_TOKEN=your-hf-token LLM=llama-3-1-8b-instruct
+```
+
+#### With Intel Gaudi Node Tolerations
+
+If your Intel Gaudi nodes have taints (e.g., dedicated Gaudi nodes), add tolerations:
+
+```bash
+make install NAMESPACE=your-namespace \
+  DEVICE=hpu \
+  HF_TOKEN=your-hf-token \
+  LLM=llama-3-1-8b-instruct \
+  LLM_TOLERATION="habana.ai/gaudi"
+```
+
+#### With Alerting Enabled
+
+To enable AI-powered Slack notifications:
+
+```bash
+make install NAMESPACE=your-namespace \
+  DEVICE=hpu \
+  HF_TOKEN=your-hf-token \
+  LLM=llama-3-1-8b-instruct \
+  ALERTS=TRUE
+```
+
+### Installation Parameters
+
+| Parameter | Description | Required | Default | Example |
+|-----------|-------------|----------|---------|---------|
+| `NAMESPACE` | Target OpenShift namespace for deployment | Yes | - | `test-qs` |
+| `DEVICE` | Accelerator type (`hpu` for Intel Gaudi, `gpu` for NVIDIA) | Yes | `gpu` | `hpu` |
+| `HF_TOKEN` | Hugging Face access token for model downloads | Yes* | - | `hf_xxxxx` |
+| `LLM` | Model ID to deploy | No | `llama-3-1-8b-instruct` | `llama-3-2-3b-instruct` |
+| `LLM_TOLERATION` | Kubernetes toleration for accelerator nodes | No | - | `habana.ai/gaudi` |
+| `ALERTS` | Enable alerting and Slack notifications | No | `FALSE` | `TRUE` |
+| `SLACK_WEBHOOK_URL` | Slack webhook URL (required if ALERTS=TRUE) | Conditional | - | `https://hooks.slack.com/...` |
+
+\* Required unless using an existing LLM deployment via `LLM_URL`
+
+### Post-Installation Verification
+
+After installation, verify the deployment:
+
+1. **Check pod status**:
+   ```bash
+   oc get pods -n your-namespace
+   ```
+
+   Expected pods:
+   - `llm-service-*` - LLM inference on Intel Gaudi
+   - `llama-stack-*` - Backend API
+   - `metric-ui-*` - Streamlit dashboard
+   - `mcp-server-*` - Model Context Protocol server
+
+2. **Verify Intel Gaudi allocation**:
+   ```bash
+   oc describe pod -n your-namespace llm-service-xxxxx | grep -i habana
+   ```
+
+3. **Access the application**:
+   ```bash
+   oc get route -n your-namespace
+   ```
+
+   Navigate to the route URL to access the Streamlit dashboard.
+
+4. **Check logs for Gaudi initialization**:
+   ```bash
+   oc logs -n your-namespace deployment/llm-service | grep -i "gaudi\|hpu"
+   ```
+
+### Uninstallation
+
+To remove the observability stack:
+
+```bash
+make uninstall NAMESPACE=your-namespace
+```
+
+To also remove the observability operators and stack:
+
+```bash
+make uninstall NAMESPACE=your-namespace \
+  UNINSTALL_OBSERVABILITY=true \
+  UNINSTALL_OPERATORS=true
+```
+
+### Troubleshooting Installation
+
+#### LLM Service Not Starting
+
+If the LLM service pod fails to start:
+
+```bash
+# Check pod events
+oc describe pod -n your-namespace llm-service-xxxxx
+
+# Check logs
+oc logs -n your-namespace deployment/llm-service
+```
+
+Common issues:
+- **Missing HF_TOKEN**: Verify the secret is created: `oc get secret -n your-namespace`
+- **No Gaudi available**: Check node resources: `oc get nodes -o json | jq '.items[].status.allocatable'`
+- **Image pull errors**: Verify network connectivity and registry access
+
+#### Gaudi Resources Not Detected
+
+Verify Intel Gaudi resources are advertised:
+
+```bash
+# Check node capacity
+oc get nodes -o json | jq '.items[] | {name: .metadata.name, capacity: .status.capacity}'
+
+# Look for habana.ai/gaudi resources
+```
+
+If resources are missing, verify the Intel Gaudi Base Operator installation.
+
 ### Enabling Monitoring for User-Defined Projects
 
 In OpenShift Container Platform, Intel Gaudi metrics are collected through user workload monitoring. You must enable monitoring for user-defined projects to collect these metrics.

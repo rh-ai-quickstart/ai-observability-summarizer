@@ -343,17 +343,20 @@ def get_models_helper() -> List[str]:
                         namespace = entry.get("namespace", "").strip()
                         if model and namespace:
                             model_set.add(f"{namespace} | {model}")
-
-                    # If we found models, return them
-                    if model_set:
-                        return sorted(list(model_set))
+                            logger.debug(f"Found model: {namespace} | {model} in metric: {metric_name}")
 
                 except Exception as e:
                     logger.warning(
                         f"Error checking {metric_name} with {time_window}s window: {e}"
                     )
                     continue
+            
+            # If we found models in this time window, log but continue checking
+            # to ensure we get ALL models across all time windows and metrics
+            if model_set:
+                logger.info(f"Found {len(model_set)} model(s) in {time_window}s window, continuing to check other windows...")
 
+        logger.info(f"Total models discovered: {len(model_set)}")
         return sorted(list(model_set))
     except Exception as e:
         logger.error("Error getting models", exc_info=e)
@@ -406,19 +409,23 @@ def get_namespaces_helper() -> List[str]:
                     for entry in series:
                         namespace = entry.get("namespace", "").strip()
                         model = entry.get("model_name", "").strip()
+                        # Require both namespace and model_name to ensure properly configured deployments
                         if namespace and model:
                             namespace_set.add(namespace)
-
-                    # If we found namespaces, return them immediately
-                    if namespace_set:
-                        return sorted(list(namespace_set))
+                            logger.debug(f"Found namespace: {namespace} with model: {model} in metric: {metric_name}")
 
                 except Exception as e:
                     logger.warning(
                         f"Error checking {metric_name} with {time_window}s window: {e}"
                     )
                     continue
+            
+            # If we found namespaces in this time window, log but continue checking
+            # to ensure we get ALL namespaces across all time windows and metrics
+            if namespace_set:
+                logger.info(f"Found {len(namespace_set)} namespace(s) in {time_window}s window, continuing to check other windows...")
 
+        logger.info(f"Total namespaces discovered: {len(namespace_set)}")
         return sorted(list(namespace_set))
     except Exception as e:
         logger.error("Error getting namespaces", exc_info=e)
@@ -601,14 +608,14 @@ def discover_vllm_metrics():
         return metric_mapping
     except Exception as e:
         logger.error("Error discovering vLLM metrics: %s", e)
-        # Enhanced fallback with comprehensive GPU metrics and vLLM metrics
+        # Enhanced fallback with comprehensive GPU metrics and vLLM metrics (multi-vendor)
         return {
-            "GPU Temperature (°C)": "avg(DCGM_FI_DEV_GPU_TEMP)",
-            "GPU Power Usage (Watts)": "avg(DCGM_FI_DEV_POWER_USAGE)",
-            "GPU Memory Usage (GB)": "avg(DCGM_FI_DEV_FB_USED) / (1024*1024*1024)",
-            "GPU Energy Consumption (Joules)": "avg(DCGM_FI_DEV_TOTAL_ENERGY_CONSUMPTION)",
-            "GPU Memory Temperature (°C)": "avg(DCGM_FI_DEV_MEMORY_TEMP)",
-            "GPU Usage (%)": "avg(DCGM_FI_DEV_GPU_UTIL)",
+            "GPU Temperature (°C)": "avg(DCGM_FI_DEV_GPU_TEMP) or avg(habanalabs_temperature_onchip)",
+            "GPU Power Usage (Watts)": "avg(DCGM_FI_DEV_POWER_USAGE) or avg(habanalabs_power_mW) / 1000",
+            "GPU Memory Usage (GB)": "avg(DCGM_FI_DEV_FB_USED) / (1024*1024*1024) or avg(habanalabs_memory_used_bytes) / (1024*1024*1024)",
+            "GPU Energy Consumption (Joules)": "avg(DCGM_FI_DEV_TOTAL_ENERGY_CONSUMPTION) or avg(habanalabs_energy)",
+            "GPU Memory Temperature (°C)": "avg(DCGM_FI_DEV_MEMORY_TEMP) or avg(habanalabs_temperature_onboard)",
+            "GPU Usage (%)": "avg(DCGM_FI_DEV_GPU_UTIL) or avg(habanalabs_utilization)",
             "Prompt Tokens Created": "vllm:request_prompt_tokens_sum",
             "Output Tokens Created": "vllm:request_generation_tokens_sum",
             "Requests Running": "vllm:num_requests_running",

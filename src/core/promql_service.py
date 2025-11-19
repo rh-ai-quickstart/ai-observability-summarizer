@@ -91,13 +91,13 @@ def generate_promql_from_question(question: str, namespace: Optional[str], model
             default_queries = [
                 f'vllm:num_requests_running{{model_name="{model_name}"}}',  # No namespace filter
                 'sum(kube_pod_status_phase{phase="Running"})',  # No namespace filter
-                'avg(DCGM_FI_DEV_GPU_UTIL)'
+                'avg(DCGM_FI_DEV_GPU_UTIL) or avg(habanalabs_utilization)'  # Multi-vendor GPU
             ]
         else:
             default_queries = [
                 f'vllm:num_requests_running{{namespace="{namespace}", model_name="{model_name}"}}',
                 f'sum(kube_pod_status_phase{{phase="Running", namespace="{namespace}"}})',
-                f'avg(DCGM_FI_DEV_GPU_UTIL)'
+                f'avg(DCGM_FI_DEV_GPU_UTIL) or avg(habanalabs_utilization)'  # Multi-vendor GPU
             ]
         queries.extend(default_queries)
     
@@ -206,14 +206,17 @@ def select_queries_directly(question: str, namespace: Optional[str], model_name:
         logger.debug("Detected: GPU question")
         pattern_detected = True
         if "temperature" in question_lower:
-            queries.append("avg(DCGM_FI_DEV_GPU_TEMP)")
+            # Multi-vendor: NVIDIA DCGM or Intel Gaudi
+            queries.append("avg(DCGM_FI_DEV_GPU_TEMP) or avg(habanalabs_temperature_onchip)")
         elif "utilization" in question_lower or "usage" in question_lower:
-            queries.append("avg(DCGM_FI_DEV_GPU_UTIL)")
+            # Multi-vendor: NVIDIA DCGM or Intel Gaudi
+            queries.append("avg(DCGM_FI_DEV_GPU_UTIL) or avg(habanalabs_utilization)")
         elif "power" in question_lower:
-            queries.append("avg(DCGM_FI_DEV_POWER_USAGE)")
+            # Multi-vendor: NVIDIA DCGM or Intel Gaudi (convert mW to W for Intel)
+            queries.append("avg(DCGM_FI_DEV_POWER_USAGE) or avg(habanalabs_power_mW) / 1000")
         else:
-            # Default GPU question - show utilization
-            queries.append("avg(DCGM_FI_DEV_GPU_UTIL)")
+            # Default GPU question - show utilization (multi-vendor)
+            queries.append("avg(DCGM_FI_DEV_GPU_UTIL) or avg(habanalabs_utilization)")
     
     # === KUBERNETES/OPENSHIFT METRICS ===
     
@@ -301,13 +304,13 @@ def select_queries_directly(question: str, namespace: Optional[str], model_name:
             queries.extend([
                 f'vllm:num_requests_running{{model_name="{model_name}"}}',  # vLLM requests
                 'sum(kube_pod_status_phase{phase="Running"})',  # Running pods
-                'avg(DCGM_FI_DEV_GPU_UTIL)'  # GPU utilization
+                'avg(DCGM_FI_DEV_GPU_UTIL) or avg(habanalabs_utilization)'  # GPU utilization (multi-vendor)
             ])
         else:
             queries.extend([
                 f'vllm:num_requests_running{{namespace="{namespace}", model_name="{model_name}"}}',  # vLLM requests
                 f'sum(kube_pod_status_phase{{phase="Running", namespace="{namespace}"}})',  # Running pods
-                f'avg(DCGM_FI_DEV_GPU_UTIL)'  # GPU utilization
+                'avg(DCGM_FI_DEV_GPU_UTIL) or avg(habanalabs_utilization)'  # GPU utilization (multi-vendor)
             ])
     
     logger.debug("Generated %d queries: %s", len(queries), queries)
