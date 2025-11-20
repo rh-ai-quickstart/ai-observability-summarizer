@@ -3,6 +3,8 @@
 # Full Name: tempo-product.openshift-tempo-operator
 # CRD Patterns: tempo.grafana.com
 # Note: Uninstalling this operator will delete all CRDs matching the above patterns
+# Note: Tempo Operator v0.18.0-2 and v0.18.0-1 has container crash issue (https://issues.redhat.com/browse/APPENG-3916), 
+# so we use the older version v0.16.0-2 instead. Do not change installPlanApproval to Automatic until a future version fixes this issue.
 ---
 apiVersion: v1
 kind: Namespace
@@ -26,4 +28,6 @@ spec:
   name: tempo-product
   source: redhat-operators
   sourceNamespace: openshift-marketplace
-  installPlanApproval: Automatic
+  # Pin to a specific, known-good CSV and prevent auto-upgrades
+  startingCSV: tempo-operator.v0.16.0-2
+  installPlanApproval: Manual
