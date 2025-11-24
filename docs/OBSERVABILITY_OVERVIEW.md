@@ -257,6 +257,122 @@ Example output:
 💡 All observability components are up-to-date
 ```
 
+## Multi-Vendor GPU/Accelerator Support
+
+The observability stack supports monitoring multiple GPU and accelerator vendors, allowing different clusters to use different hardware while maintaining consistent monitoring capabilities.
+
+### Supported Accelerator Vendors
+
+#### NVIDIA GPUs
+- **Exporter**: NVIDIA DCGM (Data Center GPU Manager)
+- **Metric Prefix**: `DCGM_FI_DEV_*`
+- **Key Metrics**: GPU temperature, utilization, memory usage, power consumption
+- **Documentation**: [NVIDIA DCGM Exporter](https://github.com/NVIDIA/dcgm-exporter)
+
+#### Intel Gaudi Accelerators
+- **Exporter**: Habana Labs Prometheus Metric Exporter
+- **Metric Prefix**: `habanalabs_*`
+- **Key Metrics**: Accelerator temperature, utilization, memory usage, power consumption
+- **Documentation**: [Intel Gaudi Metrics](./INTEL_GAUDI_METRICS.md)
+
+### Deployment Architecture
+
+Different clusters typically use different accelerator types:
+
+```
+Cluster A (NVIDIA)          Cluster B (Intel Gaudi)
+├── NVIDIA GPUs            ├── Intel Gaudi Accelerators
+├── DCGM Exporter          ├── Habana Labs Exporter
+└── Prometheus             └── Prometheus
+    │                          │
+    └──────────┬───────────────┘
+               │
+         Thanos Querier
+               │
+    ┌──────────┴──────────┐
+    │  Observability     │
+    │  Summarizer        │
+    │  (Multi-vendor)    │
+    └────────────────────┘
+```
+
+### Automatic Vendor Detection
+
+The observability stack automatically detects which accelerator type is available in the cluster:
+
+1. **Metric Discovery**: Queries Prometheus for available metrics
+2. **Vendor Detection**: Identifies NVIDIA (DCGM_*) or Intel Gaudi (habanalabs_*) metrics
+3. **Dashboard Adaptation**: Displays appropriate metrics based on available hardware
+4. **Query Fallback**: Uses vendor-agnostic queries that work with either platform
+
+### Vendor-Agnostic Queries
+
+The stack uses PromQL queries that work with multiple vendors:
+
+```promql
+# GPU Temperature (works with both vendors)
+avg(DCGM_FI_DEV_GPU_TEMP) or avg(habanalabs_temperature_onchip)
+
+# GPU Utilization (works with both vendors)
+avg(DCGM_FI_DEV_GPU_UTIL) or avg(habanalabs_utilization)
+
+# GPU Memory Usage in GB (works with both vendors)
+avg(DCGM_FI_DEV_FB_USED) / (1024*1024*1024) or avg(habanalabs_memory_used_bytes) / (1024*1024*1024)
+
+# GPU Power Usage in Watts (works with both vendors, converts Intel mW to W)
+avg(DCGM_FI_DEV_POWER_USAGE) or avg(habanalabs_power_mW) / 1000
+```
+
+### Implementation Details
+
+#### Code Components
+
+1. **Metric Discovery** (`src/core/metrics.py`):
+   - `discover_dcgm_metrics()` - NVIDIA GPU metrics
+   - `discover_intel_gaudi_metrics()` - Intel Gaudi metrics
+   - `get_cluster_gpu_info()` - Multi-vendor GPU detection
+
+2. **Metric Categorization** (`src/core/promql_service.py`):
+   - `categorize_gpu_metric()` - Handles both NVIDIA and Intel Gaudi metrics
+   - Automatic vendor identification based on metric prefix
+
+3. **Dashboard Integration** (`src/core/metrics.py`):
+   - `discover_openshift_metrics()` - Fleet-wide metrics with vendor fallback
+   - `discover_vllm_metrics()` - vLLM monitoring with multi-vendor GPU support
+
+#### Metric Mapping
+
+| Category | NVIDIA DCGM | Intel Gaudi | Unit |
+|----------|-------------|-------------|------|
+| Temperature | `DCGM_FI_DEV_GPU_TEMP` | `habanalabs_temperature_onchip` | Celsius |
+| Power | `DCGM_FI_DEV_POWER_USAGE` | `habanalabs_power_mW / 1000` | Watts |
+| Utilization | `DCGM_FI_DEV_GPU_UTIL` | `habanalabs_utilization` | % |
+| Memory Used | `DCGM_FI_DEV_FB_USED` | `habanalabs_memory_used_bytes` | bytes |
+| Clock Speed | `DCGM_FI_DEV_SM_CLOCK` | `habanalabs_clock_soc_mhz` | MHz |
+| Energy | `DCGM_FI_DEV_TOTAL_ENERGY_CONSUMPTION` | `habanalabs_energy` | Joules |
+
+For a complete metric mapping and Intel Gaudi-specific documentation, see [INTEL_GAUDI_METRICS.md](./INTEL_GAUDI_METRICS.md).
+
+### Configuration
+
+No special configuration is required - the system automatically detects available accelerators. However, you can verify detection:
+
+```bash
+# Check which GPU metrics are available
+curl -H "Authorization: Bearer $TOKEN" \
+  "$PROMETHEUS_URL/api/v1/label/__name__/values" | grep -E "DCGM_|habanalabs_"
+
+# Query cluster GPU info via MCP server
+# Returns vendor information (NVIDIA, Intel Gaudi, or Mixed)
+```
+
+### Benefits
+
+1. **Flexibility**: Support for multiple hardware vendors without code changes
+2. **Portability**: Same monitoring stack works across different cluster types
+3. **Cost Optimization**: Choose accelerator type based on workload and cost requirements
+4. **Future-Proofing**: Easy to add support for additional accelerator vendors
+
 ## Troubleshooting
 
 ### Common Issues
