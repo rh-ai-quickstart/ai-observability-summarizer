@@ -39,13 +39,64 @@ def create_chatbot(
         ValueError: If tool_executor is None
 
     Examples:
+        # Example 1: Using MCPServerAdapter (in MCP server process)
         >>> from mcp_server.mcp_tools_adapter import MCPServerAdapter
         >>> tool_executor = MCPServerAdapter(mcp_server)
         >>> chatbot = create_chatbot("gpt-4o-mini", api_key="sk-...", tool_executor=tool_executor)
         >>> response = chatbot.chat("What's the CPU usage?")
 
-        >>> chatbot = create_chatbot("meta-llama/Llama-3.2-3B-Instruct", tool_executor=tool_executor)
+        # Example 2: Using MCPClientAdapter (in UI process)
+        >>> from ui.mcp_client_helper import MCPClientHelper
+        >>> from ui.mcp_client_adapter import MCPClientAdapter
+        >>> mcp_client = MCPClientHelper()
+        >>> tool_executor = MCPClientAdapter(mcp_client)
+        >>> chatbot = create_chatbot("anthropic/claude-3-5-haiku-20241022", api_key="sk-...", tool_executor=tool_executor)
         >>> response = chatbot.chat("Check memory usage")
+
+        # Example 3: Local model with MCPServerAdapter
+        >>> chatbot = create_chatbot("meta-llama/Llama-3.2-3B-Instruct", tool_executor=tool_executor)
+        >>> response = chatbot.chat("List all running pods")
+
+    Factory Decision Tree:
+        ┌─────────────────────────────────────────────────────────────────┐
+        │                    create_chatbot(model_name)                   │
+        └────────────────────────────┬────────────────────────────────────┘
+                                     │
+                    ┌────────────────┴───────────────────┐
+                    │                                    │
+            ┌───────▼────────┐                 ┌─────────▼──────────┐
+            │  External      │                 │  Local Model       │
+            │  Provider?     │                 │  (No provider)     │
+            └───────┬────────┘                 └───────────┬────────┘
+                    │                                      │
+        ┌───────────┼───────────┐                          │
+        │           │           │                          │
+    ┌───▼─────┐  ┌───▼───┐  ┌───▼───┐              ┌───────▼────────┐
+    │Anthropic│  │OpenAI │  │Google │              │ Llama Version? │
+    └───┬─────┘  └───┬───┘  └───┬───┘              └───────┬────────┘
+        │            │          │                          │
+    ┌───▼─────┐  ┌───▼───┐  ┌───▼───┐         ┌────────────┼────────┐
+    │Anthropic│  │OpenAI │  │Google │         │            │        │
+    │ChatBot  │  │ChatBot│  │ChatBot│     ┌───▼───┐  ┌───▼───┐  ┌───▼───┐
+    └─────────┘  └───────┘  └───────┘     │Llama  │  │Llama  │  │Unknown│
+                                          │3.1/3.3│  │3.2    │  │Model  │
+                                          └───┬───┘  └───┬───┘  └───┬───┘
+                                              │          │          │
+                                          ┌───▼───┐  ┌───▼───┐  ┌───▼───┐
+                                          │Llama  │  │Determ │  │Determ │
+                                          │ChatBot│  │ChatBot│  │ChatBot│
+                                          └───────┘  └───────┘  └───────┘
+
+    Model Name Patterns:
+        External Providers:
+            - Anthropic: "anthropic/", "claude"
+            - OpenAI: "openai/", "gpt-", "o1-"
+            - Google: "google/", "gemini"
+
+        Local Models (Llama):
+            - Llama 3.1/3.3: Uses LlamaChatBot (tool calling capable)
+            - Llama 3.2: Uses DeterministicChatBot (67% accuracy, deterministic parsing)
+            - Unknown: Uses DeterministicChatBot (fallback for safety)
     """
     if tool_executor is None:
         raise ValueError(
