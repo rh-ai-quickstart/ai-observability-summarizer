@@ -1,0 +1,9 @@
+graph LR
+    A[UI] -->|creates| B[MCPClientAdapter]
+    A -->|creates| C[Chatbot]
+    B -->|uses| D[MCPClientHelper]
+    C -->|uses| B
+    style A fill:#51cf66
+    style B fill:#51cf66
+    style C fill:#51cf66
+    style D fill:#51cf66
