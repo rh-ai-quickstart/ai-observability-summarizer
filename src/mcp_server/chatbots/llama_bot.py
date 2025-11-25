@@ -67,8 +67,12 @@ For Memory queries:
 - Use: sum(container_memory_usage_bytes) by (pod, namespace)
 - NOT: container_memory_usage_bytes alone
 
-For GPU queries:
-- Use: DCGM_FI_DEV_GPU_UTIL or gpu_usage with appropriate job label
+For GPU queries (Multi-vendor: NVIDIA + Intel Gaudi):
+- Temperature: avg(DCGM_FI_DEV_GPU_TEMP) or avg(habanalabs_temperature_onchip)
+- Utilization: avg(DCGM_FI_DEV_GPU_UTIL) or avg(habanalabs_utilization)
+- Power: avg(DCGM_FI_DEV_POWER_USAGE) or avg(habanalabs_power_mW) / 1000
+- For detailed breakdowns, use: sum(...) by (pod, namespace)
+- The "or" pattern automatically selects the correct vendor metric
 
 For Pod Status queries:
 - Use: kube_pod_status_phase == 1 to filter only active states

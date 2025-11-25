@@ -395,6 +395,98 @@ uninstall_operator() {
     echo -e "${BLUE}  ℹ️  Note: Namespace '$namespace' was preserved${NC}"
 }
 
+# Approve a pending InstallPlan for a Subscription when approval is Manual
+approve_install_plan_if_manual() {
+    local subscription_name="$1"
+    local namespace="$2"
+
+    # Ensure subscription exists before querying it
+    local attempts=0
+    local max_attempts=60  # up to 10 minutes
+    while [ $attempts -lt $max_attempts ]; do
+        if oc get subscription "$subscription_name" -n "$namespace" >/dev/null 2>&1; then
+            break
+        fi
+        attempts=$((attempts + 1))
+        sleep 10
+    done
+
+    if ! oc get subscription "$subscription_name" -n "$namespace" >/dev/null 2>&1; then
+        echo -e "${YELLOW}  ⚠️  Subscription $subscription_name not found; skipping InstallPlan approval${NC}"
+        return 0
+    fi
+
+    local approval
+    approval=$(oc get subscription "$subscription_name" -n "$namespace" -o jsonpath='{.spec.installPlanApproval}' 2>/dev/null || echo "")
+    if [ "$(echo "$approval" | tr '[:upper:]' '[:lower:]')" != "manual" ]; then
+        [[ "$DEBUG" == "true" ]] && echo -e "${BLUE}  📋 Install plan approval is '$approval' (not Manual); nothing to approve${NC}"
+        return 0
+    fi
+
+    local target_csv
+    target_csv=$(oc get subscription "$subscription_name" -n "$namespace" -o jsonpath='{.spec.startingCSV}' 2>/dev/null || echo "")
+    if [ -z "$target_csv" ] || [ "$target_csv" = "null" ]; then
+        echo -e "${YELLOW}  ⚠️  Subscription has Manual approval but no startingCSV set; will approve first pending InstallPlan${NC}"
+    else
+        echo -e "${BLUE}  📋 Manual approval required; target CSV: ${target_csv}${NC}"
+    fi
+
+    # Wait for the InstallPlan to be created and referenced by the Subscription
+    attempts=0
+    local installplan_name=""
+    while [ $attempts -lt $max_attempts ]; do
+        installplan_name=$(oc get subscription "$subscription_name" -n "$namespace" \
+            -o jsonpath='{.status.installplan.name}' 2>/dev/null)
+        if [ -z "$installplan_name" ] || [ "$installplan_name" = "null" ]; then
+            installplan_name=$(oc get subscription "$subscription_name" -n "$namespace" \
+                -o jsonpath='{.status.installPlanRef.name}' 2>/dev/null)
+        fi
+
+        if [ -n "$installplan_name" ] && [ "$installplan_name" != "null" ]; then
+            break
+        fi
+
+        attempts=$((attempts + 1))
+        echo -e "${BLUE}  ⏳ Waiting for InstallPlan to be created (attempt $attempts/$max_attempts)...${NC}"
+        sleep 10
+    done
+
+    if [ -z "$installplan_name" ] || [ "$installplan_name" = "null" ]; then
+        echo -e "${RED}  ❌ InstallPlan not found for subscription $subscription_name after waiting${NC}"
+        return 1
+    fi
+
+    echo -e "${BLUE}  📋 Found InstallPlan: $installplan_name${NC}"
+
+    # Validate the InstallPlan targets the desired CSV (if provided)
+    if [ -n "$target_csv" ] && [ "$target_csv" != "null" ]; then
+        local csv_list
+        csv_list=$(oc get installplan "$installplan_name" -n "$namespace" -o jsonpath='{.spec.clusterServiceVersionNames[*]}' 2>/dev/null || echo "")
+        if ! echo "$csv_list" | tr ' ' '\n' | grep -q "^${target_csv}\$"; then
+            echo -e "${YELLOW}  ⚠️  InstallPlan does not include expected CSV '${target_csv}'. Planned CSV(s): ${csv_list}${NC}"
+            echo -e "${YELLOW}  ⚠️  Skipping auto-approval to avoid unintended upgrades${NC}"
+            return 1
+        fi
+    fi
+
+    # Approve the InstallPlan
+    echo -e "${BLUE}  ✍️  Approving InstallPlan: $installplan_name${NC}"
+    oc patch installplan "$installplan_name" -n "$namespace" --type merge -p '{"spec":{"approved":true}}' >/dev/null
+
+    # Optionally, wait briefly for the plan to move forward
+    attempts=0
+    while [ $attempts -lt 12 ]; do  # up to ~2 minutes
+        local phase
+        phase=$(oc get installplan "$installplan_name" -n "$namespace" -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
+        if [ "$phase" = "Complete" ]; then
+            echo -e "${GREEN}  ✅ InstallPlan $installplan_name completed${NC}"
+            break
+        fi
+        attempts=$((attempts + 1))
+        sleep 10
+    done
+}
+
 # Function to install an operator
 install_operator() {
     local operator_name="$1"
@@ -414,6 +506,12 @@ install_operator() {
     envsubst < "$yaml_path" | oc create --save-config -f - 2>&1 | grep -v "namespaces.*already exists" || true
 
     echo -e "${GREEN}  ✅ $operator_name installation initiated${NC}"
+
+    # Get the subscription name to manage InstallPlan approval if needed
+    local subscription_name=$(grep -A2 "kind: Subscription" "$yaml_path" | grep "name:" | awk '{print $2}')
+
+    # If approval is Manual, auto-approve InstallPlan for the startingCSV
+    approve_install_plan_if_manual "$subscription_name" "$namespace" || true
 
     # Wait for operator to be installed (operator resource exists)
     echo -e "${BLUE}  ⏳ Waiting for operator resource to be created...${NC}"
@@ -438,9 +536,6 @@ install_operator() {
         echo -e "${RED}  ❌ Operator resource was not created after 10 minutes${NC}"
         exit 1
     fi
-
-    # Get the subscription name to check CSV status
-    local subscription_name=$(grep -A2 "kind: Subscription" "$yaml_path" | grep "name:" | awk '{print $2}')
 
     # Wait for CSV to reach Succeeded phase
     echo -e "${BLUE}  ⏳ Waiting for CSV to reach Succeeded phase...${NC}"

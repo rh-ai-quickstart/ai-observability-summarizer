@@ -131,6 +131,12 @@ def summarize_with_llm(
     model_info = MODEL_CONFIG.get(summarize_model_id, {})
     is_external = model_info.get("external", False)
 
+    # For local vLLM models, use a smaller max_tokens limit to prevent repetition loops
+    # External models have better repetition handling, so they can use the full limit
+    if not is_external and max_tokens > 500:
+        max_tokens = 400  # Cap local vLLM models at 400 tokens to prevent runaway generation
+        logger.debug(f"Capping max_tokens to 400 for local vLLM model: {summarize_model_id}")
+
     # Building LLM messages array
     llm_messages = []
     if messages:
@@ -246,11 +252,28 @@ def summarize_with_llm(
         response_json = None
         # Attempt each candidate model ID until one succeeds
         for candidate_model_id in candidate_ids:
+            # Note: Local vLLM models use temperature=0.1 (very low but non-zero) to minimize repetition
+            # while avoiding deterministic loops. External models use DETERMINISTIC_TEMPERATURE=0
+            # as they have better built-in repetition handling.
+            # 
+            # Using ONLY vLLM-specific repetition_penalty (no OpenAI-compatible penalties) because:
+            # 1. repetition_penalty is the native vLLM parameter and works most effectively
+            # 2. Mixing parameter types causes conflicts and unpredictable behavior
+            # 3. External models don't need this parameter as they handle repetition internally
             payload = {
                 "model": candidate_model_id,
                 "prompt": prompt_text,
-                "temperature": DETERMINISTIC_TEMPERATURE,  # Deterministic output
+                "temperature": 0.1,  # Very low temperature to minimize randomness and repetition
                 "max_tokens": max_tokens,
+                "repetition_penalty": 1.5,  # Strong penalty to prevent loops (1.0=none, 1.5=strong)
+                "top_p": 0.9,  # Slightly lower for more focused output
+                "stop": [
+                    "**5.", "**5. ", "\n\n**5.", "Question 5",  # Stop on question 5
+                    "Best regards", "Please let me know", "Feel free to ask",  # Stop on signature patterns
+                    "[Your Name]", "OpenShift Platform Monitoring & Operations Expert",  # Stop on placeholders
+                    "Consider implementing",  # Stop on repetitive recommendation phrases
+                    "Regularly reviewing",  # Stop on repetitive recommendation phrases
+                ],
             }
             try:
                 response_json = _make_api_request(
@@ -356,7 +379,7 @@ ANALYSIS REQUIREMENTS:
 
 In your response, do not add or ask additional questions. 
 Answer each requirement above concisely as a summary in less than 150 words. 
-Stop after you have answered requirement 5 and do not add explainations or notes.
+Stop after you have answered requirement 5 and do not add explanations or notes.
 Please provide a clear, structured analysis that would be useful for both technical teams and stakeholders.
 """
     
@@ -402,10 +425,12 @@ def build_openshift_prompt(
 3. What actions should be taken?
 4. Any optimization recommendations?
 
-Do not add or ask additional questions. Your response should only include the questions and answers for the above questions.
-For each question, state the question in bold font, and then answer each question concisely and directly with maximum of 150 words.
-If there is no direct answer to a question, say so and do not speculate or add additional information. 
-Stop after you have answered question 4 and do not add explainations or notes.
+INSTRUCTIONS:
+- For each question above, state the question in bold font, then provide a concise answer based on the metrics data (maximum 100 words per answer).
+- Use only the data provided - if metrics are stable/normal, state that clearly.
+- Stop immediately after answering question 4.
+- DO NOT add any signatures, greetings, contact information, or closing remarks.
+- DO NOT add phrases like "Best regards", "Please let me know", "Feel free to ask", or any placeholders like [Your Name].
 """
     logs_section = f"\n\nCorrelated Logs/Traces (top 5):\n{log_trace_data}\n" if log_trace_data else ""
     return f"""{header}
