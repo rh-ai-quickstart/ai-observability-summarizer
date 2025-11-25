@@ -2,7 +2,7 @@ replicaCount: 1
 
 image:
   repository: quay.io/ecosystem-appeng/aiobs-mcp-server
-  tag: 0.15.5
+  tag: 0.15.6
   pullPolicy: IfNotPresent
 
 service:
