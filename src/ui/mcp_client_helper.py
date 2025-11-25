@@ -68,7 +68,7 @@ class MCPClientHelper:
     def check_server_health(self) -> bool:
         """Check if the MCP server is healthy"""
         try:
-            response = requests.get(self.health_endpoint, timeout=5)
+            response = requests.get(self.health_endpoint, timeout=60)
             if response.status_code == 200:
                 health_data = response.json()
                 logger.info(f"MCP Server healthy: {health_data.get('service')}")
