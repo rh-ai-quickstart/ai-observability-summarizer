@@ -101,7 +101,7 @@ def chat(
 
 ## Examples
 
-### Basic Usage
+### Usage
 
 ```python
 from chatbots import create_chatbot
@@ -136,18 +136,6 @@ response = chatbot.chat(
 )
 ```
 
-### Direct Import (Advanced)
-
-```python
-from chatbots import AnthropicChatBot
-
-# Create specific implementation directly
-chatbot = AnthropicChatBot(
-    model_name="claude-3-5-sonnet-20241022",
-    api_key="sk-ant-...",
-    tool_executor=tool_executor
-)
-```
 
 ## Model Name Patterns
 
@@ -225,6 +213,5 @@ chatbots/
 
 ## Related Documentation
 
-- [docs/CHATBOTS.md](../../docs/CHATBOTS.md) - Comprehensive architecture guide
-- [src/mcp_server/README.md](../mcp_server/README.md) - MCP server setup
-- [docs/OBSERVABILITY_OVERVIEW.md](../../docs/OBSERVABILITY_OVERVIEW.md) - System overview
+- [Comprehensive architecture guide](../../docs/CHATBOTS.md)
+- [Observability MCP Server](../mcp_server/README.md)

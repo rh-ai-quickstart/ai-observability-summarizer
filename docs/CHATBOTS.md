@@ -67,9 +67,11 @@ response = chatbot.chat(
 
 ## Architecture
 
-The chatbots system uses a **ToolExecutor interface** with **adapter pattern** implementations to decouple chatbot implementations from the execution context. This allows chatbots to work seamlessly whether they're running in the UI process or the MCP server process.
+The chatbots system uses a **ToolExecutor interface** with **Adapter pattern** implementations to decouple chatbot
+implementations from the execution context. This allows chatbots to work seamlessly whether they are running in the
+_UI process_ or the _MCP server process_.
 
-- **ToolExecutor**: Abstract interface that defines how tools are executed (dependency inversion principle)
+- **ToolExecutor**: Abstract interface that defines how tools are executed (_dependency inversion principle_)
 - **Adapter Pattern**: Implementation approach where `MCPServerAdapter` and `MCPClientAdapter` adapt different contexts to the `ToolExecutor` interface
 
 ### Key Components
@@ -110,7 +112,7 @@ The chatbots system uses a **ToolExecutor interface** with **adapter pattern** i
 
 The UI creates chatbots directly and uses them to answer user questions about observability data.
 
-#### Flow Diagram
+#### Sequence Diagram
 
 ![Chatbot UI Flow](images/chatbot-ui-flow.png)
 
@@ -151,7 +153,9 @@ sequenceDiagram
 
 </details>
 
-**ASCII Sequence Diagram** (text fallback):
+
+<details>
+<summary>ASCII Sequence Diagram</summary>
 
 ```
 User → UI: Ask question about metrics
@@ -167,16 +171,22 @@ UI → Chatbot: chatbot.chat(question)
   MCPClientAdapter → MCPClientHelper: call_tool_sync(tool_name, args)
   MCPClientHelper → MCPServer: HTTP POST /mcp (JSON-RPC)
   MCPServer → MCPServer: Execute tool
-  MCPServer → MCPClientHelper: Tool result
-  MCPClientHelper → MCPClientAdapter: Result
-  MCPClientAdapter → Chatbot: Tool result string
+  MCPServer ⤶ MCPClientHelper: Tool result
+  MCPClientHelper ⤶ MCPClientAdapter: Result
+  MCPClientAdapter ⤶ Chatbot: Tool result string
   Chatbot → Chatbot: Process result, continue conversation
 
-Chatbot → UI: Final response
-UI → User: Display response
+Chatbot ⤶ UI: Final response
+UI ⤶ User: Display response
 ```
 
+</details>
+
+
 #### Code Example
+
+<details>
+<summary>Click to expand or collapse</summary>
 
 ```python
 # In UI (ui/ui.py)
@@ -203,6 +213,8 @@ response = chatbot.chat(
 )
 ```
 
+</details>
+
 #### Key Points
 
 - **Location**: Chatbots run in the UI process (Streamlit)
@@ -214,7 +226,7 @@ response = chatbot.chat(
 
 The `chat` MCP tool allows external clients to use chatbots through the MCP protocol. This is useful for CLI tools, other services, or any MCP-compatible client.
 
-#### Flow Diagram
+#### Sequence Diagram
 
 ![Chatbot MCP Tool Flow](images/chatbot-mcp-tool-flow.png)
 
@@ -253,7 +265,9 @@ sequenceDiagram
 
 </details>
 
-**ASCII Sequence Diagram** (text fallback):
+
+<details>
+<summary>ASCII Sequence Diagram</summary>
 
 ```
 Client → MCPServer: Call "chat" tool via MCP
@@ -266,17 +280,22 @@ ChatTool → Chatbot: create_chatbot(model, api_key, MCPServerAdapter)
   Chatbot → MCPServerAdapter: call_tool(tool_name, args)
   MCPServerAdapter → MCPServerTools: Direct function call (no HTTP)
   MCPServerTools → MCPServerTools: Execute tool
-  MCPServerTools → MCPServerAdapter: Tool result
-  MCPServerAdapter → Chatbot: Tool result string
+  MCPServerTools ⤶ MCPServerAdapter: Tool result
+  MCPServerAdapter ⤶ Chatbot: Tool result string
   Chatbot → Chatbot: Process result, continue conversation
 
-Chatbot → ChatTool: Final response
+Chatbot ⤶ ChatTool: Final response
 ChatTool → ChatTool: Package response with progress_log
-ChatTool → MCPServer: JSON response
-MCPServer → Client: MCP tool result
+ChatTool ⤶ MCPServer: JSON response
+MCPServer ⤶ Client: MCP tool result
 ```
 
+</details>
+
 #### Code Example
+
+<details>
+<summary>Click to expand or collapse</summary>
 
 ```python
 # In MCP Server (mcp_server/tools/chat_tool.py)
@@ -323,6 +342,9 @@ def chat(
     })
 ```
 
+</details>
+
+
 #### Key Points
 
 - **Location**: Chatbots run in the MCP server process
@@ -330,64 +352,90 @@ def chat(
 - **Adapter**: `MCPServerAdapter` wraps the server instance for direct tool access
 - **Benefits**: Lower latency, no network overhead, progress tracking included
 
-## What This Branch Fixed: Circular Dependency Resolution
+## Architecture Evolution: Resolving Circular Dependencies
 
-### The Problem in Dev Branch
+This section documents the architectural refactoring that introduced the **ToolExecutor interface** and **Adapter pattern** to eliminate circular dependencies and enable flexible chatbot usage across different execution contexts.
 
-Previously, there was a **circular dependency** between components that made the architecture fragile and tightly coupled.
+### Previous Architecture
 
-#### Dev Branch Architecture (❌ Problematic)
+The initial implementation had chatbots located within the MCP server package with direct dependencies on server components.
 
-**Location**: Chatbots lived in `src/mcp_server/chatbots/`
+#### Original Design
 
-**Import Chain**:
+**Location**: Chatbots lived in `src/mcp_server/chatbots/` (inside the server package)
+
+**The Circular Dependency Chain**:
 ```
 UI (ui/ui.py)
   ↓ imports
-mcp_server.chatbots (chatbots in mcp_server package!)
-  ↓ imports & instantiates
-ObservabilityMCPServer (mcp_server/observability_mcp.py)
+mcp_server.chatbots (chatbots in mcp_server package)
+  ↓ imports (at runtime via sys.path manipulation)
+mcp_client_helper (from UI package!)
+  ↓ which is part of
+UI package
 ```
 
-**The circular dependency chain:**
-1. `ui/ui.py` imports `chatbots` from `mcp_server.chatbots` package
-2. `chatbots/base.py` directly instantiates `ObservabilityMCPServer()`
-3. UI needs MCP client to call server, but chatbots are in server package
+**How the circular dependency occurred:**
+1. UI imports chatbots from `mcp_server.chatbots` package
+2. Chatbots need to execute MCP tools
+3. Chatbots import `mcp_client_helper` from the `ui/` directory (using dynamic import with sys.path manipulation)
+4. This creates: **UI → mcp_server.chatbots → ui.mcp_client_helper → UI** (circular!)
 
-**Code in dev branch:**
+**Characteristics of this design:**
+1. Chatbots located in `mcp_server` package but depend on UI code
+2. Dynamic import with sys.path manipulation to access UI modules
+3. Chatbots use `MCPClientHelper` from UI to call MCP server
+4. Creates circular dependency: UI imports from mcp_server, mcp_server imports from UI
+5. Tight coupling between server and UI packages
+
+**Code structure:**
 ```python
-# src/mcp_server/chatbots/base.py (dev)
+# src/mcp_server/chatbots/base.py (original architecture)
 from mcp_server.observability_mcp import ObservabilityMCPServer
 
 class BaseChatBot(ABC):
     def __init__(self, model_name: str, api_key: Optional[str] = None):
         self.model_name = model_name
         self.api_key = api_key if api_key is not None else self._get_api_key()
-
-        # ❌ CIRCULAR DEPENDENCY: Chatbots directly create MCP server
         self.mcp_server = ObservabilityMCPServer()
+
+    def _route_tool_call_to_mcp(self, tool_name: str, arguments: Dict[str, Any]) -> str:
+        """Route tool call to MCP server."""
+        # CIRCULAR DEPENDENCY: Import from UI package
+        import sys
+        ui_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'ui')
+        if ui_path not in sys.path:
+            sys.path.insert(0, ui_path)
+
+        from mcp_client_helper import MCPClientHelper  # Imports from UI!
+
+        mcp_client = MCPClientHelper()
+        result = mcp_client.call_tool_sync(tool_name, arguments)
+        return result[0]['text'] if result else f"No results from {tool_name}"
 ```
 
-**UI usage in dev:**
+**UI usage (original architecture):**
 ```python
-# src/ui/ui.py (dev)
+# src/ui/ui.py (original architecture)
 # UI imports chatbots FROM mcp_server package
-from mcp_server.chatbots import create_chatbot
+# Old location was: from mcp_server.chatbots import create_chatbot
 
-# No adapter needed - chatbot handles everything internally
+# Chatbot handles tool execution internally
 chatbot = create_chatbot(model_name, api_key)
 response = chatbot.chat(question)
 ```
 
-**Problems:**
-- ❌ Chatbots located in `mcp_server` package (tight coupling to server)
-- ❌ Chatbots directly instantiate `ObservabilityMCPServer` (no flexibility)
-- ❌ UI must import from `mcp_server.chatbots` (violates separation of concerns)
-- ❌ Cannot use chatbots without MCP server code
-- ❌ Difficult to test (can't mock tool execution)
-- ❌ Chatbots can't use MCP client (hardcoded to server instantiation)
+**Limitations of this approach:**
+- **Circular dependency**: UI imports from `mcp_server.chatbots`, chatbots import from `ui/`
+- **Dynamic sys.path manipulation**: Chatbots modify Python path at runtime to access UI modules
+- Chatbots tightly coupled to both `mcp_server` and `ui` packages
+- UI depends on server package, server depends on UI package
+- Brittle import mechanism relying on directory structure
+- Chatbots cannot work in different execution contexts
+- Testing requires both MCP server and UI infrastructure
+- No way to use alternative tool execution mechanisms
 
-#### Circular Dependency Diagram (Before)
+#### Architecture Diagram (Original)
 
 ![Circular Dependency - Before](images/circular-dependency-before.png)
 
@@ -408,13 +456,13 @@ graph LR
 
 </details>
 
-### The Solution in Current Branch
+### Current Architecture
 
-The fix introduces a **ToolExecutor interface** with **adapter pattern** implementations and **dependency injection**.
+The refactored design introduces a **ToolExecutor interface** with **Adapter pattern** implementations and **dependency injection**.
 
-#### Current Branch Architecture (✅ Fixed)
+#### Improved Design
 
-**Location**: Chatbots live in standalone `src/chatbots/` package
+**Location**: Chatbots now live in standalone `src/chatbots/` package
 
 **Import Chain** (UI):
 ```
@@ -442,9 +490,9 @@ MCPServerAdapter (mcp_server/mcp_tools_adapter.py)
 ObservabilityMCPServer instance
 ```
 
-**Code in current branch:**
+**Current code structure:**
 ```python
-# src/chatbots/base.py (current)
+# src/chatbots/base.py (refactored architecture)
 from chatbots.tool_executor import ToolExecutor
 
 class BaseChatBot(ABC):
@@ -452,7 +500,7 @@ class BaseChatBot(ABC):
         self,
         model_name: str,
         api_key: Optional[str] = None,
-        tool_executor: ToolExecutor = None  # ✅ REQUIRED parameter
+        tool_executor: ToolExecutor = None  # REQUIRED parameter
     ):
         if tool_executor is None:
             raise ValueError(
@@ -462,13 +510,13 @@ class BaseChatBot(ABC):
         self.model_name = model_name
         self.api_key = api_key if api_key is not None else self._get_api_key()
 
-        # ✅ NO DIRECT DEPENDENCY: Uses injected interface
+        # Uses dependency injection instead of direct instantiation
         self.tool_executor = tool_executor
 ```
 
-**UI usage in current branch:**
+**UI usage (refactored architecture):**
 ```python
-# src/ui/ui.py (current)
+# src/ui/ui.py (refactored architecture)
 # UI imports from standalone chatbots package
 from chatbots import create_chatbot
 from ui.mcp_client_adapter import MCPClientAdapter
@@ -482,21 +530,21 @@ tool_executor = MCPClientAdapter(mcp_client)
 chatbot = create_chatbot(
     model_name=model_name,
     api_key=api_key,
-    tool_executor=tool_executor  # ✅ Injected dependency
+    tool_executor=tool_executor  
 )
 response = chatbot.chat(question)
 ```
 
-**Benefits:**
-- ✅ Chatbots in standalone package (no coupling to mcp_server)
-- ✅ Dependency injection via `ToolExecutor` interface
-- ✅ UI imports from `chatbots` (clean separation)
-- ✅ Can use chatbots anywhere (UI, MCP server, tests)
-- ✅ Easy to test (mock `ToolExecutor`)
-- ✅ No circular dependencies
-- ✅ Follows SOLID principles (Dependency Inversion)
+**Improvements in this approach:**
+- Chatbots in standalone package, decoupled from server implementation
+- Dependency injection enables flexible tool execution
+- Clean separation between UI and server concerns
+- Chatbots work in multiple contexts (UI, MCP server, tests)
+- Easy to test with mock implementations
+- Eliminates circular dependencies
+- Follows SOLID principles (Dependency Inversion)
 
-#### Clean Architecture Diagram (After)
+#### Architecture Diagram (Refactored)
 
 ![Circular Dependency - After](images/circular-dependency-after.png)
 
@@ -553,64 +601,70 @@ graph LR
 
 ### Architecture Comparison
 
-#### Before (Problematic)
+#### Original Structure
 
 ```
 ui/ui.py
-  ├── imports mcp_server.chatbots  ❌ UI imports from server package
+  ├── imports mcp_server.chatbots
   └── mcp_server/chatbots/base.py
-        └── instantiates ObservabilityMCPServer()  ❌ Hardcoded dependency
+        └── instantiates ObservabilityMCPServer()
 ```
 
-#### After (Fixed)
+#### Refactored Structure
 
 ```
 ui/ui.py
-  ├── imports chatbots  ✅ Standalone package
-  ├── imports mcp_client_adapter  ✅ UI-specific adapter
-  └── creates: MCPClientAdapter(MCPClientHelper())  ✅ Dependency injection
+  ├── imports chatbots (standalone package)
+  ├── imports mcp_client_adapter (UI-specific adapter)
+  └── creates: MCPClientAdapter(MCPClientHelper())
 
 mcp_server/tools/chat_tool.py
-  ├── imports chatbots  ✅ Same standalone package
-  ├── imports mcp_tools_adapter  ✅ Server-specific adapter
-  └── creates: MCPServerAdapter(server_instance)  ✅ Dependency injection
+  ├── imports chatbots (standalone package)
+  ├── imports mcp_tools_adapter (server-specific adapter)
+  └── creates: MCPServerAdapter(server_instance)
 
 chatbots/base.py
-  └── uses ToolExecutor interface  ✅ No concrete imports!
+  └── uses ToolExecutor interface (abstraction, no concrete dependencies)
 ```
 
-### Migration Guide
+### Understanding the Refactoring
 
-**What Changed**:
-1. Chatbots moved from `src/mcp_server/chatbots/` → `src/chatbots/`
+This refactoring demonstrates a classic application of **SOLID principles** to resolve tight coupling:
+
+**Design Patterns Applied**:
+1. **Dependency Inversion Principle** - High-level chatbots depend on `ToolExecutor` abstraction, not concrete implementations
+2. **Adapter Pattern** - `MCPClientAdapter` and `MCPServerAdapter` adapt different contexts to the same interface
+3. **Dependency Injection** - Tool executor is injected at runtime, not hardcoded
+
+**Key Architectural Changes**:
+1. Chatbots relocated from `src/mcp_server/chatbots/` → `src/chatbots/` (standalone package)
 2. Added `tool_executor` **REQUIRED** parameter to factory and constructors
 3. Created `ToolExecutor` interface in `chatbots/tool_executor.py`
-4. Created adapters:
-   - `MCPClientAdapter` in `ui/mcp_client_adapter.py` (for UI)
-   - `MCPServerAdapter` in `mcp_server/mcp_tools_adapter.py` (for MCP server)
+4. Created context-specific adapters:
+   - `MCPClientAdapter` in `ui/mcp_client_adapter.py` (for UI process)
+   - `MCPServerAdapter` in `mcp_server/mcp_tools_adapter.py` (for MCP server process)
 5. Moved shared utilities to `common/mcp_utils.py`
 
-**Update Your Code**:
+**Code Usage Pattern**:
 
-OLD (dev):
 ```python
-from mcp_server.chatbots import create_chatbot
-
-chatbot = create_chatbot(model, api_key)
-response = chatbot.chat(question)
-```
-
-NEW (current):
-```python
+# Always use this pattern when creating chatbots
 from chatbots import create_chatbot
+
+# In UI context:
 from ui.mcp_client_adapter import MCPClientAdapter
 from ui.mcp_client_helper import MCPClientHelper
 
-# Create adapter
 mcp_client = MCPClientHelper()
 tool_executor = MCPClientAdapter(mcp_client)
 
-# Create chatbot with tool_executor (REQUIRED)
+# In MCP Server context:
+from mcp_server.mcp_tools_adapter import MCPServerAdapter
+from mcp_server.observability_mcp import _server_instance
+
+tool_executor = MCPServerAdapter(_server_instance)
+
+# Create chatbot with injected dependency
 chatbot = create_chatbot(model, api_key, tool_executor=tool_executor)
 response = chatbot.chat(question)
 ```
@@ -646,10 +700,10 @@ Chatbots can execute any MCP tool available on the server. Common tools include:
 
 1. **Always Provide Tool Executor**: Chatbots require a `ToolExecutor` instance
    ```python
-   # ✅ Good
+   # Good
    chatbot = create_chatbot(model, api_key, tool_executor=adapter)
 
-   # ❌ Bad - will raise ValueError
+   # Bad - will raise ValueError
    chatbot = create_chatbot(model, api_key)  # Missing tool_executor
    ```
 
@@ -673,56 +727,6 @@ Chatbots can execute any MCP tool available on the server. Common tools include:
    )
    ```
 
-## Troubleshooting
-
-### Import Errors
-
-**Error**: `ImportError: cannot import name 'create_chatbot' from 'mcp_server.chatbots'`
-
-**Solution**: Update imports - chatbots moved to standalone package:
-```python
-# OLD (dev)
-from mcp_server.chatbots import create_chatbot
-
-# NEW (current)
-from chatbots import create_chatbot
-```
-
-### Tool Executor Missing
-
-**Error**: `ValueError: tool_executor is required`
-
-**Solution**: Always pass a `ToolExecutor` implementation:
-```python
-# In UI
-from ui.mcp_client_adapter import MCPClientAdapter
-from ui.mcp_client_helper import MCPClientHelper
-
-mcp_client = MCPClientHelper()
-tool_executor = MCPClientAdapter(mcp_client)
-chatbot = create_chatbot(model, api_key, tool_executor=tool_executor)
-
-# In MCP Server
-from mcp_server.mcp_tools_adapter import MCPServerAdapter
-from mcp_server.observability_mcp import _server_instance
-
-tool_executor = MCPServerAdapter(_server_instance)
-chatbot = create_chatbot(model, api_key, tool_executor=tool_executor)
-```
-
-### Tool Execution Failures
-
-- Verify MCP server is running (for UI usage)
-- Check that `ToolExecutor` is properly initialized
-- Review logs for specific tool errors
-- Ensure MCP server URL is correct (default: `http://localhost:8085`)
-
-### Model Selection
-
-- Use `create_chatbot()` factory function
-- Provide correct model name format (e.g., `anthropic/claude-3-5-haiku-20241022`)
-- Ensure API keys are provided for external models
-
 ## Related Documentation
 
 - [MCP Server README](../src/mcp_server/README.md) - MCP server setup and configuration
@@ -732,21 +736,21 @@ chatbot = create_chatbot(model, api_key, tool_executor=tool_executor)
 ## Diagram Source Files
 
 The diagrams in this document are generated from Mermaid source files in `diagrams/`:
-- `diagrams/chatbot-ui-flow.mmd` - UI usage flow
-- `diagrams/chatbot-mcp-tool-flow.mmd` - MCP tool usage flow
-- `diagrams/circular-dependency-before.mmd` - Circular dependency problem
-- `diagrams/circular-dependency-after.mmd` - Clean architecture solution
+- `diagrams/chatbot-ui-flow.mmd` - UI usage sequence diagram (sequenceDiagram)
+- `diagrams/chatbot-mcp-tool-flow.mmd` - MCP tool usage sequence diagram (sequenceDiagram)
+- `diagrams/circular-dependency-before.mmd` - Circular dependency graph (graph LR)
+- `diagrams/circular-dependency-after.mmd` - Clean architecture graph (graph LR)
 
 To regenerate images after modifying source files:
 
 ```bash
 cd docs
 
-# Regenerate flow diagrams
+# Regenerate sequence diagrams
 npx @mermaid-js/mermaid-cli@latest -i diagrams/chatbot-ui-flow.mmd -o images/chatbot-ui-flow.png -w 1200 -H 800
 npx @mermaid-js/mermaid-cli@latest -i diagrams/chatbot-mcp-tool-flow.mmd -o images/chatbot-mcp-tool-flow.png -w 1200 -H 800
 
-# Regenerate circular dependency diagrams
+# Regenerate dependency graph diagrams
 npx @mermaid-js/mermaid-cli@latest -i diagrams/circular-dependency-before.mmd -o images/circular-dependency-before.png -w 800 -H 400
 npx @mermaid-js/mermaid-cli@latest -i diagrams/circular-dependency-after.mmd -o images/circular-dependency-after.png -w 800 -H 400
 ```
@@ -755,13 +759,13 @@ Or regenerate all at once:
 ```bash
 cd docs
 
-# Regenerate all chatbot flow diagrams
+# Regenerate all sequence diagrams
 for file in diagrams/chatbot-*.mmd; do
   name=$(basename "$file" .mmd)
   npx @mermaid-js/mermaid-cli@latest -i "$file" -o "images/${name}.png" -w 1200 -H 800
 done
 
-# Regenerate all circular dependency diagrams
+# Regenerate all dependency graph diagrams
 for file in diagrams/circular-*.mmd; do
   name=$(basename "$file" .mmd)
   npx @mermaid-js/mermaid-cli@latest -i "$file" -o "images/${name}.png" -w 800 -H 400
