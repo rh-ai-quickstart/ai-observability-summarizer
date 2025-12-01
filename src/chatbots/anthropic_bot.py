@@ -5,12 +5,13 @@ This module provides Anthropic Claude-specific implementation using the official
 """
 
 import os
-import logging
 from typing import Optional, Callable
 
 from .base import BaseChatBot
+from chatbots.tool_executor import ToolExecutor
+from common.pylogger import get_python_logger
 
-logger = logging.getLogger(__name__)
+logger = get_python_logger()
 
 
 class AnthropicChatBot(BaseChatBot):
@@ -24,8 +25,12 @@ class AnthropicChatBot(BaseChatBot):
         """Claude supports 200K token context - 15K chars is reasonable."""
         return 15000
 
-    def __init__(self, model_name: str, api_key: Optional[str] = None):
-        super().__init__(model_name, api_key)
+    def __init__(
+        self,
+        model_name: str,
+        api_key: Optional[str] = None,
+        tool_executor: ToolExecutor = None):
+        super().__init__(model_name, api_key, tool_executor)
 
         # Import Anthropic SDK
         try:
@@ -51,7 +56,7 @@ class AnthropicChatBot(BaseChatBot):
 - Provide detailed pod-level and namespace-level breakdowns
 - Use your tool calling reliability for multi-step analysis"""
 
-    def chat(self, user_question: str, namespace: Optional[str] = None, scope: Optional[str] = None, progress_callback: Optional[Callable] = None) -> str:
+    def chat(self, user_question: str, namespace: Optional[str] = None, progress_callback: Optional[Callable] = None) -> str:
         """Chat with Anthropic Claude using tool calling."""
         if not self.client:
             return "Error: Anthropic SDK not installed. Please install it with: pip install anthropic"
@@ -102,7 +107,8 @@ class AnthropicChatBot(BaseChatBot):
 
                 # If Claude wants to use tools, execute them
                 if response.stop_reason == "tool_use":
-                    logger.info("Anthropic is using tools")
+                    tool_count = sum(1 for block in response.content if block.type == "tool_use")
+                    logger.info(f"🤖 Anthropic requesting {tool_count} tool(s)")
 
                     tool_results = []
                     for content_block in response.content:
@@ -111,11 +117,10 @@ class AnthropicChatBot(BaseChatBot):
                             tool_args = content_block.input
                             tool_id = content_block.id
 
-                            logger.info(f"🔧 Calling tool: {tool_name}")
                             if progress_callback:
                                 progress_callback(f"🔧 Using tool: {tool_name}")
 
-                            # Get tool result with automatic truncation
+                            # Get tool result with automatic truncation (logging handled in base class)
                             tool_result = self._get_tool_result(tool_name, tool_args)
 
                             tool_results.append({

@@ -9,8 +9,10 @@ source "$SCRIPT_DIR/common.sh"
 # Configuration
 PROMETHEUS_NAMESPACE="openshift-monitoring"
 OBSERVABILITY_NAMESPACE="observability-hub"
+KORREL8R_NAMESPACE="openshift-cluster-observability-operator"
 THANOS_PORT=9090
 TEMPO_PORT=8082
+KORREL8R_PORT=9443
 LLAMASTACK_PORT=8321
 LLAMA_MODEL_PORT=8080
 UI_PORT=8501
@@ -146,13 +148,19 @@ create_port_forward() {
     local namespace="$4"
     local description="$5"
     local emoji="$6"
+    local optional="${7:-false}"  # Default to false (required resource)
 
     # Check if resource name is found
     if [ -z "$resource_name" ]; then
-        echo -e "${YELLOW}⚠️  $description resource NOT found in $namespace namespace. Exiting...${NC}"
-        exit 1
+        if [ "$optional" = "true" ]; then
+            echo -e "${YELLOW}⚠️  $description resource NOT found in $namespace namespace (optional - skipping)${NC}"
+            return 0
+        else
+            echo -e "${RED}❌️  $description resource NOT found in $namespace namespace. Exiting...${NC}"
+            exit 1
+        fi
     fi
-    
+
     # Create port-forward
     oc port-forward "$resource_name" "$local_port:$remote_port" -n "$namespace" >/dev/null 2>&1 &
     echo -e "${GREEN}✅ Found $description: $emoji (resource: $resource_name, namespace: $namespace) available at: http://localhost:$local_port${NC}"
@@ -162,20 +170,30 @@ create_port_forward() {
 start_port_forwards() {
     echo -e "${BLUE}🔍 Finding pods and starting port-forwards...${NC}"
 
-    THANOS_POD=$(oc get pods -n "$PROMETHEUS_NAMESPACE" -o name -l 'app.kubernetes.io/component=query-layer,app.kubernetes.io/instance=thanos-querier' | head -1)
+    local THANOS_POD_LABEL='app.kubernetes.io/component=query-layer,app.kubernetes.io/instance=thanos-querier'
+    local LLAMASTACK_SERVICE_LABEL='app.kubernetes.io/instance=rag, app.kubernetes.io/name=llamastack'
+    local LLAMA_MODEL_SERVICE_LABEL="serving.kserve.io/inferenceservice=$LLM_MODEL, component=predictor"
+    local TEMPO_SERVICE_LABEL='app.kubernetes.io/name=tempo,app.kubernetes.io/component=gateway'
+    local KORREL8R_SERVICE_LABEL='app.kubernetes.io/name=korrel8r'
+
+    THANOS_POD=$(oc get pods -n "$PROMETHEUS_NAMESPACE" -o name -l "$THANOS_POD_LABEL" | head -1)
     create_port_forward "$THANOS_POD" "$THANOS_PORT" "9090" "$PROMETHEUS_NAMESPACE" "Thanos" "📊"
-    
+
     # Find LlamaStack pod
-    LLAMASTACK_SERVICE=$(oc get services -n "$LLAMA_MODEL_NAMESPACE" -o name -l 'app.kubernetes.io/instance=rag, app.kubernetes.io/name=llamastack')
+    LLAMASTACK_SERVICE=$(oc get services -n "$LLAMA_MODEL_NAMESPACE" -o name -l "$LLAMASTACK_SERVICE_LABEL")
     create_port_forward "$LLAMASTACK_SERVICE" "$LLAMASTACK_PORT" "8321" "$LLAMA_MODEL_NAMESPACE" "LlamaStack" "🦙"
-    
+
     # Find Llama Model service
-    LLAMA_MODEL_SERVICE=$(oc get services -n "$LLAMA_MODEL_NAMESPACE" -o name -l "serving.kserve.io/inferenceservice=$LLM_MODEL, component=predictor")
+    LLAMA_MODEL_SERVICE=$(oc get services -n "$LLAMA_MODEL_NAMESPACE" -o name -l "$LLAMA_MODEL_SERVICE_LABEL")
     create_port_forward "$LLAMA_MODEL_SERVICE" "$LLAMA_MODEL_PORT" "8080" "$LLAMA_MODEL_NAMESPACE" "Llama Model" "🤖"
-    
+
     # Find Tempo gateway service
-    TEMPO_SERVICE=$(oc get services -n "$OBSERVABILITY_NAMESPACE" -o name -l 'app.kubernetes.io/name=tempo,app.kubernetes.io/component=gateway')
+    TEMPO_SERVICE=$(oc get services -n "$OBSERVABILITY_NAMESPACE" -o name -l "$TEMPO_SERVICE_LABEL")
     create_port_forward "$TEMPO_SERVICE" "$TEMPO_PORT" "8080" "$OBSERVABILITY_NAMESPACE" "Tempo" "🔍"
+
+    # Find Korrel8r service (optional - may not be deployed)
+    KORREL8R_SERVICE=$(oc get services -n "$KORREL8R_NAMESPACE" -o name -l "$KORREL8R_SERVICE_LABEL" 2>/dev/null | head -1)
+    create_port_forward "$KORREL8R_SERVICE" "$KORREL8R_PORT" "9443" "$KORREL8R_NAMESPACE" "Korrel8r" "🔗" "true"
 
     sleep 3  # Give port-forwards time to establish
 }
@@ -272,6 +290,7 @@ start_local_services() {
       TEMPO_TENANT_ID="$TEMPO_TENANT_ID" \
       TEMPO_TOKEN="$TEMPO_TOKEN" \
       LLAMA_STACK_URL="$LLAMA_STACK_URL" \
+      KORREL8R_URL="https://localhost:$KORREL8R_PORT" \
       THANOS_TOKEN="$THANOS_TOKEN" \
       VERIFY_SSL="$VERIFY_SSL" \
       PYTHON_LOG_LEVEL="$PYTHON_LOG_LEVEL" \

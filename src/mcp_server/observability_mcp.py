@@ -3,6 +3,9 @@ import logging
 from .settings import settings
 from common.pylogger import get_python_logger, force_reconfigure_all_loggers
 
+# Global server instance reference for chat_tool access
+_server_instance = None
+
 
 class ObservabilityMCPServer:
     def __init__(self) -> None:
@@ -13,6 +16,11 @@ class ObservabilityMCPServer:
         self.mcp = FastMCP("metrics-observability")
         # Ensure third-party loggers are reconfigured after FastMCP init
         force_reconfigure_all_loggers(settings.PYTHON_LOG_LEVEL)
+
+        # Set global instance for chat_tool access
+        global _server_instance
+        _server_instance = self
+
         self._register_mcp_tools()
         logging.getLogger(__name__).info("Observability MCP Server initialized")
 
@@ -52,6 +60,8 @@ class ObservabilityMCPServer:
             get_trace_details_tool,
             chat_tempo_tool
         )
+        from .tools.chat_tool import chat
+
         from core.config import KORREL8R_ENABLED
 
         # Register vLLM tools
@@ -65,7 +75,7 @@ class ObservabilityMCPServer:
         self.mcp.tool()(get_gpu_info)
         self.mcp.tool()(get_deployment_info)
         self.mcp.tool()(chat_vllm)
-        
+
         # Register OpenShift tools
         self.mcp.tool()(analyze_openshift)
         self.mcp.tool()(list_openshift_namespaces)
@@ -88,7 +98,7 @@ class ObservabilityMCPServer:
         self.mcp.tool()(query_tempo_tool)
         self.mcp.tool()(get_trace_details_tool)
         self.mcp.tool()(chat_tempo_tool)
-        
+
         # Register Korrel8r tools (only when enabled)
         if KORREL8R_ENABLED:
             from .tools.korrel8r_tools import (
@@ -97,3 +107,5 @@ class ObservabilityMCPServer:
             )
             self.mcp.tool()(korrel8r_query_objects)
             self.mcp.tool()(korrel8r_get_correlated)
+
+        self.mcp.tool()(chat)

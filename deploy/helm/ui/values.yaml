@@ -10,11 +10,10 @@ service:
 env:
   PROMETHEUS_URL: "https://thanos-querier.openshift-monitoring.svc.cluster.local:9091"
   LLM_URL: "http://llm-service:8012"
-  LLAMA_STACK_URL: "http://llamastack:8321/v1/openai/v1"
   LLM_API_TOKEN: ""
+  LLAMA_STACK_URL: "http://llamastack:8321/v1/openai/v1"
   PYTHON_LOG_LEVEL: "INFO"
-  KORREL8R_ENABLED: "false"
-  
+
 # Configurable MCP server service name and port - can be overridden
 mcpServer:
   serviceName: "mcp-server-svc"  # Should match the MCP server release name + "-svc"

@@ -3,12 +3,13 @@ WORKDIR /app
 
 # Copy required dependencies that UI imports (build context is src/)
 COPY core/ /app/core/
-COPY mcp_server/ /app/mcp_server/
 COPY common/ /app/common/
+COPY chatbots/ /app/chatbots/
 
 # Copy UI specific files
 COPY ui/ui.py .
 COPY ui/mcp_client_helper.py .
+COPY ui/mcp_client_adapter.py .
 COPY ui/error_handler.py .
 COPY ui/requirements.txt .
 

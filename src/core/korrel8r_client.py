@@ -98,12 +98,16 @@ class Korrel8rClient:
     def _choose_verify_param(self, full_url: str) -> Any:
         """Use service CA bundle for in-cluster service URLs; otherwise system CAs.
 
+        For in-cluster '.svc' / 'cluster.local' URLs, returns the VERIFY_SSL setting.
+        For localhost URLs (port-forwarded services), returns the VERIFY_SSL setting.
+        For external routes, returns True to use public CAs.
+
         This avoids overriding public CA trust with the injected service CA bundle
         when calling external routes.
         """
         try:
             host = urlparse(full_url).hostname or ""
-            if ".svc" in host or "cluster.local" in host:
+            if ".svc" in host or "cluster.local" in host or host == "localhost":
                 return VERIFY_SSL
             return True
         except Exception:

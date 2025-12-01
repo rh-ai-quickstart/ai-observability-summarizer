@@ -5,13 +5,14 @@ This module provides Llama-specific implementation using LlamaStack's OpenAI-com
 """
 
 import json
-import logging
-from typing import Optional, Callable, List, Dict, Any
+from typing import Optional, List, Dict, Any, Callable
 
 from .base import BaseChatBot
+from chatbots.tool_executor import ToolExecutor
 from core.config import LLAMA_STACK_URL, LLM_API_TOKEN
+from common.pylogger import get_python_logger
 
-logger = logging.getLogger(__name__)
+logger = get_python_logger()
 
 
 class LlamaChatBot(BaseChatBot):
@@ -32,8 +33,13 @@ class LlamaChatBot(BaseChatBot):
         """
         return self.model_name
 
-    def __init__(self, model_name: str, api_key: Optional[str] = None):
-        super().__init__(model_name, api_key)
+    def __init__(
+        self,
+        model_name: str,
+        api_key: Optional[str] = None,
+        tool_executor: ToolExecutor = None
+    ):
+        super().__init__(model_name, api_key, tool_executor)
 
         # Import OpenAI SDK (LlamaStack is OpenAI-compatible)
         try:
@@ -112,7 +118,7 @@ For Pod Status queries:
             })
         return openai_tools
 
-    def chat(self, user_question: str, namespace: Optional[str] = None, scope: Optional[str] = None, progress_callback: Optional[Callable] = None) -> str:
+    def chat(self, user_question: str, namespace: Optional[str] = None, progress_callback: Optional[Callable] = None) -> str:
         """Chat with Llama using LlamaStack OpenAI-compatible API."""
         if not self.client:
             return "Error: OpenAI SDK not installed. Please install it with: pip install openai"
@@ -181,7 +187,7 @@ For Pod Status queries:
 
                 # If model wants to use tools, execute them
                 if finish_reason == 'tool_calls' and message.tool_calls:
-                    logger.info(f"LlamaStack model is using {len(message.tool_calls)} tool(s)")
+                    logger.info(f"🤖 LlamaStack requesting {len(message.tool_calls)} tool(s)")
 
                     tool_results = []
                     for tool_call in message.tool_calls:
@@ -189,17 +195,16 @@ For Pod Status queries:
                         tool_args_str = tool_call.function.arguments
                         tool_id = tool_call.id
 
-                        logger.info(f"🔧 Calling tool: {tool_name}")
-                        if progress_callback:
-                            progress_callback(f"🔧 Using tool: {tool_name}")
-
                         # Parse arguments
                         try:
                             tool_args = json.loads(tool_args_str)
                         except json.JSONDecodeError:
                             tool_args = {}
 
-                        # Get tool result with automatic truncation
+                        if progress_callback:
+                            progress_callback(f"🔧 Using tool: {tool_name}")
+
+                        # Get tool result with automatic truncation (logging handled in base class)
                         tool_result = self._get_tool_result(tool_name, tool_args)
 
                         tool_results.append({
