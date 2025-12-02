@@ -5,12 +5,13 @@ This module provides Google Gemini-specific implementation using the official SD
 """
 
 import os
-import logging
-from typing import Optional, Callable, List, Dict, Any
+from typing import Optional, List, Dict, Any, Callable
 
 from .base import BaseChatBot
+from chatbots.tool_executor import ToolExecutor
+from common.pylogger import get_python_logger
 
-logger = logging.getLogger(__name__)
+logger = get_python_logger()
 
 
 class GoogleChatBot(BaseChatBot):
@@ -24,8 +25,12 @@ class GoogleChatBot(BaseChatBot):
         """Gemini supports 1M token context - 10K chars is reasonable."""
         return 10000
 
-    def __init__(self, model_name: str, api_key: Optional[str] = None):
-        super().__init__(model_name, api_key)
+    def __init__(
+        self,
+        model_name: str,
+        api_key: Optional[str] = None,
+        tool_executor: ToolExecutor = None):
+        super().__init__(model_name, api_key, tool_executor)
 
         # Import Google SDK and configure
         try:
@@ -157,7 +162,7 @@ class GoogleChatBot(BaseChatBot):
 
         return sdk_tools
 
-    def chat(self, user_question: str, namespace: Optional[str] = None, scope: Optional[str] = None, progress_callback: Optional[Callable] = None) -> str:
+    def chat(self, user_question: str, namespace: Optional[str] = None, progress_callback: Optional[Callable] = None) -> str:
         """Chat with Google Gemini using tool calling."""
         if not self.configured:
             return "Error: Google Generative AI SDK not installed. Please install it with: pip install google-generativeai"
@@ -244,7 +249,7 @@ class GoogleChatBot(BaseChatBot):
 
                 if has_function_calls:
                     tool_count = sum(1 for p in parts if hasattr(p, 'function_call') and p.function_call)
-                    logger.info(f"Google Gemini is using {tool_count} tool(s)")
+                    logger.info(f"🤖 Google Gemini requesting {tool_count} tool(s)")
 
                     # Build function responses for next iteration
                     function_responses = []  # Clear previous responses
@@ -255,13 +260,11 @@ class GoogleChatBot(BaseChatBot):
                             # Convert proto args to native Python types (dict with proto values -> dict with native values)
                             tool_args = self._convert_proto_to_native(dict(func_call.args))
 
-                            logger.info(f"🔧 Calling tool: {tool_name} with args: {tool_args}")
                             if progress_callback:
                                 progress_callback(f"🔧 Using tool: {tool_name}")
 
-                            # Get tool result with automatic truncation
+                            # Get tool result with automatic truncation (logging handled in base class)
                             tool_result = self._get_tool_result(tool_name, tool_args)
-                            logger.info(f"Tool result length: {len(str(tool_result))}")
 
                             # Create function response for Gemini SDK
                             function_responses.append(

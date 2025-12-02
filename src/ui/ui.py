@@ -22,9 +22,6 @@ from mcp_client_helper import (
     analyze_vllm_mcp,
     calculate_metrics_mcp,
     get_vllm_metrics_mcp,
-    extract_text_from_mcp_result,
-    is_double_encoded_mcp_response,
-    extract_from_double_encoded_response,
     analyze_openshift_mcp,
     chat_openshift_mcp,
     parse_analyze_response,
@@ -33,6 +30,12 @@ from mcp_client_helper import (
     get_deployment_info_mcp,
     chat_vllm_mcp,
     chat_tempo_mcp,
+)
+# Import MCP utilities from common module (breaks circular dependency)
+from common.mcp_utils import (
+    extract_text_from_mcp_result,
+    is_double_encoded_mcp_response,
+    extract_from_double_encoded_response,
 )
 # Add current directory to Python path for consistent imports
 import sys
@@ -68,22 +71,19 @@ except Exception:
 # Multi-model chatbot support - Direct import with robust fallbacks
 try:
     # Try direct import first (works in container with proper package structure)
-    from mcp_server.chatbots import create_chatbot
+    from chatbots import create_chatbot
 except ImportError:
-    # Fallback: Add both parent paths to ensure relative imports work
+    # Fallback: Add parent path to ensure imports work
     src_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-    mcp_server_path = os.path.join(src_path, 'mcp_server')
 
     if src_path not in sys.path:
         sys.path.insert(0, src_path)
-    if mcp_server_path not in sys.path:
-        sys.path.insert(0, mcp_server_path)
 
     try:
-        from mcp_server.chatbots import create_chatbot
+        from chatbots import create_chatbot
     except ImportError:
         # If package imports fail, create dummy factory function
-        def create_chatbot(model_name: str, api_key=None):
+        def create_chatbot(model_name: str, api_key=None, tool_executor=None):
             class DummyChatBot:
                 def __init__(self, *args, **kwargs):
                     self.error = "Chat bot package not available"
@@ -93,9 +93,17 @@ except ImportError:
                     return False
             return DummyChatBot()
 
+# Import MCP client and adapter for chatbots
+from mcp_client_helper import MCPClientHelper
+from mcp_client_adapter import MCPClientAdapter
+
 # --- Config ---
 MCP_SERVER_URL = os.getenv("MCP_SERVER_URL", "http://localhost:8085")
 PROM_URL = os.getenv("PROM_URL", "http://localhost:9090")
+
+# --- Create MCP client and adapter (used by chatbots for tool operations) ---
+mcp_client = MCPClientHelper()
+tool_executor_adapter = MCPClientAdapter(mcp_client)
 
 # --- Claude Chat Bot (removed cached version since we create chatbot dynamically with user API key) ---
 
@@ -1339,7 +1347,11 @@ elif page == "Chat with Prometheus":
     if user_api_key or multi_model_name != "No models available":
         try:
             logger.info(f"🤖 Creating chatbot for model: {multi_model_name}")
-            ai_chatbot = create_chatbot(model_name=multi_model_name, api_key=user_api_key)
+            ai_chatbot = create_chatbot(
+                model_name=multi_model_name,
+                api_key=user_api_key,
+                tool_executor=tool_executor_adapter
+            )
             logger.info(f"✅ Chatbot created: {ai_chatbot.__class__.__name__} for model {multi_model_name}")
         except Exception as e:
             logger.error(f"❌ Failed to create chatbot for {multi_model_name}: {e}")
@@ -1415,7 +1427,7 @@ elif page == "Chat with Prometheus":
 
     # Custom chat input with better placeholder
     user_question = st.chat_input("Ask AI about your metrics and traces... (e.g., 'What's the GPU usage?' or 'Show me CPU trends' or 'Show me traces with errors')")
-    
+
     if user_question and ai_chatbot:
         # Add user message to history and display it
         st.session_state.claude_messages.append({"role": "user", "content": user_question})
@@ -1425,15 +1437,15 @@ elif page == "Chat with Prometheus":
         # Create assistant message placeholder for streaming-like effect
         with st.chat_message("assistant", avatar="🤖"):
             message_placeholder = st.empty()
-            
+
             # Show thinking state
             message_placeholder.markdown("🔍 **Analyzing your request...**")
-            
+
             try:
                 # Create progress callback to show tool usage like Claude Desktop
                 def update_progress(status_msg):
                     message_placeholder.markdown(f"**{status_msg}**")
-                
+
                 # Update status
                 message_placeholder.markdown("⚡ **Starting analysis...**")
                 
@@ -1493,13 +1505,12 @@ elif page == "Chat with Prometheus":
                     response = ai_chatbot.chat(
                         user_question,
                         namespace=None,  # Cluster-wide analysis
-                        scope="cluster-wide",
                         progress_callback=update_progress
                     )
                     logger.info(f"📥 Received response from {ai_chatbot.model_name}: {len(response) if response else 0} chars")
                 else:
                     response = None  # Skip AI analysis for pure trace questions
-                
+
                 # Display final response with better formatting
                 if response:
                     # Format the response for better readability

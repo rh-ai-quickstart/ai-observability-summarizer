@@ -30,7 +30,5 @@ spec:
               value: "{{ .Values.env.LLM_API_TOKEN }}"
             - name: PYTHON_LOG_LEVEL
               value: "{{ .Values.env.PYTHON_LOG_LEVEL }}"
-            - name: KORREL8R_ENABLED
-              value: "{{ .Values.env.KORREL8R_ENABLED }}"
             - name: MCP_SERVER_URL
               value: "http://{{ .Values.mcpServer.serviceName }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.mcpServer.port }}"

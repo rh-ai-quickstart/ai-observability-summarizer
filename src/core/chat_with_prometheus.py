@@ -14,10 +14,9 @@ Key capabilities:
 
 import json
 import logging
-import re
 import requests
 from datetime import datetime, timedelta
-from typing import Dict, Any, List, Optional, Union, Tuple
+from typing import Dict, Any, List, Optional
 
 from .config import PROMETHEUS_URL, THANOS_TOKEN, VERIFY_SSL
 from .llm_client import summarize_with_llm
@@ -40,12 +39,14 @@ def make_prometheus_request(endpoint: str, params: Optional[Dict] = None) -> Dic
         headers["Authorization"] = f"Bearer {THANOS_TOKEN}"
     
     try:
+        from .config import REQUEST_TIMEOUT_SECONDS
+
         response = requests.get(
             url, 
             params=params, 
             headers=headers, 
             verify=VERIFY_SSL,
-            timeout=30
+            timeout=REQUEST_TIMEOUT_SECONDS
         )
         response.raise_for_status()
         return response.json()

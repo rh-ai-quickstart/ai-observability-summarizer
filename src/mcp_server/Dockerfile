@@ -31,6 +31,7 @@ RUN python -m pip install --no-cache-dir --upgrade pip \
 # Copy source code
 COPY core /app/core
 COPY common /app/common
+COPY chatbots /app/chatbots
 COPY mcp_server /app/mcp_server
 
 ENV PYTHONPATH=/app
