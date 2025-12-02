@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alert-example-config
+data:
+  config.yaml: |
+    message: Hello from alert-example
+

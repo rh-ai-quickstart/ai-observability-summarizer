@@ -1,0 +1,142 @@
+{{- if .Values.rbac.create }}
+# Collector Service Account and RBAC for OpenShift Logging
+# This creates the necessary service account and permissions for log collection
+{{- if .Values.rbac.collector.create }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: collector
+  namespace: openshift-logging
+  labels:
+    {{- include "loki-stack.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+{{- end }}
+---
+# ClusterRole for collecting application logs using new observability API
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: collect-application-logs
+  labels:
+    {{- include "loki-stack.labels" . | nindent 4 }}
+rules:
+- apiGroups:
+  - logging.openshift.io
+  - observability.openshift.io
+  resourceNames:
+  - application
+  resources:
+  - logs
+  verbs:
+  - collect
+---
+# ClusterRole for collecting infrastructure logs using new observability API
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: collect-infrastructure-logs
+  labels:
+    {{- include "loki-stack.labels" . | nindent 4 }}
+rules:
+- apiGroups:
+  - logging.openshift.io
+  - observability.openshift.io
+  resourceNames:
+  - infrastructure
+  resources:
+  - logs
+  verbs:
+  - collect
+---
+# ClusterRole for collecting audit logs using new observability API
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: collect-audit-logs
+  labels:
+    {{- include "loki-stack.labels" . | nindent 4 }}
+rules:
+- apiGroups:
+  - logging.openshift.io
+  - observability.openshift.io
+  resourceNames:
+  - audit
+  resources:
+  - logs
+  verbs:
+  - collect
+---
+# ClusterRole for writing logs to LokiStack tenants
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: logging-collector-logs-writer
+  labels:
+    {{- include "loki-stack.labels" . | nindent 4 }}
+rules:
+- apiGroups: ["loki.grafana.com"]
+  resources: ["application", "infrastructure", "audit"]
+  verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: collect-application-logs
+  labels:
+    {{- include "loki-stack.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: collect-application-logs
+subjects:
+- kind: ServiceAccount
+  name: collector
+  namespace: openshift-logging
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: collect-infrastructure-logs
+  labels:
+    {{- include "loki-stack.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: collect-infrastructure-logs
+subjects:
+- kind: ServiceAccount
+  name: collector
+  namespace: openshift-logging
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: collect-audit-logs
+  labels:
+    {{- include "loki-stack.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: collect-audit-logs
+subjects:
+- kind: ServiceAccount
+  name: collector
+  namespace: openshift-logging
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: logging-collector-logs-writer
+  labels:
+    {{- include "loki-stack.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: logging-collector-logs-writer
+subjects:
+- kind: ServiceAccount
+  name: collector
+  namespace: openshift-logging
+{{- end }}

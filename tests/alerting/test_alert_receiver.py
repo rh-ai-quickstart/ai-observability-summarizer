@@ -36,12 +36,12 @@ class TestAlertReceiver:
                 "finished_reason": "length",
                 "for": "0s",
                 "instance": "10.129.5.199:8080",
-                "job": "llama-3-2-3b-instruct-metrics",
+                "job": "llama-3-1-8b-instruct-metrics",
                 "model_name": "meta-llama/Llama-3.2-3B-Instruct",
                 "namespace": "m6",
-                "pod": "llama-3-2-3b-instruct-predictor-b5d9df9bc-89bhv",
+                "pod": "llama-3-1-8b-instruct-predictor-b5d9df9bc-89bhv",
                 "prometheus": "openshift-user-workload-monitoring/user-workload",
-                "service": "llama-3-2-3b-instruct-metrics",
+                "service": "llama-3-1-8b-instruct-metrics",
                 "severity": "info",
                 "test_alert": "false"
             }

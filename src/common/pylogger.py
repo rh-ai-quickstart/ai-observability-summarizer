@@ -80,7 +80,8 @@ def _setup_logger(logger_name: str, level: str) -> None:
 
 
 def _configure_third_party_loggers(log_level: str) -> None:
-    logging.getLogger().handlers.clear()
+    # Configure third-party loggers without clearing root logger handlers
+    # Root logger handlers are needed for structlog loggers to output properly
     for name in THIRD_PARTY_LOGGERS:
         _setup_logger(name, log_level)
 

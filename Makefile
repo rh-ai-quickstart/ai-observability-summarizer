@@ -3,7 +3,7 @@
 
 # NAMESPACE validation for deployment targets
 ifeq ($(NAMESPACE),)
-ifeq (,$(filter install-local depend install-ingestion-pipeline list-models% generate-model-config help build build-ui build-alerting build-mcp-server push push-ui push-alerting push-mcp-server clean config test check-observability-drift install-operators uninstall-operators check-operators install-cluster-observability-operator install-opentelemetry-operator install-tempo-operator uninstall-cluster-observability-operator uninstall-opentelemetry-operator uninstall-tempo-operator enable-tracing-ui disable-tracing-ui,$(MAKECMDGOALS)))
+ifeq (,$(filter install-local depend install-ingestion-pipeline list-models% generate-model-config help build build-ui build-alerting build-mcp-server push push-ui push-alerting push-mcp-server clean config test check-observability-drift install-operators uninstall-operators check-operators install-cluster-observability-operator install-opentelemetry-operator install-tempo-operator install-logging-operator install-loki-operator uninstall-cluster-observability-operator uninstall-opentelemetry-operator uninstall-tempo-operator uninstall-logging-operator uninstall-loki-operator enable-tracing-ui disable-tracing-ui enable-logging-ui disable-logging-ui install-loki uninstall-loki upgrade-observability install-korrel8r uninstall-korrel8r,$(MAKECMDGOALS)))
 $(error NAMESPACE is not set)
 endif
 endif
@@ -14,13 +14,18 @@ MAKEFLAGS += --no-print-directory
 REGISTRY ?= quay.io
 ORG ?= ecosystem-appeng
 IMAGE_PREFIX ?= aiobs
-VERSION ?= 0.14.7
+VERSION ?= 0.17.1
 PLATFORM ?= linux/amd64
 
 # Container image names
 METRICS_UI_IMAGE = $(REGISTRY)/$(ORG)/$(IMAGE_PREFIX)-metrics-ui
 METRICS_ALERTING_IMAGE = $(REGISTRY)/$(ORG)/$(IMAGE_PREFIX)-metrics-alerting
 MCP_SERVER_IMAGE = $(REGISTRY)/$(ORG)/$(IMAGE_PREFIX)-mcp-server
+
+# Alert example image
+ALERT_EXAMPLE_IMAGE ?= $(REGISTRY)/$(ORG)/alert-example:$(VERSION)
+ALERT_EXAMPLE_CONTEXT ?= tests/alert-example/app
+ALERT_EXAMPLE_K8S_DIR ?= tests/alert-example/k8s
 
 
 # Build tools
@@ -63,6 +68,11 @@ METRICS_UI_RELEASE_NAME ?= ui
 METRICS_UI_CHART_PATH ?= ui
 MCP_SERVER_RELEASE_NAME ?= mcp-server
 MCP_SERVER_CHART_PATH ?= mcp-server
+# Korrel8r chart
+KORREL8R_RELEASE_NAME ?= korrel8r-summarizer
+KORREL8R_CHART_PATH ?= observability/korrel8r
+KORREL8R_NAMESPACE ?= openshift-cluster-observability-operator
+
 TOLERATIONS_TEMPLATE=[{"key":"$(1)","effect":"NoSchedule","operator":"Exists"}]
 GEN_MODEL_CONFIG_PREFIX = /tmp/gen_model_config
 
@@ -74,7 +84,7 @@ MODEL_CONFIG_JSON := $(shell cat deploy/helm/model-config.json | jq -c .)
 DYNAMIC_MODEL_CONFIG_JSON :=
 
 # Extract only non-external models for deployment
-LLM := llama-3-2-3b-instruct
+LLM := llama-3-1-8b-instruct
 LLM_JSON := $(shell echo '["$(LLM_JSON)"]')
 
 # Alerting configuration
@@ -85,6 +95,7 @@ ALERTING_RELEASE_NAME ?= alerting
 OBSERVABILITY_NAMESPACE ?= observability-hub # currently hard-coded in instrumentation.yaml
 INSTRUMENTATION_PATH ?= observability/otel-collector/scripts/instrumentation.yaml
 MINIO_NAMESPACE ?= observability-hub
+LOKI_NAMESPACE ?= openshift-logging
 
 # LLM URL processing constants
 DEFAULT_LLM_PORT_AND_PATH := :8080/v1
@@ -140,6 +151,23 @@ helm_tempo_args = \
     --set minio.s3.accessKeySecret=$(MINIO_PASSWORD) \
     --set minio.s3.bucket=tempo
 
+# Shell snippet to check if collector SA exists and determine rbac.collector.create value
+# Returns "false" if SA exists, "true" if it doesn't
+# Usage: COLLECTOR_CREATE=$$($(check_collector_sa_and_get_flag))
+check_collector_sa_and_get_flag = \
+	if oc get serviceaccount collector -n $(LOKI_NAMESPACE) >/dev/null 2>&1; then \
+		echo "  → Collector ServiceAccount already exists in $(LOKI_NAMESPACE), will not recreate" >&2; \
+		echo "false"; \
+	else \
+		echo "  → Collector ServiceAccount does not exist, will be created" >&2; \
+		echo "true"; \
+	fi
+
+helm_loki_args = \
+    --set minio.s3.accessKeyId=$(MINIO_USER) \
+    --set minio.s3.accessKeySecret=$(MINIO_PASSWORD) \
+    --set minio.s3.bucket=loki
+
 .PHONY: help
 help:
 	@echo "OpenShift AI Observability Summarizer - Build & Deploy"
@@ -155,6 +183,8 @@ help:
 	@echo "  push-ui            - Push metric-ui image"
 	@echo "  push-alerting      - Push metric-alerting image"
 	@echo "  push-mcp-server    - Push mcp-server image"
+	@echo "  build-alert-example - Build alert-example test image"
+	@echo "  push-alert-example  - Push alert-example test image"
 	@echo ""
 	@echo "Deployment:"
 	@echo "  install            - Deploy to OpenShift using Helm"
@@ -168,36 +198,52 @@ help:
 	@echo "  list-models        - List available models"
 	@echo "  generate-model-config - Generate JSON config for specified LLM using template"
 	@echo "  install-ingestion-pipeline - Install extra ingestion pipelines"
+	@echo "  install-korrel8r   - Install Korrel8r via UIPlugin then patch resources"
 	@echo ""
 	@echo "Observability Stack:"
-	@echo "  install-observability-stack - Install complete observability stack (MinIO + TempoStack + OTEL + tracing + drift check)"
-	@echo "  uninstall-observability-stack - Uninstall complete observability stack (tracing + TempoStack + OTEL + MinIO)"
+	@echo "  install-observability-stack - Install complete observability stack (MinIO + TempoStack + LokiStack + OTEL + tracing + logging + drift check)"
+	@echo "  uninstall-observability-stack - Uninstall complete observability stack (tracing + logging + TempoStack + LokiStack + OTEL + MinIO)"
 	@echo ""
 	@echo "Operators:"
-	@echo "  install-operators - Install all mandatory operators (observability, otel, tempo)"
+	@echo "  install-operators - Install all mandatory operators (observability, otel, tempo, logging, loki)"
 	@echo "  install-cluster-observability-operator - Install Cluster Observability Operator (observability)"
 	@echo "  install-opentelemetry-operator - Install OpenTelemetry Operator (otel)"
 	@echo "  install-tempo-operator - Install Tempo Operator (tempo)"
+	@echo "  install-logging-operator - Install OpenShift Logging Operator (logging)"
+	@echo "  install-loki-operator - Install Loki Operator (loki)"
 	@echo "  uninstall-operators - Uninstall all mandatory operators (with confirmation)"
 	@echo "  uninstall-cluster-observability-operator - Uninstall Cluster Observability Operator only"
 	@echo "  uninstall-opentelemetry-operator - Uninstall OpenTelemetry Operator only"
 	@echo "  uninstall-tempo-operator - Uninstall Tempo Operator only"
+	@echo "  uninstall-logging-operator - Uninstall OpenShift Logging Operator only"
+	@echo "  uninstall-loki-operator - Uninstall Loki Operator only"
 	@echo "  check-operators - Check status of all mandatory operators"
+	@echo "  verify-operators-ready - Verify all operators are installed and ready (used internally)"
 	@echo ""
 	@echo "Individual Components:"
-	@echo "  install-observability - Install TempoStack and OTEL Collector only"
-	@echo "  uninstall-observability - Uninstall TempoStack and OTEL Collector only"
+	@echo "  install-observability - Install TempoStack, LokiStack and OTEL Collector only"
+	@echo "  uninstall-observability - Uninstall TempoStack, LokiStack and OTEL Collector only"
 	@echo "  upgrade-observability - Force upgrade observability components (even if already installed)"
 	@echo "  check-observability-drift - Check for configuration drift in observability-hub"
 	@echo "  setup-tracing - Enable auto-instrumentation for tracing in target namespace (idempotent)"
 	@echo "  remove-tracing - Disable auto-instrumentation for tracing in target namespace"
 	@echo "  enable-tracing-ui - Enable 'Observe → Traces' menu in OpenShift Console"
 	@echo "  disable-tracing-ui - Disable 'Observe → Traces' menu in OpenShift Console"
+	@echo "  enable-logging-ui - Enable 'Observe → Logs' menu in OpenShift Console"
+	@echo "  disable-logging-ui - Disable 'Observe → Logs' menu in OpenShift Console"
 	@echo "  install-minio - Install MinIO observability storage backend only"
 	@echo "  uninstall-minio - Uninstall MinIO observability storage backend only"
+	@echo "  install-loki - Install LokiStack for centralized log aggregation (idempotent)"
+	@echo "  uninstall-loki - Uninstall LokiStack (preserves MinIO storage and buckets)"
+	@echo ""
+	@echo "Korrel8r:"
+	@echo "  install-korrel8r     - Install Korrel8r via UIPlugin then patch resources"
+	@echo "  uninstall-korrel8r   - Uninstall Korrel8r helm release and clean leftovers"
 	@echo ""
 	@echo "Alerting:"
 	@echo "  install-alerts     - Install alerting Helm chart"
+	@echo "  install-alert-example - Deploy alert-example app and PrometheusRule (NAMESPACE required)"
+	@echo "  uninstall-alert-example - Remove alert-example app, Service, Route, ConfigMap and PrometheusRule"
 	@echo "  uninstall-alerts   - Uninstall alerting and related resources"
 	@echo "  patch-config       - Enable Alertmanager and configure cross-project alerting"
 	@echo "  revert-config      - Remove namespace from cross-project alerting configuration"
@@ -220,7 +266,7 @@ help:
 	@echo "  NAMESPACE          - OpenShift namespace for deployment"
 	@echo "  HF_TOKEN           - Hugging Face Token (will prompt if not provided and LLM_URL not set)"
 	@echo "  DEVICE             - Deploy models on cpu or gpu (default)"
-	@echo "  LLM                - Model id (eg. llama-3-2-3b-instruct)"
+	@echo "  LLM                - Model id (eg. llama-3-1-8b-instruct)"
 	@echo "  LLM_URL            - Use existing model URL (auto-adds :8080/v1 if no port specified)"
 	@echo "  SAFETY             - Safety model id"
 	@echo "  ALERTS             - Set to TRUE to install alerting with main deployment"
@@ -330,6 +376,7 @@ install-mcp-server: namespace
 			--set image.repository=$(MCP_SERVER_IMAGE) \
 			--set image.tag=$(VERSION) \
 			--set rbac.createGrafanaRole=false \
+			--set LLM_PREDICTOR=$(LLM)-predictor \
 			$(if $(MCP_SERVER_ROUTE_HOST),--set route.host='$(MCP_SERVER_ROUTE_HOST)',) \
 			$(if $(LLAMA_STACK_URL),--set llm.url='$(LLAMA_STACK_URL)',) \
 			-f $(GEN_MODEL_CONFIG_PREFIX)-for_helm.yaml; \
@@ -339,6 +386,7 @@ install-mcp-server: namespace
 			--set image.repository=$(MCP_SERVER_IMAGE) \
 			--set image.tag=$(VERSION) \
 			--set rbac.createGrafanaRole=true \
+			--set LLM_PREDICTOR=$(LLM)-predictor \
 			$(if $(MCP_SERVER_ROUTE_HOST),--set route.host='$(MCP_SERVER_ROUTE_HOST)',) \
 			$(if $(LLAMA_STACK_URL),--set llm.url='$(LLAMA_STACK_URL)',) \
 			-f $(GEN_MODEL_CONFIG_PREFIX)-for_helm.yaml; \
@@ -362,7 +410,7 @@ install-rag: namespace
 
 
 .PHONY: install
-install: namespace depend validate-llm install-operators install-observability-stack install-rag install-metric-ui install-mcp-server delete-jobs
+install: namespace depend validate-llm install-operators install-observability-stack install-rag install-metric-ui install-mcp-server install-korrel8r delete-jobs
 	@if [ "$(ALERTS)" = "TRUE" ]; then \
 		echo "ALERTS flag is set to TRUE. Installing alerting..."; \
 		$(MAKE) install-alerts NAMESPACE=$(NAMESPACE); \
@@ -436,14 +484,16 @@ uninstall:
 	- @helm -n $(NAMESPACE) uninstall $(METRICS_UI_RELEASE_NAME) --ignore-not-found
 	@echo "Uninstalling $(MCP_SERVER_RELEASE_NAME) helm chart (if installed)"
 	- @helm -n $(NAMESPACE) uninstall $(MCP_SERVER_RELEASE_NAME) --ignore-not-found
+	@echo "Uninstalling Korrel8r helm-managed resources (if installed)"
+	@$(MAKE) uninstall-korrel8r || true
 
 	@echo ""
 	@echo "Checking if observability stack should be uninstalled..."
-	@$(MAKE) uninstall-observability-stack NAMESPACE=$(NAMESPACE) || true
+	@$(MAKE) uninstall-observability-stack NAMESPACE=$(NAMESPACE) UNINSTALL_OBSERVABILITY=$(UNINSTALL_OBSERVABILITY) || true
 
 	@echo ""
 	@echo "Checking if operators should be uninstalled..."
-	@$(MAKE) uninstall-operators || true
+	@$(MAKE) uninstall-operators UNINSTALL_OPERATORS=$(UNINSTALL_OPERATORS) || true
 
 	@echo "\nRemaining resources in namespace $(NAMESPACE):"
 	@echo " → Pods..."
@@ -521,7 +571,7 @@ clean:
 
 # Run tests
 .PHONY: test
-test:	
+test:
 	@echo "🧪 Running tests with coverage..."
 	@uv sync --group test
 	@uv run pytest -v --cov=src --cov-report=html --cov-report=term
@@ -642,7 +692,7 @@ create-secret: namespace
 	@echo "Secret 'alerts-secrets' created/updated in namespace $(NAMESPACE)."
 
 .PHONY: install-alerts
-install-alerts: patch-config create-secret 
+install-alerts: patch-config create-secret
 	@echo "Installing/Upgrading Helm chart $(ALERTING_RELEASE_NAME) in namespace $(NAMESPACE)..."
 	@cd deploy/helm && helm upgrade --install $(ALERTING_RELEASE_NAME) ./alerting --namespace $(NAMESPACE) \
 		--set image.repository=$(METRICS_ALERTING_IMAGE) \
@@ -672,7 +722,7 @@ validate-llm:
 
 .PHONY: install-observability
 install-observability:
-	@echo "→ Checking if OpenTelemetry Collector and Tempo already exist in namespace $(OBSERVABILITY_NAMESPACE)"
+	@echo "→ Checking if OpenTelemetry Collector, Tempo, and Loki already exist in namespace $(OBSERVABILITY_NAMESPACE)"
 	@if helm list -n $(OBSERVABILITY_NAMESPACE) 2>/dev/null | grep -q "^tempo\s"; then \
 		echo "  → TempoStack already installed, skipping..."; \
 	else \
@@ -680,8 +730,10 @@ install-observability:
 		cd deploy/helm && helm upgrade --install tempo ./observability/tempo \
 			--namespace $(OBSERVABILITY_NAMESPACE) \
 			--create-namespace \
+			--wait --timeout 10m \
 			--set global.namespace=$(OBSERVABILITY_NAMESPACE) \
 			$(helm_tempo_args); \
+		echo "  ✅ TempoStack deployed and ready"; \
 	fi
 
 	@if helm list -n $(OBSERVABILITY_NAMESPACE) 2>/dev/null | grep -q "^otel-collector\s"; then \
@@ -691,11 +743,22 @@ install-observability:
 		cd deploy/helm && helm upgrade --install otel-collector ./observability/otel-collector \
 			--namespace $(OBSERVABILITY_NAMESPACE) \
 			--create-namespace \
+			--wait --timeout 10m \
 			--set global.namespace=$(OBSERVABILITY_NAMESPACE); \
+		echo "  ✅ OpenTelemetry Collector deployed and ready"; \
 	fi
 
+	@# Delegate to install-loki to avoid duplication
+	@$(MAKE) install-loki
+
 .PHONY: install-observability-stack
-install-observability-stack: install-minio setup-tracing install-observability check-observability-drift enable-tracing-ui
+install-observability-stack:
+	@echo "🚀 Installing observability stack in proper sequence..."
+	@$(MAKE) install-minio
+	@$(MAKE) setup-tracing
+	@$(MAKE) install-observability
+	@$(MAKE) check-observability-drift
+	@$(MAKE) enable-tracing-ui
 
 .PHONY: setup-tracing
 setup-tracing: namespace
@@ -742,25 +805,64 @@ disable-tracing-ui:
 		echo "  → Console plugin is not enabled"; \
 	fi
 
+.PHONY: enable-logging-ui
+enable-logging-ui:
+	@echo "→ Enabling logging console plugin for Observe → Logs menu"
+	@if oc get console.operator.openshift.io cluster -o jsonpath='{.spec.plugins}' 2>/dev/null | grep -q "logging-console-plugin"; then \
+		echo "  → Console plugin already enabled"; \
+	else \
+		echo "  → Enabling console plugin..."; \
+		oc patch console.operator.openshift.io cluster --type=json -p='[{"op": "add", "path": "/spec/plugins/-", "value": "logging-console-plugin"}]' 2>/dev/null && \
+		echo "  → Console plugin enabled. The OpenShift Console will refresh automatically." || \
+		echo "  → Note: Console plugin enablement requires cluster-admin permissions. You may need to run this manually."; \
+	fi
+
+.PHONY: disable-logging-ui
+disable-logging-ui:
+	@echo "→ Disabling logging console plugin for Observe → Logs menu"
+	@if oc get console.operator.openshift.io cluster -o jsonpath='{.spec.plugins}' 2>/dev/null | grep -q "logging-console-plugin"; then \
+		PLUGIN_INDEX=$$(oc get console.operator.openshift.io cluster -o json | jq '.spec.plugins | to_entries | .[] | select(.value=="logging-console-plugin") | .key'); \
+		if [ -n "$$PLUGIN_INDEX" ]; then \
+			oc patch console.operator.openshift.io cluster --type=json -p="[{\"op\": \"remove\", \"path\": \"/spec/plugins/$$PLUGIN_INDEX\"}]" 2>/dev/null && \
+			echo "  → Console plugin disabled. The OpenShift Console will refresh automatically." || \
+			echo "  → Note: Console plugin disabling requires cluster-admin permissions. You may need to run this manually."; \
+		else \
+			echo "  → Could not find plugin index"; \
+		fi \
+	else \
+		echo "  → Console plugin is not enabled"; \
+	fi
+
 .PHONY: uninstall-observability
 uninstall-observability:
 	@echo "Uninstalling TempoStack and Otel Collector in namespace $(OBSERVABILITY_NAMESPACE)"
-	@helm uninstall tempo -n $(OBSERVABILITY_NAMESPACE)
-	@helm uninstall otel-collector -n $(OBSERVABILITY_NAMESPACE)
+	@helm uninstall tempo -n $(OBSERVABILITY_NAMESPACE) --ignore-not-found
+	@helm uninstall otel-collector -n $(OBSERVABILITY_NAMESPACE) --ignore-not-found
 
 	@echo "Removing TempoStack PVCs from $(OBSERVABILITY_NAMESPACE)"
 	- @oc delete pvc -n $(OBSERVABILITY_NAMESPACE) -l app.kubernetes.io/name=tempo --timeout=30s ||:
 
+	@echo "Uninstalling LokiStack in namespace $(LOKI_NAMESPACE)"
+	@helm uninstall loki-stack -n $(LOKI_NAMESPACE) --ignore-not-found
+
+	@echo "Removing LokiStack PVCs from $(LOKI_NAMESPACE)"
+	- @oc delete pvc -n $(LOKI_NAMESPACE) -l app.kubernetes.io/name=loki --timeout=30s ||:
+
+	@echo "Cleaning up Loki ClusterRoles and ClusterRoleBindings..."
+	@$(MAKE) cleanup-loki-clusterroles
+	@echo "  → ClusterRole cleanup complete"
+
 .PHONY: uninstall-observability-stack
 uninstall-observability-stack:
 	@if [ "$(UNINSTALL_OBSERVABILITY)" = "true" ]; then \
-		echo "🗑️  Uninstalling observability stack (includes tracing and MinIO)"; \
+		echo "🗑️  Uninstalling observability stack (includes tracing, logging, and MinIO)"; \
 		echo ""; \
 		echo "⚠️  WARNING: This will remove the following components:"; \
 		echo "  → Auto-instrumentation for tracing in namespace $(NAMESPACE)"; \
-		echo "  → TempoStack and OTEL Collector in namespace $(OBSERVABILITY_NAMESPACE)"; \
+		echo "  → TempoStack, LokiStack, and OTEL Collector in namespace $(OBSERVABILITY_NAMESPACE)"; \
 		echo "  → MinIO observability storage in namespace $(MINIO_NAMESPACE)"; \
 		echo "  → Distributed Tracing Console Plugin (Observe → Traces menu)"; \
+		echo "  → Logging Console Plugin (Observe → Logs menu)"; \
 		echo ""; \
 		echo "This infrastructure is shared by multiple applications."; \
 		echo ""; \
@@ -768,12 +870,13 @@ uninstall-observability-stack:
 		$(MAKE) uninstall-observability; \
 		$(MAKE) uninstall-minio; \
 		$(MAKE) disable-tracing-ui; \
+		$(MAKE) disable-logging-ui; \
 		echo ""; \
 		echo "✅ Observability stack uninstallation completed!"; \
 	else \
 		echo "❌ WARNING: UNINSTALL_OBSERVABILITY is not set to 'true'"; \
 		echo "   Skipping removal of shared observability infrastructure to protect other teams."; \
-		echo "   This infrastructure (TempoStack, OTel Collector) is shared by multiple applications."; \
+		echo "   This infrastructure (TempoStack, LokiStack, OTel Collector) is shared by multiple applications."; \
 		echo ""; \
 		echo "   To remove observability infrastructure, run:"; \
 		echo "     → make uninstall NAMESPACE=$(NAMESPACE) UNINSTALL_OBSERVABILITY=true"; \
@@ -784,42 +887,141 @@ uninstall-observability-stack:
 
 .PHONY: upgrade-observability
 upgrade-observability:
-	@echo "→ Force upgrading OpenTelemetry Collector and Tempo in namespace $(OBSERVABILITY_NAMESPACE)"
+	@echo "→ Force upgrading OpenTelemetry Collector, Tempo, and Loki in namespace $(OBSERVABILITY_NAMESPACE)"
 	@echo "  This will update the configuration even if already installed"
 	cd deploy/helm && helm upgrade --install tempo ./observability/tempo \
 		--namespace $(OBSERVABILITY_NAMESPACE) \
 		--create-namespace \
+		--wait --timeout 10m \
 		--set global.namespace=$(OBSERVABILITY_NAMESPACE) \
 		$(helm_tempo_args)
 	cd deploy/helm && helm upgrade --install otel-collector ./observability/otel-collector \
 		--namespace $(OBSERVABILITY_NAMESPACE) \
 		--create-namespace \
+		--wait --timeout 10m \
 		--set global.namespace=$(OBSERVABILITY_NAMESPACE)
+	@$(MAKE) cleanup-loki-clusterroles
+	@COLLECTOR_CREATE=$$($(check_collector_sa_and_get_flag)); \
+	cd deploy/helm && helm upgrade --install loki-stack ./observability/loki \
+		--namespace $(LOKI_NAMESPACE) \
+		--create-namespace \
+		--atomic --wait --timeout 15m \
+		--set global.namespace=$(LOKI_NAMESPACE) \
+		--set rbac.collector.create=$$COLLECTOR_CREATE \
+		$(helm_loki_args)
 	@echo "✅ Observability components upgraded successfully"
 
 .PHONY: check-observability-drift
 check-observability-drift:
-	@scripts/check-observability-drift.sh $(OBSERVABILITY_NAMESPACE)
+	@scripts/check-observability-drift.sh $(OBSERVABILITY_NAMESPACE) $(LOKI_NAMESPACE)
+
+
+# ---- Alert Example (Python) ----
+.PHONY: build-alert-example
+build-alert-example:
+	@echo "→ Building alert-example image: $(ALERT_EXAMPLE_IMAGE)"
+	$(BUILD_TOOL) build --platform=$(PLATFORM) -t $(ALERT_EXAMPLE_IMAGE) $(ALERT_EXAMPLE_CONTEXT)
+
+.PHONY: push-alert-example
+push-alert-example:
+	@echo "→ Pushing alert-example image: $(ALERT_EXAMPLE_IMAGE)"
+	$(BUILD_TOOL) push $(ALERT_EXAMPLE_IMAGE)
+
+.PHONY: install-alert-example
+install-alert-example: namespace
+	@echo "→ Applying PrometheusRule for alert-example"
+	oc apply -n $(NAMESPACE) -f $(ALERT_EXAMPLE_K8S_DIR)/prometheusrule.yaml
+	@echo "→ Deploying alert-example resources to namespace $(NAMESPACE)"
+	oc apply -n $(NAMESPACE) -f $(ALERT_EXAMPLE_K8S_DIR)/configmap.yaml
+	oc apply -n $(NAMESPACE) -f $(ALERT_EXAMPLE_K8S_DIR)/deployment.yaml
+	oc set image -n $(NAMESPACE) deployment/alert-example app=$(ALERT_EXAMPLE_IMAGE)
+	oc apply -n $(NAMESPACE) -f $(ALERT_EXAMPLE_K8S_DIR)/service.yaml
+	oc rollout status -n $(NAMESPACE) deployment/alert-example
+	@echo "→ Patching ConfigMap to trigger crash behavior"
+	oc apply -n $(NAMESPACE) -f $(ALERT_EXAMPLE_K8S_DIR)/configmap_patch.yaml
+	@echo "→ Restarting deployment to pick up patched config"
+	oc rollout restart deployment/alert-example -n $(NAMESPACE)
+	@echo "→ Waiting for pod to enter CrashLoopBackOff"
+	@retries=60; \
+	while [ $$retries -gt 0 ]; do \
+	  reason=$$(oc get pods -n $(NAMESPACE) -l app=alert-example -o jsonpath='{range .items[*]}{.status.containerStatuses[0].state.waiting.reason}{"\n"}{end}' 2>/dev/null | head -n1); \
+	  if [ "$$reason" = "CrashLoopBackOff" ]; then echo "✔ Pod in CrashLoopBackOff"; break; fi; \
+	  sleep 5; retries=$$((retries-1)); \
+	done; \
+	if [ $$retries -eq 0 ]; then \
+	  echo "✖ Timed out waiting for CrashLoopBackOff"; \
+	  exit 1; \
+	else \
+	  echo "✅ alert-example deployed successfully and pod is in CrashLoopBackOff"; \
+	  echo "ℹ You can verify in Prometheus that alert 'AlertExampleDown' is firing."; \
+	fi
+
+.PHONY: uninstall-alert-example
+uninstall-alert-example: namespace
+	@echo "→ Uninstalling alert-example resources from namespace $(NAMESPACE)"
+	- oc delete -n $(NAMESPACE) -f $(ALERT_EXAMPLE_K8S_DIR)/prometheusrule.yaml --ignore-not-found
+	- oc delete deployment alert-example -n $(NAMESPACE) --ignore-not-found
+	- oc delete service alert-example -n $(NAMESPACE) --ignore-not-found
+	- oc delete route alert-example -n $(NAMESPACE) --ignore-not-found
+	- oc delete configmap alert-example-config -n $(NAMESPACE) --ignore-not-found
+	@echo "✅ alert-example resources removed (skipped any that were not found)"
 
 
 .PHONY: install-minio
 install-minio:
 	@$(eval MINIO_ARGS := $(call helm_minio_args))
 
+	@echo "→ Ensuring $(MINIO_NAMESPACE) namespace exists..."
+	@oc create namespace $(MINIO_NAMESPACE) 2>/dev/null || echo "  → Namespace already exists"
 	@echo "→ Checking if $(MINIO_CHART) already exists in namespace $(MINIO_NAMESPACE)"
 	@if helm list -n $(MINIO_NAMESPACE) 2>/dev/null | grep -q "^$(MINIO_CHART)\s"; then \
 		echo "  → $(MINIO_CHART) already installed, skipping..."; \
 	else \
 		echo "Installing $(MINIO_CHART) helm chart"; \
 		cd deploy/helm && helm -n $(MINIO_NAMESPACE) upgrade --install $(MINIO_CHART) $(MINIO_CHART_PATH) \
-		--atomic --timeout 5m \
+		--create-namespace \
+		--atomic --wait --timeout 10m \
 		$(MINIO_ARGS); \
-		echo "$(MINIO_CHART) installed successfully"; \
+		echo "  ✅ $(MINIO_CHART) deployed and ready"; \
 	fi
 	@echo "→ Cleaning up broken upstream routes (pointing to non-existent 'minio' service)"
 	- @oc delete route minio-api minio-webui -n $(MINIO_NAMESPACE) --ignore-not-found ||:
 	@echo "  → Broken upstream routes cleaned up"
 
+
+# Korrel8r installation via UIPlugin then patch
+.PHONY: install-korrel8r
+install-korrel8r:
+	@bash -c '\
+		MCS_NS="$${NAMESPACE:-$$(oc project -q 2>/dev/null)}"; \
+		echo "→ Checking KORREL8R_ENABLED in Helm release $(MCP_SERVER_RELEASE_NAME) (namespace=$$MCS_NS)"; \
+		if ! helm list -n "$$MCS_NS" -q 2>/dev/null | grep -q "^$(MCP_SERVER_RELEASE_NAME)$$"; then \
+		  echo "  → $(MCP_SERVER_RELEASE_NAME) not found in $$MCS_NS; skipping Korrel8r install"; \
+		  exit 0; \
+		fi; \
+		ENABLED=$$(helm get values $(MCP_SERVER_RELEASE_NAME) -n "$$MCS_NS" --all -o json 2>/dev/null | jq -r ".env.KORREL8R_ENABLED // \"\"" | tr "[:upper:]" "[:lower:]"); \
+		if [ "$$ENABLED" != "true" ]; then \
+		  echo "  → KORREL8R_ENABLED=$$ENABLED; skipping Korrel8r install"; \
+		  exit 0; \
+		fi; \
+		echo "  → KORREL8R_ENABLED=true; deploying Korrel8r directly via Helm"; \
+		cd deploy/helm && helm upgrade --install $(KORREL8R_RELEASE_NAME) $(KORREL8R_CHART_PATH) \
+			--namespace $(KORREL8R_NAMESPACE) \
+			--create-namespace \
+			--set global.namespace=$(KORREL8R_NAMESPACE); \
+		echo "→ Waiting for rollout of deployment/$(KORREL8R_RELEASE_NAME)"; \
+		oc rollout status -n $(KORREL8R_NAMESPACE) deployment/$(KORREL8R_RELEASE_NAME) --timeout=10m || true; \
+		echo "✅ Korrel8r installed successfully" \
+	'
+
+.PHONY: uninstall-korrel8r
+uninstall-korrel8r:
+	@echo "→ Uninstalling Korrel8r Helm release from namespace $(KORREL8R_NAMESPACE)"
+	- @helm -n $(KORREL8R_NAMESPACE) uninstall $(KORREL8R_RELEASE_NAME) --ignore-not-found
+	@echo "→ Cleaning up leftover resources (if any)"
+	- @oc delete configmap korrel8r-patch -n $(KORREL8R_NAMESPACE) --ignore-not-found
+	- @oc delete route korrel8r -n $(KORREL8R_NAMESPACE) --ignore-not-found
+	@echo "✅ Korrel8r helm-managed resources removed"
 
 .PHONY: uninstall-minio
 uninstall-minio:
@@ -828,6 +1030,80 @@ uninstall-minio:
 
 	@echo "Removing minio PVCs from $(MINIO_NAMESPACE)"
 	- @oc delete pvc -n $(MINIO_NAMESPACE) -l app.kubernetes.io/name=$(MINIO_CHART) --timeout=30s ||:
+
+# Cleanup Loki ClusterRoles and ClusterRoleBindings (reusable target)
+.PHONY: cleanup-loki-clusterroles
+cleanup-loki-clusterroles:
+	- @oc delete clusterrole logging-collector-logs-writer collect-application-logs collect-audit-logs collect-infrastructure-logs --ignore-not-found 2>/dev/null ||:
+	- @oc delete clusterrolebinding logging-collector-logs-writer collect-application-logs collect-audit-logs collect-infrastructure-logs --ignore-not-found 2>/dev/null ||:
+
+.PHONY: install-loki
+install-loki:
+	@echo "→ Checking if loki-stack already exists in namespace $(LOKI_NAMESPACE)"
+	@if helm list -n $(LOKI_NAMESPACE) 2>/dev/null | grep -q "^loki-stack\s"; then \
+		echo "  → loki-stack already installed, skipping..."; \
+	else \
+		echo "→ Verifying Logging and Loki Operators are ready..."; \
+		if ! oc get operator cluster-logging.openshift-logging >/dev/null 2>&1; then \
+			echo "  ❌ Error: Logging Operator is not installed"; \
+			echo "  → Run: make install-logging-operator"; \
+			exit 1; \
+		fi; \
+		echo "  ✅ Logging Operator is installed"; \
+		if ! oc get operator loki-operator.openshift-operators-redhat >/dev/null 2>&1; then \
+			echo "  ❌ Error: Loki Operator is not installed"; \
+			echo "  → Run: make install-loki-operator"; \
+			exit 1; \
+		fi; \
+		echo "  ✅ Loki Operator is installed"; \
+		echo "→ Verifying Loki CRDs are available..."; \
+		if ! oc get crd lokistacks.loki.grafana.com >/dev/null 2>&1; then \
+			echo "  ⚠️  LokiStack CRD not found, waiting for operator to create CRDs..."; \
+			for i in {1..6}; do \
+				if oc get crd lokistacks.loki.grafana.com >/dev/null 2>&1; then \
+					echo "  ✅ LokiStack CRD is now available"; \
+					break; \
+				fi; \
+				if [ $$i -eq 6 ]; then \
+					echo "  ❌ Error: LokiStack CRD not available after 1 minute"; \
+					echo "  → Check operator pods: oc get pods -n $(LOKI_NAMESPACE)"; \
+					exit 1; \
+				fi; \
+				echo "  ⏳ Waiting for CRDs (attempt $$i/6)..."; \
+				sleep 10; \
+			done; \
+		else \
+			echo "  ✅ LokiStack CRD is available"; \
+		fi; \
+		echo "→ Cleaning up any pre-existing ClusterRoles that might conflict..."; \
+		$(MAKE) cleanup-loki-clusterroles; \
+		echo "  ✅ Cleanup complete"; \
+		echo "→ Installing loki-stack helm chart"; \
+		COLLECTOR_CREATE=$$($(check_collector_sa_and_get_flag)); \
+		cd deploy/helm && helm upgrade --install loki-stack observability/loki \
+			--namespace $(LOKI_NAMESPACE) \
+			--create-namespace \
+			--atomic --timeout 15m \
+			--set global.namespace=$(LOKI_NAMESPACE) \
+			--set rbac.collector.create=$$COLLECTOR_CREATE \
+			$(helm_loki_args); \
+		echo "✅ loki-stack installed successfully"; \
+	fi
+	@$(MAKE) enable-logging-ui
+
+.PHONY: uninstall-loki
+uninstall-loki:
+	@echo "Uninstalling loki-stack in namespace $(LOKI_NAMESPACE)"
+	@helm -n $(LOKI_NAMESPACE) uninstall loki-stack --ignore-not-found
+
+	@echo "Removing LokiStack PVCs from $(LOKI_NAMESPACE)"
+	- @oc delete pvc -n $(LOKI_NAMESPACE) -l app.kubernetes.io/name=loki --timeout=30s ||:
+
+	@echo "Cleaning up Loki ClusterRoles and ClusterRoleBindings..."
+	@$(MAKE) cleanup-loki-clusterroles
+	@echo "  → ClusterRole cleanup complete"
+
+	@$(MAKE) disable-logging-ui
 
 # -- Operator Installation targets --
 
@@ -849,9 +1125,126 @@ install-tempo-operator:
 	@echo ""
 	@$(OPERATOR_MANAGER_SCRIPT) -i tempo -n openshift-tempo-operator
 
-# Install all three mandatory operators for Tempo and OpenTelemetry Collector
+# Install OpenShift Logging Operator
+.PHONY: install-logging-operator
+install-logging-operator:
+	@echo ""
+	@$(OPERATOR_MANAGER_SCRIPT) -i logging -n openshift-logging
+
+# Install Loki Operator
+.PHONY: install-loki-operator
+install-loki-operator:
+	@echo ""
+	@$(OPERATOR_MANAGER_SCRIPT) -i loki -n openshift-operators-redhat
+
+# Verify all required operators are installed and ready
+.PHONY: verify-operators-ready
+verify-operators-ready:
+	@echo ""
+	@echo "🔍 Verifying all required operators are installed and ready..."
+	@ERRORS=0; \
+	echo "  → Checking Cluster Observability Operator..."; \
+	if oc get operator cluster-observability-operator.openshift-cluster-observability >/dev/null 2>&1; then \
+		CSV=$$(oc get subscription cluster-observability-operator -n openshift-cluster-observability-operator -o jsonpath='{.status.installedCSV}' 2>/dev/null); \
+		if [ -n "$$CSV" ]; then \
+			PHASE=$$(oc get csv $$CSV -n openshift-cluster-observability-operator -o jsonpath='{.status.phase}' 2>/dev/null); \
+			if [ "$$PHASE" = "Succeeded" ]; then \
+				echo "    ✅ Cluster Observability Operator: Ready (CSV: $$PHASE)"; \
+			else \
+				echo "    ⚠️  Cluster Observability Operator: Installed but CSV phase is $$PHASE"; \
+			fi; \
+		else \
+			echo "    ✅ Cluster Observability Operator: Installed"; \
+		fi; \
+	else \
+		echo "    ❌ Cluster Observability Operator: NOT INSTALLED"; \
+		ERRORS=$$((ERRORS + 1)); \
+	fi; \
+	echo "  → Checking OpenTelemetry Operator..."; \
+	if oc get operator opentelemetry-product.openshift-opentelemetry-operator >/dev/null 2>&1; then \
+		CSV=$$(oc get subscription opentelemetry-product -n openshift-opentelemetry-operator -o jsonpath='{.status.installedCSV}' 2>/dev/null); \
+		if [ -n "$$CSV" ]; then \
+			PHASE=$$(oc get csv $$CSV -n openshift-opentelemetry-operator -o jsonpath='{.status.phase}' 2>/dev/null); \
+			if [ "$$PHASE" = "Succeeded" ]; then \
+				echo "    ✅ OpenTelemetry Operator: Ready (CSV: $$PHASE)"; \
+			else \
+				echo "    ⚠️  OpenTelemetry Operator: Installed but CSV phase is $$PHASE"; \
+			fi; \
+		else \
+			echo "    ✅ OpenTelemetry Operator: Installed"; \
+		fi; \
+	else \
+		echo "    ❌ OpenTelemetry Operator: NOT INSTALLED"; \
+		ERRORS=$$((ERRORS + 1)); \
+	fi; \
+	echo "  → Checking Tempo Operator..."; \
+	if oc get operator tempo-product.openshift-tempo-operator >/dev/null 2>&1; then \
+		CSV=$$(oc get subscription tempo-product -n openshift-tempo-operator -o jsonpath='{.status.installedCSV}' 2>/dev/null); \
+		if [ -n "$$CSV" ]; then \
+			PHASE=$$(oc get csv $$CSV -n openshift-tempo-operator -o jsonpath='{.status.phase}' 2>/dev/null); \
+			if [ "$$PHASE" = "Succeeded" ]; then \
+				echo "    ✅ Tempo Operator: Ready (CSV: $$PHASE)"; \
+			else \
+				echo "    ⚠️  Tempo Operator: Installed but CSV phase is $$PHASE"; \
+			fi; \
+		else \
+			echo "    ✅ Tempo Operator: Installed"; \
+		fi; \
+	else \
+		echo "    ❌ Tempo Operator: NOT INSTALLED"; \
+		ERRORS=$$((ERRORS + 1)); \
+	fi; \
+	echo "  → Checking Logging Operator..."; \
+	if oc get operator cluster-logging.openshift-logging >/dev/null 2>&1; then \
+		CSV=$$(oc get subscription cluster-logging -n openshift-logging -o jsonpath='{.status.installedCSV}' 2>/dev/null); \
+		if [ -n "$$CSV" ]; then \
+			PHASE=$$(oc get csv $$CSV -n openshift-logging -o jsonpath='{.status.phase}' 2>/dev/null); \
+			if [ "$$PHASE" = "Succeeded" ]; then \
+				echo "    ✅ Logging Operator: Ready (CSV: $$PHASE)"; \
+			else \
+				echo "    ⚠️  Logging Operator: Installed but CSV phase is $$PHASE"; \
+			fi; \
+		else \
+			echo "    ✅ Logging Operator: Installed"; \
+		fi; \
+	else \
+		echo "    ❌ Logging Operator: NOT INSTALLED"; \
+		ERRORS=$$((ERRORS + 1)); \
+	fi; \
+	echo "  → Checking Loki Operator..."; \
+	if oc get operator loki-operator.openshift-operators-redhat >/dev/null 2>&1; then \
+		CSV=$$(oc get subscription loki-operator -n openshift-operators-redhat -o jsonpath='{.status.installedCSV}' 2>/dev/null); \
+		if [ -n "$$CSV" ]; then \
+			PHASE=$$(oc get csv $$CSV -n openshift-operators-redhat -o jsonpath='{.status.phase}' 2>/dev/null); \
+			if [ "$$PHASE" = "Succeeded" ]; then \
+				echo "    ✅ Loki Operator: Ready (CSV: $$PHASE)"; \
+			else \
+				echo "    ⚠️  Loki Operator: Installed but CSV phase is $$PHASE"; \
+			fi; \
+		else \
+			echo "    ✅ Loki Operator: Installed"; \
+		fi; \
+	else \
+		echo "    ❌ Loki Operator: NOT INSTALLED"; \
+		ERRORS=$$((ERRORS + 1)); \
+	fi; \
+	echo ""; \
+	if [ $$ERRORS -eq 0 ]; then \
+		echo "✅ All operators verified and ready!"; \
+	else \
+		echo "❌ Error: $$ERRORS operator(s) not installed"; \
+		echo "   Run: make install-operators"; \
+		exit 1; \
+	fi
+
+# Install all five mandatory operators for Tempo, OpenTelemetry Collector, and Loki
 .PHONY: install-operators
-install-operators: install-cluster-observability-operator install-opentelemetry-operator install-tempo-operator
+install-operators: install-cluster-observability-operator install-opentelemetry-operator install-tempo-operator install-logging-operator install-loki-operator
+	@echo ""
+	@echo "✅ All operators installation completed"
+	@echo "⏳ Waiting 15 seconds for operators to stabilize and CRDs to be fully ready..."
+	@sleep 15
+	@$(MAKE) verify-operators-ready
 
 # Uninstall Cluster Observability Operator
 .PHONY: uninstall-cluster-observability-operator
@@ -868,22 +1261,36 @@ uninstall-opentelemetry-operator:
 uninstall-tempo-operator:
 	@$(OPERATOR_MANAGER_SCRIPT) -u tempo -n openshift-tempo-operator
 
-# Uninstall all three operators
+# Uninstall OpenShift Logging Operator
+.PHONY: uninstall-logging-operator
+uninstall-logging-operator:
+	@$(OPERATOR_MANAGER_SCRIPT) -u logging -n openshift-logging
+
+# Uninstall Loki Operator
+.PHONY: uninstall-loki-operator
+uninstall-loki-operator:
+	@$(OPERATOR_MANAGER_SCRIPT) -u loki -n openshift-operators-redhat
+
+# Uninstall all five operators
 .PHONY: uninstall-operators
 uninstall-operators:
 	@if [ "$(UNINSTALL_OPERATORS)" = "true" ]; then \
-		echo "🗑️  Uninstalling operators for Tempo and OpenTelemetry Collector..."; \
+		echo "🗑️  Uninstalling operators for Tempo, OpenTelemetry Collector, and Loki..."; \
 		echo ""; \
 		echo "⚠️  WARNING: This will remove the following operators:"; \
 		echo "  → Cluster Observability Operator"; \
 		echo "  → Red Hat build of OpenTelemetry Operator"; \
 		echo "  → Tempo Operator"; \
+		echo "  → OpenShift Logging Operator"; \
+		echo "  → Loki Operator"; \
 		echo ""; \
 		echo "This may affect other applications using these operators."; \
 		echo ""; \
 		$(MAKE) uninstall-cluster-observability-operator; \
 		$(MAKE) uninstall-opentelemetry-operator; \
 		$(MAKE) uninstall-tempo-operator; \
+		$(MAKE) uninstall-logging-operator; \
+		$(MAKE) uninstall-loki-operator; \
 		echo ""; \
 		echo "✅ All operators uninstallation completed!"; \
 	else \
@@ -902,8 +1309,10 @@ uninstall-operators:
 # Check operator status
 .PHONY: check-operators
 check-operators:
-	@echo "📊 Checking operator status for Tempo and OpenTelemetry Collector..."
+	@echo "📊 Checking operator status for Tempo, OpenTelemetry Collector, and Loki..."
 	@echo ""
 	@printf "🔍 Cluster Observability Operator: " && $(OPERATOR_MANAGER_SCRIPT) -c observability
 	@printf "🔍 OpenTelemetry Operator: " && $(OPERATOR_MANAGER_SCRIPT) -c otel
 	@printf "🔍 Tempo Operator: " && $(OPERATOR_MANAGER_SCRIPT) -c tempo
+	@printf "🔍 OpenShift Logging Operator: " && $(OPERATOR_MANAGER_SCRIPT) -c logging
+	@printf "🔍 Loki Operator: " && $(OPERATOR_MANAGER_SCRIPT) -c loki

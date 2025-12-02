@@ -13,7 +13,8 @@ import re
 import logging
 import math
 from datetime import datetime
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional, Tuple, Set
+from dataclasses import dataclass
 
 import logging
 from common.pylogger import get_python_logger
@@ -32,8 +33,131 @@ from .llm_client import (
     build_openshift_metrics_context,
     build_openshift_chat_prompt,
 )
+from .config import KORREL8R_ENABLED
+from .korrel8r_service import fetch_goal_query_objects
 NAMESPACE_SCOPED = "namespace_scoped"
 CLUSTER_WIDE = "cluster_wide"
+
+@dataclass(frozen=True)
+class NamespacePodPair:
+    namespace: str
+    pod: Optional[str] = None
+
+
+ 
+
+def extract_namespace_pod_pairs_from_metrics(
+    model_field: str,
+    metric_dfs: Dict[str, Any],
+) -> Set[NamespacePodPair]:
+    """Extract all unique (namespace, pod) pairs from provided metrics.
+
+    Uses DataFrame label columns when available and falls back to parsing
+    namespace from model name formatted as "namespace | model". Deduplicates pairs.
+    """
+    pairs: Set[NamespacePodPair] = set()
+    try:
+        for _label, df in metric_dfs.items():
+            if df is None or not isinstance(df, pd.DataFrame) or df.empty:
+                continue
+            has_ns = "namespace" in df.columns
+            has_pod = "pod" in df.columns
+            try:
+                if has_ns and has_pod:
+                    for _, row in df[["namespace", "pod"]].dropna(how="all").iterrows():
+                        ns_val = str(row["namespace"]).strip() if pd.notna(row.get("namespace")) else None
+                        pod_val = str(row["pod"]).strip() if pd.notna(row.get("pod")) else None
+                        if ns_val or pod_val:
+                            pairs.add(NamespacePodPair(namespace=ns_val or "", pod=pod_val))
+            except Exception:
+                continue
+    except Exception:
+        pass
+    
+    try:
+        if not pairs and "|" in model_field:
+            parts = [p.strip() for p in model_field.split("|", 1)]
+            if len(parts) == 2 and parts[0]:
+                pairs.add(NamespacePodPair(namespace=parts[0], pod=None))
+    except Exception:
+        pass
+    logger.debug("extract_namespace_pod_pairs_from_metrics: pairs=%s", pairs)
+    return pairs
+
+
+def sort_logs_by_severity_then_time(logs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Sort logs by severity (desc) then timestamp (newest first).
+
+    Severity order: FATAL/CRITICAL > ERROR > WARN/WARNING > INFO > DEBUG > TRACE > UNKNOWN.
+    Accepts timestamps in ISO8601, including Z suffix and sub-second precision.
+    """
+    severity_rank = {
+        "FATAL": 7,
+        "CRITICAL": 7,
+        "ERROR": 6,
+        "WARN": 5,
+        "WARNING": 5,
+        "INFO": 3,
+        "DEBUG": 2,
+        "TRACE": 1,
+        "UNKNOWN": 0,
+    }
+
+    from datetime import datetime
+
+    def _parse_ts(ts: str):
+        try:
+            if not ts:
+                return None
+            s = ts.strip()
+            if s.endswith("Z"):
+                s = s[:-1] + "+00:00"
+            if "." in s:
+                head, tail = s.split(".", 1)
+                tz = ""
+                for i, ch in enumerate(tail):
+                    if ch in "+-" and i != 0:
+                        tz = tail[i:]
+                        tail = tail[:i]
+                        break
+                digits = "".join(ch for ch in tail if ch.isdigit())
+                if len(digits) > 6:
+                    digits = digits[:6]
+                s = f"{head}.{digits}{tz}" if digits else f"{head}{tz}"
+            return datetime.fromisoformat(s)
+        except Exception:
+            return None
+
+    def _sort_key(log: Dict[str, Any]):
+        level = str(log.get("level") or "UNKNOWN").upper()
+        rank = severity_rank.get(level, 0)
+        ts = str(log.get("timestamp") or log.get("ts") or "")
+        dt = _parse_ts(ts)
+        return (rank, dt or datetime.fromtimestamp(0))
+
+    return sorted(logs or [], key=_sort_key, reverse=True)
+
+def build_korrel8r_log_query_for_vllm(
+    namespace: Optional[str],
+    pod: Optional[str],
+) -> Optional[str]:
+    """Return a Korrel8r domain query for logs given namespace/pod context.
+
+    - If both namespace and pod are known: use the pod
+    - Else if only namespace is known: k8s Pod selector to pivot to logs
+    - Else: None
+    """
+    try:
+        if namespace and pod:
+            return (
+                f'k8s:Pod.v1:{{"namespace":"{namespace}",'
+                f'"name":"{pod}"}}'
+            )
+        if namespace:
+            return f'k8s:Pod.v1:{{"namespace":"{namespace}"}}'
+        return None
+    except Exception:
+        return None
 
 def choose_prometheus_step(
     start_ts: int,
@@ -219,24 +343,27 @@ def get_models_helper() -> List[str]:
                         namespace = entry.get("namespace", "").strip()
                         if model and namespace:
                             model_set.add(f"{namespace} | {model}")
-
-                    # If we found models, return them
-                    if model_set:
-                        return sorted(list(model_set))
+                            logger.debug(f"Found model: {namespace} | {model} in metric: {metric_name}")
 
                 except Exception as e:
                     logger.warning(
                         f"Error checking {metric_name} with {time_window}s window: {e}"
                     )
                     continue
+            
+            # If we found models in this time window, log but continue checking
+            # to ensure we get ALL models across all time windows and metrics
+            if model_set:
+                logger.info(f"Found {len(model_set)} model(s) in {time_window}s window, continuing to check other windows...")
 
+        logger.info(f"Total models discovered: {len(model_set)}")
         return sorted(list(model_set))
     except Exception as e:
         logger.error("Error getting models", exc_info=e)
         return []
 
 
-def get_namespaces_helper() -> List[str]:
+def get_vllm_namespaces_helper() -> List[str]:
     """
     Get list of namespaces that have vLLM metrics available.
 
@@ -282,24 +409,54 @@ def get_namespaces_helper() -> List[str]:
                     for entry in series:
                         namespace = entry.get("namespace", "").strip()
                         model = entry.get("model_name", "").strip()
+                        # Require both namespace and model_name to ensure properly configured deployments
                         if namespace and model:
                             namespace_set.add(namespace)
-
-                    # If we found namespaces, return them immediately
-                    if namespace_set:
-                        return sorted(list(namespace_set))
+                            logger.debug(f"Found namespace: {namespace} with model: {model} in metric: {metric_name}")
 
                 except Exception as e:
                     logger.warning(
                         f"Error checking {metric_name} with {time_window}s window: {e}"
                     )
                     continue
+            
+            # If we found namespaces in this time window, log but continue checking
+            # to ensure we get ALL namespaces across all time windows and metrics
+            if namespace_set:
+                logger.info(f"Found {len(namespace_set)} namespace(s) in {time_window}s window, continuing to check other windows...")
 
+        logger.info(f"Total namespaces discovered: {len(namespace_set)}")
         return sorted(list(namespace_set))
     except Exception as e:
         logger.error("Error getting namespaces", exc_info=e)
         return []
 
+
+def get_openshift_namespaces_helper() -> List[str]:
+    """
+    Get list of all namespaces present in Prometheus/Thanos data.
+
+    Uses the label values endpoint to retrieve all observed namespace labels.
+
+    Returns:
+        Sorted list of namespace names
+    """
+    try:
+        headers = _auth_headers()
+        response = requests.get(
+            f"{PROMETHEUS_URL}/api/v1/label/namespace/values",
+            headers=headers,
+            verify=VERIFY_SSL,
+        )
+        response.raise_for_status()
+        values = response.json().get("data", [])
+        if not isinstance(values, list):
+            return []
+        namespaces = sorted({str(v).strip() for v in values if v})
+        return namespaces
+    except Exception as e:
+        logger.error("Error getting OpenShift namespaces", exc_info=e)
+        return []
 
 def calculate_metric_stats(data):
     """
@@ -344,8 +501,9 @@ def discover_vllm_metrics():
         # Create friendly names for metrics
         metric_mapping = {}
 
-        # First, add GPU metrics (DCGM) that are relevant for vLLM monitoring
-        gpu_metrics = {
+        # First, add GPU metrics (DCGM for NVIDIA or habanalabs for Intel Gaudi) that are relevant for vLLM monitoring
+        # Try NVIDIA DCGM metrics first
+        gpu_metrics_nvidia = {
             "GPU Temperature (°C)": "DCGM_FI_DEV_GPU_TEMP",
             "GPU Power Usage (Watts)": "DCGM_FI_DEV_POWER_USAGE",
             "GPU Memory Usage (GB)": "DCGM_FI_DEV_FB_USED / (1024*1024*1024)",
@@ -354,7 +512,18 @@ def discover_vllm_metrics():
             "GPU Utilization (%)": "DCGM_FI_DEV_GPU_UTIL",
         }
 
-        for friendly_name, metric_name in gpu_metrics.items():
+        # Try Intel Gaudi metrics as alternative
+        gpu_metrics_gaudi = {
+            "GPU Temperature (°C)": "habanalabs_temperature_onchip",
+            "GPU Power Usage (Watts)": "habanalabs_power_mW / 1000",
+            "GPU Memory Usage (GB)": "habanalabs_memory_used_bytes / (1024*1024*1024)",
+            "GPU Energy Consumption (Joules)": "habanalabs_energy",
+            "GPU Memory Temperature (°C)": "habanalabs_temperature_threshold_memory",
+            "GPU Utilization (%)": "habanalabs_utilization",
+        }
+
+        # Try NVIDIA metrics first
+        for friendly_name, metric_name in gpu_metrics_nvidia.items():
             # Handle expressions (like memory GB conversion) by checking base metric presence
             if friendly_name == "GPU Memory Usage (GB)":
                 if "DCGM_FI_DEV_FB_USED" in all_metrics:
@@ -364,9 +533,35 @@ def discover_vllm_metrics():
             if metric_name in all_metrics:
                 metric_mapping[friendly_name] = f"avg({metric_name})"
 
-        # If vLLM GPU cache usage is unavailable, alias GPU Usage (%) to DCGM utilization
-        if "GPU Usage (%)" not in metric_mapping and "DCGM_FI_DEV_GPU_UTIL" in all_metrics:
-            metric_mapping["GPU Usage (%)"] = "avg(DCGM_FI_DEV_GPU_UTIL)"
+        # If no NVIDIA metrics, try Intel Gaudi metrics
+        if not metric_mapping:
+            for friendly_name, metric_expr in gpu_metrics_gaudi.items():
+                # Handle expressions (like memory GB conversion and power mW to W)
+                if friendly_name == "GPU Memory Usage (GB)":
+                    if "habanalabs_memory_used_bytes" in all_metrics:
+                        metric_mapping[friendly_name] = "avg(habanalabs_memory_used_bytes) / (1024*1024*1024)"
+                    continue
+                elif friendly_name == "GPU Power Usage (Watts)":
+                    if "habanalabs_power_mW" in all_metrics:
+                        metric_mapping[friendly_name] = "avg(habanalabs_power_mW) / 1000"
+                    continue
+
+                # For simple metric names without expressions
+                metric_name = metric_expr.split()[0] if " " not in metric_expr and "/" not in metric_expr else None
+                if metric_name and metric_name in all_metrics:
+                    metric_mapping[friendly_name] = f"avg({metric_name})"
+
+        # Ensure GPU Usage (%) metric is available by aliasing to vendor-specific utilization metrics
+        # This provides a fallback when vLLM-specific GPU cache usage metric is not available
+        if "GPU Usage (%)" not in metric_mapping:
+            if "DCGM_FI_DEV_GPU_UTIL" in all_metrics:
+                metric_mapping["GPU Usage (%)"] = "avg(DCGM_FI_DEV_GPU_UTIL)"
+            elif "habanalabs_utilization" in all_metrics:
+                metric_mapping["GPU Usage (%)"] = "avg(habanalabs_utilization)"
+            # TODO: Add AMD support here when available.
+            # When AMD GPU metrics are available, add:
+            # elif "amd_smi_utilization" in all_metrics:
+            #     metric_mapping["GPU Usage (%)"] = "avg(amd_smi_utilization)"
 
         # Build vLLM-derived queries based on available metrics
         vllm_metrics = set(m for m in all_metrics if m.startswith("vllm:"))
@@ -439,14 +634,14 @@ def discover_vllm_metrics():
         return metric_mapping
     except Exception as e:
         logger.error("Error discovering vLLM metrics: %s", e)
-        # Enhanced fallback with comprehensive GPU metrics and vLLM metrics
+        # Enhanced fallback with comprehensive GPU metrics and vLLM metrics (multi-vendor)
         return {
-            "GPU Temperature (°C)": "avg(DCGM_FI_DEV_GPU_TEMP)",
-            "GPU Power Usage (Watts)": "avg(DCGM_FI_DEV_POWER_USAGE)",
-            "GPU Memory Usage (GB)": "avg(DCGM_FI_DEV_FB_USED) / (1024*1024*1024)",
-            "GPU Energy Consumption (Joules)": "avg(DCGM_FI_DEV_TOTAL_ENERGY_CONSUMPTION)",
-            "GPU Memory Temperature (°C)": "avg(DCGM_FI_DEV_MEMORY_TEMP)",
-            "GPU Usage (%)": "avg(DCGM_FI_DEV_GPU_UTIL)",
+            "GPU Temperature (°C)": "avg(DCGM_FI_DEV_GPU_TEMP) or avg(habanalabs_temperature_onchip)",
+            "GPU Power Usage (Watts)": "avg(DCGM_FI_DEV_POWER_USAGE) or avg(habanalabs_power_mW) / 1000",
+            "GPU Memory Usage (GB)": "avg(DCGM_FI_DEV_FB_USED) / (1024*1024*1024) or avg(habanalabs_memory_used_bytes) / (1024*1024*1024)",
+            "GPU Energy Consumption (Joules)": "avg(DCGM_FI_DEV_TOTAL_ENERGY_CONSUMPTION) or avg(habanalabs_energy)",
+            "GPU Memory Temperature (°C)": "avg(DCGM_FI_DEV_MEMORY_TEMP) or avg(habanalabs_temperature_onboard)",
+            "GPU Usage (%)": "avg(DCGM_FI_DEV_GPU_UTIL) or avg(habanalabs_utilization)",
             "Prompt Tokens Created": "vllm:request_prompt_tokens_sum",
             "Output Tokens Created": "vllm:request_generation_tokens_sum",
             "Requests Running": "vllm:num_requests_running",
@@ -555,6 +750,128 @@ def discover_dcgm_metrics():
         return {}
 
 
+def discover_intel_gaudi_metrics():
+    """Dynamically discover available Intel Gaudi accelerator metrics
+    
+    Note: This function follows a vendor-specific discovery pattern.
+    To add AMD support in the future, create a similar discover_amd_metrics() function
+    following the same pattern used here.
+    """
+    try:
+        headers = {"Authorization": f"Bearer {THANOS_TOKEN}"}
+        response = requests.get(
+            f"{PROMETHEUS_URL}/api/v1/label/__name__/values",
+            headers=headers,
+            verify=VERIFY_SSL,
+            timeout=30,
+        )
+        response.raise_for_status()
+        all_metrics = response.json()["data"]
+
+        # Filter for Intel Gaudi (habanalabs) metrics
+        gaudi_metrics = [metric for metric in all_metrics if metric.startswith("habanalabs_")]
+
+        logger.info("Found %d Intel Gaudi (habanalabs) metrics", len(gaudi_metrics))
+
+        # Create a mapping of useful Intel Gaudi metrics for fleet monitoring
+        gaudi_mapping = {}
+        memory_used_metric = None
+        memory_total_metric = None
+
+        for metric in gaudi_metrics:
+            # Temperature metrics
+            if "temperature_onchip" in metric:
+                gaudi_mapping["GPU Temperature (°C)"] = f"avg({metric})"
+            elif "temperature_onboard" in metric:
+                gaudi_mapping["Board Temperature (°C)"] = f"avg({metric})"
+            elif "temperature_threshold_gpu" in metric:
+                gaudi_mapping["GPU Temperature Threshold (°C)"] = f"avg({metric})"
+            elif "temperature_threshold_memory" in metric:
+                gaudi_mapping["GPU Memory Temperature Threshold (°C)"] = f"avg({metric})"
+            
+            # Power metrics (convert mW to Watts)
+            elif metric == "habanalabs_power_mW":
+                gaudi_mapping["GPU Power Usage (Watts)"] = f"avg({metric}) / 1000"
+            elif "power_default_limit_mW" in metric:
+                gaudi_mapping["GPU Power Cap (Watts)"] = f"avg({metric}) / 1000"
+            
+            # Utilization
+            elif metric == "habanalabs_utilization":
+                gaudi_mapping["GPU Utilization (%)"] = f"avg({metric})"
+            
+            # Memory metrics
+            elif metric == "habanalabs_memory_used_bytes":
+                memory_used_metric = metric
+                gaudi_mapping["GPU Memory Used (bytes)"] = f"avg({metric})"
+            elif metric == "habanalabs_memory_total_bytes":
+                memory_total_metric = metric
+                gaudi_mapping["GPU Memory Total (bytes)"] = f"avg({metric})"
+            elif metric == "habanalabs_memory_free_bytes":
+                gaudi_mapping["GPU Memory Free (bytes)"] = f"avg({metric})"
+            
+            # Clock speeds
+            elif metric == "habanalabs_clock_soc_mhz":
+                gaudi_mapping["GPU SoC Clock (MHz)"] = f"avg({metric})"
+            elif metric == "habanalabs_clock_soc_max_mhz":
+                gaudi_mapping["GPU SoC Max Clock (MHz)"] = f"avg({metric})"
+            
+            # Energy
+            elif metric == "habanalabs_energy":
+                gaudi_mapping["GPU Energy Consumption (Joules)"] = f"avg({metric})"
+            
+            # PCIe metrics
+            elif metric == "habanalabs_pcie_rx":
+                gaudi_mapping["PCIe RX Traffic (bytes)"] = f"avg({metric})"
+            elif metric == "habanalabs_pcie_tx":
+                gaudi_mapping["PCIe TX Traffic (bytes)"] = f"avg({metric})"
+            elif "pcie_receive_throughput" in metric:
+                gaudi_mapping["PCIe Receive Throughput"] = f"avg({metric})"
+            elif "pcie_transmit_throughput" in metric:
+                gaudi_mapping["PCIe Transmit Throughput"] = f"avg({metric})"
+            elif "pcie_replay_count" in metric:
+                gaudi_mapping["PCIe Replay Count"] = f"avg({metric})"
+            
+            # PCIe link info
+            elif metric == "habanalabs_pci_link_speed":
+                gaudi_mapping["PCIe Link Speed"] = f"avg({metric})"
+            elif metric == "habanalabs_pci_link_width":
+                gaudi_mapping["PCIe Link Width"] = f"avg({metric})"
+            
+            # ECC and memory health
+            elif "ecc_feature_mode" in metric:
+                gaudi_mapping["ECC Status"] = f"avg({metric})"
+            elif "pending_rows_with_single_bit_ecc_errors" in metric:
+                gaudi_mapping["Single-bit ECC Errors"] = f"sum({metric})"
+            elif "pending_rows_with_double_bit_ecc_errors" in metric:
+                gaudi_mapping["Double-bit ECC Errors"] = f"sum({metric})"
+            
+            # NIC port status
+            elif "nic_port_status" in metric:
+                gaudi_mapping["NIC Port Status"] = f"avg({metric})"
+
+        # Add GPU Memory Usage in GB if we found the memory used metric
+        if memory_used_metric:
+            gaudi_mapping["GPU Memory Usage (GB)"] = (
+                f"avg({memory_used_metric}) / (1024*1024*1024)"
+            )
+        
+        # Add memory usage percentage if we have both used and total
+        if memory_used_metric and memory_total_metric:
+            gaudi_mapping["GPU Memory Usage (%)"] = (
+                f"(avg({memory_used_metric}) / avg({memory_total_metric})) * 100"
+            )
+
+        if gaudi_mapping:
+            logger.info("Successfully discovered %d Intel Gaudi metrics", len(gaudi_mapping))
+        else:
+            logger.warning("No Intel Gaudi metrics found - cluster may not have Intel Gaudi accelerators or monitoring")
+
+        return gaudi_mapping
+    except Exception as e:
+        logger.error("Error discovering Intel Gaudi metrics", exc_info=e)
+        return {}
+
+
 def discover_openshift_metrics():
     """Return comprehensive OpenShift/Kubernetes metrics organized by category"""
     return {
@@ -568,9 +885,9 @@ def discover_openshift_metrics():
             "Container Images": "count(count by (image)(container_spec_image))",
             "Total Services": "sum(kube_service_info)",
             "Total Nodes": "sum(kube_node_info)",
-            # Key GPU metrics for fleet overview
-            "GPU Utilization (%)": "avg(DCGM_FI_DEV_GPU_UTIL)",
-            "GPU Temperature (°C)": "avg(DCGM_FI_DEV_GPU_TEMP)",
+            # Key GPU/Accelerator metrics for fleet overview (multi-vendor support)
+            "GPU Utilization (%)": "avg(DCGM_FI_DEV_GPU_UTIL) or avg(habanalabs_utilization)",
+            "GPU Temperature (°C)": "avg(DCGM_FI_DEV_GPU_TEMP) or avg(habanalabs_temperature_onchip)",
         },
         "Services & Networking": {
             # Services, ingress, and networking metrics
@@ -609,13 +926,14 @@ def discover_openshift_metrics():
             "Container Memory Usage": "sum(container_memory_usage_bytes)",
         },
         "GPU & Accelerators": {
-            # 🚀 Comprehensive GPU fleet monitoring with DCGM metrics
-            "GPU Temperature (°C)": "avg(DCGM_FI_DEV_GPU_TEMP)",
-            "GPU Power Usage (Watts)": "avg(DCGM_FI_DEV_POWER_USAGE)",
-            "GPU Utilization (%)": "avg(DCGM_FI_DEV_GPU_UTIL)",
-            "GPU Memory Usage (GB)": "avg(DCGM_FI_DEV_FB_USED) / (1024*1024*1024)",
-            "GPU Energy Consumption (Joules)": "avg(DCGM_FI_DEV_TOTAL_ENERGY_CONSUMPTION)",
-            "GPU Memory Temperature (°C)": "avg(DCGM_FI_DEV_MEMORY_TEMP)",
+            # 🚀 Comprehensive GPU/Accelerator fleet monitoring (multi-vendor: NVIDIA DCGM + Intel Gaudi)
+            # TODO: Add AMD support by appending "or avg(amd_smi_temperature)" to each query below
+            "GPU Temperature (°C)": "avg(DCGM_FI_DEV_GPU_TEMP) or avg(habanalabs_temperature_onchip)",
+            "GPU Power Usage (Watts)": "avg(DCGM_FI_DEV_POWER_USAGE) or avg(habanalabs_power_mW) / 1000",
+            "GPU Utilization (%)": "avg(DCGM_FI_DEV_GPU_UTIL) or avg(habanalabs_utilization)",
+            "GPU Memory Usage (GB)": "avg(DCGM_FI_DEV_FB_USED) / (1024*1024*1024) or avg(habanalabs_memory_used_bytes) / (1024*1024*1024)",
+            "GPU Energy Consumption (Joules)": "avg(DCGM_FI_DEV_TOTAL_ENERGY_CONSUMPTION) or avg(habanalabs_energy)",
+            "GPU Memory Temperature (°C)": "avg(DCGM_FI_DEV_MEMORY_TEMP) or avg(habanalabs_temperature_threshold_memory)",
         },
         "Storage & Networking": {
             # 6 storage and network metrics
@@ -824,7 +1142,6 @@ def analyze_openshift_metrics(
     metrics_to_fetch, namespace_for_query = _select_openshift_metrics_for_scope(
         metric_category, scope, namespace
     )
-
     # Fetch metrics; if Prometheus fails, raise immediately so MCP tool can surface PROMETHEUS_ERROR
     metric_dfs: Dict[str, Any] = {}
     try:
@@ -844,10 +1161,23 @@ def analyze_openshift_metrics(
     if scope == NAMESPACE_SCOPED and namespace:
         scope_description += f" ({namespace})"
 
-    # Build OpenShift metrics prompt
+    # Build correlated log/trace context for OpenShift analysis (only when relevant)
+    log_trace_data: str = ""
+    if KORREL8R_ENABLED:
+        log_trace_data = build_log_trace_context_for_pod_issues(
+            namespace_for_query=namespace_for_query,
+            namespace_label=namespace,
+            start_ts=start_ts,
+            end_ts=end_ts,
+            metrics_to_fetch=metrics_to_fetch,
+        )
+        logger.debug("In analyze_openshift_metrics: log_trace_data=%s", log_trace_data)
+    # Build OpenShift metrics prompt (including optional log/trace context)
     prompt = build_openshift_prompt(
-        metric_dfs, metric_category, namespace_for_query, scope_description
+        metric_dfs, metric_category, namespace_for_query, scope_description, log_trace_data
     )
+
+    logger.debug("In analyze_openshift_metrics: prompt=%s", prompt)
     # Summarize; if LLM service fails, raise HTTPException to be mapped to LLMServiceError by MCP
     try:
         summary = summarize_with_llm(
@@ -1133,6 +1463,50 @@ def fetch_openshift_metrics(query, start, end, namespace=None):
 
 # --- Business logic for MCP tools (moved from tools module) ---
 
+def build_log_trace_context_for_pod_issues(
+    namespace_for_query: Optional[str],
+    namespace_label: Optional[str],
+    start_ts: int,
+    end_ts: int,
+    metrics_to_fetch: Optional[Dict[str, str]] = None,
+) -> str:
+    """Return correlated log/trace context for pods in Failed/CrashLoopBackOff states.
+
+    Uses an explicit PromQL to retrieve (namespace,pod) pairs, then delegates to
+    build_correlated_context_from_metrics to construct the prompt lines. Returns
+    an empty string on any error.
+    """
+    try:
+        contains_pods_failed_metric = any(
+            isinstance(label, str) and ("Pods Failed" in label)
+            for label in (metrics_to_fetch or {}).keys()
+        ) if isinstance(metrics_to_fetch, dict) else False
+        if not contains_pods_failed_metric:
+            return ""
+
+        pod_issue_query = (
+            "max by (namespace, pod) ((kube_pod_status_phase{phase=\"Failed\"} == 1) "
+            "or (kube_pod_container_status_waiting_reason{reason=\"CrashLoopBackOff\"} == 1))"
+        )
+        pairs_df = fetch_openshift_metrics(
+            pod_issue_query,
+            start_ts,
+            end_ts,
+            namespace_for_query,
+        )
+        pairs_metric_dfs: Dict[str, Any] = {"pod_status": pairs_df}
+        logger.debug("In build_log_trace_context_for_pod_issues: pairs_metric_dfs=%s", pairs_metric_dfs)
+        if not pairs_metric_dfs:
+            return ""
+        return build_correlated_context_from_metrics(
+            metric_dfs=pairs_metric_dfs,
+            model_name=namespace_label or "",
+            start_ts=start_ts,
+            end_ts=end_ts,
+        )
+    except Exception:
+        return ""
+
 def get_summarization_models() -> List[str]:
     """Return available summarization model IDs from MODEL_CONFIG.
 
@@ -1147,10 +1521,54 @@ def get_summarization_models() -> List[str]:
         return []
 
 
+def _fetch_vendor_gpu_info(
+    headers: Dict[str, str],
+    temp_metric: str,
+    vendor_name: str,
+    model_name: str,
+    info: Dict[str, Any]
+) -> int:
+    """Helper function to fetch GPU info for a specific vendor.
+    
+    Args:
+        headers: Authentication headers for Prometheus
+        temp_metric: Temperature metric query (e.g., "DCGM_FI_DEV_GPU_TEMP")
+        vendor_name: Vendor display name (e.g., "NVIDIA")
+        model_name: Model display name (e.g., "GPU")
+        info: Dictionary to populate with vendor data
+        
+    Returns:
+        Count of GPUs/accelerators found for this vendor
+    """
+    try:
+        resp = requests.get(
+            f"{PROMETHEUS_URL}/api/v1/query",
+            headers=headers,
+            params={"query": temp_metric},
+            verify=VERIFY_SSL,
+            timeout=30,
+        )
+        resp.raise_for_status()
+        result = resp.json().get("data", {}).get("result", [])
+        count = len(result)
+        if count > 0:
+            temps = [float(series.get("value", [None, None])[1]) for series in result if series.get("value")]
+            info["temperatures"].extend(temps)
+            info["vendors"].append(vendor_name)
+            info["models"].append(model_name)
+        return count
+    except Exception:
+        return 0
+
+
 def get_cluster_gpu_info() -> Dict[str, Any]:
-    """Fetch cluster GPU info from Prometheus (DCGM exporter).
+    """Fetch cluster GPU/accelerator info from Prometheus (multi-vendor: NVIDIA DCGM + Intel Gaudi).
 
     Returns a dict with total_gpus, vendors, models, temperatures, power_usage.
+    
+    To add AMD support: Add a call to _fetch_vendor_gpu_info() with AMD-specific parameters
+    (e.g., temp_metric="GPU_JUNCTION_TEMPERATURE", vendor_name="AMD", model_name="Instinct")
+    and update the mixed vendor logic to include AMD.
     """
     headers = _auth_headers()
     info: Dict[str, Any] = {
@@ -1160,25 +1578,28 @@ def get_cluster_gpu_info() -> Dict[str, Any]:
         "temperatures": [],
         "power_usage": [],
     }
-    try:
-        resp = requests.get(
-            f"{PROMETHEUS_URL}/api/v1/query",
-            headers=headers,
-            params={"query": "DCGM_FI_DEV_GPU_TEMP"},
-            verify=VERIFY_SSL,
-            timeout=30,
-        )
-        resp.raise_for_status()
-        result = resp.json().get("data", {}).get("result", [])
-        info["total_gpus"] = len(result)
-        temps = [float(series.get("value", [None, None])[1]) for series in result if series.get("value")]
-        info["temperatures"] = temps
-        if temps:
-            info["vendors"] = ["NVIDIA"]
-            info["models"] = ["GPU"]
-    except Exception:
-        # Keep defaults on error
-        pass
+    
+    # Fetch info for each vendor
+    nvidia_count = _fetch_vendor_gpu_info(
+        headers, "DCGM_FI_DEV_GPU_TEMP", "NVIDIA", "GPU", info
+    )
+    intel_count = _fetch_vendor_gpu_info(
+        headers, "habanalabs_temperature_onchip", "Intel Gaudi", "Gaudi Accelerator", info
+    )
+    # TODO: AMD - Add AMD support:
+    # amd_count = _fetch_vendor_gpu_info(
+    #     headers, "GPU_JUNCTION_TEMPERATURE", "AMD", "Instinct", info
+    # )
+    
+    # Set total count and handle mixed vendor scenarios
+    info["total_gpus"] = nvidia_count + intel_count
+    
+    # If we have both vendors, add mixed indicator while preserving individual vendor info
+    if nvidia_count > 0 and intel_count > 0:
+        # Prepend mixed indicator to existing vendor lists
+        info["vendors"].insert(0, "Mixed (NVIDIA + Intel Gaudi)")
+        info["mixed"] = True
+    
     return info
 
 
@@ -1254,3 +1675,85 @@ def get_namespace_model_deployment_info(namespace: str, model: str) -> Dict[str,
         "namespace": namespace,
         "model": model,
     }
+
+
+def build_correlated_context_from_metrics(
+    metric_dfs: Dict[str, Any],
+    model_name: str,
+    start_ts: int,
+    end_ts: int,
+) -> str:
+    """Return up to 5 log/trace lines for vLLM prompt.
+
+    Each line includes: pod, container, level, and the log message.
+    """
+    if not KORREL8R_ENABLED:
+        return ""
+    try:
+        # Gather all unique (namespace, pod) pairs from metrics
+        pairs = extract_namespace_pod_pairs_from_metrics(model_name, metric_dfs)
+        logger.debug("In build_correlated_context_from_metrics: pairs=%s", pairs)
+        if not pairs:
+            return ""
+        goals = ["log:application", "log:infrastructure"]
+        # Aggregate logs across all pairs first
+        aggregated_logs: List[Dict[str, Any]] = []
+        for pair in pairs:
+            try:
+                query_str = build_korrel8r_log_query_for_vllm(pair.namespace, pair.pod)
+                if not query_str:
+                    continue
+                logger.debug("In build_correlated_context_from_metrics: query_str=%s", query_str)
+                aggregated: List[Any] = fetch_goal_query_objects(goals, query_str)
+                logger.debug("In build_correlated_context_from_metrics: aggregated=%s", aggregated)
+                for obj in aggregated:
+                    try:
+                        message = obj.get("message") or obj.get("line") or ""
+                        if not message:
+                            continue
+                        level = str(obj.get("level") or "UNKNOWN").upper()
+                        # Skip DEBUG, INFO, TRACE, UNKNOWN levels
+                        if level in ("DEBUG", "INFO", "TRACE", "UNKNOWN"):
+                            continue
+                        aggregated_logs.append(obj)
+                    except Exception:
+                        continue
+            except Exception:
+                continue
+        # Sort aggregated logs by severity then timestamp
+        aggregated_logs_sorted = sort_logs_by_severity_then_time(aggregated_logs)
+        logger.debug("In build_correlated_context_from_metrics: aggregated_logs_sorted=%s", aggregated_logs_sorted)
+        # Take top N (configurable) and build lines
+        try:
+            max_rows = int(os.getenv("MAX_NUM_LOG_ROWS", "10"))
+        except Exception:
+            max_rows = 10
+        lines: List[str] = []
+        for obj in aggregated_logs_sorted[:max_rows]:
+            try:
+                message = obj.get("message") or obj.get("line") or ""
+                if not message:
+                    continue
+                pod = obj.get("pod") or ""
+                namespace = obj.get("namespace") or ""
+                level = str(obj.get("level") or "UNKNOWN").upper()
+                lines.append(f"- namespace={namespace} pod={pod} level={level} {message}")
+            except Exception:
+                continue
+
+        result_str = "\n".join(lines)
+        logger.debug("In build_correlated_context_from_metrics: selected_lines=%s", result_str)
+        # Optionally inject a synthetic error log line for testing ONLY
+        try:
+            if os.getenv("INJECT_VLLM_ERROR_LOG_MSG"):
+                injected = (
+                    "- namespace=dev pod=llama-3-2-3b-instruct-predictor-649469cd68-8zn49 "
+                    "level=ERROR Server running out of memory"
+                )
+                result_str = f"{result_str}\n{injected}" if result_str else injected
+        except Exception:
+            pass
+
+        return result_str
+    except Exception:
+        return ""

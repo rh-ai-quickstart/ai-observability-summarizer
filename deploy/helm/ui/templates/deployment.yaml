@@ -24,6 +24,8 @@ spec:
               value: "{{ .Values.env.PROMETHEUS_URL }}"
             - name: LLM_URL
               value: "{{ .Values.env.LLM_URL }}"
+            - name: LLAMA_STACK_URL
+              value: "{{ .Values.env.LLAMA_STACK_URL }}"
             - name: LLM_API_TOKEN
               value: "{{ .Values.env.LLM_API_TOKEN }}"
             - name: PYTHON_LOG_LEVEL

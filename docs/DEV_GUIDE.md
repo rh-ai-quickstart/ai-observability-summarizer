@@ -35,7 +35,15 @@ summarizer/
 │   │   ├── main.py        # HTTP server entrypoint
 │   │   ├── stdio_server.py # STDIO server for AI assistants
 │   │   ├── tools/         # MCP tools (observability_tools.py)
-│   │   └── integrations/  # AI assistant integration configs
+│   │   ├── integrations/  # AI assistant integration configs
+│   │   └── chatbots/      # Multi-provider chatbot implementations
+│   │       ├── base.py           # Abstract base class with common functionality
+│   │       ├── factory.py        # Model-to-bot routing
+│   │       ├── anthropic_bot.py  # Anthropic Claude support
+│   │       ├── openai_bot.py     # OpenAI GPT support
+│   │       ├── google_bot.py     # Google Gemini support
+│   │       ├── llama_bot.py      # Local Llama models
+│   │       └── deterministic_bot.py # Deterministic parsing for Llama 3.2
 │   └── alerting/          # Alerting service
 │       └── alert_receiver.py # Alert handling
 ├── deploy/helm/           # Helm charts for deployment
@@ -112,7 +120,12 @@ export DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib:$DYLD_FALLBACK_LIBRARY_PATH
 
 ### Core Components
 1. **MCP Server** (`src/mcp_server/`): Model Context Protocol server for metrics analysis, report generation, and AI assistant integration
-2. **UI** (`src/ui/ui.py`): Streamlit multi-dashboard frontend
+   - **Chatbot Architecture** (`src/mcp_server/chatbots/`): Multi-provider LLM support with factory pattern
+     - **Anthropic Claude**: Claude Sonnet 4, Claude 3.5 Haiku, Claude 3 Opus
+     - **OpenAI GPT**: GPT-4o, GPT-4o-mini
+     - **Google Gemini**: Gemini 2.0/2.5 Flash
+     - **Local Llama**: Llama 3.1-8B, Llama 3.2-3B (via LlamaStack)
+2. **UI** (`src/ui/ui.py`): Streamlit multi-dashboard frontend with model selection dropdown
 3. **Core Logic** (`src/core/`): Business logic modules for metrics processing and LLM integration
 4. **Alerting** (`src/alerting/`): Alert handling and Slack notifications
 5. **Helm Charts** (`deploy/helm/`): OpenShift deployment configuration
@@ -153,6 +166,8 @@ open htmlcov/index.html
 
 ### Test Structure
 - **`tests/mcp/`** - Metric Collection & Processing tests
+- **`tests/mcp_server/`** - MCP server and chatbot implementation tests
+  - `test_chatbots.py` - Chatbot factory, API key retrieval, model name extraction, Korrel8r normalization (56 tests)
 - **`tests/core/`** - Core business logic tests
 - **`tests/alerting/`** - Alerting service tests
 - **`tests/api/`** - API endpoint tests
@@ -280,10 +295,15 @@ make list-models
 - `LLAMA_STACK_URL`: LLM backend URL (default: http://localhost:8321/v1/openai/v1)
 - `LLM_API_TOKEN`: API token for LLM service
 - `LLM_URL`: Use existing model URL (skips HF_TOKEN prompt and model deployment)
+- `LLM_PREDICTOR`: Override default LLM model selection (e.g., "anthropic/claude-sonnet-4-20250514")
 - `HF_TOKEN`: Hugging Face token (auto-prompted only when LLM_URL is not set)
 - `MODEL_CONFIG`: JSON configuration for available models
 - `THANOS_TOKEN`: Authentication token (default: reads from service account)
 - `SLACK_WEBHOOK_URL`: Slack webhook for alerting notifications
+- **External Model API Keys** (for multi-provider support):
+  - `ANTHROPIC_API_KEY`: Anthropic Claude API key
+  - `OPENAI_API_KEY`: OpenAI GPT API key
+  - `GOOGLE_API_KEY`: Google Gemini API key
 
 ### Model Configuration
 Models are configured via `MODEL_CONFIG` environment variable as JSON:
@@ -303,8 +323,8 @@ Models are configured via `MODEL_CONFIG` environment variable as JSON:
 make list-models
 ```
 Common models include:
-- `llama-3-2-3b-instruct` (default)
-- `llama-3-1-8b-instruct`
+- `llama-3-2-3b-instruct`
+- `llama-3-1-8b-instruct` (default)
 - `llama-3-3-70b-instruct`
 - `llama-guard-3-8b` (safety model)
 
@@ -325,8 +345,8 @@ generate-model-config.sh
 
 **How it works**:
 1. **Template Substitution**: Reads `deploy/helm/default-model.json.template` and substitutes:
-   - `$MODEL_ID` → Full model path (e.g., `meta-llama/Llama-3.2-3B-Instruct`)
-   - `$MODEL_NAME` → Service name (e.g., `llama-3-2-3b-instruct`)
+   - `$MODEL_ID` → Full model path (e.g., `meta-llama/Llama-3.1-8B-Instruct`)
+   - `$MODEL_NAME` → Service name (e.g., `llama-3-1-8b-instruct`)
 
 2. **JSON Merging**: Merges the LLM-specific config with base external models from `deploy/helm/model-config.json`:
    ```bash
@@ -336,7 +356,7 @@ generate-model-config.sh
 3. **Export**: Sets `MODEL_CONFIG` environment variable for use by services
 
 **Parameters**:
-- **LLM model name** (optional): Model identifier (default: `llama-3-2-3b-instruct`)
+- **LLM model name** (optional): Model identifier (default: `llama-3-1-8b-instruct`)
 - **`--helm-format` flag** (optional): Generate Helm values YAML file in addition to JSON
 
 **Output Files** (in `/tmp`):
@@ -374,10 +394,10 @@ make install NAMESPACE=your-ns LLM=llama-3.1-8b-instruct
 
 # 2. After substitution (new_model_config.json)
 {
-  "meta-llama/Llama-3.2-3B-Instruct": {
+  "meta-llama/Llama-3.1-8B-Instruct": {
     "external": false,
     "requiresApiKey": false,
-    "serviceName": "llama-3-2-3b-instruct"
+    "serviceName": "llama-3-1-8b-instruct"
   }
 }
 
@@ -390,7 +410,7 @@ make install NAMESPACE=your-ns LLM=llama-3.1-8b-instruct
 
 # 4. Final merged config (final_config.json)
 {
-  "meta-llama/Llama-3.2-3B-Instruct": { ... },  # ← LLM-specific
+  "meta-llama/Llama-3.1-8B-Instruct": { ... },  # ← LLM-specific
   "openai/gpt-4o-mini": { ... },                 # ← Base external models
   "google/gemini-2.5-flash": { ... },
   "anthropic/claude-sonnet-4-20250514": { ... }
@@ -489,7 +509,7 @@ LLAMASTACK_SERVICE=$(oc get services -n <DEFAULT_NAMESPACE> -o name -l 'app.kube
 oc port-forward $LLAMASTACK_SERVICE 8321:8321 -n <DEFAULT_NAMESPACE> &
 
 # Llama Model service (service-based)
-LLAMA_MODEL_SERVICE=$(oc get services -n <MODEL_NAMESPACE> -o name -l 'app=isvc.llama-3-2-3b-instruct-predictor')
+LLAMA_MODEL_SERVICE=$(oc get services -n <MODEL_NAMESPACE> -o name -l 'app=isvc.llama-3-1-8b-instruct-predictor')
 oc port-forward $LLAMA_MODEL_SERVICE 8080:8080 -n <MODEL_NAMESPACE> &
 
 # Tempo gateway (service-based)

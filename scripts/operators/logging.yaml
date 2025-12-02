@@ -1,0 +1,33 @@
+---
+# Operator: cluster-logging
+# Full Name: cluster-logging.openshift-logging
+# CRD Patterns: logging.openshift.io
+# Note: Uninstalling this operator will delete all CRDs matching the above patterns
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ${NAMESPACE}
+  labels:
+    openshift.io/cluster-monitoring: "true"
+---
+apiVersion: operators.coreos.com/v1
+kind: OperatorGroup
+metadata:
+  generateName: ${NAMESPACE}-
+  namespace: ${NAMESPACE}
+spec:
+  targetNamespaces:
+    - ${NAMESPACE}
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: cluster-logging
+  namespace: ${NAMESPACE}
+spec:
+  channel: stable-6.3
+  installPlanApproval: Automatic
+  name: cluster-logging
+  source: redhat-operators
+  sourceNamespace: openshift-marketplace

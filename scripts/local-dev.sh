@@ -9,8 +9,12 @@ source "$SCRIPT_DIR/common.sh"
 # Configuration
 PROMETHEUS_NAMESPACE="openshift-monitoring"
 OBSERVABILITY_NAMESPACE="observability-hub"
+LOKI_NAMESPACE="openshift-logging"
+KORREL8R_NAMESPACE="openshift-cluster-observability-operator"
 THANOS_PORT=9090
 TEMPO_PORT=8082
+LOKI_PORT=3100
+KORREL8R_PORT=9443
 LLAMASTACK_PORT=8321
 LLAMA_MODEL_PORT=8080
 UI_PORT=8501
@@ -146,13 +150,19 @@ create_port_forward() {
     local namespace="$4"
     local description="$5"
     local emoji="$6"
+    local optional="${7:-false}"  # Default to false (required resource)
 
     # Check if resource name is found
     if [ -z "$resource_name" ]; then
-        echo -e "${YELLOW}⚠️  $description resource NOT found in $namespace namespace. Exiting...${NC}"
-        exit 1
+        if [ "$optional" = "true" ]; then
+            echo -e "${YELLOW}⚠️  $description resource NOT found in $namespace namespace (optional - skipping)${NC}"
+            return 0
+        else
+            echo -e "${RED}❌️  $description resource NOT found in $namespace namespace. Exiting...${NC}"
+            exit 1
+        fi
     fi
-    
+
     # Create port-forward
     oc port-forward "$resource_name" "$local_port:$remote_port" -n "$namespace" >/dev/null 2>&1 &
     echo -e "${GREEN}✅ Found $description: $emoji (resource: $resource_name, namespace: $namespace) available at: http://localhost:$local_port${NC}"
@@ -162,20 +172,38 @@ create_port_forward() {
 start_port_forwards() {
     echo -e "${BLUE}🔍 Finding pods and starting port-forwards...${NC}"
 
-    THANOS_POD=$(oc get pods -n "$PROMETHEUS_NAMESPACE" -o name -l 'app.kubernetes.io/component=query-layer,app.kubernetes.io/instance=thanos-querier' | head -1)
+    local THANOS_POD_LABEL='app.kubernetes.io/component=query-layer,app.kubernetes.io/instance=thanos-querier'
+    local LLAMASTACK_SERVICE_LABEL='app.kubernetes.io/instance=rag, app.kubernetes.io/name=llamastack'
+    local LLAMA_MODEL_SERVICE_LABEL="serving.kserve.io/inferenceservice=$LLM_MODEL, component=predictor"
+    local TEMPO_SERVICE_LABEL='app.kubernetes.io/name=tempo,app.kubernetes.io/component=gateway'
+    local KORREL8R_SERVICE_LABEL='app.kubernetes.io/name=korrel8r'
+
+    THANOS_POD=$(oc get pods -n "$PROMETHEUS_NAMESPACE" -o name -l "$THANOS_POD_LABEL" | head -1)
     create_port_forward "$THANOS_POD" "$THANOS_PORT" "9090" "$PROMETHEUS_NAMESPACE" "Thanos" "📊"
-    
+
     # Find LlamaStack pod
-    LLAMASTACK_SERVICE=$(oc get services -n "$DEFAULT_NAMESPACE" -o name -l 'app.kubernetes.io/instance=rag, app.kubernetes.io/name=llamastack')
-    create_port_forward "$LLAMASTACK_SERVICE" "$LLAMASTACK_PORT" "8321" "$DEFAULT_NAMESPACE" "LlamaStack" "🦙"
-    
+    LLAMASTACK_SERVICE=$(oc get services -n "$LLAMA_MODEL_NAMESPACE" -o name -l "$LLAMASTACK_SERVICE_LABEL")
+    create_port_forward "$LLAMASTACK_SERVICE" "$LLAMASTACK_PORT" "8321" "$LLAMA_MODEL_NAMESPACE" "LlamaStack" "🦙"
+
     # Find Llama Model service
-    LLAMA_MODEL_SERVICE=$(oc get services -n "$LLAMA_MODEL_NAMESPACE" -o name -l "serving.kserve.io/inferenceservice=$LLM_MODEL, component=predictor")
+    LLAMA_MODEL_SERVICE=$(oc get services -n "$LLAMA_MODEL_NAMESPACE" -o name -l "$LLAMA_MODEL_SERVICE_LABEL")
     create_port_forward "$LLAMA_MODEL_SERVICE" "$LLAMA_MODEL_PORT" "8080" "$LLAMA_MODEL_NAMESPACE" "Llama Model" "🤖"
-    
+
     # Find Tempo gateway service
-    TEMPO_SERVICE=$(oc get services -n "$OBSERVABILITY_NAMESPACE" -o name -l 'app.kubernetes.io/name=tempo,app.kubernetes.io/component=gateway')
+    TEMPO_SERVICE=$(oc get services -n "$OBSERVABILITY_NAMESPACE" -o name -l "$TEMPO_SERVICE_LABEL")
     create_port_forward "$TEMPO_SERVICE" "$TEMPO_PORT" "8080" "$OBSERVABILITY_NAMESPACE" "Tempo" "🔍"
+
+    # Find Loki gateway service (optional - only if LokiStack is installed)
+    LOKI_SERVICE=$(oc get services -n "$LOKI_NAMESPACE" -o name -l 'app.kubernetes.io/name=loki,app.kubernetes.io/component=gateway' 2>/dev/null)
+    if [ -n "$LOKI_SERVICE" ]; then
+        create_port_forward "$LOKI_SERVICE" "$LOKI_PORT" "8080" "$LOKI_NAMESPACE" "Loki" "📋"
+    else
+        echo -e "${YELLOW}⚠️  Loki gateway service NOT found in $LOKI_NAMESPACE namespace (optional - skipping)${NC}"
+    fi
+
+    # Find Korrel8r service (optional - may not be deployed)
+    KORREL8R_SERVICE=$(oc get services -n "$KORREL8R_NAMESPACE" -o name -l "$KORREL8R_SERVICE_LABEL" 2>/dev/null | head -1)
+    create_port_forward "$KORREL8R_SERVICE" "$KORREL8R_PORT" "9443" "$KORREL8R_NAMESPACE" "Korrel8r" "🔗" "true"
 
     sleep 3  # Give port-forwards time to establish
 }
@@ -236,15 +264,17 @@ set_model_config() {
 # Function to start local services
 start_local_services() {
     echo -e "${BLUE}🏃 Starting local services...${NC}"
-    
+
     # Get service account token
     TOKEN=$(oc whoami -t)
-    
+
     # Set environment variables
     export PROMETHEUS_URL="http://localhost:$THANOS_PORT"
     export TEMPO_URL="https://localhost:$TEMPO_PORT"
     export TEMPO_TENANT_ID="dev"
     export TEMPO_TOKEN="$TOKEN"
+    export LOKI_URL="https://localhost:$LOKI_PORT"
+    export LOKI_TOKEN="$TOKEN"
     export LLAMA_STACK_URL="http://localhost:$LLAMASTACK_PORT/v1/openai/v1"
     export THANOS_TOKEN="$TOKEN"
     export MCP_URL="http://localhost:$MCP_PORT"
@@ -271,7 +301,10 @@ start_local_services() {
       TEMPO_URL="$TEMPO_URL" \
       TEMPO_TENANT_ID="$TEMPO_TENANT_ID" \
       TEMPO_TOKEN="$TEMPO_TOKEN" \
+      LOKI_URL="$LOKI_URL" \
+      LOKI_TOKEN="$LOKI_TOKEN" \
       LLAMA_STACK_URL="$LLAMA_STACK_URL" \
+      KORREL8R_URL="https://localhost:$KORREL8R_PORT" \
       THANOS_TOKEN="$THANOS_TOKEN" \
       VERIFY_SSL="$VERIFY_SSL" \
       PYTHON_LOG_LEVEL="$PYTHON_LOG_LEVEL" \
@@ -288,7 +321,7 @@ start_local_services() {
         echo -e "${RED}❌ MCP Server failed to start${NC}"
         exit 1
     fi
-    
+
     # Start Streamlit UI
     echo -e "${BLUE}🎨 Starting Streamlit UI...${NC}"
     (cd src/ui && \
@@ -296,10 +329,10 @@ start_local_services() {
       PYTHON_LOG_LEVEL="$PYTHON_LOG_LEVEL" \
       streamlit run ui.py --server.port $UI_PORT --server.address 0.0.0.0 --server.headless true > /tmp/summarizer-ui.log 2>&1) &
     UI_PID=$!
-    
+
     # Wait for UI to start
     sleep 5
-    
+
     # Show log file locations for debugging
     echo -e "${GREEN}📋 Log files for debugging (all in /tmp):${NC}"
     echo -e "   🔧 MCP Server: /tmp/summarizer-mcp-server.log"
@@ -333,7 +366,7 @@ main() {
 
     start_port_forwards
     start_local_services
-    
+
     echo -e "\n${GREEN}🎉 Setup complete! All services are running.${NC}"
     echo -e "\n${BLUE}📋 Services Available:${NC}"
     echo -e "   ${YELLOW}🎨 Streamlit UI: http://localhost:$UI_PORT${NC}"
@@ -341,13 +374,16 @@ main() {
     echo -e "   ${YELLOW}🧩 MCP HTTP Endpoint: $MCP_URL/mcp${NC}"
     echo -e "   ${YELLOW}📊 Prometheus: $PROMETHEUS_URL${NC}"
     echo -e "   ${YELLOW}🔍 TempoStack: $TEMPO_URL${NC}"
+    if [ -n "$LOKI_SERVICE" ]; then
+        echo -e "   ${YELLOW}📋 LokiStack: $LOKI_URL${NC}"
+    fi
     echo -e "   ${YELLOW}🦙 LlamaStack: $LLAMA_STACK_URL${NC}"
     echo -e "   ${YELLOW}🤖 Llama Model: http://localhost:$LLAMA_MODEL_PORT${NC}"
-    
+
     echo -e "\n${GREEN}🎯 Ready to use! Open your browser to http://localhost:$UI_PORT${NC}"
     echo -e "\n${YELLOW}📝 Note: Keep this terminal open to maintain all services${NC}"
     echo -e "${YELLOW}Press Ctrl+C to stop all services and cleanup${NC}"
-    
+
     # Keep script running
     wait
 }

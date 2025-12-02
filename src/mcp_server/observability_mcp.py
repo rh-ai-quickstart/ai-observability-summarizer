@@ -3,6 +3,9 @@ import logging
 from .settings import settings
 from common.pylogger import get_python_logger, force_reconfigure_all_loggers
 
+# Global server instance reference for chat_tool access
+_server_instance = None
+
 
 class ObservabilityMCPServer:
     def __init__(self) -> None:
@@ -13,13 +16,18 @@ class ObservabilityMCPServer:
         self.mcp = FastMCP("metrics-observability")
         # Ensure third-party loggers are reconfigured after FastMCP init
         force_reconfigure_all_loggers(settings.PYTHON_LOG_LEVEL)
+
+        # Set global instance for chat_tool access
+        global _server_instance
+        _server_instance = self
+
         self._register_mcp_tools()
         logging.getLogger(__name__).info("Observability MCP Server initialized")
 
     def _register_mcp_tools(self) -> None:
         from .tools.observability_vllm_tools import (
             list_models,
-            list_namespaces,
+            list_vllm_namespaces,
             get_model_config,
             get_vllm_metrics_tool,
             analyze_vllm,
@@ -31,6 +39,7 @@ class ObservabilityMCPServer:
         )
         from .tools.observability_openshift_tools import (
             analyze_openshift,
+            list_openshift_namespaces,
             list_openshift_metric_groups,
             list_openshift_namespace_metric_groups,
             chat_openshift,
@@ -49,12 +58,15 @@ class ObservabilityMCPServer:
         from .tools.tempo_tools import (
             query_tempo_tool,
             get_trace_details_tool,
-            chat_tempo_tool,
+            chat_tempo_tool
         )
+        from .tools.chat_tool import chat
+
+        from core.config import KORREL8R_ENABLED
 
         # Register vLLM tools
         self.mcp.tool()(list_models)
-        self.mcp.tool()(list_namespaces)
+        self.mcp.tool()(list_vllm_namespaces)
         self.mcp.tool()(get_model_config)
         self.mcp.tool()(get_vllm_metrics_tool)
         self.mcp.tool()(analyze_vllm)
@@ -63,9 +75,10 @@ class ObservabilityMCPServer:
         self.mcp.tool()(get_gpu_info)
         self.mcp.tool()(get_deployment_info)
         self.mcp.tool()(chat_vllm)
-        
+
         # Register OpenShift tools
         self.mcp.tool()(analyze_openshift)
+        self.mcp.tool()(list_openshift_namespaces)
         self.mcp.tool()(list_openshift_metric_groups)
         self.mcp.tool()(list_openshift_namespace_metric_groups)
         self.mcp.tool()(chat_openshift)
@@ -85,3 +98,14 @@ class ObservabilityMCPServer:
         self.mcp.tool()(query_tempo_tool)
         self.mcp.tool()(get_trace_details_tool)
         self.mcp.tool()(chat_tempo_tool)
+
+        # Register Korrel8r tools (only when enabled)
+        if KORREL8R_ENABLED:
+            from .tools.korrel8r_tools import (
+                korrel8r_query_objects,
+                korrel8r_get_correlated,
+            )
+            self.mcp.tool()(korrel8r_query_objects)
+            self.mcp.tool()(korrel8r_get_correlated)
+
+        self.mcp.tool()(chat)

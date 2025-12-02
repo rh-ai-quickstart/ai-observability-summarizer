@@ -1,0 +1,27 @@
+sequenceDiagram
+    participant Client
+    participant MCPServer
+    participant ChatTool
+    participant Chatbot
+    participant MCPServerAdapter
+    participant MCPServerTools
+
+    Client->>MCPServer: Call "chat" tool via MCP
+    MCPServer->>ChatTool: chat(model, message, api_key)
+    ChatTool->>ChatTool: Create MCPServerAdapter(server_instance)
+    ChatTool->>Chatbot: create_chatbot(model, api_key, MCPServerAdapter)
+
+    loop Tool Execution Loop
+        Chatbot->>Chatbot: Decide to use tool
+        Chatbot->>MCPServerAdapter: call_tool(tool_name, args)
+        MCPServerAdapter->>MCPServerTools: Direct function call (no HTTP)
+        MCPServerTools->>MCPServerTools: Execute tool
+        MCPServerTools-->>MCPServerAdapter: Tool result
+        MCPServerAdapter-->>Chatbot: Tool result string
+        Chatbot->>Chatbot: Process result, continue conversation
+    end
+
+    Chatbot-->>ChatTool: Final response
+    ChatTool->>ChatTool: Package response with progress_log
+    ChatTool-->>MCPServer: JSON response
+    MCPServer-->>Client: MCP tool result

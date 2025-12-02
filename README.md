@@ -19,13 +19,14 @@ Key capabilities include automated performance analysis, predictive cost optimiz
 Perfect for AI operations teams, platform engineers, and business stakeholders who need to understand and optimize their AI infrastructure without becoming metrics experts.
 
 ### **Main Features**
-- **Chat with Prometheus/Alertmanager/Tempo** - Ask questions about metrics, alerts, and traces in natural language
+
+- **Chat with Prometheus/Alertmanager/Tempo/Loki** - Ask questions about metrics, alerts, traces, and logs in natural language
 - **AI-Powered Insights** - Natural language queries with intelligent responses
-- **GPU & Model Monitoring** - Real-time vLLM and DCGM metrics tracking  
+- **GPU & Model Monitoring** - Real-time vLLM and DCGM metrics tracking
 - **Multi-Dashboard Interface** - vLLM, OpenShift, and Chat interfaces
 - **Report Generation** - Export analysis in HTML, PDF, or Markdown
 - **Smart Alerting** - AI-powered Slack notifications and custom thresholds
-- **Distributed Tracing** - Complete observability stack with OpenTelemetry
+- **Complete Observability Stack** - Distributed tracing (Tempo), log aggregation (Loki), and metrics (Prometheus) with OpenTelemetry
 - **MCP Integration** - AI assistant support for Claude Desktop and Cursor IDE
 
 ### Architecture diagrams
@@ -34,40 +35,43 @@ Perfect for AI operations teams, platform engineers, and business stakeholders w
 
 ## Requirements
 
-| **Category** | **Component** | **Minimum** | **Recommended** |
-|--------------|---------------|-------------|-----------------|
-| **Hardware** | CPU Cores | 4 cores | 8 cores |
-|              | Memory | 8 Gi RAM | 16 Gi RAM |
-|              | Storage | 20Gi | 50Gi |
-|              | GPU | Optional | GPU nodes (for DCGM metrics) |
-| **Software** | OpenShift | 4.16.24 or later | 4.16.24 or later |
-|              | OpenShift AI | 2.16.2 or later | 2.16.2 or later |
-|              | Service Mesh | Red Hat OpenShift Service Mesh | Red Hat OpenShift Service Mesh |
-|              | Serverless | Red Hat OpenShift Serverless | Red Hat OpenShift Serverless |
-| **Tools** | CLI | `oc` CLI | `oc` CLI + `helm` v3.x + `yq` |
-|           | Monitoring | Prometheus/Thanos | Prometheus/Thanos |
-| **Permissions** | User Access | Standard user with project admin | Standard user with project admin |
-| **Optional** | GPU Monitoring | - | DCGM exporter |
-|              | Alerting | - | Slack Webhook URL |
-|              | Tracing | - | OpenTelemetry + Tempo Operators |
-
+| **Category**    | **Component**  | **Minimum**                      | **Recommended**                                  |
+| --------------- | -------------- | -------------------------------- | ------------------------------------------------ |
+| **Hardware**    | CPU Cores      | 4 cores                          | 8 cores                                          |
+|                 | Memory         | 8 Gi RAM                         | 16 Gi RAM                                        |
+|                 | Storage        | 20Gi                             | 50Gi                                             |
+|                 | GPU            | Optional                         | GPU nodes (for DCGM metrics)                     |
+| **Software**    | OpenShift      | 4.16.24 or later                 | 4.16.24 or later                                 |
+|                 | OpenShift AI   | 2.16.2 or later                  | 2.16.2 or later                                  |
+|                 | Service Mesh   | Red Hat OpenShift Service Mesh   | Red Hat OpenShift Service Mesh                   |
+|                 | Serverless     | Red Hat OpenShift Serverless     | Red Hat OpenShift Serverless                     |
+| **Tools**       | CLI            | `oc` CLI                         | `oc` CLI + `helm` v3.x + `yq`                    |
+|                 | Monitoring     | Prometheus/Thanos                | Prometheus/Thanos                                |
+| **Permissions** | User Access    | Standard user with project admin | Standard user with project admin                 |
+| **Optional**    | GPU Monitoring | -                                | DCGM exporter                                    |
+|                 | Alerting       | -                                | Slack Webhook URL                                |
+|                 | Observability  | -                                | OpenTelemetry + Tempo + Logging + Loki Operators |
 
 ## Deploy
 
 ### Installing the OpenShift AI Observability Summarizer
 
 Use the included `Makefile` to install everything:
+
 ```bash
 make install NAMESPACE=your-namespace
 ```
-This will install the project with the default LLM deployment, `llama-3-2-3b-instruct`.
+
+This will install the project with the default LLM deployment, `llama-3-1-8b-instruct`.
 
 ### Choosing different models during installation
 
 To see all available models:
+
 ```bash
 make list-models
 ```
+
 ```
 (Output)
 model: llama-3-1-8b-instruct (meta-llama/Llama-3.1-8B-Instruct)
@@ -78,32 +82,39 @@ model: llama-3-3-70b-instruct (meta-llama/Llama-3.3-70B-Instruct)
 model: llama-guard-3-1b (meta-llama/Llama-Guard-3-1B)
 model: llama-guard-3-8b (meta-llama/Llama-Guard-3-8B)
 ```
+
 You can use the `LLM` flag during installation to set a model from this list for deployment:
+
 ```
-make install NAMESPACE=your-namespace LLM=llama-3-2-3b-instruct 
+make install NAMESPACE=your-namespace LLM=llama-3-1-8b-instruct
 ```
 
 ### With GPU tolerations
+
 ```bash
-make install NAMESPACE=your-namespace LLM=llama-3-2-3b-instruct LLM_TOLERATION="nvidia.com/gpu"
+make install NAMESPACE=your-namespace LLM=llama-3-1-8b-instruct LLM_TOLERATION="nvidia.com/gpu"
 ```
 
 ### With alerting if you want to send on SLACK
+
 ```bash
 make install NAMESPACE=your-namespace ALERTS=TRUE
 ```
+
 Enabling alerting will deploy alert rules, a cron job to monitor vLLM metrics, and AI-powered Slack notifications.
 
 ### Accessing the Application
 
 The default configuration deploys:
+
 - **llm-service** - LLM inference
 - **llama-stack** - Backend API
 - **metric-ui** - Multi-dashboard Streamlit interface
 - **mcp-server** - Model Context Protocol server for metrics analysis, report generation, and AI assistant integration
 - **OpenTelemetry Collector** - Distributed tracing collection
 - **Tempo** - Trace storage and analysis
-- **MinIO** - Object storage for traces
+- **Loki** - Centralized log aggregation and querying
+- **MinIO** - Object storage for traces and logs
 
 Navigate to your **OpenShift Cluster → Networking → Routes** to find the application URL(s). You can also navigate to **Observe → Traces** in the OpenShift console to view traces.
 
@@ -116,18 +127,21 @@ NAME              HOST/PORT                                                     
 metric-ui-route   metric-ui-route-llama-1.apps.tsisodia-spark.2vn8.p1.openshiftapps.com          metric-ui-svc   8501   edge/Redirect   None
 ```
 
-### OpenShift Summarizer Dashboard 
+### OpenShift Summarizer Dashboard
+
 ![UI](docs/images/os.png)
 
-### vLLM Summarizer Dashboard 
+### vLLM Summarizer Dashboard
+
 ![UI](docs/images/vllm.png)
 
-### Chat with Prometheus 
+### Chat with Prometheus
+
 ![UI](docs/images/chat.png)
 
-### Report Generated 
-![UI](docs/images/report.png)
+### Report Generated
 
+![UI](docs/images/report.png)
 
 To uninstall:
 
@@ -137,10 +151,11 @@ make uninstall NAMESPACE=your-namespace
 
 ### References
 
-* Built on [Prometheus](https://prometheus.io/) and [Thanos](https://thanos.io/) for metrics collection
-* Uses [vLLM](https://github.com/vllm-project/vllm) for model serving
-* Powered by [Streamlit](https://streamlit.io/) for the web interface
-* Integrates with [OpenTelemetry](https://opentelemetry.io/) for distributed tracing
+- Built on [Prometheus](https://prometheus.io/) and [Thanos](https://thanos.io/) for metrics collection
+- Uses [Loki](https://grafana.com/oss/loki/) for centralized log aggregation
+- Uses [vLLM](https://github.com/vllm-project/vllm) for model serving
+- Powered by [Streamlit](https://streamlit.io/) for the web interface
+- Integrates with [OpenTelemetry](https://opentelemetry.io/) for distributed tracing and observability
 
 ## Tags
 

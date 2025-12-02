@@ -13,16 +13,24 @@ readonly OPERATOR_OBSERVABILITY_ALT="cluster-observability"
 readonly OPERATOR_OTEL="otel"
 readonly OPERATOR_OTEL_ALT="opentelemetry"
 readonly OPERATOR_TEMPO="tempo"
+readonly OPERATOR_LOGGING="logging"
+readonly OPERATOR_LOGGING_ALT="cluster-logging"
+readonly OPERATOR_LOKI="loki"
+readonly OPERATOR_LOKI_ALT="loki-operator"
 
 # Full operator names (subscription.namespace format)
 readonly FULL_NAME_OBSERVABILITY="cluster-observability-operator.openshift-cluster-observability"
 readonly FULL_NAME_OTEL="opentelemetry-product.openshift-opentelemetry-operator"
 readonly FULL_NAME_TEMPO="tempo-product.openshift-tempo-operator"
+readonly FULL_NAME_LOGGING="cluster-logging.openshift-logging"
+readonly FULL_NAME_LOKI="loki-operator.openshift-operators-redhat"
 
 # YAML file names
 readonly YAML_OBSERVABILITY="cluster-observability.yaml"
 readonly YAML_OTEL="opentelemetry.yaml"
 readonly YAML_TEMPO="tempo.yaml"
+readonly YAML_LOGGING="logging.yaml"
+readonly YAML_LOKI="loki.yaml"
 
 readonly OPERATOR_ACTION_CHECK="check"
 readonly OPERATOR_ACTION_INSTALL="install"
@@ -31,6 +39,8 @@ readonly OPERATOR_ACTION_UNINSTALL="uninstall"
 readonly OBSERVABILITY_CRDS="monitoring.rhobs perses.dev observability.openshift.io"
 readonly OTEL_CRDS="opentelemetry.io"
 readonly TEMPO_CRDS="tempo.grafana.com"
+readonly LOGGING_CRDS="logging.openshift.io"
+readonly LOKI_CRDS="loki.grafana.com"
 
 # Function to display usage
 usage() {
@@ -62,6 +72,8 @@ usage() {
     echo "  observability - Cluster Observability Operator"
     echo "  otel          - Red Hat build of OpenTelemetry Operator"
     echo "  tempo         - Tempo Operator"
+    echo "  logging       - Red Hat OpenShift Logging Operator"
+    echo "  loki          - Loki Operator"
 }
 
 # Function to parse command line arguments
@@ -197,7 +209,7 @@ validate_namespace() {
 # Function to check if an operator exists
 check_operator() {
     local operator_name="$1"
-    [[ "$DEBUG" == "true" ]] && echo -e "${BLUE}📋 Checking operator: $operator_name${NC}"    
+    [[ "$DEBUG" == "true" ]] && echo -e "${BLUE}📋 Checking operator: $operator_name${NC}"
     if oc get operator "$operator_name" >/dev/null 2>&1; then
         return 0  # Operator exists
     else
@@ -219,9 +231,15 @@ get_operator_full_name() {
         "$OPERATOR_TEMPO"|"$FULL_NAME_TEMPO")
             echo "$FULL_NAME_TEMPO"
             ;;
+        "$OPERATOR_LOGGING"|"$OPERATOR_LOGGING_ALT"|"$FULL_NAME_LOGGING")
+            echo "$FULL_NAME_LOGGING"
+            ;;
+        "$OPERATOR_LOKI"|"$OPERATOR_LOKI_ALT"|"$FULL_NAME_LOKI")
+            echo "$FULL_NAME_LOKI"
+            ;;
         *)
             echo -e "${RED}❌ Unknown operator: $operator_name${NC}" >&2
-            echo -e "${YELLOW}   Available operators: observability, otel, tempo${NC}" >&2
+            echo -e "${YELLOW}   Available operators: observability, otel, tempo, logging, loki${NC}" >&2
             exit 1
             ;;
     esac
@@ -241,9 +259,15 @@ get_operator_yaml() {
         "$OPERATOR_TEMPO"|"$FULL_NAME_TEMPO")
             echo "$YAML_TEMPO"
             ;;
+        "$OPERATOR_LOGGING"|"$OPERATOR_LOGGING_ALT"|"$FULL_NAME_LOGGING")
+            echo "$YAML_LOGGING"
+            ;;
+        "$OPERATOR_LOKI"|"$OPERATOR_LOKI_ALT"|"$FULL_NAME_LOKI")
+            echo "$YAML_LOKI"
+            ;;
         *)
             echo -e "${RED}❌ Unknown operator: $operator_name${NC}" >&2
-            echo -e "${YELLOW}   Available operators: observability, otel, tempo${NC}" >&2
+            echo -e "${YELLOW}   Available operators: observability, otel, tempo, logging, loki${NC}" >&2
             exit 1
             ;;
     esac
@@ -275,6 +299,12 @@ get_operator_crds() {
             ;;
         "$FULL_NAME_TEMPO")
             echo "$TEMPO_CRDS"
+            ;;
+        "$FULL_NAME_LOGGING")
+            echo "$LOGGING_CRDS"
+            ;;
+        "$FULL_NAME_LOKI")
+            echo "$LOKI_CRDS"
             ;;
         *)
             echo ""
@@ -365,6 +395,98 @@ uninstall_operator() {
     echo -e "${BLUE}  ℹ️  Note: Namespace '$namespace' was preserved${NC}"
 }
 
+# Approve a pending InstallPlan for a Subscription when approval is Manual
+approve_install_plan_if_manual() {
+    local subscription_name="$1"
+    local namespace="$2"
+
+    # Ensure subscription exists before querying it
+    local attempts=0
+    local max_attempts=60  # up to 10 minutes
+    while [ $attempts -lt $max_attempts ]; do
+        if oc get subscription "$subscription_name" -n "$namespace" >/dev/null 2>&1; then
+            break
+        fi
+        attempts=$((attempts + 1))
+        sleep 10
+    done
+
+    if ! oc get subscription "$subscription_name" -n "$namespace" >/dev/null 2>&1; then
+        echo -e "${YELLOW}  ⚠️  Subscription $subscription_name not found; skipping InstallPlan approval${NC}"
+        return 0
+    fi
+
+    local approval
+    approval=$(oc get subscription "$subscription_name" -n "$namespace" -o jsonpath='{.spec.installPlanApproval}' 2>/dev/null || echo "")
+    if [ "$(echo "$approval" | tr '[:upper:]' '[:lower:]')" != "manual" ]; then
+        [[ "$DEBUG" == "true" ]] && echo -e "${BLUE}  📋 Install plan approval is '$approval' (not Manual); nothing to approve${NC}"
+        return 0
+    fi
+
+    local target_csv
+    target_csv=$(oc get subscription "$subscription_name" -n "$namespace" -o jsonpath='{.spec.startingCSV}' 2>/dev/null || echo "")
+    if [ -z "$target_csv" ] || [ "$target_csv" = "null" ]; then
+        echo -e "${YELLOW}  ⚠️  Subscription has Manual approval but no startingCSV set; will approve first pending InstallPlan${NC}"
+    else
+        echo -e "${BLUE}  📋 Manual approval required; target CSV: ${target_csv}${NC}"
+    fi
+
+    # Wait for the InstallPlan to be created and referenced by the Subscription
+    attempts=0
+    local installplan_name=""
+    while [ $attempts -lt $max_attempts ]; do
+        installplan_name=$(oc get subscription "$subscription_name" -n "$namespace" \
+            -o jsonpath='{.status.installplan.name}' 2>/dev/null)
+        if [ -z "$installplan_name" ] || [ "$installplan_name" = "null" ]; then
+            installplan_name=$(oc get subscription "$subscription_name" -n "$namespace" \
+                -o jsonpath='{.status.installPlanRef.name}' 2>/dev/null)
+        fi
+
+        if [ -n "$installplan_name" ] && [ "$installplan_name" != "null" ]; then
+            break
+        fi
+
+        attempts=$((attempts + 1))
+        echo -e "${BLUE}  ⏳ Waiting for InstallPlan to be created (attempt $attempts/$max_attempts)...${NC}"
+        sleep 10
+    done
+
+    if [ -z "$installplan_name" ] || [ "$installplan_name" = "null" ]; then
+        echo -e "${RED}  ❌ InstallPlan not found for subscription $subscription_name after waiting${NC}"
+        return 1
+    fi
+
+    echo -e "${BLUE}  📋 Found InstallPlan: $installplan_name${NC}"
+
+    # Validate the InstallPlan targets the desired CSV (if provided)
+    if [ -n "$target_csv" ] && [ "$target_csv" != "null" ]; then
+        local csv_list
+        csv_list=$(oc get installplan "$installplan_name" -n "$namespace" -o jsonpath='{.spec.clusterServiceVersionNames[*]}' 2>/dev/null || echo "")
+        if ! echo "$csv_list" | tr ' ' '\n' | grep -q "^${target_csv}\$"; then
+            echo -e "${YELLOW}  ⚠️  InstallPlan does not include expected CSV '${target_csv}'. Planned CSV(s): ${csv_list}${NC}"
+            echo -e "${YELLOW}  ⚠️  Skipping auto-approval to avoid unintended upgrades${NC}"
+            return 1
+        fi
+    fi
+
+    # Approve the InstallPlan
+    echo -e "${BLUE}  ✍️  Approving InstallPlan: $installplan_name${NC}"
+    oc patch installplan "$installplan_name" -n "$namespace" --type merge -p '{"spec":{"approved":true}}' >/dev/null
+
+    # Optionally, wait briefly for the plan to move forward
+    attempts=0
+    while [ $attempts -lt 12 ]; do  # up to ~2 minutes
+        local phase
+        phase=$(oc get installplan "$installplan_name" -n "$namespace" -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
+        if [ "$phase" = "Complete" ]; then
+            echo -e "${GREEN}  ✅ InstallPlan $installplan_name completed${NC}"
+            break
+        fi
+        attempts=$((attempts + 1))
+        sleep 10
+    done
+}
+
 # Function to install an operator
 install_operator() {
     local operator_name="$1"
@@ -384,6 +506,12 @@ install_operator() {
     envsubst < "$yaml_path" | oc create --save-config -f - 2>&1 | grep -v "namespaces.*already exists" || true
 
     echo -e "${GREEN}  ✅ $operator_name installation initiated${NC}"
+
+    # Get the subscription name to manage InstallPlan approval if needed
+    local subscription_name=$(grep -A2 "kind: Subscription" "$yaml_path" | grep "name:" | awk '{print $2}')
+
+    # If approval is Manual, auto-approve InstallPlan for the startingCSV
+    approve_install_plan_if_manual "$subscription_name" "$namespace" || true
 
     # Wait for operator to be installed (operator resource exists)
     echo -e "${BLUE}  ⏳ Waiting for operator resource to be created...${NC}"
@@ -408,9 +536,6 @@ install_operator() {
         echo -e "${RED}  ❌ Operator resource was not created after 10 minutes${NC}"
         exit 1
     fi
-
-    # Get the subscription name to check CSV status
-    local subscription_name=$(grep -A2 "kind: Subscription" "$yaml_path" | grep "name:" | awk '{print $2}')
 
     # Wait for CSV to reach Succeeded phase
     echo -e "${BLUE}  ⏳ Waiting for CSV to reach Succeeded phase...${NC}"
@@ -486,7 +611,7 @@ install_operator() {
 main() {
     [[ "$DEBUG" == "true" ]] && echo -e "${BLUE}🚀 OpenShift Operator Management${NC}"
     [[ "$DEBUG" == "true" ]] && echo "=================================="
-    
+
     check_openshift_prerequisites
 
     # Check if envsubst is installed (required for variable substitution)

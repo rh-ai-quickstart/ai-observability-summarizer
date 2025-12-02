@@ -92,3 +92,15 @@ MAX_TIME_RANGE_DAYS: int = int(os.getenv("MAX_TIME_RANGE_DAYS", "90"))
 
 # Default time range when none is provided (in days)
 DEFAULT_TIME_RANGE_DAYS: int = int(os.getenv("DEFAULT_TIME_RANGE_DAYS", "90"))
+
+# Korrel8r integration (feature-flagged)
+KORREL8R_ENABLED: bool = os.getenv("KORREL8R_ENABLED", "true").lower() == "true"
+KORREL8R_URL: str = os.getenv("KORREL8R_URL", "")
+KORREL8R_TIMEOUT_SECONDS: int = int(os.getenv("KORREL8R_TIMEOUT_SECONDS", "8"))
+
+# Deep-link configuration
+CONSOLE_BASE_URL: str = os.getenv("CONSOLE_BASE_URL", "")
+GRAFANA_BASE_URL: str = os.getenv("GRAFANA_BASE_URL", "")
+TEMPO_BASE_URL: str = os.getenv("TEMPO_BASE_URL", "")
+TEMPO_DATASOURCE_UID: str = os.getenv("TEMPO_DATASOURCE_UID", "")
+LOKI_DATASOURCE_UID: str = os.getenv("LOKI_DATASOURCE_UID", "")

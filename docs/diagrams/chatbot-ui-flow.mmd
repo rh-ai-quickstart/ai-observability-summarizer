@@ -1,0 +1,29 @@
+sequenceDiagram
+    participant User
+    participant UI
+    participant Chatbot
+    participant MCPClientAdapter
+    participant MCPClientHelper
+    participant MCPServer
+
+    User->>UI: Ask question about metrics
+    UI->>UI: Create MCPClientHelper
+    UI->>UI: Create MCPClientAdapter(MCPClientHelper)
+    UI->>Chatbot: create_chatbot(model, api_key, MCPClientAdapter)
+    User->>UI: Submit question
+    UI->>Chatbot: chatbot.chat(question)
+
+    loop Tool Execution Loop
+        Chatbot->>Chatbot: Decide to use tool
+        Chatbot->>MCPClientAdapter: call_tool(tool_name, args)
+        MCPClientAdapter->>MCPClientHelper: call_tool_sync(tool_name, args)
+        MCPClientHelper->>MCPServer: HTTP POST /mcp (JSON-RPC)
+        MCPServer->>MCPServer: Execute tool
+        MCPServer-->>MCPClientHelper: Tool result
+        MCPClientHelper-->>MCPClientAdapter: Result
+        MCPClientAdapter-->>Chatbot: Tool result string
+        Chatbot->>Chatbot: Process result, continue conversation
+    end
+
+    Chatbot-->>UI: Final response
+    UI-->>User: Display response

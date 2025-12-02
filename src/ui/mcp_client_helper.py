@@ -24,6 +24,11 @@ if _SRC_ROOT not in sys.path:
 
 from error_handler import parse_mcp_error, display_mcp_error
 from common.pylogger import get_python_logger, force_reconfigure_all_loggers
+from common.mcp_utils import (
+    extract_text_from_mcp_result,
+    is_double_encoded_mcp_response,
+    extract_from_double_encoded_response
+)
 
 # Initialize shared structured logging once per process
 get_python_logger(os.getenv("PYTHON_LOG_LEVEL", "INFO"))
@@ -68,7 +73,7 @@ class MCPClientHelper:
     def check_server_health(self) -> bool:
         """Check if the MCP server is healthy"""
         try:
-            response = requests.get(self.health_endpoint, timeout=5)
+            response = requests.get(self.health_endpoint, timeout=60)
             if response.status_code == 200:
                 health_data = response.json()
                 logger.info(f"MCP Server healthy: {health_data.get('service')}")
@@ -128,6 +133,76 @@ class MCPClientHelper:
                         pass
                     content_list.append({"type": "text", "text": text})
                 return content_list
+            return []
+
+    async def _get_available_tools_async(self) -> List[Dict[str, Any]]:
+        """Async method to fetch available tools from MCP server.
+
+        Returns:
+            List of tool definitions with name, description, and input_schema
+        """
+        try:
+            # Ensure site-packages is in path
+            site_paths: List[str] = []
+            try:
+                site_paths.extend(site.getsitepackages())  # type: ignore[attr-defined]
+            except Exception:
+                pass
+            try:
+                user_site = site.getusersitepackages()
+                if isinstance(user_site, str):
+                    site_paths.append(user_site)
+            except Exception:
+                pass
+            for p in reversed([p for p in site_paths if p and p not in sys.path]):
+                sys.path.insert(0, p)
+        except Exception:
+            pass
+
+        # Import fastmcp lazily
+        import importlib
+        fastmcp_module = importlib.import_module("fastmcp")
+        Client = fastmcp_module.Client
+
+        client = Client(self.config)
+        async with client:
+            tools = await client.list_tools()
+            tool_list = []
+            for tool in tools:
+                tool_def = {
+                    'name': tool.name,
+                    'description': tool.description,
+                    'input_schema': tool.inputSchema
+                }
+                tool_list.append(tool_def)
+            logger.info(f"🧰 Fetched {len(tool_list)} tools from MCP server via HTTP")
+            return tool_list
+
+    def get_available_tools(self) -> List[Dict[str, Any]]:
+        """Get available tools from MCP server (sync wrapper).
+
+        Returns:
+            List of tool definitions with name, description, and input_schema
+        """
+        try:
+            return asyncio.run(self._get_available_tools_async())
+        except RuntimeError:
+            # Handle "asyncio.run() cannot be called from a running event loop"
+            try:
+                loop = asyncio.new_event_loop()
+                try:
+                    asyncio.set_event_loop(loop)
+                    return loop.run_until_complete(self._get_available_tools_async())
+                finally:
+                    try:
+                        loop.close()
+                    except Exception:
+                        pass
+            except Exception as inner_e:
+                logger.error(f"Error getting available tools with new event loop: {inner_e}")
+                return []
+        except Exception as e:
+            logger.error(f"Error getting available tools: {e}")
             return []
 
     def call_tool_sync(self, tool_name: str, parameters: Dict[str, Any] = None) -> Any:
@@ -195,37 +270,7 @@ class MCPClientHelper:
 mcp_client = MCPClientHelper()
 
 
-def extract_text_from_mcp_result(result: Any) -> Optional[str]:
-    """Helper function to extract text from MCP tool result.
-    
-    Args:
-        result: MCP tool result (typically a list with dict items)
-        
-    Returns:
-        Extracted text string, or None if extraction fails
-    """
-    try:
-        if result and isinstance(result, list) and len(result) > 0:
-            first_item = result[0]
-            if isinstance(first_item, dict) and "text" in first_item:
-                base_text = first_item["text"]
-                # If the base_text itself is a serialized MCP content list, unwrap it
-                try:
-                    if isinstance(base_text, str):
-                        parsed = json.loads(base_text)
-                        if isinstance(parsed, list) and parsed and isinstance(parsed[0], dict) and "text" in parsed[0]:
-                            inner_text = parsed[0]["text"]
-                            return inner_text
-                except Exception:
-                    # Fallback to base_text
-                    pass
-                return base_text
-            else:
-                return str(first_item)
-        return None
-    except Exception as e:
-        logger.error(f"Error extracting text from MCP result: {e}")
-        return None
+# extract_text_from_mcp_result now imported from common.mcp_utils
 
 
 def check_mcp_response_for_errors(result: Any) -> Dict[str, Any]:
@@ -246,65 +291,18 @@ def check_mcp_response_for_errors(result: Any) -> Dict[str, Any]:
     return {}
 
 
-def is_double_encoded_mcp_response(parsed_json: Any) -> bool:
-    """Check if the parsed JSON is a double-encoded MCP response.
-    
-    A double-encoded MCP response is a list containing a dict with a 'text' key
-    that contains another JSON string.
-    
-    Args:
-        parsed_json: The parsed JSON object to check
-        
-    Returns:
-        True if this appears to be a double-encoded MCP response
-    """
-    if not isinstance(parsed_json, list):
-        return False
-        
-    if len(parsed_json) == 0:
-        return False
-        
-    first_item = parsed_json[0]
-    return isinstance(first_item, dict) and "text" in first_item
-
-
-def extract_from_double_encoded_response(parsed_json: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    """Extract content from a double-encoded MCP response.
-    
-    Args:
-        parsed_json: The list containing the double-encoded response
-        
-    Returns:
-        The extracted and parsed inner JSON, or None if extraction fails
-    """
-    try:
-        inner_text = parsed_json[0]["text"]
-        logger.debug(f"Found double-encoded response, trying to parse inner text: {inner_text[:100]}...")
-        
-        inner_json = json.loads(inner_text)
-        if isinstance(inner_json, dict):
-            return inner_json
-        else:
-            logger.error(f"Inner JSON is not a dict: {type(inner_json)}")
-            return None
-            
-    except json.JSONDecodeError as e:
-        logger.error(f"Failed to parse inner JSON from double-encoded response: {e}")
-        return None
-    except Exception as e:
-        logger.error(f"Error extracting from double-encoded response: {e}")
-        return None
+# is_double_encoded_mcp_response and extract_from_double_encoded_response now imported from common.mcp_utils
 
 
 def get_namespaces_mcp() -> List[str]:
-    """Fetch namespaces via MCP list_namespaces tool."""
+    """Fetch namespaces via MCP list_vllm_namespaces tool."""
     try:
         if not mcp_client.check_server_health():
             st.sidebar.error("🌐 **CONNECTION_ERROR**: MCP server is not available")
             st.sidebar.info("💡 **How to fix**: Check if the MCP server is running")
             return []
         
-        result = mcp_client.call_tool_sync("list_namespaces")
+        result = mcp_client.call_tool_sync("list_vllm_namespaces")
         
         error_details = parse_mcp_error(result)
         if error_details:
@@ -336,6 +334,28 @@ def get_models_mcp() -> List[str]:
         return mcp_client.parse_list_response(result)
     except Exception as e:
         logger.error(f"Error fetching models via MCP: {e}")
+        st.sidebar.error(f"❌ **INTERNAL_ERROR**: {str(e)}")
+        return []
+
+
+def get_openshift_namespaces_mcp() -> List[str]:
+    """Fetch OpenShift namespaces via MCP list_openshift_namespaces tool."""
+    try:
+        if not mcp_client.check_server_health():
+            st.sidebar.error("🌐 **CONNECTION_ERROR**: MCP server is not available")
+            st.sidebar.info("💡 **How to fix**: Check if the MCP server is running")
+            return []
+
+        result = mcp_client.call_tool_sync("list_openshift_namespaces")
+
+        error_details = parse_mcp_error(result)
+        if error_details:
+            display_mcp_error(error_details)
+            return []
+
+        return mcp_client.parse_list_response(result)
+    except Exception as e:
+        logger.error(f"Error fetching OpenShift namespaces via MCP: {e}")
         st.sidebar.error(f"❌ **INTERNAL_ERROR**: {str(e)}")
         return []
 
@@ -833,10 +853,10 @@ def parse_model_config_text(text: str) -> Dict[str, Any]:
     Input format:
         Available Model Config (3 total):
         
-        • meta-llama/Llama-3.2-3B-Instruct
+        • meta-llama/Llama-3.1-8B-Instruct
           - external: False
           - requiresApiKey: False
-          - serviceName: llama-3-2-3b-instruct
+          - serviceName: llama-3-1-8b-instruct
         
         • google/gemini-2.5-flash
           - apiUrl: https://...
@@ -846,10 +866,10 @@ def parse_model_config_text(text: str) -> Dict[str, Any]:
     
     Output format:
         {
-            "meta-llama/Llama-3.2-3B-Instruct": {
+            "meta-llama/Llama-3.1-8B-Instruct": {
                 "external": False,
                 "requiresApiKey": False,
-                "serviceName": "llama-3-2-3b-instruct"
+                "serviceName": "llama-3-1-8b-instruct"
             },
             ...
         }

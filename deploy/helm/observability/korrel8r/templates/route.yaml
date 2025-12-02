@@ -1,0 +1,14 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ .Values.korrel8r.name }}
+  namespace: {{ include "korrel8r.namespace" . }}
+  labels:
+    {{- include "korrel8r.labels" . | nindent 4 }}
+spec:
+  to:
+    kind: Service
+    name: {{ .Values.korrel8r.name }}
+  tls:
+    termination: {{ .Values.route.tls.termination }}
+

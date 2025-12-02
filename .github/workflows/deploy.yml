@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       namespace:
-        description: 'Target namespace for deployment'
+        description: 'Target namespace for deployment (leave empty for auto-detect based on branch)'
         required: false
-        default: 'dev'
+        default: ''
         type: string
       force_deploy:
         description: 'Force deployment even if build workflow did not run'
@@ -20,7 +20,12 @@ on:
         type: boolean
 
 env:
-  NAMESPACE: ${{ github.event.inputs.namespace || 'dev' }}
+  # Determine namespace based on branch:
+  # - Manual dispatch: use input namespace
+  # - main branch: deploy to 'main' namespace
+  # - dev branch: deploy to 'dev' namespace
+  # - other branches: deploy to 'dev' namespace (default)
+  NAMESPACE: ${{ github.event.inputs.namespace || (github.event_name == 'workflow_run' && (github.event.workflow_run.head_branch == 'main' && 'main' || 'dev') || (github.ref_name == 'main' && 'main' || 'dev')) }}
 
 jobs:
   deploy:
@@ -44,6 +49,7 @@ jobs:
           echo "Event: ${{ github.event_name }}"
           echo "Repository: ${{ github.repository }}"
           echo "Actor: ${{ github.actor }}"
+          echo "Target namespace: ${{ env.NAMESPACE }}"
           echo "::endgroup::"
 
       - name: Install OpenShift CLI

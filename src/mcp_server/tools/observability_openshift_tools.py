@@ -220,6 +220,29 @@ def list_openshift_namespace_metric_groups() -> List[Dict[str, Any]]:
     body = "\n".join([f"• {g}" for g in groups])
     return make_mcp_text_response(header + body)
 
+
+def list_openshift_namespaces() -> List[Dict[str, Any]]:
+    """Get list of all OpenShift namespaces observed in Prometheus.
+
+    Returns a bullet list formatted response suitable for MCP clients.
+    """
+    try:
+        from core.metrics import get_openshift_namespaces_helper
+
+        namespaces = get_openshift_namespaces_helper()
+        if not namespaces:
+            return make_mcp_text_response("No OpenShift namespaces found.")
+        namespace_list = "\n".join([f"• {ns}" for ns in namespaces])
+        response_text = f"OpenShift Namespaces ({len(namespaces)} total):\n\n{namespace_list}"
+        return make_mcp_text_response(response_text)
+    except Exception as e:
+        err = MCPException(
+            message=f"Failed to retrieve OpenShift namespaces: {str(e)}",
+            error_code=MCPErrorCode.PROMETHEUS_ERROR,
+            recovery_suggestion="Please check Prometheus/Thanos connectivity."
+        )
+        return err.to_mcp_response()
+
 def chat_openshift(
     metric_category: str,
     question: str,

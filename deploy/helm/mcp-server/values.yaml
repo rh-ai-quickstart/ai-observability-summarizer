@@ -2,7 +2,7 @@ replicaCount: 1
 
 image:
   repository: quay.io/ecosystem-appeng/aiobs-mcp-server
-  tag: 0.14.7
+  tag: 0.17.1
   pullPolicy: IfNotPresent
 
 service:
@@ -26,6 +26,13 @@ env:
   TEMPO_TENANT_ID: "dev"
   MAX_TIME_RANGE_DAYS: 90
   DEFAULT_TIME_RANGE_DAYS: 7
+  KORREL8R_ENABLED: "true"
+  KORREL8R_URL: "https://korrel8r-summarizer.openshift-cluster-observability-operator.svc.cluster.local:9443"
+  MAX_NUM_LOG_ROWS: 10
+  KORREL8R_TIMEOUT_SECONDS: 8
+
+# Name of the LLM used
+LLM_PREDICTOR: "llama-3-1-8b-instruct-predictor"
 
 tls:
   enabled: false

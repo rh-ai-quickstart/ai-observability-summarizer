@@ -2,7 +2,7 @@
 
 This module provides MCP tools for interacting with observability data:
 - list_models: Get available AI models
-- list_namespaces: List monitored namespaces
+- list_vllm_namespaces: List monitored namespaces
 - get_model_config: Show configured LLM models for summarization
 - get_vllm_metrics_tool: Get available vLLM metrics with friendly names
 - analyze_vllm: Analyze vLLM metrics and summarize using LLM
@@ -14,23 +14,26 @@ OpenShift-specific tools live in observability_openshift_tools.py
 import json
 import os
 import pandas as pd
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 
 # Import core observability services
 from core.metrics import (
     get_models_helper,
-    get_namespaces_helper,
+    get_vllm_namespaces_helper,
     get_vllm_metrics,
     fetch_metrics,
     get_summarization_models,
     get_cluster_gpu_info,
     get_namespace_model_deployment_info,
+    build_korrel8r_log_query_for_vllm,
 )
 from core.llm_client import build_prompt, summarize_with_llm, extract_time_range_with_info
 from core.models import AnalyzeRequest
 from core.response_validator import ResponseType
 from core.metrics import NAMESPACE_SCOPED, CLUSTER_WIDE
+from core.metrics import build_correlated_context_from_metrics
 from core.config import PROMETHEUS_URL, THANOS_TOKEN, VERIFY_SSL, DEFAULT_TIME_RANGE_DAYS
+from core.config import KORREL8R_ENABLED
 import requests
 from datetime import datetime, timedelta
 
@@ -120,25 +123,25 @@ def list_models() -> List[Dict[str, Any]]:
         return error.to_mcp_response()
 
 
-def list_namespaces() -> List[Dict[str, Any]]:
-    """Get list of monitored Kubernetes namespaces.
+def list_vllm_namespaces() -> List[Dict[str, Any]]:
+    """Get list of monitored vLLM Kubernetes namespaces.
     
-    Retrieves all namespaces that have observability data available
+    Retrieves all vLLMnamespaces that have vLLM deployed and observability data available
     in the Prometheus/Thanos monitoring system.
     
     Returns:
-        List of namespace names with monitoring status
+        List of vLLM namespace names with monitoring status
     """
     try:
-        namespaces = get_namespaces_helper()
+        namespaces = get_vllm_namespaces_helper()
         if not namespaces:
-            return make_mcp_text_response("No monitored namespaces found.")
+            return make_mcp_text_response("No monitored vLLM namespaces found.")
         namespace_list = "\n".join([f"• {ns}" for ns in namespaces])
-        response_text = f"Monitored Namespaces ({len(namespaces)} total):\n\n{namespace_list}"
+        response_text = f"Monitored vLLM Namespaces ({len(namespaces)} total):\n\n{namespace_list}"
         return make_mcp_text_response(response_text)
     except Exception as e:
         error = MCPException(
-            message=f"Failed to retrieve namespaces: {str(e)}",
+            message=f"Failed to retrieve vLLM namespaces: {str(e)}",
             error_code=MCPErrorCode.PROMETHEUS_ERROR,
             recovery_suggestion="Please check Prometheus/Thanos connectivity."
         )
@@ -305,14 +308,26 @@ def analyze_vllm(
     # Collect metrics and perform analysis
     try:
         vllm_metrics = get_vllm_metrics()
-        
         metric_dfs: Dict[str, Any] = {
             label: fetch_metrics(query, model_name, resolved_start, resolved_end)
                 for label, query in vllm_metrics.items()
         }
 
-        # Build prompt and summarize
-        prompt = build_prompt(metric_dfs, model_name)
+        # --- Phase 1: Optional Korrel8r enrichment (logs only) ---
+        korrel8r_section: Dict[str, Any] = {}
+        korrel8r_prompt_note: str = ""
+        log_trace_data: str = ""
+        if KORREL8R_ENABLED:
+            log_trace_data = build_correlated_context_from_metrics(
+                metric_dfs=metric_dfs,
+                model_name=model_name,
+                start_ts=resolved_start,
+                end_ts=resolved_end,
+            )
+
+        # Build prompt base and summarize (Korrel8r enrichment may augment prompt later)
+        prompt = build_prompt(metric_dfs, model_name, log_trace_data)
+
         summary = summarize_with_llm(
             prompt,
             summarize_model_id,

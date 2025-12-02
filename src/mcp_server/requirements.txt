@@ -12,6 +12,8 @@ scipy>=1.16.0
 dateparser>=1.2.2
 fastmcp>=2.11
 anthropic>=0.39.0
+openai>=1.0.0
+google-generativeai>=0.8.0
 # Added for report generation functionality
 markdown>=3.0.0
 weasyprint>=60.0
