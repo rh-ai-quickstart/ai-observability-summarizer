@@ -1,4 +1,4 @@
-# OpenShift AI Observability Summarizer
+# Summarize and analyze your observability data
 
 Create an interactive dashboard to analyze AI model performance and OpenShift cluster metrics using Prometheus.
 
@@ -159,6 +159,6 @@ make uninstall NAMESPACE=your-namespace
 
 ## Tags
 
-- **Industry:** Cross-industry
-- **Product:** OpenShift AI
-- **Use case:** AI Operations, Observability, Monitoring
+* **Business challenge:** Adopt and scale AI
+* **Product:** OpenShift AI
+* **Use case:** AI Operations, Observability, Monitoring
