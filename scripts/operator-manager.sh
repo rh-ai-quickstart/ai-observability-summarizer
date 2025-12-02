@@ -13,16 +13,24 @@ readonly OPERATOR_OBSERVABILITY_ALT="cluster-observability"
 readonly OPERATOR_OTEL="otel"
 readonly OPERATOR_OTEL_ALT="opentelemetry"
 readonly OPERATOR_TEMPO="tempo"
+readonly OPERATOR_LOGGING="logging"
+readonly OPERATOR_LOGGING_ALT="cluster-logging"
+readonly OPERATOR_LOKI="loki"
+readonly OPERATOR_LOKI_ALT="loki-operator"
 
 # Full operator names (subscription.namespace format)
 readonly FULL_NAME_OBSERVABILITY="cluster-observability-operator.openshift-cluster-observability"
 readonly FULL_NAME_OTEL="opentelemetry-product.openshift-opentelemetry-operator"
 readonly FULL_NAME_TEMPO="tempo-product.openshift-tempo-operator"
+readonly FULL_NAME_LOGGING="cluster-logging.openshift-logging"
+readonly FULL_NAME_LOKI="loki-operator.openshift-operators-redhat"
 
 # YAML file names
 readonly YAML_OBSERVABILITY="cluster-observability.yaml"
 readonly YAML_OTEL="opentelemetry.yaml"
 readonly YAML_TEMPO="tempo.yaml"
+readonly YAML_LOGGING="logging.yaml"
+readonly YAML_LOKI="loki.yaml"
 
 readonly OPERATOR_ACTION_CHECK="check"
 readonly OPERATOR_ACTION_INSTALL="install"
@@ -31,6 +39,8 @@ readonly OPERATOR_ACTION_UNINSTALL="uninstall"
 readonly OBSERVABILITY_CRDS="monitoring.rhobs perses.dev observability.openshift.io"
 readonly OTEL_CRDS="opentelemetry.io"
 readonly TEMPO_CRDS="tempo.grafana.com"
+readonly LOGGING_CRDS="logging.openshift.io"
+readonly LOKI_CRDS="loki.grafana.com"
 
 # Function to display usage
 usage() {
@@ -62,6 +72,8 @@ usage() {
     echo "  observability - Cluster Observability Operator"
     echo "  otel          - Red Hat build of OpenTelemetry Operator"
     echo "  tempo         - Tempo Operator"
+    echo "  logging       - Red Hat OpenShift Logging Operator"
+    echo "  loki          - Loki Operator"
 }
 
 # Function to parse command line arguments
@@ -197,7 +209,7 @@ validate_namespace() {
 # Function to check if an operator exists
 check_operator() {
     local operator_name="$1"
-    [[ "$DEBUG" == "true" ]] && echo -e "${BLUE}📋 Checking operator: $operator_name${NC}"    
+    [[ "$DEBUG" == "true" ]] && echo -e "${BLUE}📋 Checking operator: $operator_name${NC}"
     if oc get operator "$operator_name" >/dev/null 2>&1; then
         return 0  # Operator exists
     else
@@ -219,9 +231,15 @@ get_operator_full_name() {
         "$OPERATOR_TEMPO"|"$FULL_NAME_TEMPO")
             echo "$FULL_NAME_TEMPO"
             ;;
+        "$OPERATOR_LOGGING"|"$OPERATOR_LOGGING_ALT"|"$FULL_NAME_LOGGING")
+            echo "$FULL_NAME_LOGGING"
+            ;;
+        "$OPERATOR_LOKI"|"$OPERATOR_LOKI_ALT"|"$FULL_NAME_LOKI")
+            echo "$FULL_NAME_LOKI"
+            ;;
         *)
             echo -e "${RED}❌ Unknown operator: $operator_name${NC}" >&2
-            echo -e "${YELLOW}   Available operators: observability, otel, tempo${NC}" >&2
+            echo -e "${YELLOW}   Available operators: observability, otel, tempo, logging, loki${NC}" >&2
             exit 1
             ;;
     esac
@@ -241,9 +259,15 @@ get_operator_yaml() {
         "$OPERATOR_TEMPO"|"$FULL_NAME_TEMPO")
             echo "$YAML_TEMPO"
             ;;
+        "$OPERATOR_LOGGING"|"$OPERATOR_LOGGING_ALT"|"$FULL_NAME_LOGGING")
+            echo "$YAML_LOGGING"
+            ;;
+        "$OPERATOR_LOKI"|"$OPERATOR_LOKI_ALT"|"$FULL_NAME_LOKI")
+            echo "$YAML_LOKI"
+            ;;
         *)
             echo -e "${RED}❌ Unknown operator: $operator_name${NC}" >&2
-            echo -e "${YELLOW}   Available operators: observability, otel, tempo${NC}" >&2
+            echo -e "${YELLOW}   Available operators: observability, otel, tempo, logging, loki${NC}" >&2
             exit 1
             ;;
     esac
@@ -275,6 +299,12 @@ get_operator_crds() {
             ;;
         "$FULL_NAME_TEMPO")
             echo "$TEMPO_CRDS"
+            ;;
+        "$FULL_NAME_LOGGING")
+            echo "$LOGGING_CRDS"
+            ;;
+        "$FULL_NAME_LOKI")
+            echo "$LOKI_CRDS"
             ;;
         *)
             echo ""
@@ -581,7 +611,7 @@ install_operator() {
 main() {
     [[ "$DEBUG" == "true" ]] && echo -e "${BLUE}🚀 OpenShift Operator Management${NC}"
     [[ "$DEBUG" == "true" ]] && echo "=================================="
-    
+
     check_openshift_prerequisites
 
     # Check if envsubst is installed (required for variable substitution)
