@@ -1,0 +1,229 @@
+name: Cleanup Old Summarizer Container Images
+
+on:
+  schedule:
+    # Run on the 1st day of every month at midnight UTC (00:00 UTC)
+    - cron: '0 0 1 * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (show what would be deleted without deleting)'
+        required: false
+        type: boolean
+        default: true
+      retention_days:
+        description: 'Keep images newer than this many days'
+        required: false
+        type: number
+        default: 30
+      protected_tags:
+        description: 'Additional tags to protect from deletion (comma-separated). Example: 1.5.0,2.0.0-beta,hotfix-123'
+        required: false
+        type: string
+        default: ''
+
+env:
+  REGISTRY: quay.io
+  ORG: ecosystem-appeng
+  IMAGE_PREFIX: aiobs
+
+jobs:
+  cleanup-images:
+    name: Cleanup old Summarizer container images
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        component:
+          - metrics-ui
+          - metrics-alerting
+          - mcp-server
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install skopeo
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y skopeo jq
+
+      - name: Set retention policy
+        id: retention
+        run: |
+          # Use workflow input if provided, otherwise default to 30 days
+          RETENTION_DAYS="${{ github.event.inputs.retention_days || '30' }}"
+          DRY_RUN="${{ github.event.inputs.dry_run || 'false' }}"
+          PROTECTED_TAGS="${{ github.event.inputs.protected_tags || '' }}"
+
+          echo "retention_days=$RETENTION_DAYS" >> $GITHUB_OUTPUT
+          echo "dry_run=$DRY_RUN" >> $GITHUB_OUTPUT
+          echo "protected_tags=$PROTECTED_TAGS" >> $GITHUB_OUTPUT
+          echo "Retention period: $RETENTION_DAYS days"
+          echo "Dry run mode: $DRY_RUN"
+          if [ -n "$PROTECTED_TAGS" ]; then
+            echo "Additional protected tags: $PROTECTED_TAGS"
+          fi
+
+      - name: Login to Quay.io
+        run: |
+          echo "${{ secrets.QUAY_PASSWORD }}" | skopeo login ${{ env.REGISTRY }} \
+            --username "${{ secrets.QUAY_USERNAME }}" \
+            --password-stdin
+
+      - name: Cleanup old tags for ${{ matrix.component }}
+        env:
+          IMAGE_NAME: ${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-${{ matrix.component }}
+          RETENTION_DAYS: ${{ steps.retention.outputs.retention_days }}
+          DRY_RUN: ${{ steps.retention.outputs.dry_run }}
+          PROTECTED_TAGS: ${{ steps.retention.outputs.protected_tags }}
+        run: |
+          echo "🔍 Processing image: $IMAGE_NAME"
+          echo "📅 Retention policy: Keep images from last $RETENTION_DAYS days"
+          echo "🏃 Dry run: $DRY_RUN"
+          if [ -n "$PROTECTED_TAGS" ]; then
+            echo "🔒 User-protected tags: $PROTECTED_TAGS"
+          fi
+          echo ""
+
+          # Get current timestamp
+          CURRENT_TIME=$(date +%s)
+          RETENTION_SECONDS=$((RETENTION_DAYS * 24 * 60 * 60))
+          CUTOFF_TIME=$((CURRENT_TIME - RETENTION_SECONDS))
+
+          # Get all tags
+          echo "Fetching all tags for $IMAGE_NAME..."
+          TAGS=$(skopeo list-tags docker://$IMAGE_NAME | jq -r '.Tags[]' || echo "")
+
+          if [ -z "$TAGS" ]; then
+            echo "⚠️  No tags found or unable to list tags"
+            exit 0
+          fi
+
+          DELETED_COUNT=0
+          KEPT_COUNT=0
+          PROTECTED_COUNT=0
+          FAILED_COUNT=0
+          FAILED_TAGS=""
+
+          echo "Found $(echo "$TAGS" | wc -l) tags total"
+          echo ""
+
+          for TAG in $TAGS; do
+            # Skip 'latest' tag - always keep it
+            if [ "$TAG" = "latest" ]; then
+              echo "🔒 Protecting tag: $TAG (reserved tag)"
+              PROTECTED_COUNT=$((PROTECTED_COUNT + 1))
+              continue
+            fi
+
+            # Skip release tags (anything ending with -release)
+            if [[ "$TAG" == *-release ]]; then
+              echo "🔒 Protecting tag: $TAG (release tag)"
+              PROTECTED_COUNT=$((PROTECTED_COUNT + 1))
+              continue
+            fi
+
+            # Skip user-specified protected tags
+            if [ -n "$PROTECTED_TAGS" ]; then
+              # Convert comma-separated string to array
+              IFS=',' read -ra USER_PROTECTED_TAGS <<< "$PROTECTED_TAGS"
+              SKIP_TAG=false
+              for PROTECTED in "${USER_PROTECTED_TAGS[@]}"; do
+                # Trim whitespace
+                PROTECTED=$(echo "$PROTECTED" | xargs)
+                if [ "$TAG" = "$PROTECTED" ]; then
+                  echo "🔒 Protecting tag: $TAG (user-specified)"
+                  PROTECTED_COUNT=$((PROTECTED_COUNT + 1))
+                  SKIP_TAG=true
+                  break
+                fi
+              done
+              if [ "$SKIP_TAG" = true ]; then
+                continue
+              fi
+            fi
+
+            # Get image creation time
+            IMAGE_CREATED=$(skopeo inspect docker://$IMAGE_NAME:$TAG 2>/dev/null | \
+              jq -r '.Created // empty' || echo "")
+
+            if [ -z "$IMAGE_CREATED" ]; then
+              echo "⚠️  Unable to get creation time for tag: $TAG (skipping)"
+              continue
+            fi
+
+            # Convert to timestamp
+            IMAGE_TIME=$(date -d "$IMAGE_CREATED" +%s 2>/dev/null || echo "0")
+
+            if [ "$IMAGE_TIME" -eq 0 ]; then
+              echo "⚠️  Invalid timestamp for tag: $TAG (skipping)"
+              continue
+            fi
+
+            # Check if image is older than retention period
+            if [ "$IMAGE_TIME" -lt "$CUTOFF_TIME" ]; then
+              AGE_DAYS=$(( (CURRENT_TIME - IMAGE_TIME) / 86400 ))
+
+              if [ "$DRY_RUN" = "true" ]; then
+                echo "🔍 [DRY RUN] Would delete: $TAG (age: ${AGE_DAYS} days, created: $IMAGE_CREATED)"
+                DELETED_COUNT=$((DELETED_COUNT + 1))
+              else
+                echo "🗑️  Deleting tag: $TAG (age: ${AGE_DAYS} days, created: $IMAGE_CREATED)"
+
+                # Attempt deletion
+                DELETE_OUTPUT=$(skopeo delete docker://$IMAGE_NAME:$TAG 2>&1)
+                DELETE_EXIT_CODE=$?
+
+                if [ $DELETE_EXIT_CODE -eq 0 ]; then
+                  # Verify deletion by checking if tag still exists
+                  sleep 1  # Brief pause for registry to update
+                  if skopeo list-tags docker://$IMAGE_NAME 2>/dev/null | jq -r '.Tags[]' | grep -q "^${TAG}$"; then
+                    echo "   ⚠️  Tag '$TAG': Deletion reported success but tag still exists (may need time to propagate)"
+                    FAILED_COUNT=$((FAILED_COUNT + 1))
+                    FAILED_TAGS="${FAILED_TAGS}${FAILED_TAGS:+ }$TAG"
+                  else
+                    DELETED_COUNT=$((DELETED_COUNT + 1))
+                    echo "   ✅ Tag '$TAG': Deleted successfully and verified"
+                  fi
+                else
+                  FAILED_COUNT=$((FAILED_COUNT + 1))
+                  FAILED_TAGS="${FAILED_TAGS}${FAILED_TAGS:+ }$TAG"
+                  echo "   ❌ Tag '$TAG': Failed to delete (exit code: $DELETE_EXIT_CODE)"
+                  echo "   Error details: $DELETE_OUTPUT" | head -3
+                fi
+              fi
+            else
+              AGE_DAYS=$(( (CURRENT_TIME - IMAGE_TIME) / 86400 ))
+              echo "✅ Keeping tag: $TAG (age: ${AGE_DAYS} days, created: $IMAGE_CREATED)"
+              KEPT_COUNT=$((KEPT_COUNT + 1))
+            fi
+          done
+
+          echo ""
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Summary for ${{ matrix.component }}:"
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "  🔍 Would delete: $DELETED_COUNT tags"
+          else
+            echo "  🗑️  Deleted: $DELETED_COUNT tags"
+            if [ $FAILED_COUNT -gt 0 ]; then
+              echo "  ❌ Failed: $FAILED_COUNT tags"
+              echo ""
+              echo "⚠️  Failed tags: $FAILED_TAGS"
+              echo ""
+              echo "⚠️  Warning: Some deletions failed. This may be due to:"
+              echo "   - Insufficient permissions"
+              echo "   - Tag already deleted"
+              echo "   - Registry propagation delay"
+              echo "   - Network issues"
+              echo "   Check logs above for detailed error messages"
+            fi
+          fi
+          echo "  ✅ Kept: $KEPT_COUNT tags"
+          echo "  🔒 Protected: $PROTECTED_COUNT tags"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+      - name: Logout from Quay.io
+        if: always()
+        run: |
+          skopeo logout ${{ env.REGISTRY }} || true
