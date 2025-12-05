@@ -42,65 +42,8 @@ def _extract_unique_trace_ids(obj_result: Any) -> List[str]:
     return trace_ids
 
 
-def _trace_detail_contains_error(detail: Dict[str, Any]) -> bool:
-    """Heuristically detect error-like signals within a Tempo/Jaeger trace detail response."""
-    try:
-        if not isinstance(detail, dict) or not detail.get("success"):
-            return False
-        trace_payload = detail.get("trace") or {}
-        if not isinstance(trace_payload, dict):
-            return False
-        # Top-level errors (if present in Jaeger-style response)
-        if trace_payload.get("errors"):
-            return True
-        data = trace_payload.get("data") or []
-        if not isinstance(data, list):
-            return False
-        keywords = ("error", "exception", "fatal", "panic", "fail")
-        for tr in data:
-            if not isinstance(tr, dict):
-                continue
-            spans = tr.get("spans") or []
-            for sp in spans:
-                if not isinstance(sp, dict):
-                    continue
-                # Tags (Jaeger format)
-                tags = sp.get("tags") or []
-                if isinstance(tags, list):
-                    for tg in tags:
-                        if not isinstance(tg, dict):
-                            continue
-                        key = str(tg.get("key", "")).lower()
-                        val = str(tg.get("value", "")).lower()
-                        if key in ("error", "otel.status_code", "status.code", "span.status.code"):
-                            if val in ("true", "1", "error"):
-                                return True
-                        if any(k in key for k in keywords) and any(k in val for k in keywords + ("true", "1")):
-                            return True
-                # Logs/events (Jaeger format)
-                logs = sp.get("logs") or []
-                if isinstance(logs, list):
-                    for lg in logs:
-                        if not isinstance(lg, dict):
-                            continue
-                        fields = lg.get("fields") or []
-                        if isinstance(fields, list):
-                            for f in fields:
-                                if not isinstance(f, dict):
-                                    continue
-                                fkey = str(f.get("key", "")).lower()
-                                fval = str(f.get("value", "")).lower()
-                                if fkey == "event" and fval in ("exception", "error", "fatal"):
-                                    return True
-                                if any(k in fkey for k in keywords) or any(k in fval for k in keywords):
-                                    return True
-        return False
-    except Exception:
-        return False
-
-
-async def _fetch_trace_details_for_ids_async(trace_ids: List[str], concurrency: int = 10) -> List[Dict[str, Any]]:
-    """Fetch trace details concurrently and return only those containing errors."""
+async def _fetch_trace_details_for_ids_async_all(trace_ids: List[str], concurrency: int = 10) -> List[Dict[str, Any]]:
+    """Fetch ALL trace details concurrently, without filtering by error."""
     if not trace_ids:
         return []
     service = TempoQueryService()
@@ -110,7 +53,7 @@ async def _fetch_trace_details_for_ids_async(trace_ids: List[str], concurrency: 
         async with semaphore:
             try:
                 resp = await service.get_trace_details(tid)
-                if isinstance(resp, dict) and _trace_detail_contains_error(resp):
+                if isinstance(resp, dict) and resp.get("success"):
                     return resp
             except Exception:
                 return None
@@ -118,40 +61,36 @@ async def _fetch_trace_details_for_ids_async(trace_ids: List[str], concurrency: 
 
     tasks = [fetch_one(t) for t in trace_ids]
     results = await asyncio.gather(*tasks, return_exceptions=True)
-    filtered: List[Dict[str, Any]] = []
+    collected: List[Dict[str, Any]] = []
     for r in results:
         if isinstance(r, dict):
-            filtered.append(r)
-    return filtered
+            collected.append(r)
+    return collected
 
 
-def _get_error_trace_details_sync(trace_ids: List[str]) -> List[Dict[str, Any]]:
-    """Synchronous wrapper to fetch error traces with async Tempo service, handling running event loops."""
+def _get_trace_details_sync(trace_ids: List[str]) -> List[Dict[str, Any]]:
+    """Synchronous wrapper to fetch ALL trace details with async Tempo service, handling running loops."""
     if not trace_ids:
         return []
     try:
-        # Fast path when no running loop in this thread
-        return asyncio.run(_fetch_trace_details_for_ids_async(trace_ids))
+        return asyncio.run(_fetch_trace_details_for_ids_async_all(trace_ids))
     except RuntimeError:
-        # If there's already a running loop in this thread, run in a separate thread
         result: List[Dict[str, Any]] = []
         def runner() -> None:
             nonlocal result
-            result = asyncio.run(_fetch_trace_details_for_ids_async(trace_ids))
+            result = asyncio.run(_fetch_trace_details_for_ids_async_all(trace_ids))
         t = Thread(target=runner, daemon=True)
         t.start()
         t.join()
         return result
 
 
-def _simplify_trace_detail_to_error_spans(detail: Dict[str, Any], related_objects: Any = None) -> List[Dict[str, Any]]:
+def _simplify_trace_detail_to_spans(detail: Dict[str, Any], related_objects: Any = None) -> List[Dict[str, Any]]:
     """
-    Simplify a Tempo/Jaeger trace detail response to a list of spans that contain error-like tags.
-    
-    Each simplified span includes: traceID, spanID, operationName, startTime, duration, tags (filtered).
-    Only include tag entries whose values contain an error-like string. If a span has no such tags, skip it.
+    Simplify a Tempo/Jaeger trace detail response to a list of spans (no error filtering).
+    Keeps tags as a flattened dict where possible and enriches with namespace/pod if available.
     """
-    logger.debug("_simplify_trace_detail_to_error_spans with detail=%s, related_objects=%s", detail, related_objects)
+    logger.debug("_simplify_trace_detail_to_spans with detail=%s, related_objects=%s", detail, related_objects)
     simplified_spans: List[Dict[str, Any]] = []
     try:
         # Build an index from spanID -> (namespace, pod) using related objects returned by query_objects
@@ -204,7 +143,6 @@ def _simplify_trace_detail_to_error_spans(detail: Dict[str, Any], related_object
         data = trace_payload.get("data") or []
         if not isinstance(data, list):
             return simplified_spans
-        keywords = ("error", "exception", "fatal", "panic", "fail", "critical")
         for tr in data:
             if not isinstance(tr, dict):
                 continue
@@ -216,30 +154,25 @@ def _simplify_trace_detail_to_error_spans(detail: Dict[str, Any], related_object
                 if not isinstance(sp, dict):
                     continue
                 tags_list = sp.get("tags") or []
-                if not isinstance(tags_list, list):
-                    continue
-                # Only include tags whose VALUE contains an error-like string
-                filtered_tags: Dict[str, Any] = {}
-                for tg in tags_list:
-                    if not isinstance(tg, dict):
-                        continue
-                    key = tg.get("key")
-                    val = tg.get("value")
-                    val_str = str(val).lower()
-                    if any(k in val_str for k in keywords):
-                        filtered_tags[str(key)] = val
-                # Skip spans without any error-like tags
-                if not filtered_tags:
-                    continue
+                tags_dict: Dict[str, Any] = {}
+                if isinstance(tags_list, list):
+                    for tg in tags_list:
+                        try:
+                            key = tg.get("key")
+                            val = tg.get("value")
+                            if key is not None:
+                                tags_dict[str(key)] = val
+                        except Exception:
+                            continue
                 one_span: Dict[str, Any] = {
                     "traceID": trace_id,
                     "spanID": sp.get("spanID") or sp.get("spanId"),
                     "operationName": sp.get("operationName") or sp.get("operation"),
                     "startTime": sp.get("startTime"),
                     "duration": sp.get("duration"),
-                    "tags": filtered_tags,
+                    "tags": tags_dict if tags_dict else tags_list,
                 }
-                # Enrich with namespace/pod if available from the related_objects index
+                # Enrich with namespace/pod if available
                 try:
                     sid = str(one_span.get("spanID") or "")
                     ctx_vals = span_ctx_index.get(sid)
@@ -254,13 +187,11 @@ def _simplify_trace_detail_to_error_spans(detail: Dict[str, Any], related_object
                     pass
                 simplified_spans.append(one_span)
     except Exception:
-        # Be conservative: on any parsing issue, return what we have so far
         return simplified_spans
-
-    logger.debug("_simplify_trace_detail_to_error_spans returns simplified_spans=%s", simplified_spans)
+    logger.debug("_simplify_trace_detail_to_spans returns simplified_spans=%s", simplified_spans)
     return simplified_spans
 
-
+ 
 def fetch_goal_query_objects(goals: List[str], query: str) -> Dict[str, List[Any]]:
     """Resolve Korrel8r goals from a start query and aggregate related objects by signal type.
 
@@ -308,7 +239,7 @@ def fetch_goal_query_objects(goals: List[str], query: str) -> Dict[str, List[Any
                             if isinstance(simplified, list):
                                 aggregated[bucket].extend(simplified)
                                 continue
-                        # For traces, extract unique IDs, fetch details in parallel, keep only error-like ones
+                        # For traces: extract unique IDs, fetch Tempo details, simplify to spans (no filtering)
                         if bucket == "traces":
                             trace_ids = _extract_unique_trace_ids(obj_result)
                             logger.debug("fetch_goal_query_objects trace_ids=%s", trace_ids)
@@ -317,13 +248,12 @@ def fetch_goal_query_objects(goals: List[str], query: str) -> Dict[str, List[Any
                             seen_trace_ids.update(ids_to_fetch)
                             logger.debug("fetch_goal_query_objects ids_to_fetch=%s", ids_to_fetch)
                             if ids_to_fetch:
-                                error_traces = _get_error_trace_details_sync(ids_to_fetch)
-                                logger.debug("fetch_goal_query_objects error_traces=%s", error_traces)
-                                if isinstance(error_traces, list):
-                                    # Simplify to error-focused spans
+                                all_traces = _get_trace_details_sync(ids_to_fetch)
+                                logger.debug("fetch_goal_query_objects all_traces=%s", all_traces)
+                                if isinstance(all_traces, list):
                                     simplified_spans_all: List[Dict[str, Any]] = []
-                                    for dt in error_traces:
-                                        simplified_spans_all.extend(_simplify_trace_detail_to_error_spans(dt, obj_result))
+                                    for dt in all_traces:
+                                        simplified_spans_all.extend(_simplify_trace_detail_to_spans(dt, obj_result))
                                     aggregated[bucket].extend(simplified_spans_all)
                                 continue
                         # Fallback/default aggregation

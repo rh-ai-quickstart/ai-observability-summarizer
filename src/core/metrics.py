@@ -1737,6 +1737,41 @@ def _format_span_kv(span_obj: Dict[str, Any]) -> str:
     return "- trace " + " ".join(parts) if parts else "- trace"
 
 
+def _span_is_error_like(span: Dict[str, Any]) -> bool:
+    try:
+        tags = span.get("tags", {})
+        kv_iter = []
+        if isinstance(tags, dict):
+            kv_iter = tags.items()
+        elif isinstance(tags, list):
+            tmp = []
+            for t in tags:
+                try:
+                    k = str(t.get("key", "")).lower()
+                    v = str(t.get("value", ""))
+                    if k:
+                        tmp.append((k, v))
+                except Exception:
+                    continue
+            kv_iter = tmp
+        keywords = ("error", "exception", "fatal", "panic", "fail", "critical")
+        # Explicit error tag true
+        for k, v in kv_iter:
+            if k in ("error", "span.status.code", "status.code", "otel.status_code"):
+                vs = str(v).strip().lower()
+                if k == "error" and vs in ("true", "1", "yes"):
+                    return True
+                if vs in ("error", "2", "status_code_error"):
+                    return True
+            # Any tag value containing error-like keywords
+            vs_lower = str(v).lower()
+            if any(kw in vs_lower for kw in keywords):
+                return True
+        return False
+    except Exception:
+        return False
+
+
 def build_correlated_context_from_metrics(
     metric_dfs: Dict[str, Any],
     model_name: str,
@@ -1818,13 +1853,14 @@ def build_correlated_context_from_metrics(
                 continue
 
         result_str = "\n".join(lines)
-        # Append top trace spans using helper (errors first, then longest durations)
+        # Filter error-like trace spans, then append top items using helper
         try:
             max_trace_spans = int(os.getenv("MAX_NUM_TRACE_SPANS", "10"))
         except Exception:
             max_trace_spans = 10
+        filtered_spans = [s for s in aggregated_traces if isinstance(s, dict) and _span_is_error_like(s)]
         trace_lines_kv = []
-        for span in aggregated_traces[:max_trace_spans]:
+        for span in filtered_spans[:max_trace_spans]:
             if isinstance(span, dict):
                 trace_lines_kv.append(_format_span_kv(span))
         if trace_lines_kv:
