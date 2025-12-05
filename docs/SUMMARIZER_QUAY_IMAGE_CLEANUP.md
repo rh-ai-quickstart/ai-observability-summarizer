@@ -14,7 +14,7 @@ The `.github/workflows/cleanup-old-images.yml` workflow automatically deletes ol
 - **Default retention:** Keeps images from the last 30 days
 - **Protected tags:**
   - The `latest` tag is always preserved
-  - All tags ending with `-release` are always preserved (e.g., `1.0.0-release`, `2.5.3-release`)
+  - All tags starting with `v` are always preserved (e.g., `v1.0.0`, `v2.5.3`)
 
 ### Manual Execution
 You can also run the workflow manually via GitHub Actions with custom parameters:
@@ -38,13 +38,9 @@ You can also run the workflow manually via GitHub Actions with custom parameters
 
 The workflow deletes tags older than the retention period while:
 - ✅ Keeping the `latest` tag (always protected)
-- ✅ Keeping all tags ending with `-release` (always protected)
+- ✅ Keeping all tags starting with `v` (always protected - official releases)
 - ✅ Keeping user-specified protected tags (when running manually)
 - ✅ Keeping all images created within the retention period
-- ✅ Showing age and creation date for each tag processed
-- ✅ Verifying deletions by checking if tags still exist after deletion
-- ✅ Tracking and reporting failed deletions with detailed error messages
-- ✅ Displaying a summary list of all failed tags for easy troubleshooting
 
 ### Required Secrets
 
@@ -111,44 +107,28 @@ Actions → Cleanup Old Summarizer Container Images → Run workflow
 
 This will protect:
 - `latest` (always)
-- `*-release` (always)
+- `v*` pattern - all v-prefixed tags (always, e.g., `v1.0.0`, `v2.5.3`)
 - `1.5.0`, `2.0.0-beta`, `hotfix-123` (user-specified)
 
 ## Workflow Output
 
-The workflow provides detailed output for each image:
+The workflow provides a summary for each image processed:
 
 ```
 🔍 Processing image: quay.io/ecosystem-appeng/aiobs-metrics-ui
 📅 Retention policy: Keep images from last 30 days
-🔒 User-protected tags: 1.5.0,hotfix-123
 
 Found 45 tags total
 
 🔒 Protecting tag: latest (reserved tag)
-🔒 Protecting tag: 1.0.0-release (release tag)
-🔒 Protecting tag: 1.5.0 (user-specified)
-🔒 Protecting tag: hotfix-123 (user-specified)
-✅ Keeping tag: 1.0.1 (age: 5 days, created: 2025-11-27T10:30:00Z)
-🗑️  Deleting tag: 0.9.8 (age: 45 days, created: 2025-10-18T08:15:00Z)
-   ✅ Tag '0.9.8': Deleted successfully and verified
-🗑️  Deleting tag: 0.9.7 (age: 50 days, created: 2025-10-13T08:15:00Z)
-   ❌ Tag '0.9.7': Failed to delete (exit code: 1)
-   Error details: Error deleting tag: permission denied
+🔒 Protecting tag: v1.0.0 (official release - v-prefix)
+✅ Keeping tag: 1.0.1 (age: 5 days)
+🗑️  Deleting tag: 0.9.8 (age: 45 days)
+   ✅ Deleted successfully
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Summary for metrics-ui:
   🗑️  Deleted: 20 tags
-  ❌ Failed: 1 tags
-
-⚠️  Failed tags: 0.9.7
-
-⚠️  Warning: Some deletions failed. This may be due to:
-   - Insufficient permissions
-   - Tag already deleted
-   - Registry propagation delay
-   - Network issues
-   Check logs above for detailed error messages
   ✅ Kept: 20 tags
   🔒 Protected: 4 tags
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -188,33 +168,9 @@ schedule:
 
 The workflow already protects:
 - `latest` tag
-- Any tag ending with `-release`
+- Tags starting with `v` (official releases, e.g., `v1.0.0`)
 
-To protect additional tag patterns, edit the workflow:
-
-```bash
-# Skip 'latest' tag - always keep it
-if [ "$TAG" = "latest" ]; then
-  echo "🔒 Protecting tag: $TAG (reserved tag)"
-  PROTECTED_COUNT=$((PROTECTED_COUNT + 1))
-  continue
-fi
-
-# Skip release tags (anything ending with -release)
-if [[ "$TAG" == *-release ]]; then
-  echo "🔒 Protecting tag: $TAG (release tag)"
-  PROTECTED_COUNT=$((PROTECTED_COUNT + 1))
-  continue
-fi
-
-# Add more protected patterns:
-# Protect semantic versions (e.g., v1.0.0)
-if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  echo "🔒 Protecting tag: $TAG (semantic version)"
-  PROTECTED_COUNT=$((PROTECTED_COUNT + 1))
-  continue
-fi
-```
+To protect additional tag patterns, edit the workflow script in `.github/workflows/cleanup-old-images.yml` and add custom protection logic before the age check.
 
 ## Monitoring
 
@@ -244,13 +200,13 @@ When running the workflow manually, use the **Protected tags** input field:
 **Important:**
 - This field is **optional** - leave empty if you don't need to protect additional tags
 - Only available when running **manually** (not used in scheduled runs)
-- Adds to the automatic protections (`latest` and `*-release` tags)
+- Adds to the automatic protections (`latest` and `v*` tags)
 
 ### What tags are automatically protected?
 
 The workflow always protects:
 1. **`latest`** - Reserved tag that should always exist
-2. **Tags ending with `-release`** - All release versions (e.g., `1.0.0-release`, `2.5.3-release`)
+2. **Tags starting with `v`** - Official releases (e.g., `v1.0.0`, `v2.5.3`)
 
 You don't need to specify these in the Protected tags field.
 
@@ -299,31 +255,16 @@ Settings → Secrets and variables → Actions
 
 ### Some Tags Failed to Delete
 
-**Problem:** Workflow shows "Failed: X tags" in summary
+**Problem:** Workflow shows failed deletions in summary
 
-**Possible causes:**
-1. Insufficient permissions to delete tags
-2. Tag was already deleted by another process
-3. Registry propagation delay (tag deleted but still showing in list)
-4. Network issues during deletion
-
-**Solution:**
-1. Check the workflow logs for detailed error messages
-2. Review the "Failed tags" list in the summary
-3. Verify your Quay.io credentials have delete permissions
-4. If tags show as "deletion reported success but tag still exists", wait a few minutes and check again (propagation delay)
-5. Re-run the workflow manually if needed (failed tags will be retried)
+**Solution:** Check workflow logs for detailed error messages. Common causes include insufficient permissions, tags already deleted, or registry propagation delays. Verify your Quay.io credentials have delete permissions.
 
 ## Best Practices
 
 1. **Start with dry run:** Always test with dry run first to verify behavior
 2. **Monitor regularly:** Check workflow logs after first few runs
-3. **Adjust retention:** Tune retention period based on your needs:
-   - Development branches: 7-14 days
-   - Staging/QA: 30 days
-   - Production: 90+ days or protect specific tags
-4. **Protect important tags:** Add logic to protect release versions
-5. **Review before production:** Test in a non-production repository first
+3. **Adjust retention:** Tune retention period based on your needs (default: 30 days)
+4. **Protect important tags:** Use the protected tags input for critical versions
 
 ## Security Notes
 
