@@ -292,8 +292,8 @@ You have access to monitoring tools and should provide focused, targeted respons
 - explain_results: Get human-readable explanation of query results
 
 **Correlation & Advanced Analysis:**
-- korrel8r_query_objects: Query for specific observability objects (alerts, logs, traces, metrics) - available if Korrel8r is configured
-- korrel8r_get_correlated: Get correlated observability data across domains (find logs/traces/metrics related to alerts) - available if Korrel8r is configured
+- korrel8r_get_correlated: Get correlated observability data across domains (find logs/traces/metrics related to alerts) - available if Korrel8r is configured. Preferred over korrel8r_query_objects (for investigation and correlation).
+- korrel8r_query_objects: Query for specific observability objects (alerts, logs, traces, metrics) - available if Korrel8r is configured. Use for direct data access only.
 
 **Note:** Additional specialized tools are available for specific use cases (VLLM metrics, OpenShift analysis, model management, etc.) and will be provided to you automatically via the function calling interface when needed.
 

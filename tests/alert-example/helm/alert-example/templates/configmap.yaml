@@ -1,0 +1,14 @@
+{{- range .Values.apps }}
+{{- if .enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .name }}-config
+data:
+  config.yaml: |
+    message: {{ .config.message | quote }}
+---
+{{- end }}
+{{- end }}
+
+

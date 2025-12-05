@@ -17,14 +17,14 @@ korrel8r:
     log:
       lokiStackUrl: https://logging-loki-gateway-http.openshift-logging.svc:8080
     netflow:
-      lokiStackUrl: https://loki-gateway-http.netobserv.svc:8080
+      lokiStackUrl: https://logging-loki-gateway-http.openshift-logging.svc:8080
     trace:
-      tempoStackUrl: https://tempo-tempostack-gateway.observability-hub.svc.cluster.local:8080/api/traces/v1/platform/tempo/api/search
+      tempoStackUrl: https://tempo-tempostack-gateway.observability-hub.svc.cluster.local:8080/api/traces/v1/dev/tempo/api/search
 
 # Container image
 image:
   repository: quay.io/korrel8r/korrel8r
-  tag: "0.8.3"
+  tag: "0.8.4"
   pullPolicy: Always
 
 # Service configuration

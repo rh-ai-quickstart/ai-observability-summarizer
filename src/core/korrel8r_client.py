@@ -150,12 +150,12 @@ class Korrel8rClient:
         if not query or not isinstance(query, str):
             raise ValueError("query must be a non-empty string")
         result = self._get("/api/v1alpha1/objects", params={"query": query})
-        # Try to simplify log objects when applicable; otherwise return as-is
-        simplified = self._simplify_log_objects(result)
-        logger.debug("Korrel8rClient.query_objects simplified result=%s", simplified)
-        return simplified if simplified is not None else result
+        logger.debug("Korrel8rClient.query_objects query=%s", query)
+        logger.debug("Korrel8rClient.query_objects result=%s", result)
+        # Return raw result; callers decide whether to simplify
+        return result
 
-    def _simplify_log_objects(self, objects: Any) -> Optional[List[Dict[str, str]]]:
+    def simplify_log_objects(self, objects: Any) -> Optional[List[Dict[str, str]]]:
         """Return simplified log entries if the response looks like log objects.
 
         Each entry contains: namespace, pod, level, message, timestamp.

@@ -1,0 +1,24 @@
+{{- range .Values.apps }}
+{{- if and .enabled .prometheusRule .prometheusRule.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ .name }}-rules
+spec:
+  groups:
+  - name: {{ .name }}.rules
+    rules:
+    - alert: {{ .name | replace "-" "_" | title }}Down
+      expr: |
+        kube_deployment_status_replicas_unavailable{deployment="{{ .name }}"} > 0
+      for: 2m
+      labels:
+        severity: critical
+      annotations:
+        summary: "{{ .name }} deployment has unavailable replicas (app down)"
+        description: "Deployment {{ .name }} has {{`{{ $value }}`}} unavailable replicas."
+---
+{{- end }}
+{{- end }}
+
+

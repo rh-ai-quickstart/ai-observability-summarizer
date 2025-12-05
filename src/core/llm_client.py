@@ -484,7 +484,7 @@ def build_openshift_chat_prompt(
     time_range_info: Optional[Dict[str, Any]] = None,
     chat_scope: str = "namespace_specific",
     target_namespace: str = None,
-    alerts_context: str = "",
+    log_trace_data: str = "",
 ) -> str:
     """Build specialized prompt for OpenShift/Kubernetes queries"""
     # Build scope context
@@ -531,8 +531,8 @@ You are a Senior Site Reliability Engineer (SRE) analyzing OpenShift/Kubernetes 
 **Current Metrics Status:**
 {metrics_context.strip()}
 
-**Current Alert Status:**
-{alerts_context.strip()}
+**Correlated Logs/Traces:**
+{log_trace_data.strip()}
 
 User Question: {question}
 

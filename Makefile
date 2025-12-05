@@ -26,6 +26,7 @@ MCP_SERVER_IMAGE = $(REGISTRY)/$(ORG)/$(IMAGE_PREFIX)-mcp-server
 ALERT_EXAMPLE_IMAGE ?= $(REGISTRY)/$(ORG)/alert-example:$(VERSION)
 ALERT_EXAMPLE_CONTEXT ?= tests/alert-example/app
 ALERT_EXAMPLE_K8S_DIR ?= tests/alert-example/k8s
+ALERT_EXAMPLE_CHART_PATH ?= tests/alert-example/helm/alert-example
 
 
 # Build tools
@@ -929,19 +930,14 @@ push-alert-example:
 
 .PHONY: install-alert-example
 install-alert-example: namespace
-	@echo "→ Applying PrometheusRule for alert-example"
-	oc apply -n $(NAMESPACE) -f $(ALERT_EXAMPLE_K8S_DIR)/prometheusrule.yaml
-	@echo "→ Deploying alert-example resources to namespace $(NAMESPACE)"
-	oc apply -n $(NAMESPACE) -f $(ALERT_EXAMPLE_K8S_DIR)/configmap.yaml
-	oc apply -n $(NAMESPACE) -f $(ALERT_EXAMPLE_K8S_DIR)/deployment.yaml
-	oc set image -n $(NAMESPACE) deployment/alert-example app=$(ALERT_EXAMPLE_IMAGE)
-	oc apply -n $(NAMESPACE) -f $(ALERT_EXAMPLE_K8S_DIR)/service.yaml
-	oc rollout status -n $(NAMESPACE) deployment/alert-example
-	@echo "→ Patching ConfigMap to trigger crash behavior"
-	oc apply -n $(NAMESPACE) -f $(ALERT_EXAMPLE_K8S_DIR)/configmap_patch.yaml
-	@echo "→ Restarting deployment to pick up patched config"
-	oc rollout restart deployment/alert-example -n $(NAMESPACE)
-	@echo "→ Waiting for pod to enter CrashLoopBackOff"
+	@echo "→ Installing/Upgrading alert-example helm chart (deploys alert-example and trace-example)"
+	@helm upgrade --install alert-example $(ALERT_EXAMPLE_CHART_PATH) -n $(NAMESPACE) \
+		--create-namespace \
+		--set image.repository=$(shell echo $(ALERT_EXAMPLE_IMAGE) | sed 's/:.*//') \
+		--set image.tag=$(shell echo $(ALERT_EXAMPLE_IMAGE) | sed 's/.*://')
+	@echo "→ Waiting for deployment/alert-example initial rollout"
+	@oc rollout status -n $(NAMESPACE) deployment/alert-example || true
+	@echo "→ Waiting for alert-example pod to enter CrashLoopBackOff (due to 'Crash' message)"
 	@retries=60; \
 	while [ $$retries -gt 0 ]; do \
 	  reason=$$(oc get pods -n $(NAMESPACE) -l app=alert-example -o jsonpath='{range .items[*]}{.status.containerStatuses[0].state.waiting.reason}{"\n"}{end}' 2>/dev/null | head -n1); \
@@ -953,18 +949,49 @@ install-alert-example: namespace
 	  exit 1; \
 	else \
 	  echo "✅ alert-example deployed successfully and pod is in CrashLoopBackOff"; \
-	  echo "ℹ You can verify in Prometheus that alert 'AlertExampleDown' is firing."; \
+	  echo "ℹ You can verify in Prometheus that alert 'Alert_exampleDown' is firing."; \
+	fi
+	@echo "→ Waiting for my-app-example Pod to be Ready"
+	@retries=60; \
+	while [ $$retries -gt 0 ]; do \
+	  if [ -n "$$(oc get pods -n $(NAMESPACE) -l app=my-app-example -o name 2>/dev/null | head -n1)" ]; then \
+	    break; \
+	  fi; \
+	  sleep 2; retries=$$((retries-1)); \
+	done; \
+	if [ $$retries -eq 0 ]; then \
+	  echo "✖ Timed out waiting for my-app-example pod creation"; \
+	  exit 1; \
+	fi
+	@oc wait -n $(NAMESPACE) --for=condition=Ready pod -l app=my-app-example --timeout=2m || true
+	@echo "→ Invoking /config on my-app-example route to trigger error span and termination"
+	@host=$$(oc get route my-app-example -n $(NAMESPACE) -o jsonpath='{.spec.host}'); \
+	if [ -z "$$host" ]; then \
+	  echo "✖ Could not determine route host for my-app-example"; \
+	  exit 1; \
+	else \
+	  echo "   Route host: $$host"; \
+	  curl -sS -m 15 "http://$$host/config" || true; \
+	fi
+	@echo "→ Waiting for my-app-example Pod phase to become Failed"
+	@retries=60; \
+	while [ $$retries -gt 0 ]; do \
+	  phase=$$(oc get pods -n $(NAMESPACE) -l app=my-app-example -o jsonpath='{range .items[*]}{.status.phase}{"\n"}{end}' 2>/dev/null | head -n1); \
+	  if [ "$$phase" = "Failed" ]; then echo "✔ my-app-example pod phase=Failed"; break; fi; \
+	  sleep 5; retries=$$((retries-1)); \
+	done; \
+	if [ $$retries -eq 0 ]; then \
+	  echo "✖ Timed out waiting for my-app-example pod to reach Failed phase"; \
+	  exit 1; \
+	else \
+	  echo "✅ my-app-example executed /config, emitted error span, and pod is now Failed"; \
 	fi
 
 .PHONY: uninstall-alert-example
 uninstall-alert-example: namespace
-	@echo "→ Uninstalling alert-example resources from namespace $(NAMESPACE)"
-	- oc delete -n $(NAMESPACE) -f $(ALERT_EXAMPLE_K8S_DIR)/prometheusrule.yaml --ignore-not-found
-	- oc delete deployment alert-example -n $(NAMESPACE) --ignore-not-found
-	- oc delete service alert-example -n $(NAMESPACE) --ignore-not-found
-	- oc delete route alert-example -n $(NAMESPACE) --ignore-not-found
-	- oc delete configmap alert-example-config -n $(NAMESPACE) --ignore-not-found
-	@echo "✅ alert-example resources removed (skipped any that were not found)"
+	@echo "→ Uninstalling Helm release 'alert-example' from namespace $(NAMESPACE) (removes alert-example and trace-example)"
+	- helm uninstall alert-example -n $(NAMESPACE) --ignore-not-found
+	@echo "✅ Helm release uninstalled  resources cleaned"
 
 
 .PHONY: install-minio
