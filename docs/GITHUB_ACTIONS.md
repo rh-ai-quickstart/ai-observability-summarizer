@@ -52,12 +52,12 @@ The project uses 6 GitHub Actions workflows with the following execution order a
    - **Dependencies:** None - can be run independently
 
 6. **Cleanup Old Summarizer Container Images** (`.github/workflows/cleanup-old-images.yml`)
-   - **Trigger:** **Manual only** - workflow_dispatch
+   - **Trigger:** Monthly schedule (1st day of month at midnight UTC) and manual workflow_dispatch
    - **Purpose:** Deletes old container images from Quay.io to manage storage
    - **Actions:**
      - Processes 3 container images: aiobs-metrics-ui, aiobs-metrics-alerting, aiobs-mcp-server
      - Deletes tags older than retention period (default: 30 days)
-     - Protects `latest` tag and all `*-release` tags
+     - Protects `latest` tag and all `v*` tags (official releases, e.g., `v1.0.0`)
      - Supports custom retention days and protected tags via inputs
      - Includes dry-run mode for safe testing
    - **Safety:** Defaults to dry-run mode for manual executions
@@ -75,8 +75,10 @@ PR Merged to main/dev
     └── Deploy to OpenShift ✅
 
 Manual Operations:
-├── Undeploy from OpenShift (manual only) ⚠️
-└── Cleanup Old Container Images (manual only) 🗑️
+└── Undeploy from OpenShift (manual only) ⚠️
+
+Scheduled Operations:
+└── Cleanup Old Container Images (monthly + manual) 🗑️
 ```
 
 ## OpenShift Service Account Setup
@@ -171,11 +173,12 @@ After running the setup script, configure these secrets in your GitHub repositor
 - **Safety features:** Prevents accidental deletion through explicit confirmation
 
 **Cleanup Old Container Images Workflow:**
-- **Manual trigger only:** No automatic execution
-- **Dry run:** Defaults to `true` for safety (recommended for first run)
+- **Scheduled:** Runs automatically on 1st day of each month at midnight UTC
+- **Manual trigger:** Also supports workflow_dispatch with custom parameters
+- **Dry run:** Defaults to `true` for manual executions (scheduled runs delete by default)
 - **Retention days:** Number of days to keep images (default: 30)
 - **Protected tags:** Comma-separated list of additional tags to protect (optional)
-- **Safety features:** Always protects `latest` and `*-release` tags, defaults to dry-run mode
+- **Safety features:** Always protects `latest` and `v*` tags (official releases), defaults to dry-run mode
 
 ## Manual Workflow Execution
 
@@ -184,6 +187,9 @@ Most workflows run automatically, but some can be triggered manually:
 ### Automatic Workflows (No Manual Trigger)
 - **Run Tests:** Triggered by PR events (opened, synchronize, reopened) and pushes to `main`/`dev`
 - **Rebase Check:** Triggered by PR events (opened, synchronize, reopened)
+
+### Scheduled Workflows (Can Also Run Manually)
+- **Cleanup Old Container Images:** Runs monthly (1st day at midnight UTC), also supports manual trigger
 
 ### Manual Workflows
 1. Go to **Actions** tab in your GitHub repository
