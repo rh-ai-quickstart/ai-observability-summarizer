@@ -337,8 +337,7 @@ def fetch_vllm_metrics_data(
                     ns, actual_model = [s.strip() for s in model_name.split("|", 1)]
                     label_clause = f'model_name="{actual_model}",namespace="{ns}"'
                 else:
-                    ns = None
-                    actual_model = model_name
+                    # Model name without namespace prefix
                     label_clause = f'model_name="{model_name}"'
                 
                 final_query = _inject_labels_into_query(query, label_clause)

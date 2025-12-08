@@ -90,6 +90,7 @@ def execute_instant_queries_parallel(queries: Dict[str, str], max_workers: int =
                 if isinstance(val, list) and len(val) > 1:
                     value = float(val[1])
         except (ValueError, TypeError, IndexError):
+            # Use default value (0.0) if extraction fails - metric may be unavailable
             pass
         return (label, round(value, 2))
     
@@ -158,13 +159,14 @@ def execute_range_queries_parallel(
                 for ts, val in values:
                     try:
                         float_val = float(val)
-                        # Skip NaN values
-                        if not (float_val != float_val):  # NaN check
+                        # Skip NaN values using math.isnan for clarity
+                        if not math.isnan(float_val):
                             time_series.append({
                                 "timestamp": datetime.fromtimestamp(ts).isoformat(),
                                 "value": round(float_val, 2)
                             })
                     except (ValueError, TypeError):
+                        # Skip values that can't be converted to float (e.g., "NaN" string, None)
                         pass
             return (label, time_series)
         except Exception as e:
