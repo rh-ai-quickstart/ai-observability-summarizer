@@ -1,11 +1,25 @@
 """Observability tools for OpenShift AI monitoring and analysis (vLLM-focused).
 
 This module provides MCP tools for vLLM observability:
-- list_models: Get available AI models
-- list_vllm_namespaces: List monitored namespaces  
-- get_vllm_metrics_tool: Get available vLLM metrics
-- fetch_vllm_metrics_data: Fetch metrics data for display
-- analyze_vllm: Analyze metrics with AI summarization
+
+Model & Namespace Discovery:
+- list_models: Get available AI/vLLM models
+- list_vllm_namespaces: List monitored namespaces with vLLM deployments
+- get_model_config: Get configured LLM models for summarization
+- list_summarization_models: List available summarization models
+
+Metrics:
+- get_vllm_metrics_tool: Get available vLLM metrics with friendly names
+- fetch_vllm_metrics_data: Fetch metrics data with time-series for display
+- calculate_metrics: Calculate statistics for provided metrics data
+
+Analysis:
+- analyze_vllm: Analyze vLLM metrics and summarize using LLM
+- chat_vllm: Chat with AI about vLLM metrics
+
+Infrastructure:
+- get_gpu_info: Get cluster GPU information
+- get_deployment_info: Get model deployment details
 
 OpenShift-specific tools live in observability_openshift_tools.py
 """
