@@ -1,94 +1,81 @@
-# OpenShift Console Plugin Template
+# OpenShift AI Observability Console Plugin
 
-This project is a minimal template for writing a new OpenShift Console dynamic
-plugin.
+An OpenShift Console dynamic plugin that provides AI-powered observability for vLLM and OpenShift workloads.
 
-[Dynamic plugins](https://github.com/openshift/console/tree/master/frontend/packages/console-dynamic-plugin-sdk)
-allow you to extend the
-[OpenShift UI](https://github.com/openshift/console)
-at runtime, adding custom pages and other extensions. They are based on
-[webpack module federation](https://webpack.js.org/concepts/module-federation/).
-Plugins are registered with console using the `ConsolePlugin` custom resource
-and enabled in the console operator config by a cluster administrator.
+## Features
 
-Using the latest `v1` API version of `ConsolePlugin` CRD, requires OpenShift 4.12
-and higher. For using old `v1alpha1` API version us OpenShift version 4.10 or 4.11.
+- **Overview Dashboard** – Quick status cards, health indicators, and navigation
+- **vLLM Metrics** – GPU utilization, inference throughput, latency, KV cache metrics with sparklines
+- **OpenShift Metrics** – Cluster-wide and namespace-scoped metrics across 11 categories
+- **AI Analysis** – LLM-powered insights using configurable AI models
+- **Settings** – Configure internal or external AI models with API key support
 
-For an example of a plugin that works with OpenShift 4.11, see the `release-4.11` branch.
-For a plugin that works with OpenShift 4.10, see the `release-4.10` branch.
+## Prerequisites
 
-[Node.js](https://nodejs.org/en/) and [yarn](https://yarnpkg.com) are required
-to build and run the example. To run OpenShift console in a container, either
-[Docker](https://www.docker.com) or [podman 3.2.0+](https://podman.io) and
-[oc](https://console.redhat.com/openshift/downloads) are required.
+- [Node.js](https://nodejs.org/) 20+
+- [Yarn](https://yarnpkg.com/) 1.22+
+- [Podman](https://podman.io/) 3.2+ or [Docker](https://www.docker.com/)
+- [oc CLI](https://console.redhat.com/openshift/downloads)
+- Access to an OpenShift 4.12+ cluster
 
-## Getting started
+## Local Development
 
-> [!IMPORTANT]  
-> To use this template, **DO NOT FORK THIS REPOSITORY**! Click **Use this template**, then select
-> [**Create a new repository**](https://github.com/new?template_name=networking-console-plugin&template_owner=openshift)
-> to create a new repository.
->
-> ![A screenshot showing where the "Use this template" button is located](https://i.imgur.com/AhaySbU.png)
->
-> **Forking this repository** for purposes outside of contributing to this repository
-> **will cause issues**, as users cannot have more than one fork of a template repository
-> at a time. This could prevent future users from forking and contributing to your plugin.
-> 
-> Your fork would also behave like a template repository, which might be confusing for
-> contributiors, because it is not possible for repositories generated from a template
-> repository to contribute back to the template.
+### Quick Start
 
-After cloning your instantiated repository, you must update the plugin metadata, such as the
-plugin name in the `consolePlugin` declaration of [package.json](package.json).
+```bash
+# 1. Install dependencies
+cd openshift-plugin
+yarn install
 
-```json
-"consolePlugin": {
-  "name": "console-plugin-template",
-  "version": "0.0.1",
-  "displayName": "My Plugin",
-  "description": "Enjoy this shiny, new console plugin!",
-  "exposedModules": {
-    "ExamplePage": "./components/ExamplePage"
-  },
-  "dependencies": {
-    "@console/pluginAPI": "*"
-  }
-}
+# 2. Start the plugin dev server (Terminal 1)
+yarn run start
+
+# 3. Login to your OpenShift cluster (Terminal 2)
+oc login https://api.your-cluster.com:6443
+
+# 4. Start the local OpenShift Console (Terminal 2)
+yarn run start-console
+
+# 5. Open browser
+open http://localhost:9000
 ```
 
-The template adds a single example page in the Home navigation section. The
-extension is declared in the [console-extensions.json](console-extensions.json)
-file and the React component is declared in
-[src/components/ExamplePage.tsx](src/components/ExamplePage.tsx).
+The plugin will be available at **Observe → AI Observability** in the console.
 
-You can run the plugin using a local development environment or build an image
-to deploy it to a cluster.
+### Testing with MCP Server
 
-## Development
+For full functionality (metrics, AI analysis), you need the MCP server running locally:
 
-### Option 1: Local
+```bash
+# From the project root directory (not openshift-plugin)
+cd ..
 
-In one terminal window, run:
+# Option A: Use the local-dev script (recommended)
+./scripts/local-dev.sh -n <your-namespace> -p
 
-1. `yarn install`
-2. `yarn run start`
+# Option B: Start MCP server manually
+uv run python -m mcp_server.api
+```
 
-In another terminal window, run:
+The MCP server runs on `http://localhost:8085`.
 
-1. `oc login` (requires [oc](https://console.redhat.com/openshift/downloads) and an [OpenShift cluster](https://console.redhat.com/openshift/create))
-2. `yarn run start-console` (requires [Docker](https://www.docker.com) or [podman 3.2.0+](https://podman.io))
+> **How does this work?** The plugin automatically detects the environment:
+> - **Local dev** (`localhost:9000`): Connects directly to `http://localhost:8085/mcp`
+> - **Production** (OpenShift): Uses the Console proxy at `/api/proxy/plugin/.../mcp`
+>
+> No code changes needed—just start the MCP server locally!
 
-This will run the OpenShift console in a container connected to the cluster
-you've logged into. The plugin HTTP server runs on port 9001 with CORS enabled.
-Navigate to <http://localhost:9000/example> to see the running plugin.
+### What Each Terminal Does
 
-#### Running start-console with Apple silicon and podman
+| Terminal | Command | Purpose |
+|----------|---------|---------|
+| 1 | `yarn run start` | Webpack dev server for plugin (port 9001) |
+| 2 | `yarn run start-console` | OpenShift Console container (port 9000) |
+| 3 | `./scripts/local-dev.sh -n <ns> -p` | MCP server + port forwards (port 8085) |
 
-If you are using podman on a Mac with Apple silicon, `yarn run start-console`
-might fail since it runs an amd64 image. You can workaround the problem with
-[qemu-user-static](https://github.com/multiarch/qemu-user-static) by running
-these commands:
+### Apple Silicon (M1/M2/M3) Setup
+
+If using Podman on Apple Silicon, you may need to enable x86 emulation:
 
 ```bash
 podman machine ssh
@@ -97,138 +84,127 @@ rpm-ostree install qemu-user-static
 systemctl reboot
 ```
 
-### Option 2: Docker + VSCode Remote Container
+### Troubleshooting Local Dev
 
-Make sure the
-[Remote Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
-extension is installed. This method uses Docker Compose where one container is
-the OpenShift console and the second container is the plugin. It requires that
-you have access to an existing OpenShift cluster. After the initial build, the
-cached containers will help you start developing in seconds.
+**Plugin not loading in console?**
+- Ensure `yarn run start` is running and shows no errors
+- Check http://localhost:9001/plugin-manifest.json returns valid JSON
+- Restart `yarn run start-console`
 
-1. Create a `dev.env` file inside the `.devcontainer` folder with the correct values for your cluster:
+**MCP Server disconnected?**
+- Verify MCP server is running: `curl http://localhost:8085/health`
+- Check browser console for connection errors
+
+**Console container fails to start?**
+- Ensure `oc login` was successful: `oc whoami`
+- Check Podman/Docker is running: `podman ps` or `docker ps`
+
+## Building & Deployment
+
+### Build the Plugin Image
 
 ```bash
-OC_PLUGIN_NAME=console-plugin-template
-OC_URL=https://api.example.com:6443
-OC_USER=kubeadmin
-OC_PASS=<password>
+# From project root
+make build-console-plugin
+
+# Or manually
+cd openshift-plugin
+yarn install && yarn build
+podman build -t quay.io/your-org/aiobs-console-plugin:latest .
 ```
 
-2. `(Ctrl+Shift+P) => Remote Containers: Open Folder in Container...`
-3. `yarn run start`
-4. Navigate to <http://localhost:9000/example>
+### Push to Registry
 
-## Docker image
+```bash
+make push-console-plugin
 
-Before you can deploy your plugin on a cluster, you must build an image and
-push it to an image registry.
-
-1. Build the image:
-
-   ```sh
-   docker build -t quay.io/my-repository/my-plugin:latest .
-   ```
-
-2. Run the image:
-
-   ```sh
-   docker run -it --rm -d -p 9001:80 quay.io/my-repository/my-plugin:latest
-   ```
-
-3. Push the image:
-
-   ```sh
-   docker push quay.io/my-repository/my-plugin:latest
-   ```
-
-NOTE: If you have a Mac with Apple silicon, you will need to add the flag
-`--platform=linux/amd64` when building the image to target the correct platform
-to run in-cluster.
-
-## Deployment on cluster
-
-A [Helm](https://helm.sh) chart is available to deploy the plugin to an OpenShift environment.
-
-The following Helm parameters are required:
-
-`plugin.image`: The location of the image containing the plugin that was previously pushed
-
-Additional parameters can be specified if desired. Consult the chart [values](charts/openshift-console-plugin/values.yaml) file for the full set of supported parameters.
-
-### Installing the Helm Chart
-
-Install the chart using the name of the plugin as the Helm release name into a new namespace or an existing namespace as specified by the `plugin_console-plugin-template` parameter and providing the location of the image within the `plugin.image` parameter by using the following command:
-
-```shell
-helm upgrade -i  my-plugin charts/openshift-console-plugin -n my-namespace --create-namespace --set plugin.image=my-plugin-image-location
+# Or manually
+podman push quay.io/your-org/aiobs-console-plugin:latest
 ```
 
-NOTE: When deploying on OpenShift 4.10, it is recommended to add the parameter `--set plugin.securityContext.enabled=false` which will omit configurations related to Pod Security.
+### Deploy to OpenShift
 
-NOTE: When defining i18n namespace, adhere `plugin__<name-of-the-plugin>` format. The name of the plugin should be extracted from the `consolePlugin` declaration within the [package.json](package.json) file.
+```bash
+# Using Makefile (recommended)
+make install-console-plugin NAMESPACE=your-namespace
 
-## i18n
-
-The plugin template demonstrates how you can translate messages in with [react-i18next](https://react.i18next.com/). The i18n namespace must match
-the name of the `ConsolePlugin` resource with the `plugin__` prefix to avoid
-naming conflicts. For example, the plugin template uses the
-`plugin__console-plugin-template` namespace. You can use the `useTranslation` hook
-with this namespace as follows:
-
-```tsx
-conster Header: React.FC = () => {
-  const { t } = useTranslation('plugin__console-plugin-template');
-  return <h1>{t('Hello, World!')}</h1>;
-};
+# Or using Helm directly
+helm upgrade -i openshift-ai-observability \
+  charts/openshift-console-plugin \
+  -n your-namespace \
+  --create-namespace \
+  --set plugin.image=quay.io/your-org/aiobs-console-plugin:latest
 ```
 
-For labels in `console-extensions.json`, you can use the format
-`%plugin__console-plugin-template~My Label%`. Console will replace the value with
-the message for the current language from the `plugin__console-plugin-template`
-namespace. For example:
+### Enable the Plugin
 
-```json
-  {
-    "type": "console.navigation/section",
-    "properties": {
-      "id": "admin-demo-section",
-      "perspective": "admin",
-      "name": "%plugin__console-plugin-template~Plugin Template%"
-    }
-  }
+After deployment, enable the plugin in the OpenShift Console:
+
+1. Go to **Administration → Cluster Settings → Configuration → Console**
+2. Click **Console plugins** tab
+3. Enable **openshift-ai-observability**
+
+Or via CLI:
+```bash
+oc patch console.operator.openshift.io cluster \
+  --type=merge \
+  --patch='{"spec":{"plugins":["openshift-ai-observability"]}}'
 ```
 
-Running `yarn i18n` updates the JSON files in the `locales` folder of the
-plugin template when adding or changing messages.
+## Project Structure
 
-## Linting
+```
+openshift-plugin/
+├── src/
+│   ├── pages/           # Main page components
+│   │   ├── AIObservabilityPage.tsx   # Overview dashboard
+│   │   ├── VLLMMetricsPage.tsx       # vLLM metrics
+│   │   ├── OpenShiftMetricsPage.tsx  # OpenShift metrics
+│   │   └── AIChatPage.tsx            # AI chat interface
+│   ├── components/      # Reusable components
+│   └── services/
+│       └── mcpClient.ts # MCP server communication
+├── charts/              # Helm chart for deployment
+├── console-extensions.json  # Plugin extension points
+└── package.json         # Plugin metadata & dependencies
+```
 
-This project adds prettier, eslint, and stylelint. Linting can be run with
-`yarn run lint`.
+## Configuration
 
-The stylelint config disallows hex colors since these cause problems with dark
-mode (starting in OpenShift console 4.11). You should use the
-[PatternFly global CSS variables](https://patternfly-react-main.surge.sh/developer-resources/global-css-variables#global-css-variables)
-for colors instead.
+### MCP Server Proxy
 
-The stylelint config also disallows naked element selectors like `table` and
-`.pf-` or `.co-` prefixed classes. This prevents plugins from accidentally
-overwriting default console styles, breaking the layout of existing pages. The
-best practice is to prefix your CSS classnames with your plugin name to avoid
-conflicts. Please don't disable these rules without understanding how they can
-break console styles!
+The plugin communicates with the MCP server through the OpenShift Console proxy. This is configured in the Helm chart:
 
-## Reporting
+```yaml
+# charts/openshift-console-plugin/values.yaml
+plugin:
+  proxy:
+    - alias: mcp
+      endpoint:
+        service:
+          name: mcp-server-svc
+          namespace: "{{ .Release.Namespace }}"
+          port: 8085
+        type: Service
+```
 
-Steps to generate reports
+### AI Model Settings
 
-1. In command prompt, navigate to root folder and execute the command `yarn run cypress-merge`
-2. Then execute command `yarn run cypress-generate`
-The cypress-report.html file is generated and should be in (/integration-tests/screenshots) directory
+Users can configure AI models in the plugin's Settings modal:
+- **Internal models**: LlamaStack models running in-cluster
+- **External models**: OpenAI, Anthropic, Google with API keys
+
+Settings are stored in browser localStorage.
+
+## Development Notes
+
+- Uses **React 17** (required by OpenShift Console)
+- Uses **PatternFly 5** for UI components
+- TypeScript strict mode enabled
+- Webpack module federation for dynamic loading
 
 ## References
 
-- [Console Plugin SDK README](https://github.com/openshift/console/tree/master/frontend/packages/console-dynamic-plugin-sdk)
-- [Customization Plugin Example](https://github.com/spadgett/console-customization-plugin)
-- [Dynamic Plugin Enhancement Proposal](https://github.com/openshift/enhancements/blob/master/enhancements/console/dynamic-plugins.md)
+- [Console Dynamic Plugin SDK](https://github.com/openshift/console/tree/master/frontend/packages/console-dynamic-plugin-sdk)
+- [PatternFly 5 Documentation](https://www.patternfly.org/v5/)
+- [OpenShift Console Plugin Template](https://github.com/openshift/console-plugin-template)

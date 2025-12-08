@@ -1,13 +1,32 @@
 /**
  * MCP Client for OpenShift Console Plugin
- * Communicates with the MCP server via the console's proxy
+ * Communicates with the MCP server via the console's proxy (production)
+ * or directly via localhost (local development)
  * Uses stateless HTTP mode - no session management needed
  */
 
-// Use the OpenShift Console's proxy to reach the MCP server
-// The proxy is configured in the ConsolePlugin CR via Helm chart
-// Format: /api/proxy/plugin/<plugin-name>/<alias>/<path>
-const MCP_SERVER_URL = '/api/proxy/plugin/openshift-ai-observability/mcp/mcp';
+// Determine MCP server URL based on environment
+// - Production: Use OpenShift Console proxy (path starts with /api/proxy/)
+// - Local dev: Use localhost directly (when running yarn start + start-console)
+function getMcpServerUrl(): string {
+  // Check if we're running in local development mode
+  // In local dev, window.location.origin is http://localhost:9000 (console container)
+  // The browser makes requests, so we need to use localhost:8085 directly
+  const isLocalDev = window.location.hostname === 'localhost' || 
+                     window.location.hostname === '127.0.0.1';
+  
+  if (isLocalDev) {
+    // Local development: connect directly to MCP server on host
+    return 'http://localhost:8085/mcp';
+  }
+  
+  // Production: Use OpenShift Console's proxy to reach the MCP server
+  // The proxy is configured in the ConsolePlugin CR via Helm chart
+  // Format: /api/proxy/plugin/<plugin-name>/<alias>/<path>
+  return '/api/proxy/plugin/openshift-ai-observability/mcp/mcp';
+}
+
+const MCP_SERVER_URL = getMcpServerUrl();
 
 // ============ Session Config (localStorage) ============
 
