@@ -201,6 +201,117 @@ def analyze_openshift(
         return error.to_mcp_response()
 
 
+def fetch_openshift_metrics_data(
+    metric_category: str,
+    scope: str = "cluster_wide",
+    namespace: Optional[str] = None,
+    time_range: Optional[str] = None,
+    start_datetime: Optional[str] = None,
+    end_datetime: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Fetch OpenShift metrics data for dashboard visualization (no LLM analysis).
+    
+    Uses parallel instant queries for fast dashboard loading.
+    Returns raw metrics with latest values.
+    """
+    # Validate parameters
+    try:
+        validate_required_params(metric_category=metric_category, scope=scope)
+        if scope not in (CLUSTER_WIDE, NAMESPACE_SCOPED):
+            raise ValidationError(
+                message="Invalid scope. Use 'cluster_wide' or 'namespace_scoped'.",
+                field="scope",
+                value=scope,
+            )
+        if scope == NAMESPACE_SCOPED and not namespace:
+            raise ValidationError(
+                message="Namespace is required when scope is 'namespace_scoped'.",
+                field="namespace",
+                value=namespace,
+            )
+    except ValidationError as e:
+        return e.to_mcp_response()
+
+    # Resolve time range (for metadata, not used in instant queries)
+    try:
+        start_ts, end_ts = resolve_time_range(
+            time_range=time_range,
+            start_datetime=start_datetime,
+            end_datetime=end_datetime,
+        )
+    except Exception as e:
+        error = MCPException(
+            message=f"Time range resolution failed: {str(e)}",
+            error_code=MCPErrorCode.INVALID_INPUT,
+        )
+        return error.to_mcp_response()
+
+    try:
+        # Get the queries for this category
+        openshift_metrics = core_metrics.get_openshift_metrics()
+        category_queries = openshift_metrics.get(metric_category, {})
+        
+        if not category_queries:
+            return make_mcp_text_response(json.dumps({
+                "category": metric_category,
+                "scope": scope,
+                "namespace": namespace,
+                "metrics": {},
+                "error": f"Unknown metric category: {metric_category}"
+            }))
+
+        # Prepare queries with namespace filter if needed
+        prepared_queries: Dict[str, str] = {}
+        for label, query in category_queries.items():
+            final_query = query
+            if scope == NAMESPACE_SCOPED and namespace:
+                if '{' in query:
+                    final_query = query.replace('{', f'{{namespace="{namespace}",')
+                else:
+                    # Add namespace filter to queries without existing filters
+                    final_query = query.replace(')', f'{{namespace="{namespace}"}})')
+            prepared_queries[label] = final_query
+
+        # Execute instant queries for current values (fast!)
+        values = core_metrics.execute_instant_queries_parallel(prepared_queries, max_workers=10)
+        
+        # Execute range queries for sparklines (in parallel)
+        time_series_data = core_metrics.execute_range_queries_parallel(
+            prepared_queries,
+            start_ts,
+            end_ts,
+            max_workers=10,
+            max_points=15  # ~15 points for sparklines
+        )
+        
+        # Format results
+        metrics_data: Dict[str, Any] = {}
+        for label, value in values.items():
+            metrics_data[label] = {
+                "latest_value": value,
+                "time_series": time_series_data.get(label, []),
+            }
+
+        result = {
+            "category": metric_category,
+            "scope": scope,
+            "namespace": namespace,
+            "start_ts": start_ts,
+            "end_ts": end_ts,
+            "metrics": metrics_data,
+        }
+        
+        return make_mcp_text_response(json.dumps(result))
+
+    except Exception as e:
+        error = MCPException(
+            message=f"Error fetching OpenShift metrics: {str(e)}",
+            error_code=MCPErrorCode.PROMETHEUS_ERROR,
+        )
+        return error.to_mcp_response()
+
+
 def list_openshift_metric_groups() -> List[Dict[str, Any]]:
     """Return OpenShift metric group categories (cluster-wide)."""
     groups = list(core_metrics.get_openshift_metrics().keys())

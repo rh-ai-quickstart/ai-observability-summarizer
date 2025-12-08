@@ -35,7 +35,8 @@ if settings.MCP_TRANSPORT_PROTOCOL == "sse":
 
     mcp_app = create_sse_app(server.mcp, message_path="/sse/message", sse_path="/sse")
 else:
-    mcp_app = server.mcp.http_app(path="/mcp")
+    # Use stateless_http mode with JSON responses for simple browser access
+    mcp_app = server.mcp.http_app(path="/mcp", stateless_http=True, json_response=True)
 
 # Initialize FastAPI with MCP lifespan
 app = FastAPI(lifespan=mcp_app.lifespan)

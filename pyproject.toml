@@ -28,6 +28,7 @@ dependencies = [
     "anthropic>=0.39.0",
     "openai>=2.6.0",
     "google-generativeai>=0.8.5",
+    "itsdangerous>=2.1.0",
 ]
 
 [dependency-groups]

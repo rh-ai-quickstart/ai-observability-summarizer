@@ -54,33 +54,32 @@ def test_get_model_config_empty(_):
     texts = _texts(out)
     assert any("No LLM models configured" in t for t in texts)
 @patch("src.mcp_server.tools.observability_vllm_tools.get_vllm_metrics", return_value={"latency": "q1", "tps": "q2"})
-@patch("src.mcp_server.tools.observability_vllm_tools.fetch_metrics")
+@patch("src.mcp_server.tools.observability_vllm_tools.execute_range_queries_parallel")
 @patch("src.mcp_server.tools.observability_vllm_tools.build_prompt", return_value="PROMPT")
 @patch("src.mcp_server.tools.observability_vllm_tools.summarize_with_llm", return_value="SUMMARY")
-@patch("src.mcp_server.tools.observability_vllm_tools.extract_time_range_with_info", return_value=(1, 2, {}))
-def test_analyze_vllm_success(_, __, ___, mock_fetch, ____):
-    # Create proper DataFrame-like mock objects
-    import pandas as pd
-    from datetime import datetime
+@patch("src.mcp_server.tools.observability_vllm_tools.resolve_time_range", return_value=(1000, 2000))
+def test_analyze_vllm_success(_, __, ___, mock_range_queries, ____):
+    import json
     
-    # Mock DataFrame with required columns
-    mock_df1 = pd.DataFrame({
-        "timestamp": [datetime.now(), datetime.now()],
-        "value": [1.0, 2.0]
-    })
-    mock_df2 = pd.DataFrame({
-        "timestamp": [datetime.now(), datetime.now()],
-        "value": [3.0, 4.0]
-    })
+    # Mock range query results (time series data)
+    mock_range_queries.return_value = {
+        "latency": {
+            "latest_value": 1.5,
+            "time_series": [{"timestamp": "2024-01-01T10:00:00", "value": 1.5}]
+        },
+        "tps": {
+            "latest_value": 100,
+            "time_series": [{"timestamp": "2024-01-01T10:00:00", "value": 100}]
+        }
+    }
     
-    mock_fetch.side_effect = [mock_df1, mock_df2]
+    out = tools.analyze_vllm("model", "summarizer", time_range="1h")
     
-    out = tools.analyze_vllm("model", "summarizer", time_range="last 1h")
-    text = "\n".join(_texts(out))
-    assert "Model: model" in text
-    assert "PROMPT" in text
-    assert "SUMMARY" in text
-    assert "Metrics Preview" in text
+    # analyze_vllm now returns a JSON string
+    result = json.loads(out)
+    assert result["model_name"] == "model"
+    assert result["summary"] == "SUMMARY"
+    assert "time_range" in result
 
 
 def test_calculate_metrics_success():
@@ -185,51 +184,36 @@ def test_calculate_metrics_invalid_data_format():
 
 
 def test_analyze_vllm_with_structured_data():
-    """Test that analyze_vllm returns structured data in the response"""
-    import pandas as pd
-    from datetime import datetime
+    """Test that analyze_vllm returns structured JSON response"""
+    import json
     
     with patch("src.mcp_server.tools.observability_vllm_tools.get_vllm_metrics", return_value={"GPU Temperature (°C)": "query1"}):
-        with patch("src.mcp_server.tools.observability_vllm_tools.extract_time_range_with_info", return_value=(1, 2, {})):
+        with patch("src.mcp_server.tools.observability_vllm_tools.resolve_time_range", return_value=(1000, 2000)):
             with patch("src.mcp_server.tools.observability_vllm_tools.build_prompt", return_value="TEST_PROMPT"):
                 with patch("src.mcp_server.tools.observability_vllm_tools.summarize_with_llm", return_value="TEST_SUMMARY"):
-                    with patch("src.mcp_server.tools.observability_vllm_tools.fetch_metrics") as mock_fetch:
-                        # Create mock DataFrame with realistic data
-                        mock_df = pd.DataFrame({
-                            "timestamp": [datetime(2024, 1, 1, 10, 0), datetime(2024, 1, 1, 10, 1)],
-                            "value": [45.2, 46.1]
-                        })
-                        mock_fetch.return_value = mock_df
+                    with patch("src.mcp_server.tools.observability_vllm_tools.execute_range_queries_parallel") as mock_range:
+                        # Mock range query results
+                        mock_range.return_value = {
+                            "GPU Temperature (°C)": {
+                                "latest_value": 46.1,
+                                "time_series": [
+                                    {"timestamp": "2024-01-01T10:00:00", "value": 45.2},
+                                    {"timestamp": "2024-01-01T10:01:00", "value": 46.1}
+                                ]
+                            }
+                        }
                         
-                        result = tools.analyze_vllm("test-model", "test-summarizer", time_range="last 1h")
+                        result = tools.analyze_vllm("test-model", "test-summarizer", time_range="1h")
                         
-                        text = _texts(result)[0]
+                        # analyze_vllm now returns a JSON string directly
+                        structured = json.loads(result)
                         
-                        # Check that structured data is included
-                        assert "STRUCTURED_DATA:" in text
+                        assert "model_name" in structured
+                        assert "summary" in structured
+                        assert "time_range" in structured
                         
-                        # Extract and parse the structured data
-                        structured_start = text.find("STRUCTURED_DATA:") + len("STRUCTURED_DATA:")
-                        json_data = text[structured_start:].strip()
-                        
-                        import json
-                        structured = json.loads(json_data)
-                        
-                        assert "health_prompt" in structured
-                        assert "llm_summary" in structured
-                        assert "metrics" in structured
-                        
-                        assert structured["health_prompt"] == "TEST_PROMPT"
-                        assert structured["llm_summary"] == "TEST_SUMMARY"
-                        
-                        # Check metrics structure
-                        metrics = structured["metrics"]
-                        assert "GPU Temperature (°C)" in metrics
-                        
-                        data_points = metrics["GPU Temperature (°C)"]
-                        assert len(data_points) == 2
-                        assert data_points[0]["value"] == 45.2
-                        assert data_points[1]["value"] == 46.1
+                        assert structured["model_name"] == "test-model"
+                        assert structured["summary"] == "TEST_SUMMARY"
 
 
 @patch("src.mcp_server.tools.observability_vllm_tools.get_vllm_metrics")

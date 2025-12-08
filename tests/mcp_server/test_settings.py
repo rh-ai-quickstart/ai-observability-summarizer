@@ -12,7 +12,7 @@ def test_settings_defaults():
     assert s.MCP_PORT == 8085
     assert s.MCP_TRANSPORT_PROTOCOL == "http"
     assert s.PYTHON_LOG_LEVEL == "INFO"
-    assert s.CORS_ENABLED is False
+    assert s.CORS_ENABLED is True  # Changed to True for React dashboard access
     assert isinstance(s.CORS_ORIGINS, list)
 
 
