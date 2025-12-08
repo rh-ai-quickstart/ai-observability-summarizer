@@ -12,6 +12,7 @@ OpenShift-specific tools live in observability_openshift_tools.py
 
 import json
 import math
+import os
 import re
 import pandas as pd
 from typing import Dict, Any, List, Optional
@@ -45,6 +46,7 @@ from mcp_server.exceptions import (
     MCPErrorCode,
     validate_required_params,
     validate_time_range,
+    safe_json_loads,
 )
 
 # Configure structured logging
