@@ -35,6 +35,7 @@ usage() {
     echo "  -c/-C CONFIG                 Model config source: 'local' or 'cluster' (default: local)"
     echo "  -l/-L LLM_MODEL              LLM model to generate config for (default: llama-3.2-3b-instruct, only used with -c local)"
     echo "  -p/-P                        Start OpenShift Console Plugin dev server (optional)"
+    echo "  -o/-O                        Start OpenShift Console with plugin (requires -p, starts full local console)"
     echo ""
     echo "Examples:"
     echo "  $0 -n default-ns                       # Use local config with default LLM (llama-3.2-3b-instruct)"
@@ -44,6 +45,7 @@ usage() {
     echo "  $0 -n default-ns -l llama-3.2-1b-instruct  # Generate config for llama-3.2-1b-instruct"
     echo "  $0 -n default-ns -l llama-3.1-8b-instruct  # Generate config for llama-3.1-8b-instruct"
     echo "  $0 -n default-ns -p                    # Start with OpenShift Console Plugin dev server"
+    echo "  $0 -n default-ns -p -o                 # Full local testing: MCP + Plugin + OpenShift Console"
 }
 
 # Function to parse command line arguments
@@ -59,9 +61,10 @@ parse_args() {
     MODEL_CONFIG_SOURCE="local"  # Default to local
     LLM_MODEL=$(get_default_model)  # Optional LLM model for config generation
     START_PLUGIN="false"  # Whether to start the OpenShift Console Plugin dev server
+    START_CONSOLE="false"  # Whether to start the OpenShift Console container
 
     # Parse standard arguments using getopts
-    while getopts "n:N:m:M:c:C:l:L:pPh" opt; do
+    while getopts "n:N:m:M:c:C:l:L:pPoOh" opt; do
         case $opt in
             n|N) DEFAULT_NAMESPACE="$OPTARG"
                  ;;
@@ -72,6 +75,8 @@ parse_args() {
             l|L) LLM_MODEL="$OPTARG"
                  ;;
             p|P) START_PLUGIN="true"
+                 ;;
+            o|O) START_CONSOLE="true"
                  ;;
             h) usage
                exit 0
@@ -98,6 +103,12 @@ parse_args() {
         exit 1
     fi
 
+    # If console is requested, plugin must also be started
+    if [ "$START_CONSOLE" = "true" ] && [ "$START_PLUGIN" = "false" ]; then
+        echo -e "${YELLOW}⚠️  Console (-o) requires plugin (-p). Enabling plugin automatically.${NC}"
+        START_PLUGIN="true"
+    fi
+
     # Set llama model namespace to default if not provided
     if [ -z "$LLAMA_MODEL_NAMESPACE" ]; then
         LLAMA_MODEL_NAMESPACE="$DEFAULT_NAMESPACE"
@@ -116,11 +127,21 @@ cleanup() {
     ensure_port_free "$MCP_PORT"
     ensure_port_free "$TEMPO_PORT"
     ensure_port_free "$PLUGIN_PORT"
+    ensure_port_free "$CONSOLE_PORT"
     pkill -f "oc port-forward" || true
     pkill -f "mcp_server.main" || true
     pkill -f "streamlit run ui.py" || true
     pkill -f "webpack serve" || true
     pkill -f "yarn.*start" || true
+    
+    # Stop OpenShift Console container if running
+    if command -v podman &> /dev/null; then
+        podman stop openshift-console 2>/dev/null || true
+        podman rm openshift-console 2>/dev/null || true
+    elif command -v docker &> /dev/null; then
+        docker stop openshift-console 2>/dev/null || true
+        docker rm openshift-console 2>/dev/null || true
+    fi
 
     # Deactivate virtual environment if it was activated
     if [ -n "$VIRTUAL_ENV" ]; then
@@ -348,12 +369,13 @@ start_local_services() {
     echo -e "${GREEN}📋 Log files for debugging (all in /tmp):${NC}"
     echo -e "   🔧 MCP Server: /tmp/summarizer-mcp-server.log"
     echo -e "   🎨 Streamlit UI: /tmp/summarizer-ui.log"
-    echo -e "   📊 Metrics API: /tmp/summarizer-metrics-api.log"
     if [ "$START_PLUGIN" = "true" ]; then
         echo -e "   🔌 Plugin Dev Server: /tmp/summarizer-plugin.log"
     fi
-    echo -e "   💡 To see live UI logs: tail -f /tmp/summarizer-ui.log"
-    echo -e "   💡 To see all logs: tail -f /tmp/summarizer-*.log"
+    if [ "$START_CONSOLE" = "true" ]; then
+        echo -e "   🖥️  OpenShift Console: /tmp/summarizer-console.log"
+    fi
+    echo -e "   💡 To see live logs: tail -f /tmp/summarizer-*.log"
 
     # Start OpenShift Console Plugin dev server if requested
     if [ "$START_PLUGIN" = "true" ]; then
@@ -376,6 +398,61 @@ start_local_services() {
             fi
         else
             echo -e "${RED}❌ openshift-plugin directory not found. Skipping plugin dev server.${NC}"
+            START_CONSOLE="false"  # Can't start console without plugin
+        fi
+    fi
+
+    # Start OpenShift Console container if requested
+    if [ "$START_CONSOLE" = "true" ]; then
+        echo -e "${BLUE}🖥️  Starting OpenShift Console container...${NC}"
+        ensure_port_free "$CONSOLE_PORT"
+        
+        # Determine container runtime
+        if command -v podman &> /dev/null; then
+            CONTAINER_CMD="podman"
+        elif command -v docker &> /dev/null; then
+            CONTAINER_CMD="docker"
+        else
+            echo -e "${RED}❌ Neither podman nor docker found. Cannot start console.${NC}"
+            START_CONSOLE="false"
+        fi
+        
+        if [ "$START_CONSOLE" = "true" ]; then
+            # Get cluster info for console
+            CONSOLE_IMAGE="quay.io/openshift/origin-console:latest"
+            BRIDGE_K8S_MODE_OFF_CLUSTER_ENDPOINT=$(oc whoami --show-server)
+            BRIDGE_K8S_AUTH_BEARER_TOKEN=$(oc whoami -t)
+            BRIDGE_USER_SETTINGS_LOCATION="localstorage"
+            
+            # Stop any existing console container
+            $CONTAINER_CMD stop openshift-console 2>/dev/null || true
+            $CONTAINER_CMD rm openshift-console 2>/dev/null || true
+            
+            # Start console container in background
+            $CONTAINER_CMD run -d --name openshift-console \
+                --rm \
+                -p "$CONSOLE_PORT:9000" \
+                --env BRIDGE_USER_AUTH="disabled" \
+                --env BRIDGE_K8S_MODE="off-cluster" \
+                --env BRIDGE_K8S_MODE_OFF_CLUSTER_ENDPOINT="$BRIDGE_K8S_MODE_OFF_CLUSTER_ENDPOINT" \
+                --env BRIDGE_K8S_MODE_OFF_CLUSTER_SKIP_VERIFY_TLS="true" \
+                --env BRIDGE_K8S_AUTH="bearer-token" \
+                --env BRIDGE_K8S_AUTH_BEARER_TOKEN="$BRIDGE_K8S_AUTH_BEARER_TOKEN" \
+                --env BRIDGE_USER_SETTINGS_LOCATION="$BRIDGE_USER_SETTINGS_LOCATION" \
+                --env BRIDGE_PLUGINS="openshift-ai-observability=http://host.containers.internal:$PLUGIN_PORT" \
+                "$CONSOLE_IMAGE" \
+                > /tmp/summarizer-console.log 2>&1
+            
+            # Wait for console to start
+            sleep 5
+            
+            # Test console health
+            if curl -s --connect-timeout 5 "http://localhost:$CONSOLE_PORT" | grep -q 'html'; then
+                echo -e "${GREEN}✅ OpenShift Console started successfully on port $CONSOLE_PORT${NC}"
+            else
+                echo -e "${YELLOW}⚠️  Console may still be starting. Check /tmp/summarizer-console.log${NC}"
+                echo -e "${YELLOW}   Container logs: $CONTAINER_CMD logs openshift-console${NC}"
+            fi
         fi
     fi
 
@@ -401,6 +478,7 @@ main() {
     echo -e "${BLUE}  MODEL_CONFIG_SOURCE: $MODEL_CONFIG_SOURCE${NC}"
     echo -e "${BLUE}  LLM_MODEL: $LLM_MODEL${NC}"
     echo -e "${BLUE}  START_PLUGIN: $START_PLUGIN${NC}"
+    echo -e "${BLUE}  START_CONSOLE: $START_CONSOLE${NC}"
     echo -e "${BLUE}--------------------------------${NC}\n"
 
     start_port_forwards
@@ -422,14 +500,25 @@ main() {
         echo -e "   ${YELLOW}🔌 Plugin Dev Server: http://localhost:$PLUGIN_PORT${NC}"
         echo -e "   ${YELLOW}📄 Plugin Manifest: http://localhost:$PLUGIN_PORT/plugin-manifest.json${NC}"
     fi
+    if [ "$START_CONSOLE" = "true" ]; then
+        echo -e "   ${YELLOW}🖥️  OpenShift Console: http://localhost:$CONSOLE_PORT${NC}"
+    fi
     
-    if [ "$START_PLUGIN" = "true" ]; then
+    # Show instructions based on what's running
+    if [ "$START_CONSOLE" = "true" ]; then
+        echo -e "\n${GREEN}🎯 OpenShift Console Plugin ready!${NC}"
+        echo -e "   ${BLUE}Open: http://localhost:$CONSOLE_PORT${NC}"
+        echo -e "   ${BLUE}Navigate to: Observe → AI Observability${NC}"
+    elif [ "$START_PLUGIN" = "true" ]; then
         echo -e "\n${GREEN}💡 To test with OpenShift Console, run in a new terminal:${NC}"
         echo -e "   ${BLUE}cd openshift-plugin && yarn run start-console${NC}"
         echo -e "   ${BLUE}Then open: http://localhost:$CONSOLE_PORT${NC}"
+        echo -e "\n${GREEN}   Or use the -o flag to start everything together:${NC}"
+        echo -e "   ${BLUE}$0 -n $DEFAULT_NAMESPACE -p -o${NC}"
+    else
+        echo -e "\n${GREEN}🎯 Ready to use! Open your browser to http://localhost:$UI_PORT${NC}"
     fi
     
-    echo -e "\n${GREEN}🎯 Ready to use! Open your browser to http://localhost:$UI_PORT${NC}"
     echo -e "\n${YELLOW}📝 Note: Keep this terminal open to maintain all services${NC}"
     echo -e "${YELLOW}Press Ctrl+C to stop all services and cleanup${NC}"
 

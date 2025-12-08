@@ -20,58 +20,51 @@ An OpenShift Console dynamic plugin that provides AI-powered observability for v
 
 ## Local Development
 
-### Quick Start
+### One-Command Setup (Recommended)
+
+Start **everything** with a single command:
 
 ```bash
-# 1. Install dependencies
-cd openshift-plugin
-yarn install
-
-# 2. Start the plugin dev server (Terminal 1)
-yarn run start
-
-# 3. Login to your OpenShift cluster (Terminal 2)
-oc login https://api.your-cluster.com:6443
-
-# 4. Start the local OpenShift Console (Terminal 2)
-yarn run start-console
-
-# 5. Open browser
-open http://localhost:9000
+# From the project root directory
+./scripts/local-dev.sh -n <your-namespace> -p -o
 ```
 
-The plugin will be available at **Observe → AI Observability** in the console.
+This starts:
+- ✅ MCP Server (port 8085)
+- ✅ Plugin dev server (port 9001)
+- ✅ OpenShift Console (port 9000)
+- ✅ All required port-forwards
 
-### Testing with MCP Server
+Then open: **http://localhost:9000** → Navigate to **Observe → AI Observability**
 
-For full functionality (metrics, AI analysis), you need the MCP server running locally:
+### Manual Setup (Alternative)
+
+If you prefer more control, you can start services separately:
 
 ```bash
-# From the project root directory (not openshift-plugin)
-cd ..
-
-# Option A: Use the local-dev script (recommended)
+# Terminal 1: Start MCP server + port-forwards + plugin
 ./scripts/local-dev.sh -n <your-namespace> -p
 
-# Option B: Start MCP server manually
-uv run python -m mcp_server.api
+# Terminal 2: Start OpenShift Console
+cd openshift-plugin
+oc login https://api.your-cluster.com:6443
+yarn run start-console
 ```
 
-The MCP server runs on `http://localhost:8085`.
+### Plugin-Only Development
 
-> **How does this work?** The plugin automatically detects the environment:
-> - **Local dev** (`localhost:9000`): Connects directly to `http://localhost:8085/mcp`
-> - **Production** (OpenShift): Uses the Console proxy at `/api/proxy/plugin/.../mcp`
->
-> No code changes needed—just start the MCP server locally!
+For frontend-only changes (no MCP integration):
 
-### What Each Terminal Does
+```bash
+cd openshift-plugin
+yarn install
+yarn run start          # Terminal 1
+yarn run start-console  # Terminal 2 (after oc login)
+```
 
-| Terminal | Command | Purpose |
-|----------|---------|---------|
-| 1 | `yarn run start` | Webpack dev server for plugin (port 9001) |
-| 2 | `yarn run start-console` | OpenShift Console container (port 9000) |
-| 3 | `./scripts/local-dev.sh -n <ns> -p` | MCP server + port forwards (port 8085) |
+> **Note:** The plugin auto-detects the environment:
+> - **Local dev** (`localhost`): Connects to `http://localhost:8085/mcp`
+> - **Production**: Uses the OpenShift Console proxy
 
 ### Apple Silicon (M1/M2/M3) Setup
 
