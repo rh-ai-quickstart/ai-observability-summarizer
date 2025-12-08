@@ -662,6 +662,7 @@ oc get events -n <DEFAULT_NAMESPACE> --sort-by='.lastTimestamp'
 - **README.md** - Comprehensive project overview and setup
 - **docs/GITHUB_ACTIONS.md** - CI/CD workflow documentation
 - **docs/SEMANTIC_VERSIONING.md** - Version management guidelines
+- **docs/SUMMARIZER_QUAY_IMAGE_CLEANUP.md** - Container image cleanup automation documentation
 
 ## 🎯 Quick Reference
 
