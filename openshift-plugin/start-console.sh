@@ -2,6 +2,14 @@
 
 set -euo pipefail
 
+# ============================================================================
+# LOCAL DEVELOPMENT ONLY - Security Notice
+# ============================================================================
+# This script runs the OpenShift Console with authentication DISABLED.
+# The console is bound to localhost (127.0.0.1) to prevent network exposure.
+# DO NOT use this in production or on untrusted networks.
+# ============================================================================
+
 CONSOLE_IMAGE=${CONSOLE_IMAGE:="quay.io/openshift/origin-console:latest"}
 CONSOLE_PORT=${CONSOLE_PORT:=9000}
 CONSOLE_IMAGE_PLATFORM=${CONSOLE_IMAGE_PLATFORM:="linux/amd64"}
@@ -10,6 +18,7 @@ CONSOLE_IMAGE_PLATFORM=${CONSOLE_IMAGE_PLATFORM:="linux/amd64"}
 PLUGIN_NAME=${npm_package_consolePlugin_name}
 
 echo "Starting local OpenShift console..."
+echo "⚠️  Security: Console bound to localhost only (127.0.0.1:${CONSOLE_PORT})"
 
 BRIDGE_USER_AUTH="disabled"
 BRIDGE_K8S_MODE="off-cluster"
@@ -39,16 +48,19 @@ echo "Console URL: http://localhost:${CONSOLE_PORT}"
 echo "Console Platform: $CONSOLE_IMAGE_PLATFORM"
 
 # Prefer podman if installed. Otherwise, fall back to docker.
+# Security: Bind to 127.0.0.1 only to prevent network exposure
 if [ -x "$(command -v podman)" ]; then
     if [ "$(uname -s)" = "Linux" ]; then
         # Use host networking on Linux since host.containers.internal is unreachable in some environments.
+        # Note: On Linux with host networking, the console is accessible on all interfaces.
+        # For production use, consider using a firewall or different configuration.
         BRIDGE_PLUGINS="${PLUGIN_NAME}=http://localhost:9001"
         podman run --pull always --platform $CONSOLE_IMAGE_PLATFORM --rm --network=host --env-file <(set | grep BRIDGE) $CONSOLE_IMAGE
     else
         BRIDGE_PLUGINS="${PLUGIN_NAME}=http://host.containers.internal:9001"
-        podman run --pull always --platform $CONSOLE_IMAGE_PLATFORM --rm -p "$CONSOLE_PORT":9000 --env-file <(set | grep BRIDGE) $CONSOLE_IMAGE
+        podman run --pull always --platform $CONSOLE_IMAGE_PLATFORM --rm -p "127.0.0.1:$CONSOLE_PORT:9000" --env-file <(set | grep BRIDGE) $CONSOLE_IMAGE
     fi
 else
     BRIDGE_PLUGINS="${PLUGIN_NAME}=http://host.docker.internal:9001"
-    docker run --pull always --platform $CONSOLE_IMAGE_PLATFORM --rm -p "$CONSOLE_PORT":9000 --env-file <(set | grep BRIDGE) $CONSOLE_IMAGE
+    docker run --pull always --platform $CONSOLE_IMAGE_PLATFORM --rm -p "127.0.0.1:$CONSOLE_PORT:9000" --env-file <(set | grep BRIDGE) $CONSOLE_IMAGE
 fi

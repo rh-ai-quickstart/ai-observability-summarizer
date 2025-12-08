@@ -429,9 +429,12 @@ start_local_services() {
             $CONTAINER_CMD rm openshift-console 2>/dev/null || true
             
             # Start console container in background
+            # Security: Bind to 127.0.0.1 only to prevent network exposure
+            # WARNING: Console runs with auth disabled - for local development only!
+            echo -e "${YELLOW}⚠️  Security: Console bound to localhost only (127.0.0.1:$CONSOLE_PORT)${NC}"
             $CONTAINER_CMD run -d --name openshift-console \
                 --rm \
-                -p "$CONSOLE_PORT:9000" \
+                -p "127.0.0.1:$CONSOLE_PORT:9000" \
                 --env BRIDGE_USER_AUTH="disabled" \
                 --env BRIDGE_K8S_MODE="off-cluster" \
                 --env BRIDGE_K8S_MODE_OFF_CLUSTER_ENDPOINT="$BRIDGE_K8S_MODE_OFF_CLUSTER_ENDPOINT" \
