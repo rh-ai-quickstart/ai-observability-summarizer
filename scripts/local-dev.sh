@@ -19,6 +19,8 @@ LLAMASTACK_PORT=8321
 LLAMA_MODEL_PORT=8080
 UI_PORT=8501
 MCP_PORT=${MCP_PORT:-8085}
+PLUGIN_PORT=9001
+CONSOLE_PORT=9000
 
 echo -e "${BLUE}🚀 AI Observability Metric Summarizer - Local Development Setup${NC}"
 echo "=============================================================="
@@ -32,6 +34,7 @@ usage() {
     echo "  -m/-M NAMESPACE              Llama Model namespace (optional, use if model is in different namespace)"
     echo "  -c/-C CONFIG                 Model config source: 'local' or 'cluster' (default: local)"
     echo "  -l/-L LLM_MODEL              LLM model to generate config for (default: llama-3.2-3b-instruct, only used with -c local)"
+    echo "  -p/-P                        Start OpenShift Console Plugin dev server (optional)"
     echo ""
     echo "Examples:"
     echo "  $0 -n default-ns                       # Use local config with default LLM (llama-3.2-3b-instruct)"
@@ -40,6 +43,7 @@ usage() {
     echo "  $0 -n default-ns -c cluster            # Use cluster model config instead of local"
     echo "  $0 -n default-ns -l llama-3.2-1b-instruct  # Generate config for llama-3.2-1b-instruct"
     echo "  $0 -n default-ns -l llama-3.1-8b-instruct  # Generate config for llama-3.1-8b-instruct"
+    echo "  $0 -n default-ns -p                    # Start with OpenShift Console Plugin dev server"
 }
 
 # Function to parse command line arguments
@@ -54,9 +58,10 @@ parse_args() {
     LLAMA_MODEL_NAMESPACE=""
     MODEL_CONFIG_SOURCE="local"  # Default to local
     LLM_MODEL=$(get_default_model)  # Optional LLM model for config generation
+    START_PLUGIN="false"  # Whether to start the OpenShift Console Plugin dev server
 
     # Parse standard arguments using getopts
-    while getopts "n:N:m:M:c:C:l:L:h" opt; do
+    while getopts "n:N:m:M:c:C:l:L:pPh" opt; do
         case $opt in
             n|N) DEFAULT_NAMESPACE="$OPTARG"
                  ;;
@@ -65,6 +70,8 @@ parse_args() {
             c|C) MODEL_CONFIG_SOURCE="$OPTARG"
                  ;;
             l|L) LLM_MODEL="$OPTARG"
+                 ;;
+            p|P) START_PLUGIN="true"
                  ;;
             h) usage
                exit 0
@@ -108,9 +115,12 @@ cleanup() {
     echo -e "\n${YELLOW}🧹 Cleaning up services and port-forwards...${NC}"
     ensure_port_free "$MCP_PORT"
     ensure_port_free "$TEMPO_PORT"
+    ensure_port_free "$PLUGIN_PORT"
     pkill -f "oc port-forward" || true
     pkill -f "mcp_server.main" || true
     pkill -f "streamlit run ui.py" || true
+    pkill -f "webpack serve" || true
+    pkill -f "yarn.*start" || true
 
     # Deactivate virtual environment if it was activated
     if [ -n "$VIRTUAL_ENV" ]; then
@@ -308,6 +318,7 @@ start_local_services() {
       THANOS_TOKEN="$THANOS_TOKEN" \
       VERIFY_SSL="$VERIFY_SSL" \
       PYTHON_LOG_LEVEL="$PYTHON_LOG_LEVEL" \
+      CORS_ORIGINS='["http://localhost:5173","http://localhost:3000","http://localhost:9000","http://localhost:9001","http://127.0.0.1:5173"]' \
       python3 -m mcp_server.main > /tmp/summarizer-mcp-server.log 2>&1) &
     MCP_SRV_PID=$!
 
@@ -338,8 +349,35 @@ start_local_services() {
     echo -e "   🔧 MCP Server: /tmp/summarizer-mcp-server.log"
     echo -e "   🎨 Streamlit UI: /tmp/summarizer-ui.log"
     echo -e "   📊 Metrics API: /tmp/summarizer-metrics-api.log"
+    if [ "$START_PLUGIN" = "true" ]; then
+        echo -e "   🔌 Plugin Dev Server: /tmp/summarizer-plugin.log"
+    fi
     echo -e "   💡 To see live UI logs: tail -f /tmp/summarizer-ui.log"
     echo -e "   💡 To see all logs: tail -f /tmp/summarizer-*.log"
+
+    # Start OpenShift Console Plugin dev server if requested
+    if [ "$START_PLUGIN" = "true" ]; then
+        echo -e "${BLUE}🔌 Starting OpenShift Console Plugin dev server...${NC}"
+        ensure_port_free "$PLUGIN_PORT"
+        
+        # Check if plugin directory exists
+        if [ -d "openshift-plugin" ]; then
+            (cd openshift-plugin && yarn start > /tmp/summarizer-plugin.log 2>&1) &
+            PLUGIN_PID=$!
+            
+            # Wait for plugin to start
+            sleep 8
+            
+            # Test plugin health
+            if curl -s --connect-timeout 5 "http://localhost:$PLUGIN_PORT/plugin-manifest.json" | grep -q '"name"'; then
+                echo -e "${GREEN}✅ Plugin dev server started successfully on port $PLUGIN_PORT${NC}"
+            else
+                echo -e "${YELLOW}⚠️  Plugin dev server may still be starting. Check /tmp/summarizer-plugin.log${NC}"
+            fi
+        else
+            echo -e "${RED}❌ openshift-plugin directory not found. Skipping plugin dev server.${NC}"
+        fi
+    fi
 
     echo -e "${GREEN}✅ All services started successfully!${NC}"
 }
@@ -362,6 +400,7 @@ main() {
     echo -e "${BLUE}  LLAMA_MODEL_NAMESPACE: $LLAMA_MODEL_NAMESPACE${NC}"
     echo -e "${BLUE}  MODEL_CONFIG_SOURCE: $MODEL_CONFIG_SOURCE${NC}"
     echo -e "${BLUE}  LLM_MODEL: $LLM_MODEL${NC}"
+    echo -e "${BLUE}  START_PLUGIN: $START_PLUGIN${NC}"
     echo -e "${BLUE}--------------------------------${NC}\n"
 
     start_port_forwards
@@ -379,7 +418,17 @@ main() {
     fi
     echo -e "   ${YELLOW}🦙 LlamaStack: $LLAMA_STACK_URL${NC}"
     echo -e "   ${YELLOW}🤖 Llama Model: http://localhost:$LLAMA_MODEL_PORT${NC}"
-
+    if [ "$START_PLUGIN" = "true" ]; then
+        echo -e "   ${YELLOW}🔌 Plugin Dev Server: http://localhost:$PLUGIN_PORT${NC}"
+        echo -e "   ${YELLOW}📄 Plugin Manifest: http://localhost:$PLUGIN_PORT/plugin-manifest.json${NC}"
+    fi
+    
+    if [ "$START_PLUGIN" = "true" ]; then
+        echo -e "\n${GREEN}💡 To test with OpenShift Console, run in a new terminal:${NC}"
+        echo -e "   ${BLUE}cd openshift-plugin && yarn run start-console${NC}"
+        echo -e "   ${BLUE}Then open: http://localhost:$CONSOLE_PORT${NC}"
+    fi
+    
     echo -e "\n${GREEN}🎯 Ready to use! Open your browser to http://localhost:$UI_PORT${NC}"
     echo -e "\n${YELLOW}📝 Note: Keep this terminal open to maintain all services${NC}"
     echo -e "${YELLOW}Press Ctrl+C to stop all services and cleanup${NC}"

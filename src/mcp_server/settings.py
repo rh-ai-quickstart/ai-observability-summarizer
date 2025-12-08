@@ -9,14 +9,14 @@ class Settings(BaseSettings):
     MCP_PORT: int = Field(default=8085)
     PYTHON_LOG_LEVEL: str = Field(default="INFO")
 
-    # Transport and SSL
+    # Transport and SSL - use "http" for simple JSON-RPC over HTTP
     MCP_TRANSPORT_PROTOCOL: str = Field(default="http")  # "http" | "sse" | "streamable-http"
     MCP_SSL_KEYFILE: Optional[str] = Field(default=None)
     MCP_SSL_CERTFILE: Optional[str] = Field(default=None)
 
-    # CORS
-    CORS_ENABLED: bool = Field(default=False)
-    CORS_ORIGINS: List[str] = Field(default_factory=lambda: ["*"])
+    # CORS - enabled by default for React dashboard access
+    CORS_ENABLED: bool = Field(default=True)
+    CORS_ORIGINS: List[str] = Field(default_factory=lambda: ["http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173"])
     CORS_CREDENTIALS: bool = Field(default=True)
     CORS_METHODS: List[str] = Field(default_factory=lambda: ["*"])
     CORS_HEADERS: List[str] = Field(default_factory=lambda: ["*"])

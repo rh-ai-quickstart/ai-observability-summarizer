@@ -3,7 +3,7 @@
 
 # NAMESPACE validation for deployment targets
 ifeq ($(NAMESPACE),)
-ifeq (,$(filter install-local depend install-ingestion-pipeline list-models% generate-model-config help build build-ui build-alerting build-mcp-server push push-ui push-alerting push-mcp-server clean config test check-observability-drift install-operators uninstall-operators check-operators install-cluster-observability-operator install-opentelemetry-operator install-tempo-operator install-logging-operator install-loki-operator uninstall-cluster-observability-operator uninstall-opentelemetry-operator uninstall-tempo-operator uninstall-logging-operator uninstall-loki-operator enable-tracing-ui disable-tracing-ui enable-logging-ui disable-logging-ui install-loki uninstall-loki upgrade-observability install-korrel8r uninstall-korrel8r,$(MAKECMDGOALS)))
+ifeq (,$(filter install-local depend install-ingestion-pipeline list-models% generate-model-config help build build-ui build-alerting build-mcp-server build-console-plugin push push-ui push-alerting push-mcp-server push-console-plugin clean config test check-observability-drift install-operators uninstall-operators check-operators install-cluster-observability-operator install-opentelemetry-operator install-tempo-operator install-logging-operator install-loki-operator uninstall-cluster-observability-operator uninstall-opentelemetry-operator uninstall-tempo-operator uninstall-logging-operator uninstall-loki-operator enable-tracing-ui disable-tracing-ui enable-logging-ui disable-logging-ui install-loki uninstall-loki upgrade-observability install-korrel8r uninstall-korrel8r,$(MAKECMDGOALS)))
 $(error NAMESPACE is not set)
 endif
 endif
@@ -21,6 +21,7 @@ PLATFORM ?= linux/amd64
 METRICS_UI_IMAGE = $(REGISTRY)/$(ORG)/$(IMAGE_PREFIX)-metrics-ui
 METRICS_ALERTING_IMAGE = $(REGISTRY)/$(ORG)/$(IMAGE_PREFIX)-metrics-alerting
 MCP_SERVER_IMAGE = $(REGISTRY)/$(ORG)/$(IMAGE_PREFIX)-mcp-server
+CONSOLE_PLUGIN_IMAGE = $(REGISTRY)/$(ORG)/$(IMAGE_PREFIX)-console-plugin
 
 # Alert example image
 ALERT_EXAMPLE_IMAGE ?= $(REGISTRY)/$(ORG)/alert-example:$(VERSION)
@@ -69,6 +70,9 @@ METRICS_UI_RELEASE_NAME ?= ui
 METRICS_UI_CHART_PATH ?= ui
 MCP_SERVER_RELEASE_NAME ?= mcp-server
 MCP_SERVER_CHART_PATH ?= mcp-server
+# Console plugin chart
+CONSOLE_PLUGIN_RELEASE_NAME ?= ai-obs-plugin
+CONSOLE_PLUGIN_CHART_PATH ?= ../../openshift-plugin/charts/openshift-console-plugin
 # Korrel8r chart
 KORREL8R_RELEASE_NAME ?= korrel8r-summarizer
 KORREL8R_CHART_PATH ?= observability/korrel8r
@@ -180,10 +184,12 @@ help:
 	@echo "  build-ui           - Build Streamlit UI (metric-ui)"
 	@echo "  build-alerting     - Build Alerting Service (metric-alerting)"
 	@echo "  build-mcp-server   - Build MCP Server (mcp-server)"
+	@echo "  build-console-plugin - Build OpenShift Console Plugin"
 	@echo "  push               - Push all container images to registry"
 	@echo "  push-ui            - Push metric-ui image"
 	@echo "  push-alerting      - Push metric-alerting image"
 	@echo "  push-mcp-server    - Push mcp-server image"
+	@echo "  push-console-plugin - Push console-plugin image"
 	@echo "  build-alert-example - Build alert-example test image"
 	@echo "  push-alert-example  - Push alert-example test image"
 	@echo ""
@@ -194,6 +200,8 @@ help:
 	@echo "  install-rag        - Install RAG backend services only"
 	@echo "  install-metric-ui  - Install UI only"
 	@echo "  install-mcp-server - Install MCP server only"
+	@echo "  install-console-plugin - Install OpenShift Console Plugin"
+	@echo "  uninstall-console-plugin - Uninstall OpenShift Console Plugin"
 	@echo "  uninstall          - Uninstall from OpenShift"
 	@echo "  status             - Check deployment status"
 	@echo "  list-models        - List available models"
@@ -280,7 +288,7 @@ help:
 	@echo ""
 
 .PHONY: build
-build: build-ui build-alerting build-mcp-server
+build: build-ui build-alerting build-mcp-server build-console-plugin
 	@echo "✅ All container images built successfully"
 
 .PHONY: build-ui
@@ -310,8 +318,22 @@ build-mcp-server:
 		src
 	@echo "✅ mcp-server image built: $(MCP_SERVER_IMAGE):$(VERSION)"
 
+.PHONY: build-console-plugin
+build-console-plugin:
+	@echo "🔨 Building OpenShift Console Plugin..."
+	@echo "  → Installing yarn dependencies..."
+	@cd openshift-plugin && yarn install --frozen-lockfile
+	@echo "  → Building plugin assets..."
+	@cd openshift-plugin && yarn build
+	@echo "  → Building container image..."
+	@$(BUILD_TOOL) buildx build --platform $(PLATFORM) \
+		-f openshift-plugin/Dockerfile \
+		-t $(CONSOLE_PLUGIN_IMAGE):$(VERSION) \
+		openshift-plugin
+	@echo "✅ console-plugin image built: $(CONSOLE_PLUGIN_IMAGE):$(VERSION)"
+
 .PHONY: push
-push: push-ui push-alerting push-mcp-server
+push: push-ui push-alerting push-mcp-server push-console-plugin
 	@echo "✅ All container images pushed successfully"
 
 .PHONY: push-ui
@@ -332,6 +354,11 @@ push-mcp-server:
 	@$(BUILD_TOOL) push $(MCP_SERVER_IMAGE):$(VERSION)
 	@echo "✅ mcp-server image pushed"
 
+.PHONY: push-console-plugin
+push-console-plugin:
+	@echo "📤 Pushing console-plugin image..."
+	@$(BUILD_TOOL) push $(CONSOLE_PLUGIN_IMAGE):$(VERSION)
+	@echo "✅ console-plugin image pushed"
 
 
 # Create namespace and deploy
@@ -392,6 +419,35 @@ install-mcp-server: namespace
 			$(if $(LLAMA_STACK_URL),--set llm.url='$(LLAMA_STACK_URL)',) \
 			-f $(GEN_MODEL_CONFIG_PREFIX)-for_helm.yaml; \
 	fi
+
+.PHONY: install-console-plugin
+install-console-plugin: namespace
+	@echo "Deploying OpenShift Console Plugin"
+	@cd deploy/helm && helm upgrade --install $(CONSOLE_PLUGIN_RELEASE_NAME) $(CONSOLE_PLUGIN_CHART_PATH) -n $(NAMESPACE) \
+		--set plugin.image=$(CONSOLE_PLUGIN_IMAGE):$(VERSION) \
+		--set mcpServer.serviceName=$(MCP_SERVER_RELEASE_NAME)-svc \
+		$(if $(PLUGIN_AUTO_ENABLE),--set plugin.autoEnable=$(PLUGIN_AUTO_ENABLE),)
+	@echo "✅ Console plugin deployed"
+	@echo ""
+	@echo "To enable the plugin in OpenShift Console, run:"
+	@echo "  oc patch consoles.operator.openshift.io cluster --type=json -p='[{\"op\": \"add\", \"path\": \"/spec/plugins/-\", \"value\": \"ai-observability-plugin\"}]'"
+
+.PHONY: uninstall-console-plugin
+uninstall-console-plugin:
+	@echo "Uninstalling OpenShift Console Plugin"
+	@echo "→ Disabling plugin in OpenShift Console..."
+	-@if oc get console.operator.openshift.io cluster -o jsonpath='{.spec.plugins}' 2>/dev/null | grep -q "ai-observability-plugin"; then \
+		PLUGIN_INDEX=$$(oc get console.operator.openshift.io cluster -o json | jq '.spec.plugins | to_entries | .[] | select(.value=="ai-observability-plugin") | .key'); \
+		if [ -n "$$PLUGIN_INDEX" ]; then \
+			oc patch console.operator.openshift.io cluster --type=json -p="[{\"op\": \"remove\", \"path\": \"/spec/plugins/$$PLUGIN_INDEX\"}]" 2>/dev/null; \
+			echo "  → Plugin disabled from console"; \
+		fi \
+	else \
+		echo "  → Plugin was not enabled in console"; \
+	fi
+	@echo "→ Uninstalling Helm release..."
+	-@helm -n $(NAMESPACE) uninstall $(CONSOLE_PLUGIN_RELEASE_NAME) --ignore-not-found
+	@echo "✅ Console plugin uninstalled"
 
 .PHONY: install-rag
 install-rag: namespace
@@ -564,6 +620,10 @@ clean:
 		echo "⚠️  Could not remove $(MCP_SERVER_IMAGE):$(VERSION) (may not exist)"; \
 		ERRORS=$$((ERRORS + 1)); \
 	fi; \
+	if ! $(BUILD_TOOL) rmi $(CONSOLE_PLUGIN_IMAGE):$(VERSION) 2>/dev/null; then \
+		echo "⚠️  Could not remove $(CONSOLE_PLUGIN_IMAGE):$(VERSION) (may not exist)"; \
+		ERRORS=$$((ERRORS + 1)); \
+	fi; \
 	if [ $$ERRORS -eq 0 ]; then \
 		echo "✅ All images cleaned successfully"; \
 	else \
@@ -590,6 +650,10 @@ build-deploy: build push install
 build-deploy-mcp-server: build-mcp-server push-mcp-server install-mcp-server
 	@echo "✅ Build, push, and deploy mcp-server completed"
 
+.PHONY: build-deploy-console-plugin
+build-deploy-console-plugin: build-console-plugin push-console-plugin install-console-plugin
+	@echo "✅ Build, push, and deploy console-plugin completed"
+
 .PHONY: build-deploy-alerts
 build-deploy-alerts: build push install-with-alerts
 	@echo "✅ Build, push, and deploy with alerting workflow completed"
@@ -607,6 +671,7 @@ config:
 	@echo "  Metric UI Image: $(METRICS_UI_IMAGE):$(VERSION)"
 	@echo "  Metric Alerting Image: $(METRICS_ALERTING_IMAGE):$(VERSION)"
 	@echo "  MCP Server Image: $(MCP_SERVER_IMAGE):$(VERSION)"
+	@echo "  Console Plugin Image: $(CONSOLE_PLUGIN_IMAGE):$(VERSION)"
 
 # -- Alerting targets --
 

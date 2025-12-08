@@ -38,6 +38,153 @@ from .korrel8r_service import fetch_goal_query_objects
 NAMESPACE_SCOPED = "namespace_scoped"
 CLUSTER_WIDE = "cluster_wide"
 
+
+def execute_instant_query(query: str, timeout: int = 10) -> Dict[str, Any]:
+    """Execute a Prometheus instant query (fast, single point in time).
+    
+    Args:
+        query: PromQL query string
+        timeout: Request timeout in seconds
+        
+    Returns:
+        Dict with 'data' containing query results
+    """
+    headers = _auth_headers()
+    try:
+        resp = requests.get(
+            f"{PROMETHEUS_URL}/api/v1/query",
+            headers=headers,
+            params={"query": query},
+            verify=VERIFY_SSL,
+            timeout=timeout,
+        )
+        resp.raise_for_status()
+        return resp.json()
+    except requests.exceptions.Timeout:
+        logger.warning(f"Timeout executing query: {query}")
+        return {"data": {"result": []}}
+    except Exception as e:
+        logger.warning(f"Error executing query {query}: {e}")
+        return {"data": {"result": []}}
+
+
+def execute_instant_queries_parallel(queries: Dict[str, str], max_workers: int = 10) -> Dict[str, float]:
+    """Execute multiple Prometheus instant queries in parallel.
+    
+    Args:
+        queries: Dict mapping label -> PromQL query
+        max_workers: Max parallel threads
+        
+    Returns:
+        Dict mapping label -> numeric value
+    """
+    import concurrent.futures
+    
+    def fetch_one(label: str, query: str) -> Tuple[str, float]:
+        result = execute_instant_query(query)
+        value = 0.0
+        try:
+            data = result.get("data", {}).get("result", [])
+            if data and len(data) > 0:
+                val = data[0].get("value", [None, 0])
+                if isinstance(val, list) and len(val) > 1:
+                    value = float(val[1])
+        except (ValueError, TypeError, IndexError):
+            pass
+        return (label, round(value, 2))
+    
+    results = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(fetch_one, label, query): label for label, query in queries.items()}
+        for future in concurrent.futures.as_completed(futures):
+            try:
+                label, value = future.result()
+                results[label] = value
+            except Exception as e:
+                label = futures[future]
+                logger.warning(f"Failed to fetch {label}: {e}")
+                results[label] = 0.0
+    return results
+
+
+def execute_range_queries_parallel(
+    queries: Dict[str, str], 
+    start_ts: int, 
+    end_ts: int, 
+    max_workers: int = 10,
+    max_points: int = 20
+) -> Dict[str, List[Dict[str, Any]]]:
+    """Execute multiple Prometheus range queries in parallel for sparklines.
+    
+    Args:
+        queries: Dict mapping label -> PromQL query
+        start_ts: Start timestamp (epoch seconds)
+        end_ts: End timestamp (epoch seconds)
+        max_workers: Max parallel threads
+        max_points: Target number of data points for sparklines
+        
+    Returns:
+        Dict mapping label -> list of {timestamp, value} dicts
+    """
+    import concurrent.futures
+    from datetime import datetime
+    
+    # Calculate step to get approximately max_points data points
+    duration = end_ts - start_ts
+    step = max(60, duration // max_points)  # At least 1 minute step
+    
+    headers = _auth_headers()
+    
+    def fetch_range(label: str, query: str) -> Tuple[str, List[Dict[str, Any]]]:
+        try:
+            resp = requests.get(
+                f"{PROMETHEUS_URL}/api/v1/query_range",
+                headers=headers,
+                params={
+                    "query": query,
+                    "start": start_ts,
+                    "end": end_ts,
+                    "step": f"{step}s"
+                },
+                verify=VERIFY_SSL,
+                timeout=30,
+            )
+            resp.raise_for_status()
+            result = resp.json().get("data", {}).get("result", [])
+            
+            time_series = []
+            if result and len(result) > 0:
+                values = result[0].get("values", [])
+                for ts, val in values:
+                    try:
+                        float_val = float(val)
+                        # Skip NaN values
+                        if not (float_val != float_val):  # NaN check
+                            time_series.append({
+                                "timestamp": datetime.fromtimestamp(ts).isoformat(),
+                                "value": round(float_val, 2)
+                            })
+                    except (ValueError, TypeError):
+                        pass
+            return (label, time_series)
+        except Exception as e:
+            logger.warning(f"Failed range query for {label}: {e}")
+            return (label, [])
+    
+    results = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(fetch_range, label, query): label for label, query in queries.items()}
+        for future in concurrent.futures.as_completed(futures):
+            try:
+                label, time_series = future.result()
+                results[label] = time_series
+            except Exception as e:
+                label = futures[future]
+                logger.warning(f"Failed to fetch range for {label}: {e}")
+                results[label] = []
+    return results
+
+
 @dataclass(frozen=True)
 class NamespacePodPair:
     namespace: str
@@ -302,130 +449,107 @@ def get_models_helper() -> List[str]:
     """
     Get list of available vLLM models from Prometheus metrics.
     
+    Optimized with parallel requests for fast dashboard loading.
+    
     Returns:
         List of model names in format "namespace | model_name"
     """
-    try:
-        headers = _auth_headers()
-
-        # Try multiple vLLM metrics with longer time windows
-        vllm_metrics_to_check = [
-            "vllm:request_prompt_tokens_created",
-            "vllm:request_prompt_tokens_total",
-            "vllm:avg_generation_throughput_toks_per_s",
-            "vllm:num_requests_running",
-            "vllm:gpu_cache_usage_perc",
-        ]
-
-        model_set = set()
-
-        # Try different time windows: 7 days, 24 hours, 1 hour
-        time_windows = [7 * 24 * 3600, 24 * 3600, 3600]  # 7 days, 24 hours, 1 hour
-
-        for time_window in time_windows:
-            for metric_name in vllm_metrics_to_check:
-                try:
-                    response = requests.get(
-                        f"{PROMETHEUS_URL}/api/v1/series",
-                        headers=headers,
-                        params={
-                            "match[]": metric_name,
-                            "start": int((datetime.now().timestamp()) - time_window),
-                            "end": int(datetime.now().timestamp()),
-                        },
-                        verify=VERIFY_SSL,
-                    )
-                    response.raise_for_status()
-                    series = response.json()["data"]
-
-                    for entry in series:
-                        model = entry.get("model_name", "").strip()
-                        namespace = entry.get("namespace", "").strip()
-                        if model and namespace:
-                            model_set.add(f"{namespace} | {model}")
-                            logger.debug(f"Found model: {namespace} | {model} in metric: {metric_name}")
-
-                except Exception as e:
-                    logger.warning(
-                        f"Error checking {metric_name} with {time_window}s window: {e}"
-                    )
-                    continue
-            
-            # If we found models in this time window, log but continue checking
-            # to ensure we get ALL models across all time windows and metrics
-            if model_set:
-                logger.info(f"Found {len(model_set)} model(s) in {time_window}s window, continuing to check other windows...")
-
-        logger.info(f"Total models discovered: {len(model_set)}")
-        return sorted(list(model_set))
-    except Exception as e:
-        logger.error("Error getting models", exc_info=e)
-        return []
+    import concurrent.futures
+    
+    headers = _auth_headers()
+    model_set: set = set()
+    
+    # Use just the most reliable metric with 24h window (fast)
+    def fetch_series(metric_name: str) -> List[dict]:
+        try:
+            response = requests.get(
+                f"{PROMETHEUS_URL}/api/v1/series",
+                headers=headers,
+                params={
+                    "match[]": metric_name,
+                    "start": int(datetime.now().timestamp() - 24 * 3600),  # 24h
+                    "end": int(datetime.now().timestamp()),
+                },
+                verify=VERIFY_SSL,
+                timeout=10,  # Fast timeout
+            )
+            response.raise_for_status()
+            return response.json().get("data", [])
+        except Exception as e:
+            logger.debug(f"Error checking {metric_name}: {e}")
+            return []
+    
+    # Check 3 key metrics in parallel
+    metrics = [
+        "vllm:num_requests_running",
+        "vllm:gpu_cache_usage_perc",
+        "vllm:request_prompt_tokens_total",
+    ]
+    
+    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+        futures = {executor.submit(fetch_series, m): m for m in metrics}
+        for future in concurrent.futures.as_completed(futures):
+            for entry in future.result():
+                model = entry.get("model_name", "").strip()
+                namespace = entry.get("namespace", "").strip()
+                if model and namespace:
+                    model_set.add(f"{namespace} | {model}")
+    
+    logger.info(f"Found {len(model_set)} model(s)")
+    return sorted(list(model_set))
 
 
 def get_vllm_namespaces_helper() -> List[str]:
     """
     Get list of namespaces that have vLLM metrics available.
-
-    Mirrors the logic used in the FastAPI /namespaces endpoint to ensure
-    consistent behavior across API and MCP tools.
+    
+    Optimized with parallel requests for fast dashboard loading.
 
     Returns:
         Sorted list of namespace names
     """
+    import concurrent.futures
+    
     try:
         headers = _auth_headers()
-
-        # Try multiple vLLM metrics with longer time windows
-        vllm_metrics_to_check = [
-            "vllm:request_prompt_tokens_created",
-            "vllm:request_prompt_tokens_total",
-            "vllm:avg_generation_throughput_toks_per_s",
+        namespace_set: set = set()
+        
+        def fetch_series(metric_name: str) -> List[dict]:
+            try:
+                response = requests.get(
+                    f"{PROMETHEUS_URL}/api/v1/series",
+                    headers=headers,
+                    params={
+                        "match[]": metric_name,
+                        "start": int(datetime.now().timestamp() - 24 * 3600),  # 24h
+                        "end": int(datetime.now().timestamp()),
+                    },
+                    verify=VERIFY_SSL,
+                    timeout=10,  # Fast timeout
+                )
+                response.raise_for_status()
+                return response.json().get("data", [])
+            except Exception as e:
+                logger.debug(f"Error checking {metric_name}: {e}")
+                return []
+        
+        # Check 3 key metrics in parallel
+        metrics = [
             "vllm:num_requests_running",
-            "vllm:gpu_cache_usage_perc",
+            "vllm:gpu_cache_usage_perc", 
+            "vllm:request_prompt_tokens_total",
         ]
-
-        namespace_set = set()
-
-        # Try different time windows: 7 days, 24 hours, 1 hour
-        time_windows = [7 * 24 * 3600, 24 * 3600, 3600]
-
-        for time_window in time_windows:
-            for metric_name in vllm_metrics_to_check:
-                try:
-                    response = requests.get(
-                        f"{PROMETHEUS_URL}/api/v1/series",
-                        headers=headers,
-                        params={
-                            "match[]": metric_name,
-                            "start": int((datetime.now().timestamp()) - time_window),
-                            "end": int(datetime.now().timestamp()),
-                        },
-                        verify=VERIFY_SSL,
-                    )
-                    response.raise_for_status()
-                    series = response.json()["data"]
-
-                    for entry in series:
-                        namespace = entry.get("namespace", "").strip()
-                        model = entry.get("model_name", "").strip()
-                        # Require both namespace and model_name to ensure properly configured deployments
-                        if namespace and model:
-                            namespace_set.add(namespace)
-                            logger.debug(f"Found namespace: {namespace} with model: {model} in metric: {metric_name}")
-
-                except Exception as e:
-                    logger.warning(
-                        f"Error checking {metric_name} with {time_window}s window: {e}"
-                    )
-                    continue
-            
-            # If we found namespaces in this time window, log but continue checking
-            # to ensure we get ALL namespaces across all time windows and metrics
-            if namespace_set:
-                logger.info(f"Found {len(namespace_set)} namespace(s) in {time_window}s window, continuing to check other windows...")
-
-        logger.info(f"Total namespaces discovered: {len(namespace_set)}")
+        
+        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+            futures = {executor.submit(fetch_series, m): m for m in metrics}
+            for future in concurrent.futures.as_completed(futures):
+                for entry in future.result():
+                    namespace = entry.get("namespace", "").strip()
+                    model = entry.get("model_name", "").strip()
+                    if namespace and model:
+                        namespace_set.add(namespace)
+        
+        logger.info(f"Found {len(namespace_set)} namespace(s)")
         return sorted(list(namespace_set))
     except Exception as e:
         logger.error("Error getting namespaces", exc_info=e)
@@ -437,6 +561,7 @@ def get_openshift_namespaces_helper() -> List[str]:
     Get list of all namespaces present in Prometheus/Thanos data.
 
     Uses the label values endpoint to retrieve all observed namespace labels.
+    Optimized with fast timeout for dashboard loading.
 
     Returns:
         Sorted list of namespace names
@@ -447,6 +572,7 @@ def get_openshift_namespaces_helper() -> List[str]:
             f"{PROMETHEUS_URL}/api/v1/label/namespace/values",
             headers=headers,
             verify=VERIFY_SSL,
+            timeout=10,  # Fast timeout
         )
         response.raise_for_status()
         values = response.json().get("data", [])
@@ -875,28 +1001,18 @@ def discover_intel_gaudi_metrics():
 def discover_openshift_metrics():
     """Return comprehensive OpenShift/Kubernetes metrics organized by category"""
     return {
+        # ========== CLUSTER-WIDE CATEGORIES ==========
         "Fleet Overview": {
             # Core cluster-wide metrics
             "Total Pods Running": "sum(kube_pod_status_phase{phase='Running'})",
             "Total Pods Failed": "sum(kube_pod_status_phase{phase='Failed'})",
+            "Pods Pending": "sum(kube_pod_status_phase{phase='Pending'})",
             "Total Deployments": "sum(kube_deployment_status_replicas_ready)",
             "Cluster CPU Usage (%)": "100 - (avg(rate(node_cpu_seconds_total{mode='idle'}[5m])) * 100)",
             "Cluster Memory Usage (%)": "100 - (sum(node_memory_MemAvailable_bytes) / sum(node_memory_MemTotal_bytes) * 100)",
-            "Container Images": "count(count by (image)(container_spec_image))",
             "Total Services": "sum(kube_service_info)",
             "Total Nodes": "sum(kube_node_info)",
-            # Key GPU/Accelerator metrics for fleet overview (multi-vendor support)
-            "GPU Utilization (%)": "avg(DCGM_FI_DEV_GPU_UTIL) or avg(habanalabs_utilization)",
-            "GPU Temperature (°C)": "avg(DCGM_FI_DEV_GPU_TEMP) or avg(habanalabs_temperature_onchip)",
-        },
-        "Services & Networking": {
-            # Services, ingress, and networking metrics
-            "Services Running": "sum(kube_service_info)",
-            "Service Endpoints": "sum(kube_endpoint_address_available)",
-            "Ingress Rules": "sum(kube_ingress_info)",
-            "Network Policies": "sum(kube_networkpolicy_labels)",
-            "Load Balancer Services": "sum(kube_service_spec_type{type='LoadBalancer'})",
-            "ClusterIP Services": "sum(kube_service_spec_type{type='ClusterIP'})",
+            "Total Namespaces": "count(kube_namespace_labels)",
         },
         "Jobs & Workloads": {
             # Jobs, cronjobs, and other workload types
@@ -904,54 +1020,104 @@ def discover_openshift_metrics():
             "Jobs Completed": "sum(kube_job_status_succeeded)",
             "Jobs Failed": "sum(kube_job_status_failed)", 
             "CronJobs": "sum(kube_cronjob_info)",
-            "DaemonSets": "sum(kube_daemonset_status_number_ready)",
-            "StatefulSets": "sum(kube_statefulset_status_replicas_ready)",
+            "DaemonSets Ready": "sum(kube_daemonset_status_number_ready)",
+            "StatefulSets Ready": "sum(kube_statefulset_status_replicas_ready)",
+            "ReplicaSets Ready": "sum(kube_replicaset_status_ready_replicas)",
         },
         "Storage & Config": {
             # Storage and configuration resources
             "Persistent Volumes": "sum(kube_persistentvolume_info)",
             "PV Claims": "sum(kube_persistentvolumeclaim_info)",
+            "PVC Bound": "sum(kube_persistentvolumeclaim_status_phase{phase='Bound'})",
+            "PVC Pending": "sum(kube_persistentvolumeclaim_status_phase{phase='Pending'})",
             "ConfigMaps": "sum(kube_configmap_info)",
             "Secrets": "sum(kube_secret_info)",
             "Storage Classes": "sum(kube_storageclass_info)",
-            "Volume Snapshots": "sum(kube_volumesnapshot_info)",
         },
-        "Workloads & Pods": {
-            # 6 most important pod/container metrics
-            "Pods Running": "sum(kube_pod_status_phase{phase='Running'})",
-            "Pods Pending": "sum(kube_pod_status_phase{phase='Pending'})",
-            "Pods Failed": "sum(kube_pod_status_phase{phase='Failed'})",
-            "Pod Restarts (Rate)": "sum(rate(kube_pod_container_status_restarts_total[5m]))",
-            "Container CPU Usage": "sum(rate(container_cpu_usage_seconds_total[5m]))",
-            "Container Memory Usage": "sum(container_memory_usage_bytes)",
+        "Node Metrics": {
+            # Node-level resource metrics
+            "Node CPU Usage (%)": "100 - (avg(rate(node_cpu_seconds_total{mode='idle'}[5m])) * 100)",
+            "Node Memory Available (GB)": "sum(node_memory_MemAvailable_bytes) / (1024*1024*1024)",
+            "Node Memory Total (GB)": "sum(node_memory_MemTotal_bytes) / (1024*1024*1024)",
+            "Node Disk Reads": "sum(rate(node_disk_reads_completed_total[5m]))",
+            "Node Disk Writes": "sum(rate(node_disk_writes_completed_total[5m]))",
+            "Nodes Ready": "sum(kube_node_status_condition{condition='Ready',status='true'})",
+            "Nodes Not Ready": "sum(kube_node_status_condition{condition='Ready',status='false'})",
+            "Memory Pressure": "sum(kube_node_status_condition{condition='MemoryPressure',status='true'})",
+            "Disk Pressure": "sum(kube_node_status_condition{condition='DiskPressure',status='true'})",
+            "PID Pressure": "sum(kube_node_status_condition{condition='PIDPressure',status='true'})",
         },
         "GPU & Accelerators": {
-            # 🚀 Comprehensive GPU/Accelerator fleet monitoring (multi-vendor: NVIDIA DCGM + Intel Gaudi)
-            # TODO: Add AMD support by appending "or avg(amd_smi_temperature)" to each query below
+            # GPU/Accelerator fleet monitoring (multi-vendor: NVIDIA DCGM + Intel Gaudi)
             "GPU Temperature (°C)": "avg(DCGM_FI_DEV_GPU_TEMP) or avg(habanalabs_temperature_onchip)",
-            "GPU Power Usage (Watts)": "avg(DCGM_FI_DEV_POWER_USAGE) or avg(habanalabs_power_mW) / 1000",
+            "GPU Power Usage (W)": "avg(DCGM_FI_DEV_POWER_USAGE) or avg(habanalabs_power_mW) / 1000",
             "GPU Utilization (%)": "avg(DCGM_FI_DEV_GPU_UTIL) or avg(habanalabs_utilization)",
-            "GPU Memory Usage (GB)": "avg(DCGM_FI_DEV_FB_USED) / (1024*1024*1024) or avg(habanalabs_memory_used_bytes) / (1024*1024*1024)",
-            "GPU Energy Consumption (Joules)": "avg(DCGM_FI_DEV_TOTAL_ENERGY_CONSUMPTION) or avg(habanalabs_energy)",
-            "GPU Memory Temperature (°C)": "avg(DCGM_FI_DEV_MEMORY_TEMP) or avg(habanalabs_temperature_threshold_memory)",
+            "GPU Memory Used (GB)": "avg(DCGM_FI_DEV_FB_USED) / (1024*1024*1024) or avg(habanalabs_memory_used_bytes) / (1024*1024*1024)",
+            "GPU Count": "count(DCGM_FI_DEV_GPU_TEMP) or sum(habana_hpu_count)",
+            "GPU Memory Temp (°C)": "avg(DCGM_FI_DEV_MEMORY_TEMP) or avg(habanalabs_temperature_threshold_memory)",
         },
-        "Storage & Networking": {
-            # 6 storage and network metrics
-            "PV Available Space": "sum(kube_persistentvolume_capacity_bytes)",
-            "PVC Bound": "sum(kube_persistentvolumeclaim_status_phase{phase='Bound'})",
-            "Storage I/O Rate": "sum(rate(container_fs_reads_total[5m]) + rate(container_fs_writes_total[5m]))",
-            "Network Receive Rate": "sum(rate(container_network_receive_bytes_total[5m]))",
-            "Network Transmit Rate": "sum(rate(container_network_transmit_bytes_total[5m]))",
-            "Network Errors": "sum(rate(container_network_receive_errors_total[5m]) + rate(container_network_transmit_errors_total[5m]))",
+        "Autoscaling & Scheduling": {
+            # Autoscaling and scheduling metrics
+            "Pending Pods": "sum(kube_pod_status_phase{phase='Pending'})",
+            "Scheduler Latency (s)": "histogram_quantile(0.99, sum(rate(scheduler_e2e_scheduling_duration_seconds_bucket[5m])) by (le))",
+            "CPU Requests Total": "sum(kube_pod_container_resource_requests{resource='cpu'})",
+            "CPU Limits Total": "sum(kube_pod_container_resource_limits{resource='cpu'})",
+            "Memory Requests (GB)": "sum(kube_pod_container_resource_requests{resource='memory'}) / (1024*1024*1024)",
+            "Memory Limits (GB)": "sum(kube_pod_container_resource_limits{resource='memory'}) / (1024*1024*1024)",
+            "HPA Active": "sum(kube_horizontalpodautoscaler_status_current_replicas)",
+            "HPA Desired": "sum(kube_horizontalpodautoscaler_status_desired_replicas)",
+        },
+        # ========== NAMESPACE-SCOPED CATEGORIES ==========
+        "Pod & Container Metrics": {
+            # Pod and container resource usage
+            "Pod CPU Usage (cores)": "sum(rate(container_cpu_usage_seconds_total[5m]))",
+            "CPU Throttled (%)": "sum(rate(container_cpu_cfs_throttled_periods_total[5m])) / sum(rate(container_cpu_cfs_periods_total[5m])) * 100",
+            "Pod Memory (GB)": "sum(container_memory_working_set_bytes) / (1024*1024*1024)",
+            "RSS Memory (GB)": "sum(container_memory_rss) / (1024*1024*1024)",
+            "Container Restarts": "sum(kube_pod_container_status_restarts_total)",
+            "Pods Ready": "sum(kube_pod_status_ready{condition='true'})",
+            "Pods Not Ready": "sum(kube_pod_status_ready{condition='false'})",
+            "Container OOM Killed": "sum(kube_pod_container_status_last_terminated_reason{reason='OOMKilled'})",
+        },
+        "Network Metrics": {
+            # Network I/O metrics
+            "Network RX (MB/s)": "sum(rate(container_network_receive_bytes_total[5m])) / (1024*1024)",
+            "Network TX (MB/s)": "sum(rate(container_network_transmit_bytes_total[5m])) / (1024*1024)",
+            "Network RX Packets": "sum(rate(container_network_receive_packets_total[5m]))",
+            "Network TX Packets": "sum(rate(container_network_transmit_packets_total[5m]))",
+            "Network RX Errors": "sum(rate(container_network_receive_errors_total[5m]))",
+            "Network TX Errors": "sum(rate(container_network_transmit_errors_total[5m]))",
+            "Network RX Dropped": "sum(rate(container_network_receive_packets_dropped_total[5m]))",
+            "Network TX Dropped": "sum(rate(container_network_transmit_packets_dropped_total[5m]))",
+        },
+        "Storage I/O": {
+            # Storage and filesystem metrics
+            "Disk Read (MB/s)": "sum(rate(container_fs_reads_bytes_total[5m])) / (1024*1024)",
+            "Disk Write (MB/s)": "sum(rate(container_fs_writes_bytes_total[5m])) / (1024*1024)",
+            "Disk Read IOPS": "sum(rate(container_fs_reads_total[5m]))",
+            "Disk Write IOPS": "sum(rate(container_fs_writes_total[5m]))",
+            "Filesystem Usage (GB)": "sum(container_fs_usage_bytes) / (1024*1024*1024)",
+            "Filesystem Limit (GB)": "sum(container_fs_limit_bytes) / (1024*1024*1024)",
+            "PVC Used (GB)": "sum(kubelet_volume_stats_used_bytes) / (1024*1024*1024)",
+            "PVC Capacity (GB)": "sum(kubelet_volume_stats_capacity_bytes) / (1024*1024*1024)",
+        },
+        "Services & Networking": {
+            # Services and ingress metrics
+            "Services Running": "sum(kube_service_info)",
+            "Service Endpoints": "sum(kube_endpoint_address_available)",
+            "Ingress Rules": "sum(kube_ingress_info)",
+            "Network Policies": "sum(kube_networkpolicy_labels)",
+            "Load Balancer Services": "sum(kube_service_spec_type{type='LoadBalancer'})",
+            "ClusterIP Services": "sum(kube_service_spec_type{type='ClusterIP'})",
         },
         "Application Services": {
-            # 6 application-level metrics
+            # Application-level metrics
             "HTTP Request Rate": "sum(rate(http_requests_total[5m]))",
             "HTTP Error Rate (%)": "sum(rate(http_requests_total{status=~'5..'}[5m])) / sum(rate(http_requests_total[5m])) * 100",
-            "HTTP P95 Latency": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))",
-            "Services Available": "sum(up)",
+            "HTTP P95 Latency (s)": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))",
+            "HTTP P99 Latency (s)": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))",
+            "Active Connections": "sum(nginx_ingress_controller_nginx_process_connections)",
             "Ingress Request Rate": "sum(rate(nginx_ingress_controller_requests[5m]))",
-            "Load Balancer Backends": "sum(haproxy_server_up)",
         },
     } 
 

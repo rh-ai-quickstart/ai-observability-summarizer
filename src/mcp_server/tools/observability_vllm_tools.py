@@ -1,22 +1,23 @@
 """Observability tools for OpenShift AI monitoring and analysis (vLLM-focused).
 
-This module provides MCP tools for interacting with observability data:
+This module provides MCP tools for vLLM observability:
 - list_models: Get available AI models
-- list_vllm_namespaces: List monitored namespaces
-- get_model_config: Show configured LLM models for summarization
-- get_vllm_metrics_tool: Get available vLLM metrics with friendly names
-- analyze_vllm: Analyze vLLM metrics and summarize using LLM
-- calculate_metrics: Calculate statistics for provided metrics data
+- list_vllm_namespaces: List monitored namespaces  
+- get_vllm_metrics_tool: Get available vLLM metrics
+- fetch_vllm_metrics_data: Fetch metrics data for display
+- analyze_vllm: Analyze metrics with AI summarization
 
 OpenShift-specific tools live in observability_openshift_tools.py
 """
 
 import json
-import os
+import math
+import re
 import pandas as pd
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional
+from datetime import datetime
 
-# Import core observability services
+# Core imports
 from core.metrics import (
     get_models_helper,
     get_vllm_namespaces_helper,
@@ -25,36 +26,25 @@ from core.metrics import (
     get_summarization_models,
     get_cluster_gpu_info,
     get_namespace_model_deployment_info,
-    build_korrel8r_log_query_for_vllm,
+    execute_instant_queries_parallel,
+    execute_range_queries_parallel,
+    build_correlated_context_from_metrics,
 )
 from core.llm_client import build_prompt, summarize_with_llm, extract_time_range_with_info
-from core.models import AnalyzeRequest
 from core.response_validator import ResponseType
-from core.metrics import NAMESPACE_SCOPED, CLUSTER_WIDE
-from core.metrics import build_correlated_context_from_metrics
-from core.config import PROMETHEUS_URL, THANOS_TOKEN, VERIFY_SSL, DEFAULT_TIME_RANGE_DAYS
-from core.config import KORREL8R_ENABLED
-import requests
-from datetime import datetime, timedelta
-
-# Import structured logger from MCP server utilities
+from core.config import DEFAULT_TIME_RANGE_DAYS, KORREL8R_ENABLED
 from common.pylogger import get_python_logger
 from core.response_utils import make_mcp_text_response
 
-# Import MCP exception handling framework
+# MCP exception handling
 from mcp_server.exceptions import (
-    handle_mcp_exception,
     ValidationError,
     PrometheusError,
     LLMServiceError,
-    ConfigurationError,
     MCPException,
     MCPErrorCode,
     validate_required_params,
     validate_time_range,
-    safe_json_loads,
-    parse_prometheus_error,
-    parse_llm_error
 )
 
 # Configure structured logging
@@ -247,6 +237,157 @@ def get_vllm_metrics_tool() -> List[Dict[str, Any]]:
         return error.to_mcp_response()
 
 
+def _inject_labels_into_query(query: str, label_clause: str) -> str:
+    """Inject labels into a Prometheus query at the correct position.
+    
+    Handles:
+    - vllm:simple_metric -> vllm:simple_metric{labels}
+    - vllm:metric[5m] -> vllm:metric{labels}[5m]
+    - avg(vllm:metric) -> avg(vllm:metric{labels})
+    - histogram_quantile(0.95, sum(rate(vllm:metric[5m])) by (le))
+    
+    DCGM metrics are skipped (they're global GPU metrics without model labels).
+    """
+    result = query
+    
+    # Skip DCGM/GPU metrics - they don't have model_name labels
+    if 'DCGM_' in query or 'habana' in query:
+        return result
+    
+    # Pattern 1: vllm:metric_name followed by [ (time range)
+    # e.g., vllm:metric[5m] -> vllm:metric{labels}[5m]
+    result = re.sub(
+        r'(vllm:[\w:]+)(\[)',
+        rf'\1{{{label_clause}}}\2',
+        result
+    )
+    
+    # Pattern 2: vllm:metric_name followed by ) (inside function)
+    # e.g., avg(vllm:metric) -> avg(vllm:metric{labels})
+    result = re.sub(
+        r'(vllm:[\w:]+)(?!\{)(\))',
+        rf'\1{{{label_clause}}}\2',
+        result
+    )
+    
+    # Pattern 3: Bare vllm:metric_name at end of query (no [ or ) after)
+    # e.g., vllm:num_requests_running -> vllm:num_requests_running{labels}
+    # Only if not already labeled and at end of string or followed by space/operator
+    result = re.sub(
+        r'(vllm:[\w:]+)(?!\{|\[|\))(\s|$|[+\-*/])',
+        rf'\1{{{label_clause}}}\2',
+        result
+    )
+    
+    # Merge adjacent label blocks: {a}{b} -> {a,b}
+    result = re.sub(r'\}\{', ',', result)
+    
+    return result
+
+
+def fetch_vllm_metrics_data(
+    model_name: str,
+    time_range: Optional[str] = None,
+    start_datetime: Optional[str] = None,
+    end_datetime: Optional[str] = None,
+    namespace: Optional[str] = None,
+) -> str:
+    """Fetch vLLM metrics data for dashboard display.
+    
+    Returns JSON string with all vLLM and GPU metrics for the specified model.
+    Uses parallel instant queries for fast loading.
+    
+    Args:
+        model_name: Model to fetch metrics for (e.g., "demo3 | meta-llama/Llama-3.2-3B-Instruct")
+        time_range: Time range like "1h", "6h", "24h"
+        namespace: Optional namespace filter
+        
+    Returns:
+        JSON string: {"model_name": "...", "start_ts": ..., "end_ts": ..., "metrics": {...}}
+    """
+    try:
+        # Resolve time range (for metadata)
+        resolved_start, resolved_end = resolve_time_range(
+            time_range=time_range,
+            start_datetime=start_datetime,
+            end_datetime=end_datetime,
+        )
+    except Exception as e:
+        error = MCPException(
+            message=f"Time range resolution failed: {str(e)}",
+            error_code=MCPErrorCode.INVALID_INPUT,
+            recovery_suggestion="Please check the time range parameters."
+        )
+        return error.to_mcp_response()
+
+    try:
+        # Get vLLM metrics queries
+        vllm_metrics = get_vllm_metrics()
+        
+        # Prepare queries with model_name filter
+        prepared_queries: Dict[str, str] = {}
+        for label, query in vllm_metrics.items():
+            final_query = query
+            # Inject model_name label if not "all"
+            if model_name and model_name.lower() != "all":
+                # Parse model_name which may be "namespace | model_name"
+                if "|" in model_name:
+                    ns, actual_model = [s.strip() for s in model_name.split("|", 1)]
+                    label_clause = f'model_name="{actual_model}",namespace="{ns}"'
+                else:
+                    ns = None
+                    actual_model = model_name
+                    label_clause = f'model_name="{model_name}"'
+                
+                final_query = _inject_labels_into_query(query, label_clause)
+            
+            # Add namespace filter if specified separately
+            if namespace and namespace.lower() != "all" and "namespace=" not in final_query:
+                final_query = _inject_labels_into_query(final_query, f'namespace="{namespace}"')
+            
+            prepared_queries[label] = final_query
+        
+        # Execute instant queries for current values (fast!)
+        values = execute_instant_queries_parallel(prepared_queries, max_workers=10)
+        
+        # Execute range queries for sparklines (in parallel)
+        time_series_data = execute_range_queries_parallel(
+            prepared_queries, 
+            resolved_start, 
+            resolved_end, 
+            max_workers=10,
+            max_points=15  # ~15 points for sparklines
+        )
+        
+        # Format results - convert NaN to null for valid JSON
+        metrics_data = {}
+        for label, value in values.items():
+            # NaN is not valid JSON, convert to None (null)
+            clean_value = None if (isinstance(value, float) and math.isnan(value)) else value
+            metrics_data[label] = {
+                "latest_value": clean_value,
+                "time_series": time_series_data.get(label, [])
+            }
+        
+        # Return as plain JSON string (not wrapped in MCP format)
+        response = {
+            "model_name": model_name,
+            "start_ts": resolved_start,
+            "end_ts": resolved_end,
+            "metrics": metrics_data
+        }
+        
+        return json.dumps(response)
+        
+    except Exception as e:
+        error = MCPException(
+            message=f"Failed to fetch vLLM metrics: {str(e)}",
+            error_code=MCPErrorCode.PROMETHEUS_ERROR,
+            recovery_suggestion="Check Prometheus connectivity and try again."
+        )
+        return error.to_mcp_response()
+
+
 def analyze_vllm(
     model_name: str,
     summarize_model_id: str,
@@ -254,15 +395,19 @@ def analyze_vllm(
     start_datetime: Optional[str] = None,
     end_datetime: Optional[str] = None,
     api_key: Optional[str] = None,
-) -> List[Dict[str, Any]]:
-    """Analyze vLLM metrics and summarize using LLM. Using the same core functions:
-    - get_vllm_metrics() to discover metrics
-    - fetch_metrics() to fetch time series
-    - build_prompt() to build the analysis prompt
-    - summarize_with_llm() to generate the summary
-
-    Returns an MCP-friendly text response containing model, prompt, summary,
-    and a compact metrics preview.
+) -> str:
+    """Analyze vLLM metrics and generate AI summary.
+    
+    Fetches metrics, builds a prompt, and uses LLM to generate analysis.
+    
+    Args:
+        model_name: Model to analyze (e.g., "demo3 | meta-llama/Llama-3.2-3B-Instruct")
+        summarize_model_id: LLM model to use for analysis
+        time_range: Time range like "1h", "6h", "24h"
+        api_key: Optional API key for external LLM
+        
+    Returns:
+        JSON string: {"model_name": "...", "summary": "...", "time_range": "..."}
     """
     # Validate required parameters
     try:
@@ -335,56 +480,15 @@ def analyze_vllm(
             api_key,
         )
 
-        # Create a compact metrics preview (latest values)
-        preview_lines: List[str] = []
-        for label, df in metric_dfs.items():
-            try:
-                if df is not None and not df.empty and "value" in df.columns:
-                    latest_value = df["value"].iloc[-1]
-                    preview_lines.append(f"- {label}: {latest_value}")
-                else:
-                    preview_lines.append(f"- {label}: no data")
-            except Exception:
-                preview_lines.append(f"- {label}: error reading data")
-
-        # Convert DataFrame metrics to list format for UI consumption
-        metrics_for_ui = {}
-        for label, df in metric_dfs.items():
-            if df is not None and not df.empty and "timestamp" in df.columns and "value" in df.columns:
-                # Convert DataFrame to list of {timestamp, value} objects
-                data_points = []
-                for _, row in df.iterrows():
-                    try:
-                        # Convert timestamp to ISO format string
-                        timestamp_str = row["timestamp"].isoformat() if hasattr(row["timestamp"], "isoformat") else str(row["timestamp"])
-                        value = float(row["value"]) if pd.notna(row["value"]) else None
-                        if value is not None:
-                            data_points.append({
-                                "timestamp": timestamp_str,
-                                "value": value
-                            })
-                    except (ValueError, TypeError):
-                        continue
-                metrics_for_ui[label] = data_points
-            else:
-                metrics_for_ui[label] = []
-
-        # Create structured response with both summary and metrics data
+        # Return only the AI summary - metrics data comes from fetch_vllm_metrics_data
         structured_response = {
-            "health_prompt": prompt,
-            "llm_summary": summary,
-            "metrics": metrics_for_ui
+            "model_name": model_name,
+            "summary": summary,
+            "time_range": time_range or f"{resolved_start.isoformat()}-{resolved_end.isoformat()}",
         }
 
-        content = (
-            f"Model: {model_name}\n\n"
-            f"Prompt Used:\n{prompt}\n\n"
-            f"Summary:\n{summary}\n\n"
-            f"Metrics Preview (latest values):\n" + "\n".join(preview_lines) +
-            f"\n\nSTRUCTURED_DATA:\n{json.dumps(structured_response)}"
-        )
-
-        return make_mcp_text_response(content)
+        # Return as plain JSON string (not wrapped in MCP format)
+        return json.dumps(structured_response)
         
     except PrometheusError as e:
         return e.to_mcp_response()

@@ -30,6 +30,7 @@ class ObservabilityMCPServer:
             list_vllm_namespaces,
             get_model_config,
             get_vllm_metrics_tool,
+            fetch_vllm_metrics_data,
             analyze_vllm,
             calculate_metrics,
             list_summarization_models,
@@ -39,6 +40,7 @@ class ObservabilityMCPServer:
         )
         from .tools.observability_openshift_tools import (
             analyze_openshift,
+            fetch_openshift_metrics_data,
             list_openshift_namespaces,
             list_openshift_metric_groups,
             list_openshift_namespace_metric_groups,
@@ -69,6 +71,7 @@ class ObservabilityMCPServer:
         self.mcp.tool()(list_vllm_namespaces)
         self.mcp.tool()(get_model_config)
         self.mcp.tool()(get_vllm_metrics_tool)
+        self.mcp.tool()(fetch_vllm_metrics_data)
         self.mcp.tool()(analyze_vllm)
         self.mcp.tool()(calculate_metrics)
         self.mcp.tool()(list_summarization_models)
@@ -78,6 +81,7 @@ class ObservabilityMCPServer:
 
         # Register OpenShift tools
         self.mcp.tool()(analyze_openshift)
+        self.mcp.tool()(fetch_openshift_metrics_data)
         self.mcp.tool()(list_openshift_namespaces)
         self.mcp.tool()(list_openshift_metric_groups)
         self.mcp.tool()(list_openshift_namespace_metric_groups)
