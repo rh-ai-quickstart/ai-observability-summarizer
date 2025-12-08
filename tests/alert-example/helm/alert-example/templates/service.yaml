@@ -1,0 +1,18 @@
+{{- range .Values.apps }}
+{{- if .enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .name }}
+spec:
+  selector:
+    app: {{ .name }}
+  ports:
+  - name: http
+    port: {{ $.Values.service.port }}
+    targetPort: {{ $.Values.service.targetPort }}
+---
+{{- end }}
+{{- end }}
+
+

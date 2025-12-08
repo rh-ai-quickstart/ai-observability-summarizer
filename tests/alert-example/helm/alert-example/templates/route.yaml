@@ -1,0 +1,26 @@
+{{- if .Values.route.enabled }}
+{{- range .Values.apps }}
+{{- if .enabled }}
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ .name }}
+  labels:
+    app: {{ .name }}
+spec:
+  to:
+    kind: Service
+    name: {{ .name }}
+    weight: 100
+  port:
+    targetPort: http
+  tls:
+    termination: {{ $.Values.route.tls.termination }}
+    insecureEdgeTerminationPolicy: {{ $.Values.route.tls.insecureEdgeTerminationPolicy }}
+  wildcardPolicy: None
+---
+{{- end }}
+{{- end }}
+{{- end }}
+
+

@@ -1252,6 +1252,18 @@ def chat_openshift_metrics(
     if scope == NAMESPACE_SCOPED and namespace:
         scope_description += f" ({namespace})"
 
+    # Build correlated log/trace context for chat_openshift_metrics prompt (only when relevant)
+    log_trace_data: str = ""
+    if KORREL8R_ENABLED:
+        log_trace_data = build_log_trace_context_for_pod_issues(
+            namespace_for_query=namespace_for_query,
+            namespace_label=namespace,
+            start_ts=start_ts,
+            end_ts=end_ts,
+            metrics_to_fetch=metrics_to_fetch,
+        )
+        logger.debug("In chat_openshift_metrics: log_trace_data=%s", log_trace_data)
+
     metrics_data_summary = build_openshift_metrics_context(
         metric_dfs, metric_category, namespace_for_query, scope_description
     )
@@ -1263,7 +1275,7 @@ def chat_openshift_metrics(
         time_range_info=None,
         chat_scope=chat_scope_value,
         target_namespace=namespace_for_query if scope == NAMESPACE_SCOPED else None,
-        alerts_context="",
+        log_trace_data=log_trace_data,
     )
 
     llm_response = summarize_with_llm(
@@ -1676,6 +1688,89 @@ def get_namespace_model_deployment_info(namespace: str, model: str) -> Dict[str,
         "model": model,
     }
 
+def _fmt_val(v: Any) -> str:
+    try:
+        if v is None:
+            return "null"
+        if isinstance(v, bool):
+            return "true" if v else "false"
+        if isinstance(v, (int, float)):
+            return str(v)
+        s = str(v)
+        if '"' in s:
+            s = s.replace('"', '\\"')
+        if any(c.isspace() for c in s):
+            return f"\"{s}\""
+        return s
+    except Exception:
+        return str(v)
+
+
+def _format_span_kv(span_obj: Dict[str, Any]) -> str:
+    ordered_keys = ["traceID", "spanID", "operationName", "startTime", "duration"]
+    parts = []
+    try:
+        for k in ordered_keys:
+            if k in span_obj:
+                parts.append(f"{k}={_fmt_val(span_obj.get(k))}")
+        # Add remaining top-level keys (excluding tags) in stable order
+        for k in sorted(span_obj.keys()):
+            if k in ordered_keys or k == "tags":
+                continue
+            parts.append(f"{k}={_fmt_val(span_obj.get(k))}")
+        # Flatten tags (dict or list-style) into key=value
+        tags_val = span_obj.get("tags")
+        if isinstance(tags_val, dict):
+            for tk in sorted(tags_val.keys()):
+                parts.append(f"{tk}={_fmt_val(tags_val.get(tk))}")
+        elif isinstance(tags_val, list):
+            for t in tags_val:
+                try:
+                    tk = str(t.get("key", "")).strip()
+                    tv = t.get("value")
+                    if tk:
+                        parts.append(f"{tk}={_fmt_val(tv)}")
+                except Exception:
+                    continue
+    except Exception:
+        pass
+    return "- trace " + " ".join(parts) if parts else "- trace"
+
+
+def _span_is_error_like(span: Dict[str, Any]) -> bool:
+    try:
+        tags = span.get("tags", {})
+        kv_iter = []
+        if isinstance(tags, dict):
+            kv_iter = tags.items()
+        elif isinstance(tags, list):
+            tmp = []
+            for t in tags:
+                try:
+                    k = str(t.get("key", "")).lower()
+                    v = str(t.get("value", ""))
+                    if k:
+                        tmp.append((k, v))
+                except Exception:
+                    continue
+            kv_iter = tmp
+        keywords = ("error", "exception", "fatal", "panic", "fail", "critical")
+        # Explicit error tag true
+        for k, v in kv_iter:
+            if k in ("error", "span.status.code", "status.code", "otel.status_code"):
+                vs = str(v).strip().lower()
+                if k == "error" and vs in ("true", "1", "yes"):
+                    return True
+                if vs in ("error", "2", "status_code_error"):
+                    return True
+            # Any tag value containing error-like keywords
+            vs_lower = str(v).lower()
+            if any(kw in vs_lower for kw in keywords):
+                return True
+        return False
+    except Exception:
+        return False
+
 
 def build_correlated_context_from_metrics(
     metric_dfs: Dict[str, Any],
@@ -1695,18 +1790,20 @@ def build_correlated_context_from_metrics(
         logger.debug("In build_correlated_context_from_metrics: pairs=%s", pairs)
         if not pairs:
             return ""
-        goals = ["log:application", "log:infrastructure"]
-        # Aggregate logs across all pairs first
+        goals = ["log:application", "log:infrastructure", "trace:span"]
+        # Aggregate logs and traces across all pairs first
         aggregated_logs: List[Dict[str, Any]] = []
+        aggregated_traces: List[Dict[str, Any]] = []
         for pair in pairs:
             try:
                 query_str = build_korrel8r_log_query_for_vllm(pair.namespace, pair.pod)
                 if not query_str:
                     continue
                 logger.debug("In build_correlated_context_from_metrics: query_str=%s", query_str)
-                aggregated: List[Any] = fetch_goal_query_objects(goals, query_str)
+                aggregated = fetch_goal_query_objects(goals, query_str)
                 logger.debug("In build_correlated_context_from_metrics: aggregated=%s", aggregated)
-                for obj in aggregated:
+                # Logs
+                for obj in aggregated.get("logs", []):
                     try:
                         message = obj.get("message") or obj.get("line") or ""
                         if not message:
@@ -1718,11 +1815,25 @@ def build_correlated_context_from_metrics(
                         aggregated_logs.append(obj)
                     except Exception:
                         continue
+                # Traces (kept for potential downstream use)
+                try:
+                    if isinstance(aggregated.get("traces", []), list):
+                        aggregated_traces.extend(aggregated.get("traces", []))
+                except Exception:
+                    pass
             except Exception:
                 continue
         # Sort aggregated logs by severity then timestamp
         aggregated_logs_sorted = sort_logs_by_severity_then_time(aggregated_logs)
         logger.debug("In build_correlated_context_from_metrics: aggregated_logs_sorted=%s", aggregated_logs_sorted)
+        # Optionally log trace aggregate count for visibility
+        try:
+            logger.debug(
+                "In build_correlated_context_from_metrics: aggregated_traces_count=%s",
+                len(aggregated_traces),
+            )
+        except Exception:
+            pass
         # Take top N (configurable) and build lines
         try:
             max_rows = int(os.getenv("MAX_NUM_LOG_ROWS", "10"))
@@ -1742,7 +1853,19 @@ def build_correlated_context_from_metrics(
                 continue
 
         result_str = "\n".join(lines)
-        logger.debug("In build_correlated_context_from_metrics: selected_lines=%s", result_str)
+        # Filter error-like trace spans, then append top items using helper
+        try:
+            max_trace_spans = int(os.getenv("MAX_NUM_TRACE_SPANS", "10"))
+        except Exception:
+            max_trace_spans = 10
+        filtered_spans = [s for s in aggregated_traces if isinstance(s, dict) and _span_is_error_like(s)]
+        trace_lines_kv = []
+        for span in filtered_spans[:max_trace_spans]:
+            if isinstance(span, dict):
+                trace_lines_kv.append(_format_span_kv(span))
+        if trace_lines_kv:
+            trace_section_str = "\n".join(trace_lines_kv)
+            result_str = f"{result_str}\n{trace_section_str}" if result_str else trace_section_str
         # Optionally inject a synthetic error log line for testing ONLY
         try:
             if os.getenv("INJECT_VLLM_ERROR_LOG_MSG"):
@@ -1753,7 +1876,7 @@ def build_correlated_context_from_metrics(
                 result_str = f"{result_str}\n{injected}" if result_str else injected
         except Exception:
             pass
-
+        logger.debug("In build_correlated_context_from_metrics: result=%s", result_str)
         return result_str
     except Exception:
         return ""
