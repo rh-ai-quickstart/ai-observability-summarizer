@@ -454,12 +454,16 @@ make build
 
 ### 2. Bug Fixing
 ```bash
-# 1. Setup local environment
-./scripts/local-dev.sh -n <DEFAULT_NAMESPACE>
-
-# 2. Activate virtual environment (for testing)
+# 1. Activate virtual environment (for testing)
 uv sync --group dev
 source .venv/bin/activate
+curl -O https://bootstrap.pypa.io/get-pip.py
+python3 get-pip.py
+
+# 2. Setup local environment
+make depend
+uv run python -m pip install -e .
+./scripts/local-dev.sh -n <DEFAULT_NAMESPACE>
 
 # 3. Run specific test
 uv run pytest -v tests/core/test_specific_feature.py
@@ -662,7 +666,6 @@ oc get events -n <DEFAULT_NAMESPACE> --sort-by='.lastTimestamp'
 - **README.md** - Comprehensive project overview and setup
 - **docs/GITHUB_ACTIONS.md** - CI/CD workflow documentation
 - **docs/SEMANTIC_VERSIONING.md** - Version management guidelines
-- **docs/SUMMARIZER_QUAY_IMAGE_CLEANUP.md** - Container image cleanup automation documentation
 
 ## 🎯 Quick Reference
 
