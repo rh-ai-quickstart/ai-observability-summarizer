@@ -173,7 +173,12 @@ const MetricCard: React.FC<MetricCardProps> = ({ label, value, unit = '', descri
 
   // Simple SVG sparkline (copied from OpenShift Metrics page)
   const renderSparkline = () => {
-    if (!timeSeries || timeSeries.length < 2) return null;
+    if (!timeSeries || timeSeries.length < 2) {
+      console.log(`${label}: No sparkline - ${!timeSeries ? 'no timeSeries' : `only ${timeSeries.length} points`}`);
+      return null;
+    }
+    
+    console.log(`${label}: Rendering sparkline with ${timeSeries.length} points`);
     
     const values = timeSeries.map(p => p.value);
     const min = Math.min(...values);
@@ -378,33 +383,17 @@ const VLLMMetricsPage: React.FC = () => {
         return;
       }
 
-      // Enhance metrics with mock time series for demonstration (temporary)
-      const enhancedMetrics = { ...metricsResponse.metrics };
+      // Use only real data from MCP server - no mock data
+      console.log('Received metrics data:', Object.keys(metricsResponse.metrics).length, 'metrics');
       
-      // Add mock time series to metrics that have values but no time series
-      Object.keys(enhancedMetrics).forEach(key => {
-        const metric = enhancedMetrics[key];
-        if (metric.latest_value && metric.latest_value > 0 && (!metric.time_series || metric.time_series.length === 0)) {
-          // Generate mock time series showing trend toward current value
-          const now = new Date();
-          const mockSeries = [];
-          for (let i = 14; i >= 0; i--) {
-            const timestamp = new Date(now.getTime() - i * 4 * 60 * 1000); // 4-minute intervals
-            const variation = (Math.random() - 0.5) * 0.2; // ±10% variation
-            const value = metric.latest_value * (0.8 + (14 - i) * 0.02 + variation); // Trending upward
-            mockSeries.push({
-              timestamp: timestamp.toISOString(),
-              value: Math.max(0, value)
-            });
-          }
-          enhancedMetrics[key] = {
-            ...metric,
-            time_series: mockSeries
-          };
-        }
-      });
-
-      setMetricsData(enhancedMetrics);
+      // Debug: Check which metrics have time series
+      const metricsWithTimeSeries = Object.entries(metricsResponse.metrics)
+        .filter(([, data]) => data.time_series && data.time_series.length > 0)
+        .map(([key, data]) => ({ key, points: data.time_series?.length || 0 }));
+      
+      console.log('Metrics with time series:', metricsWithTimeSeries);
+      
+      setMetricsData(metricsResponse.metrics);
     } catch (err) {
       console.error('Failed to fetch metrics:', err);
       setError('Failed to fetch metrics from MCP server');
