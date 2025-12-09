@@ -133,15 +133,7 @@ cleanup() {
     pkill -f "streamlit run ui.py" || true
     pkill -f "webpack serve" || true
     pkill -f "yarn.*start" || true
-    
-    # Stop OpenShift Console container if running
-    if command -v podman &> /dev/null; then
-        podman stop openshift-console 2>/dev/null || true
-        podman rm openshift-console 2>/dev/null || true
-    elif command -v docker &> /dev/null; then
-        docker stop openshift-console 2>/dev/null || true
-        docker rm openshift-console 2>/dev/null || true
-    fi
+    pkill -f "yarn run start-console" || true
 
     # Deactivate virtual environment if it was activated
     if [ -n "$VIRTUAL_ENV" ]; then
@@ -384,6 +376,10 @@ start_local_services() {
         
         # Check if plugin directory exists
         if [ -d "openshift-plugin" ]; then
+            echo -e "${BLUE}  → Installing plugin dependencies...${NC}"
+            (cd openshift-plugin && yarn install --frozen-lockfile)
+            
+            echo -e "${BLUE}  → Starting plugin dev server...${NC}"
             (cd openshift-plugin && yarn start > /tmp/summarizer-plugin.log 2>&1) &
             PLUGIN_PID=$!
             
@@ -402,60 +398,46 @@ start_local_services() {
         fi
     fi
 
-    # Start OpenShift Console container if requested
+    # Start OpenShift Console using yarn script if requested
     if [ "$START_CONSOLE" = "true" ]; then
-        echo -e "${BLUE}🖥️  Starting OpenShift Console container...${NC}"
+        echo -e "${BLUE}🖥️  Starting OpenShift Console...${NC}"
         ensure_port_free "$CONSOLE_PORT"
         
-        # Determine container runtime
-        if command -v podman &> /dev/null; then
-            CONTAINER_CMD="podman"
-        elif command -v docker &> /dev/null; then
-            CONTAINER_CMD="docker"
-        else
-            echo -e "${RED}❌ Neither podman nor docker found. Cannot start console.${NC}"
-            START_CONSOLE="false"
-        fi
-        
-        if [ "$START_CONSOLE" = "true" ]; then
-            # Get cluster info for console
-            CONSOLE_IMAGE="quay.io/openshift/origin-console:latest"
-            BRIDGE_K8S_MODE_OFF_CLUSTER_ENDPOINT=$(oc whoami --show-server)
-            BRIDGE_K8S_AUTH_BEARER_TOKEN=$(oc whoami -t)
-            BRIDGE_USER_SETTINGS_LOCATION="localstorage"
+        # Check if plugin directory exists and yarn is available
+        if [ -d "openshift-plugin" ]; then
+            echo -e "${BLUE}  → Checking Podman connection...${NC}"
+            # Ensure Podman connection is working
+            if ! podman system connection default podman-machine-default 2>/dev/null; then
+                echo -e "${YELLOW}⚠️  Setting Podman default connection...${NC}"
+            fi
             
-            # Stop any existing console container
-            $CONTAINER_CMD stop openshift-console 2>/dev/null || true
-            $CONTAINER_CMD rm openshift-console 2>/dev/null || true
+            # Test Podman connection and restart machine if needed
+            if ! podman ps >/dev/null 2>&1; then
+                echo -e "${YELLOW}⚠️  Podman connection failed, restarting machine...${NC}"
+                podman machine stop >/dev/null 2>&1 || true
+                podman machine start >/dev/null 2>&1
+                echo -e "${GREEN}✅ Podman machine restarted${NC}"
+            fi
             
-            # Start console container in background
-            # Security: Bind to 127.0.0.1 only to prevent network exposure
-            # WARNING: Console runs with auth disabled - for local development only!
+            echo -e "${BLUE}  → Starting console with plugin integration...${NC}"
             echo -e "${YELLOW}⚠️  Security: Console bound to localhost only (127.0.0.1:$CONSOLE_PORT)${NC}"
-            $CONTAINER_CMD run -d --name openshift-console \
-                --rm \
-                -p "127.0.0.1:$CONSOLE_PORT:9000" \
-                --env BRIDGE_USER_AUTH="disabled" \
-                --env BRIDGE_K8S_MODE="off-cluster" \
-                --env BRIDGE_K8S_MODE_OFF_CLUSTER_ENDPOINT="$BRIDGE_K8S_MODE_OFF_CLUSTER_ENDPOINT" \
-                --env BRIDGE_K8S_MODE_OFF_CLUSTER_SKIP_VERIFY_TLS="true" \
-                --env BRIDGE_K8S_AUTH="bearer-token" \
-                --env BRIDGE_K8S_AUTH_BEARER_TOKEN="$BRIDGE_K8S_AUTH_BEARER_TOKEN" \
-                --env BRIDGE_USER_SETTINGS_LOCATION="$BRIDGE_USER_SETTINGS_LOCATION" \
-                --env BRIDGE_PLUGINS="openshift-ai-observability=http://host.containers.internal:$PLUGIN_PORT" \
-                "$CONSOLE_IMAGE" \
-                > /tmp/summarizer-console.log 2>&1
+            
+            # Start console using yarn script in background
+            (cd openshift-plugin && yarn run start-console > /tmp/summarizer-console.log 2>&1) &
+            CONSOLE_PID=$!
             
             # Wait for console to start
-            sleep 5
+            sleep 8
             
             # Test console health
             if curl -s --connect-timeout 5 "http://localhost:$CONSOLE_PORT" | grep -q 'html'; then
                 echo -e "${GREEN}✅ OpenShift Console started successfully on port $CONSOLE_PORT${NC}"
             else
                 echo -e "${YELLOW}⚠️  Console may still be starting. Check /tmp/summarizer-console.log${NC}"
-                echo -e "${YELLOW}   Container logs: $CONTAINER_CMD logs openshift-console${NC}"
             fi
+        else
+            echo -e "${RED}❌ openshift-plugin directory not found. Cannot start console.${NC}"
+            START_CONSOLE="false"
         fi
     fi
 
