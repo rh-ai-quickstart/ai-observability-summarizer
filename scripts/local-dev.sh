@@ -437,10 +437,20 @@ start_local_services() {
             
             echo -e "${BLUE}  → Starting console with plugin integration...${NC}"
             echo -e "${YELLOW}⚠️  Security: Console bound to localhost only (127.0.0.1:$CONSOLE_PORT)${NC}"
-            
-            # Start console using yarn script in background
-            (cd openshift-plugin && yarn run start-console > /tmp/summarizer-console.log 2>&1) &
-            CONSOLE_PID=$!
+            $CONTAINER_CMD run -d --name openshift-console \
+                --platform linux/amd64 \
+                --rm \
+                -p "127.0.0.1:$CONSOLE_PORT:9000" \
+                --env BRIDGE_USER_AUTH="disabled" \
+                --env BRIDGE_K8S_MODE="off-cluster" \
+                --env BRIDGE_K8S_MODE_OFF_CLUSTER_ENDPOINT="$BRIDGE_K8S_MODE_OFF_CLUSTER_ENDPOINT" \
+                --env BRIDGE_K8S_MODE_OFF_CLUSTER_SKIP_VERIFY_TLS="true" \
+                --env BRIDGE_K8S_AUTH="bearer-token" \
+                --env BRIDGE_K8S_AUTH_BEARER_TOKEN="$BRIDGE_K8S_AUTH_BEARER_TOKEN" \
+                --env BRIDGE_USER_SETTINGS_LOCATION="$BRIDGE_USER_SETTINGS_LOCATION" \
+                --env BRIDGE_PLUGINS="openshift-ai-observability=http://host.containers.internal:$PLUGIN_PORT" \
+                "$CONSOLE_IMAGE" \
+                > /tmp/summarizer-console.log 2>&1
             
             # Wait for console to start
             sleep 8

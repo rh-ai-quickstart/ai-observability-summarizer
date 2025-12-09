@@ -1,6 +1,7 @@
 from typing import Dict, Any, List, Optional
 import os
 import json
+import base64
 import core.metrics as core_metrics
 import re
 import pandas as pd
@@ -27,6 +28,68 @@ from mcp_server.exceptions import (
 )
 
 logger = get_python_logger()
+
+K8S_SA_TOKEN_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+K8S_SA_CA_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+K8S_API_URL = "https://kubernetes.default.svc"
+
+def _detect_provider_from_model_id(model_id: Optional[str]) -> Optional[str]:
+    try:
+        if not model_id:
+            return None
+        if "/" in model_id:
+            return model_id.split("/", 1)[0].strip().lower()
+        m_lower = model_id.lower()
+        if "gpt" in m_lower or "openai" in m_lower:
+            return "openai"
+        if "claude" in m_lower or "anthropic" in m_lower:
+            return "anthropic"
+        if "gemini" in m_lower or "google" in m_lower or "bard" in m_lower:
+            return "google"
+        if "llama" in m_lower or "meta" in m_lower:
+            return "meta"
+        return "internal"
+    except Exception:
+        return None
+
+def _fetch_api_key_from_secret(provider: Optional[str]) -> Optional[str]:
+    """
+    Best-effort fetch of provider API key from a namespaced Secret:
+      name: ai-<provider>-credentials
+      data['api-key'] base64-encoded
+    Requires RBAC for the service account to get the secret.
+    """
+    try:
+        if not provider or provider == "internal":
+            return None
+        # Use only the MCP server namespace
+        ns = os.getenv("NAMESPACE", "")
+        if not ns:
+            return None
+        secret_name = f"ai-{provider}-credentials"
+        token = ""
+        try:
+            with open(K8S_SA_TOKEN_PATH, "r") as f:
+                token = f.read().strip()
+        except Exception:
+            return None
+        if not token:
+            return None
+        headers = {"Authorization": f"Bearer {token}"}
+        verify = K8S_SA_CA_PATH if os.path.exists(K8S_SA_CA_PATH) else True
+        url = f"{K8S_API_URL}/api/v1/namespaces/{ns}/secrets/{secret_name}"
+        resp = requests.get(url, headers=headers, timeout=5, verify=verify)
+        if resp.status_code != 200:
+            logger.debug("Secret fetch failed: %s %s", resp.status_code, resp.text[:200])
+            return None
+        data = resp.json().get("data", {})
+        api_key_b64 = data.get("api-key")
+        if not api_key_b64:
+            return None
+        return base64.b64decode(api_key_b64).decode("utf-8").strip()
+    except Exception as e:
+        logger.debug("Error fetching API key from Secret: %s", e)
+        return None
 
 
 def _classify_requests_error(e: Exception) -> str:
@@ -118,7 +181,12 @@ def analyze_openshift(
             start_ts=start_ts,
             end_ts=end_ts,
             summarize_model_id=summarize_model_id or os.getenv("DEFAULT_SUMMARIZE_MODEL", ""),
-            api_key=api_key or os.getenv("LLM_API_TOKEN", ""),
+            api_key=(
+                api_key
+                or os.getenv("LLM_API_TOKEN", "")
+                or _fetch_api_key_from_secret(_detect_provider_from_model_id(summarize_model_id))
+                or ""
+            ),
         )
 
         # Format the response for MCP consumers

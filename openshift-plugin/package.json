@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "OpenShift Console Dynamic Plugin for AI Observability",
   "private": true,
+  "license": "Apache-2.0",
   "scripts": {
     "clean": "rm -rf dist",
     "build": "yarn clean && NODE_ENV=production yarn webpack",

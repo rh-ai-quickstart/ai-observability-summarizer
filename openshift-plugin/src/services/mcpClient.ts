@@ -64,7 +64,7 @@ let requestId = 0;
 /**
  * Call an MCP tool directly via HTTP (stateless, JSON response)
  */
-async function callMcpTool<T = unknown>(
+export async function callMcpTool<T = unknown>(
   toolName: string,
   args: Record<string, unknown> = {}
 ): Promise<T> {
@@ -144,7 +144,7 @@ async function callMcpTool<T = unknown>(
 /**
  * Call MCP tool and get raw text response
  */
-async function callMcpToolText(toolName: string, args: Record<string, unknown> = {}): Promise<string> {
+export async function callMcpToolText(toolName: string, args: Record<string, unknown> = {}): Promise<string> {
   const response = await fetch(MCP_SERVER_URL, {
     method: 'POST',
     headers: {
@@ -199,9 +199,15 @@ async function callMcpToolText(toolName: string, args: Record<string, unknown> =
 
 // Helper to parse bulleted list responses from MCP
 function parseMCPListResponse(text: string): string[] {
-  return text.split('\n')
+  const modelNamePattern = /^([a-z]+\/)?[A-Za-z0-9._-]+$/;
+  return text
+    .split('\n')
     .map(line => line.replace(/•\s*/, '').trim())
-    .filter(line => line.length > 0);
+    // Drop obvious headings/separators
+    .filter(line => line.length > 0 && !line.endsWith(':'))
+    .filter(line => !/available.+models/i.test(line))
+    // Keep only plausible model identifiers (provider/model or single token without spaces)
+    .filter(line => modelNamePattern.test(line));
 }
 
 // ============ MCP API Calls ============
