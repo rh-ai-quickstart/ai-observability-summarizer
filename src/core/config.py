@@ -52,9 +52,47 @@ def get_ca_verify_setting():
     return ca_bundle_path if os.path.exists(ca_bundle_path) else True
 
 
+def detect_environment() -> str:
+    """Detect if running locally or in cluster."""
+    # Check for Kubernetes service account (indicates cluster deployment)
+    if os.path.exists("/var/run/secrets/kubernetes.io/serviceaccount/token"):
+        return "cluster"
+    # Check for local development indicators
+    elif os.getenv("LOCAL_DEV") or os.getenv("PROMETHEUS_URL", "").startswith("http://localhost"):
+        return "local"
+    else:
+        return "local"  # Default to local for safety
+
+def get_prometheus_url() -> str:
+    """Get Prometheus URL based on environment."""
+    # Allow explicit override
+    if os.getenv("PROMETHEUS_URL"):
+        return os.getenv("PROMETHEUS_URL")
+    
+    env = detect_environment()
+    if env == "cluster":
+        # In cluster: use Thanos querier service
+        return "http://thanos-querier.openshift-monitoring.svc.cluster.local:9090"
+    else:
+        # Local development: use port-forwarded localhost
+        return "http://localhost:9090"
+
+def get_tempo_url() -> str:
+    """Get Tempo URL based on environment."""
+    # Allow explicit override
+    if os.getenv("TEMPO_URL"):
+        return os.getenv("TEMPO_URL")
+    
+    env = detect_environment()
+    if env == "cluster":
+        return "https://tempo-tempostack-gateway.observability-hub.svc.cluster.local:8080"
+    else:
+        # Local development: use port-forwarded localhost
+        return "https://localhost:8082"
+
 # Main configuration settings
-PROMETHEUS_URL = os.getenv("PROMETHEUS_URL", "http://localhost:9090")
-TEMPO_URL = os.getenv("TEMPO_URL", "http://localhost:8080")
+PROMETHEUS_URL = get_prometheus_url()
+TEMPO_URL = get_tempo_url()
 LLAMA_STACK_URL = os.getenv("LLAMA_STACK_URL", "http://localhost:8321/v1/openai/v1")
 LLM_API_TOKEN = os.getenv("LLM_API_TOKEN", "")
 
@@ -79,7 +117,16 @@ REQUEST_TIMEOUT_SECONDS = 30.0  # HTTP request timeout
 # Load complex configurations
 MODEL_CONFIG = load_model_config()
 THANOS_TOKEN = load_thanos_token()
-VERIFY_SSL = get_ca_verify_setting() 
+VERIFY_SSL = get_ca_verify_setting()
+
+# Log configuration for debugging
+import logging
+logger = logging.getLogger(__name__)
+logger.info(f"Environment detected: {detect_environment()}")
+logger.info(f"Prometheus URL: {PROMETHEUS_URL}")
+logger.info(f"Tempo URL: {TEMPO_URL}")
+logger.info(f"SSL Verification: {VERIFY_SSL}")
+logger.info(f"Thanos Token: {'***configured***' if THANOS_TOKEN else 'not set'}") 
 
 # Common constants
 # Chat scope values used across the codebase
