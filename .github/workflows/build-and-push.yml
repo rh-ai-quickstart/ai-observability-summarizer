@@ -197,7 +197,9 @@ jobs:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-${{ matrix.component }}:${{ needs.semantic-version.outputs.version }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-${{ matrix.component }}:${{ needs.semantic-version.outputs.version }}
+            ${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-${{ matrix.component }}:latest
           build-args: |
             IMAGE_TAG=${{ needs.semantic-version.outputs.version }}
 
