@@ -1,0 +1,22 @@
+apiVersion: v2
+name: aiobs-stack
+description: AI Observability Summarizer - Full Stack Deployment
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+
+# This umbrella chart combines:
+# - aiobs-app: Per-namespace application components (MCP, UI, Alerting, RAG)
+# - aiobs-infra: Shared infrastructure (Tempo, Loki, OTEL, MinIO, Korrel8r)
+
+dependencies:
+  # Application components - deployed per CR namespace
+  - name: aiobs-app
+    version: ">=0.0.0"
+    repository: "file://../aiobs-app"
+
+  # Shared infrastructure - deployed once per cluster
+  - name: aiobs-infra
+    version: ">=0.0.0"
+    repository: "file://../aiobs-infra"
+    condition: infrastructure.enabled

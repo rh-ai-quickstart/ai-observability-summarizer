@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ui
+  template:
+    metadata:
+      labels:
+        app: ui
+    spec:
+      containers:
+        - name: ui
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["streamlit", "run", "ui.py", "--server.port=8501", "--server.address=0.0.0.0"]
+          ports:
+            - containerPort: 8501
+          env:
+            - name: PROMETHEUS_URL
+              value: "{{ .Values.env.PROMETHEUS_URL }}"
+            - name: LLM_URL
+              value: "{{ .Values.env.LLM_URL }}"
+            - name: LLAMA_STACK_URL
+              value: "{{ .Values.env.LLAMA_STACK_URL }}"
+            - name: LLM_API_TOKEN
+              value: "{{ .Values.env.LLM_API_TOKEN }}"
+            - name: PYTHON_LOG_LEVEL
+              value: "{{ .Values.env.PYTHON_LOG_LEVEL }}"
+            - name: MCP_SERVER_URL
+              value: "http://{{ .Values.mcpServer.serviceName }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.mcpServer.port }}"

@@ -1,0 +1,28 @@
+apiVersion: console.openshift.io/v1
+kind: ConsolePlugin
+metadata:
+  name: {{ template "openshift-console-plugin.name" . }}
+  labels:
+    {{- include "openshift-console-plugin.labels" . | nindent 4 }}
+spec:
+  displayName: {{ default (printf "%s Plugin" (include "openshift-console-plugin.name" .)) .Values.plugin.description }}
+  i18n: 
+    loadType: Preload
+  backend:
+    type: Service
+    service:
+      name: {{ template "openshift-console-plugin.name" . }}
+      namespace: {{ .Release.Namespace }}
+      port: {{ .Values.plugin.port }}
+      basePath: {{ .Values.plugin.basePath }}
+  {{- if .Values.mcpServer.enabled }}
+  proxy:
+    - alias: mcp
+      authorization: None
+      endpoint:
+        type: Service
+        service:
+          name: {{ .Values.mcpServer.serviceName }}
+          namespace: {{ default .Release.Namespace .Values.mcpServer.namespace }}
+          port: {{ .Values.mcpServer.port }}
+  {{- end }}

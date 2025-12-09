@@ -1,0 +1,72 @@
+# AI Observability Summarizer - Full Stack Values
+# This umbrella chart combines app + infrastructure components
+
+# =============================================================================
+# Infrastructure Toggle
+# Set to false if shared infrastructure is already installed
+# =============================================================================
+infrastructure:
+  enabled: true
+
+# =============================================================================
+# Application Components (aiobs-app)
+# Deployed in the CR's namespace - each team gets their own
+# =============================================================================
+
+aiobs-app:
+  # MCP Server - Model Context Protocol server (always installed)
+  mcpServer:
+    enabled: true
+    # replicaCount: 1
+    # image:
+    #   repository: quay.io/ecosystem-appeng/aiobs-mcp-server
+    #   tag: latest
+
+  # OpenShift Console Plugin - Native console integration (always installed)
+  consolePlugin:
+    enabled: true
+    plugin:
+      name: "openshift-ai-observability"
+      image: "quay.io/ecosystem-appeng/aiobs-console-plugin:latest"
+
+  # Alerting - Alert processing CronJob (optional)
+  alerting:
+    enabled: true
+
+  # RAG - LLM stack (optional, requires GPU)
+  rag:
+    enabled: false
+    # llm-service:
+    #   device: gpu  # or cpu
+
+# =============================================================================
+# Infrastructure Components (aiobs-infra)
+# Deployed once per cluster - shared by all applications
+# =============================================================================
+
+aiobs-infra:
+  # Target namespaces
+  global:
+    observabilityNamespace: observability-hub
+    lokiNamespace: openshift-logging
+    korrel8rNamespace: openshift-cluster-observability-operator
+
+  # TempoStack - Distributed tracing
+  tempo:
+    enabled: true
+
+  # LokiStack - Log aggregation (requires Loki Operator)
+  loki:
+    enabled: false
+
+  # OpenTelemetry Collector
+  otelCollector:
+    enabled: true
+
+  # Korrel8r - Signal correlation
+  korrel8r:
+    enabled: true
+
+  # MinIO - Object storage
+  minio:
+    enabled: true

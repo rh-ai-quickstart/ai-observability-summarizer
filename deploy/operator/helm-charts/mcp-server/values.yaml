@@ -1,0 +1,76 @@
+replicaCount: 1
+
+deployment:
+  name: mcp-server  # Fixed name for consistent service selector
+
+image:
+  repository: quay.io/ahameed/aiobs-mcp-server
+  tag: 1.0.4
+  pullPolicy: IfNotPresent
+
+service:
+  name: mcp-server-svc  # Fixed name for console plugin proxy
+  type: ClusterIP
+  port: 8085
+  annotations: {}
+
+route:
+  name: mcp-server-route
+  enabled: false  # Not needed - console plugin proxies internally via service
+  host: ""
+  tls:
+    termination: edge
+
+env:
+  MCP_HOST: "0.0.0.0"
+  MCP_PORT: 8085
+  MCP_TRANSPORT_PROTOCOL: "http"
+  PYTHON_LOG_LEVEL: "INFO"
+  PROMETHEUS_URL: "https://thanos-querier.openshift-monitoring.svc.cluster.local:9091"
+  TEMPO_URL: "https://tempo-tempostack-gateway.observability-hub.svc.cluster.local:8080"
+  TEMPO_TENANT_ID: "dev"
+  MAX_TIME_RANGE_DAYS: 90
+  DEFAULT_TIME_RANGE_DAYS: 7
+  KORREL8R_ENABLED: "true"
+  KORREL8R_URL: "https://korrel8r-summarizer.openshift-cluster-observability-operator.svc.cluster.local:9443"
+  MAX_NUM_LOG_ROWS: 10
+  MAX_NUM_TRACE_SPANS: 10
+  KORREL8R_TIMEOUT_SECONDS: 8
+
+# Name of the LLM used
+LLM_PREDICTOR: "llama-3-1-8b-instruct-predictor"
+
+tls:
+  enabled: true  # Enable TLS for console plugin proxy
+  secretName: mcp-server-tls
+  serviceCertAnnotation: service.beta.openshift.io/serving-cert-secret-name
+
+# JSON map of model configs exposed to tools (converted to env MODEL_CONFIG)
+# If empty/null, reads from model-config.json file in the chart directory
+# Can be overridden via values to add local models dynamically
+modelConfig: null
+
+# Optional LLM endpoint settings (not required by tools, but available)
+llm:
+  url: ""
+  apiToken: ""
+
+# Mount OpenShift service CA to enable HTTPS verification for in-cluster services
+trustedCA:
+  enabled: true
+  configMapName: "mcp-server-trusted-ca-bundle"  # Fixed name
+
+# RBAC setup similar to metrics-api
+rbac:
+  createGrafanaRole: false
+
+
+resources:
+  requests:
+    cpu: "1"
+    memory: "1Gi"
+  limits:
+    cpu: "1"
+    memory: "1Gi"
+
+

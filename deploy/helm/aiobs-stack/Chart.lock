@@ -1,0 +1,9 @@
+dependencies:
+- name: aiobs-app
+  repository: file://../aiobs-app
+  version: 0.1.0
+- name: aiobs-infra
+  repository: file://../aiobs-infra
+  version: 0.1.0
+digest: sha256:6166fb6ff64534f8fa5b49077e56e0e4d21da9e7d28cae0fbd14e10bfa5db983
+generated: "2025-12-11T15:28:58.841091-05:00"

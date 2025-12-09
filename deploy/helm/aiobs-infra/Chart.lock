@@ -1,0 +1,18 @@
+dependencies:
+- name: tempo-stack
+  repository: file://../observability/tempo
+  version: 1.0.0
+- name: loki-stack
+  repository: file://../observability/loki
+  version: 0.1.0
+- name: otel-collector
+  repository: file://../observability/otel-collector
+  version: 0.2.0
+- name: korrel8r
+  repository: file://../observability/korrel8r
+  version: 0.1.0
+- name: minio-observability-storage
+  repository: file://../minio
+  version: 0.1.0
+digest: sha256:3aaa45a7ec834580ce3a17338d9c5d07c13509cd5cbdc2a4c8a2a3062db7603b
+generated: "2025-12-11T15:28:58.490682-05:00"
