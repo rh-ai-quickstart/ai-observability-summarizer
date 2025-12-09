@@ -214,7 +214,22 @@ const MetricCard: React.FC<MetricCardProps> = ({ label, value, unit = '', descri
   const isNull = value === null;
 
   return (
-    <Card isCompact style={{ height: '100%' }}>
+    <Card 
+      isCompact 
+      style={{ 
+        height: '100%',
+        transition: 'all 0.3s ease',
+        cursor: 'default',
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.transform = 'translateY(-2px)';
+        e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.transform = 'translateY(0)';
+        e.currentTarget.style.boxShadow = '';
+      }}
+    >
       <CardBody style={{ padding: '12px' }}>
         <TextContent>
           <Text component={TextVariants.small} style={{ color: 'var(--pf-v5-global--Color--200)', marginBottom: '4px' }}>
@@ -469,13 +484,71 @@ const VLLMMetricsPage: React.FC = () => {
   }
 
   return (
-    <Page>
-      {/* Header with gradient background like OpenShift */}
-      <PageSection variant="light" style={{ 
-        background: 'linear-gradient(135deg, #7c3aed 0%, #4f46e5 50%, #3b82f6 100%)',
-        color: 'white',
-        paddingBottom: '24px',
-      }}>
+    <Page className="vllm-dashboard">
+      {/* Header with animated gradient background */}
+      <PageSection 
+        variant="light" 
+        style={{ 
+          background: 'linear-gradient(-45deg, #7c3aed, #4f46e5, #3b82f6, #06b6d4, #8b5cf6)',
+          backgroundSize: '400% 400%',
+          animation: 'gradientShift 15s ease infinite',
+          color: 'white',
+          paddingBottom: '24px',
+          position: 'relative',
+          overflow: 'hidden',
+        }}
+      >
+        <style>
+          {`
+            @keyframes gradientShift {
+              0% {
+                background-position: 0% 50%;
+              }
+              50% {
+                background-position: 100% 50%;
+              }
+              100% {
+                background-position: 0% 50%;
+              }
+            }
+            
+            @keyframes shimmer {
+              0% {
+                transform: translateX(-100%);
+              }
+              100% {
+                transform: translateX(100%);
+              }
+            }
+            
+            @keyframes subtleGlow {
+              0%, 100% {
+                box-shadow: 0 0 20px rgba(124,58,237,0.1);
+              }
+              50% {
+                box-shadow: 0 0 30px rgba(124,58,237,0.2);
+              }
+            }
+            
+            .vllm-dashboard {
+              animation: subtleGlow 12s ease-in-out infinite;
+            }
+          `}
+        </style>
+        
+        {/* Subtle overlay shimmer effect */}
+        <div
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent)',
+            animation: 'shimmer 8s ease-in-out infinite',
+            pointerEvents: 'none',
+          }}
+        />
         <Flex justifyContent={{ default: 'justifyContentSpaceBetween' }} alignItems={{ default: 'alignItemsCenter' }}>
           <FlexItem>
             <Title headingLevel="h1" style={{ color: 'white' }}>
@@ -574,6 +647,21 @@ const VLLMMetricsPage: React.FC = () => {
                 isLoading={analysisLoading}
                 isDisabled={model === 'all'}
                 icon={<OutlinedLightbulbIcon />}
+                style={{
+                  background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 50%, #6366f1 100%)',
+                  backgroundSize: '200% 200%',
+                  animation: 'gradientShift 12s ease infinite',
+                  border: 'none',
+                  transition: 'all 0.3s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-1px) scale(1.02)';
+                  e.currentTarget.style.boxShadow = '0 8px 25px rgba(139,92,246,0.4)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0) scale(1)';
+                  e.currentTarget.style.boxShadow = '';
+                }}
               >
                 Analyze with AI
               </Button>
