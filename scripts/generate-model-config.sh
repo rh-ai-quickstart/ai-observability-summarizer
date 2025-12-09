@@ -9,6 +9,9 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+# Get script directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DEPLOY_HELM_DIR="$SCRIPT_DIR/../deploy/helm"
 
 check_tool_exists() {
   local tool="$1"
@@ -50,10 +53,16 @@ generate_model_config() {
   # Check if helm is available
   check_tool_exists "helm"
 
+  # Ensure helm dependencies are up to date
+  echo -e "${BLUE}   → Ensuring Helm dependencies are available...${NC}"
+  (cd "$DEPLOY_HELM_DIR" && helm dependency build "$RAG_CHART" >/dev/null 2>&1)
+  if [ $? -ne 0 ]; then
+      echo -e "${YELLOW}⚠️  Warning: Failed to update Helm dependencies, attempting to continue...${NC}"
+  fi
+
   echo -e "${BLUE}   → Running list-models to find available models...${NC}"
   # Run helm template to get available models
-  cd deploy/helm && helm template dummy-release "$RAG_CHART" --set llm-service._debugListModels=true 2>/dev/null | grep "^model:" > "${GEN_MODEL_CONFIG_PREFIX}-list_models_output.txt"
-  cd - > /dev/null
+  (cd "$DEPLOY_HELM_DIR" && helm template dummy-release "$RAG_CHART" --set llm-service._debugListModels=true 2>/dev/null | grep "^model:" > "${GEN_MODEL_CONFIG_PREFIX}-list_models_output.txt")
 
   if [ ! -s "${GEN_MODEL_CONFIG_PREFIX}-list_models_output.txt" ]; then
       echo -e "${RED}❌ Failed to get list of available models${NC}"
@@ -84,21 +93,21 @@ generate_model_config() {
 
   # Generate new model config from template
   echo -e "${BLUE}   → Generating JSON configuration from template...${NC}"
-  if [ ! -f "deploy/helm/default-model.json.template" ]; then
-      echo -e "${RED}❌ Template file not found: deploy/helm/default-model.json.template${NC}"
+  if [ ! -f "$DEPLOY_HELM_DIR/default-model.json.template" ]; then
+      echo -e "${RED}❌ Template file not found: $DEPLOY_HELM_DIR/default-model.json.template${NC}"
       return 1
   fi
 
-  sed "s|\$MODEL_ID|$MODEL_ID|g; s|\$MODEL_NAME|$MODEL_NAME|g" deploy/helm/default-model.json.template > "${GEN_MODEL_CONFIG_PREFIX}-new_model_config.json"
+  sed "s|\$MODEL_ID|$MODEL_ID|g; s|\$MODEL_NAME|$MODEL_NAME|g" "$DEPLOY_HELM_DIR/default-model.json.template" > "${GEN_MODEL_CONFIG_PREFIX}-new_model_config.json"
 
   # Merge with base model config
   echo -e "${BLUE}     → Merging with existing model-config.json...${NC}"
-  if [ ! -f "deploy/helm/model-config.json" ]; then
-      echo -e "${RED}❌ Base config file not found: deploy/helm/model-config.json${NC}"
+  if [ ! -f "$DEPLOY_HELM_DIR/model-config.json" ]; then
+      echo -e "${RED}❌ Base config file not found: $DEPLOY_HELM_DIR/model-config.json${NC}"
       return 1
   fi
 
-  jq -s '.[0] * .[1]' "${GEN_MODEL_CONFIG_PREFIX}-new_model_config.json" deploy/helm/model-config.json > "${GEN_MODEL_CONFIG_PREFIX}-final_config.json"
+  jq -s '.[0] * .[1]' "${GEN_MODEL_CONFIG_PREFIX}-new_model_config.json" "$DEPLOY_HELM_DIR/model-config.json" > "${GEN_MODEL_CONFIG_PREFIX}-final_config.json"
 
   if [ $? -ne 0 ]; then
       echo -e "${RED}❌ Failed to merge configurations${NC}"
