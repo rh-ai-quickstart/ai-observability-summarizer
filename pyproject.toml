@@ -47,7 +47,14 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src"]
+packages = [
+  "src/common",
+  "src/core",
+  "src/mcp_server",
+  "src/ui",
+  "src/alerting",
+  "src/chatbots",
+]
 
 [tool.coverage.run]
 source = ["src"]
