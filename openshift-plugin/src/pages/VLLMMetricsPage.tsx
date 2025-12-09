@@ -30,85 +30,85 @@ import {
 import {
   SyncIcon,
   OutlinedLightbulbIcon,
-  ServerIcon,
   CubesIcon,
   ClockIcon,
-  DatabaseIcon,
-  BoltIcon,
+  TachometerAltIcon,
+  MemoryIcon,
+  CogIcon,
 } from '@patternfly/react-icons';
 import { listModels, listNamespaces, ModelInfo, NamespaceInfo, fetchVLLMMetrics, analyzeVLLM, getSessionConfig, AnalysisResult } from '../services/mcpClient';
 
-// Metric definitions organized by category - matching actual MCP server metric names exactly
+// Comprehensive vLLM metric categories based on actual Prometheus metrics
 const METRIC_CATEGORIES = {
-  'GPU Resources': {
-    icon: CubesIcon,
+  'Token Throughput': {
+    icon: TachometerAltIcon,
+    priority: 1,
+    description: 'Token processing performance and rates',
     metrics: [
-      { key: 'GPU Temperature (°C)', label: 'Temperature', unit: '°C', description: 'GPU core temperature' },
-      { key: 'GPU Utilization (%)', label: 'Utilization', unit: '%', description: 'GPU compute utilization' },
-      { key: 'GPU Power Usage (Watts)', label: 'Power', unit: 'W', description: 'GPU power consumption' },
-      { key: 'GPU Memory Usage (GB)', label: 'Memory', unit: 'GB', description: 'GPU memory used' },
-      { key: 'GPU Memory Temperature (°C)', label: 'Mem Temp', unit: '°C', description: 'GPU memory temperature' },
-      { key: 'GPU Energy Consumption (Joules)', label: 'Energy', unit: 'J', description: 'Total energy consumed' },
-      { key: 'GPU Usage (%)', label: 'vLLM GPU', unit: '%', description: 'vLLM GPU cache usage' },
-      { key: 'Gpu Cache Usage Perc', label: 'Cache %', unit: '%', description: 'GPU cache utilization' },
-    ]
-  },
-  'Inference Throughput': {
-    icon: ServerIcon,
-    metrics: [
-      { key: 'Prompt Tokens Total', label: 'Prompt Tokens', unit: '', description: 'Total prompt tokens' },
+      { key: 'Prompt Tokens Total', label: 'Prompt Tokens', unit: '', description: 'Total prompt tokens processed' },
       { key: 'Generation Tokens Total', label: 'Gen Tokens', unit: '', description: 'Total generated tokens' },
-      { key: 'Request Success Total', label: 'Success', unit: '', description: 'Successful requests' },
-      { key: 'Requests Running', label: 'Running', unit: '', description: 'Active requests' },
-      { key: 'Num Requests Waiting', label: 'Waiting', unit: '', description: 'Queued requests' },
-      { key: 'E2E Request Latency Seconds Count', label: 'Total Reqs', unit: '', description: 'Total requests' },
-      { key: 'Request Generation Tokens Sum', label: 'Gen Sum', unit: '', description: 'Generation tokens sum' },
-      { key: 'Request Prompt Tokens Sum', label: 'Prompt Sum', unit: '', description: 'Prompt tokens sum' },
-      { key: 'Request Generation Tokens Count', label: 'Gen Count', unit: '', description: 'Requests with gen tokens' },
-      { key: 'Request Prompt Tokens Count', label: 'Prompt Count', unit: '', description: 'Requests with prompts' },
+      { key: 'Prompt Tokens Created', label: 'Prompt Rate', unit: '/s', description: 'Prompt token rate' },
+      { key: 'Generation Tokens Created', label: 'Gen Rate', unit: '/s', description: 'Generation token rate' },
+      { key: 'Request Prompt Tokens Sum', label: 'Avg Prompt', unit: '', description: 'Average prompt tokens per request' },
+      { key: 'Request Generation Tokens Sum', label: 'Avg Gen', unit: '', description: 'Average generated tokens per request' },
     ]
   },
   'Latency & Timing': {
     icon: ClockIcon,
+    priority: 2,
+    description: 'Response time breakdown and analysis',
     metrics: [
-      { key: 'P95 Latency (s)', label: 'P95', unit: 's', description: '95th percentile latency' },
+      { key: 'P95 Latency (s)', label: 'P95 Latency', unit: 's', description: '95th percentile end-to-end latency' },
       { key: 'Inference Time (s)', label: 'Avg Inference', unit: 's', description: 'Average inference time' },
-      { key: 'Time To First Token Seconds Sum', label: 'TTFT Sum', unit: 's', description: 'Time to first token (sum)' },
-      { key: 'Time To First Token Seconds Count', label: 'TTFT Count', unit: '', description: 'TTFT request count' },
-      { key: 'Time Per Output Token Seconds Sum', label: 'TPOT Sum', unit: 's', description: 'Time per output token' },
-      { key: 'Time Per Output Token Seconds Count', label: 'TPOT Count', unit: '', description: 'TPOT request count' },
+      { key: 'Time To First Token Seconds Sum', label: 'TTFT Sum', unit: 's', description: 'Time to first token (total)' },
+      { key: 'Time Per Output Token Seconds Sum', label: 'TPOT Sum', unit: 's', description: 'Time per output token (total)' },
       { key: 'Request Prefill Time Seconds Sum', label: 'Prefill', unit: 's', description: 'Prompt processing time' },
       { key: 'Request Decode Time Seconds Sum', label: 'Decode', unit: 's', description: 'Token generation time' },
-      { key: 'E2E Request Latency Seconds Sum', label: 'E2E Sum', unit: 's', description: 'End-to-end latency sum' },
-      { key: 'Request Queue Time Seconds Sum', label: 'Queue', unit: 's', description: 'Time in queue' },
-      { key: 'Inter Token Latency Seconds Sum', label: 'ITL Sum', unit: 's', description: 'Inter-token latency' },
-      { key: 'Inter Token Latency Seconds Count', label: 'ITL Count', unit: '', description: 'ITL request count' },
+      { key: 'Request Queue Time Seconds Sum', label: 'Queue Time', unit: 's', description: 'Time spent in queue' },
+      { key: 'E2E Request Latency Seconds Sum', label: 'E2E Total', unit: 's', description: 'End-to-end latency sum' },
     ]
   },
-  'KV Cache & Memory': {
-    icon: DatabaseIcon,
+  'Memory & Cache': {
+    icon: MemoryIcon,
+    priority: 3,
+    description: 'Cache efficiency and memory utilization',
     metrics: [
-      { key: 'Kv Cache Usage Perc', label: 'KV Cache', unit: '%', description: 'KV cache utilization' },
-      { key: 'Prefix Cache Hits Total', label: 'Cache Hits', unit: '', description: 'Prefix cache hits' },
-      { key: 'Prefix Cache Queries Total', label: 'Cache Queries', unit: '', description: 'Cache queries' },
+      { key: 'Kv Cache Usage Perc', label: 'KV Cache', unit: '%', description: 'Key-Value cache utilization' },
+      { key: 'Gpu Cache Usage Perc', label: 'GPU Cache', unit: '%', description: 'GPU cache utilization' },
+      { key: 'Prefix Cache Hits Total', label: 'Cache Hits', unit: '', description: 'Total prefix cache hits' },
+      { key: 'Prefix Cache Queries Total', label: 'Cache Queries', unit: '', description: 'Total cache queries' },
       { key: 'Gpu Prefix Cache Hits Total', label: 'GPU Hits', unit: '', description: 'GPU prefix cache hits' },
       { key: 'Gpu Prefix Cache Queries Total', label: 'GPU Queries', unit: '', description: 'GPU cache queries' },
-      { key: 'Num Preemptions Total', label: 'Preemptions', unit: '', description: 'Request preemptions' },
-      { key: 'Cache Config Info', label: 'Config', unit: '', description: 'Cache configuration' },
+      { key: 'Gpu Prefix Cache Hits Created', label: 'GPU Hit Rate', unit: '/s', description: 'GPU cache hit rate' },
+      { key: 'Gpu Prefix Cache Queries Created', label: 'GPU Query Rate', unit: '/s', description: 'GPU cache query rate' },
     ]
   },
-  'Request Details': {
-    icon: BoltIcon,
+  'GPU Hardware': {
+    icon: CubesIcon,
+    priority: 4,
+    description: 'GPU hardware monitoring and resource usage',
     metrics: [
-      { key: 'Request Max Num Generation Tokens Sum', label: 'Max Gen', unit: '', description: 'Max generation tokens' },
-      { key: 'Request Max Num Generation Tokens Count', label: 'Max Gen Count', unit: '', description: 'Requests' },
-      { key: 'Request Params Max Tokens Sum', label: 'Max Params', unit: '', description: 'Max tokens parameter' },
-      { key: 'Request Params Max Tokens Count', label: 'Params Count', unit: '', description: 'Requests' },
-      { key: 'Request Params N Sum', label: 'N Sum', unit: '', description: 'N parameter sum' },
-      { key: 'Request Params N Count', label: 'N Count', unit: '', description: 'Requests with N param' },
+      { key: 'GPU Temperature (°C)', label: 'Temperature', unit: '°C', description: 'GPU core temperature' },
+      { key: 'GPU Power Usage (Watts)', label: 'Power', unit: 'W', description: 'GPU power consumption' },
+      { key: 'GPU Energy Consumption (Joules)', label: 'Energy', unit: 'J', description: 'Total energy consumed' },
+      { key: 'GPU Utilization (%)', label: 'Utilization', unit: '%', description: 'GPU compute utilization' },
+      { key: 'GPU Memory Usage (GB)', label: 'Memory', unit: 'GB', description: 'GPU memory used' },
+      { key: 'GPU Memory Temperature (°C)', label: 'Mem Temp', unit: '°C', description: 'GPU memory temperature' },
+    ]
+  },
+  'Request Parameters': {
+    icon: CogIcon,
+    priority: 5,
+    description: 'Request configuration and parameter analysis',
+    metrics: [
+      { key: 'Request Max Num Generation Tokens Sum', label: 'Max Gen Tokens', unit: '', description: 'Max generation tokens requested' },
+      { key: 'Request Max Num Generation Tokens Count', label: 'Max Gen Reqs', unit: '', description: 'Requests with max gen tokens' },
+      { key: 'Request Params Max Tokens Sum', label: 'Max Params', unit: '', description: 'Max tokens parameter sum' },
+      { key: 'Request Params Max Tokens Count', label: 'Param Reqs', unit: '', description: 'Requests with max tokens param' },
+      { key: 'Request Params N Sum', label: 'N Parameter', unit: '', description: 'N parameter sum' },
+      { key: 'Request Params N Count', label: 'N Reqs', unit: '', description: 'Requests with N parameter' },
       { key: 'Iteration Tokens Total Sum', label: 'Iter Tokens', unit: '', description: 'Tokens per iteration' },
-      { key: 'Iteration Tokens Total Count', label: 'Iter Count', unit: '', description: 'Iteration count' },
-      { key: 'Request Inference Time Seconds Bucket', label: 'Inf Bucket', unit: '', description: 'Inference histogram' },
+      { key: 'Iteration Tokens Total Count', label: 'Iterations', unit: '', description: 'Total iterations' },
     ]
   },
 };
@@ -205,9 +205,7 @@ const MetricCard: React.FC<MetricCardProps> = ({ label, value, unit = '', descri
                 <span style={{ 
                   fontSize: '1.75rem', 
                   fontWeight: 600, 
-                  color: value === 0 || value === '0' 
-                    ? 'var(--pf-v5-global--Color--200)' 
-                    : 'var(--pf-v5-global--primary-color--100)' 
+                  color: 'var(--pf-v5-global--primary-color--100)' 
                 }}>
                   {formatValue(value)}
                 </span>
@@ -253,21 +251,31 @@ interface MetricDataValue {
 interface CategorySectionProps {
   title: string;
   icon: React.ComponentType<{ style?: React.CSSProperties }>;
+  description: string;
   metrics: Array<{ key: string; label: string; unit: string; description: string }>;
   data: Record<string, MetricDataValue>;
   loading: boolean;
 }
 
-const CategorySection: React.FC<CategorySectionProps> = ({ title, icon: Icon, metrics, data, loading }) => {
+const CategorySection: React.FC<CategorySectionProps> = ({ title, icon: Icon, description, metrics, data, loading }) => {
   return (
     <Card style={{ marginBottom: '16px' }}>
       <CardTitle>
-        <Flex alignItems={{ default: 'alignItemsCenter' }}>
+        <Flex alignItems={{ default: 'alignItemsCenter' }} justifyContent={{ default: 'justifyContentSpaceBetween' }}>
           <FlexItem>
-            <Icon style={{ marginRight: '8px', color: 'var(--pf-v5-global--primary-color--100)' }} />
+            <Flex alignItems={{ default: 'alignItemsCenter' }}>
+              <FlexItem>
+                <Icon style={{ marginRight: '8px', color: 'var(--pf-v5-global--primary-color--100)' }} />
+              </FlexItem>
+              <FlexItem>
+                <Text component={TextVariants.h3}>{title}</Text>
+              </FlexItem>
+            </Flex>
           </FlexItem>
           <FlexItem>
-            <Text component={TextVariants.h3}>{title}</Text>
+            <Text component={TextVariants.small} style={{ color: 'var(--pf-v5-global--Color--200)' }}>
+              {description}
+            </Text>
           </FlexItem>
         </Flex>
       </CardTitle>
@@ -569,16 +577,19 @@ const VLLMMetricsPage: React.FC = () => {
           </EmptyState>
         ) : (
           <>
-            {Object.entries(METRIC_CATEGORIES).map(([categoryName, category]) => (
-              <CategorySection
-                key={categoryName}
-                title={categoryName}
-                icon={category.icon}
-                metrics={category.metrics}
-                data={metricsData}
-                loading={metricsLoading}
-              />
-            ))}
+            {Object.entries(METRIC_CATEGORIES)
+              .sort(([, a], [, b]) => (a.priority || 999) - (b.priority || 999))
+              .map(([categoryName, category]) => (
+                <CategorySection
+                  key={categoryName}
+                  title={categoryName}
+                  icon={category.icon}
+                  description={category.description}
+                  metrics={category.metrics}
+                  data={metricsData}
+                  loading={metricsLoading}
+                />
+              ))}
           </>
         )}
       </PageSection>

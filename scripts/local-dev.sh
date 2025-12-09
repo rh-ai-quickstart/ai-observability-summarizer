@@ -292,6 +292,7 @@ start_local_services() {
     TOKEN=$(oc whoami -t)
 
     # Set environment variables
+    export LOCAL_DEV="true"  # Mark as local development
     export PROMETHEUS_URL="http://localhost:$THANOS_PORT"
     export TEMPO_URL="https://localhost:$TEMPO_PORT"
     export TEMPO_TENANT_ID="dev"
