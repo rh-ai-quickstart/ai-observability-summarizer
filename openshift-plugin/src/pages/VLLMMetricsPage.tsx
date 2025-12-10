@@ -26,6 +26,7 @@ import {
   TextContent,
   Text,
   TextVariants,
+  Label,
 } from '@patternfly/react-core';
 import {
   SyncIcon,
@@ -132,38 +133,60 @@ const MetricCard: React.FC<MetricCardProps> = ({ label, value, unit = '', descri
   const formatValue = (val: number | string): string => {
     if (typeof val === 'string') return val;
     if (val === 0) return '0';
-    if (val >= 1000000) return `${(val / 1000000).toFixed(2)}M`;
-    if (val >= 1000) return `${(val / 1000).toFixed(2)}K`;
-    if (val < 1 && val > 0) return val.toFixed(3);
-    return val.toLocaleString(undefined, { maximumFractionDigits: 2 });
+    if (val >= 1000000000) return `${(val / 1000000000).toFixed(1)}B`;
+    if (val >= 1000000) return `${(val / 1000000).toFixed(1)}M`;
+    if (val >= 1000) return `${(val / 1000).toFixed(1)}K`;
+    if (val < 1 && val > 0) return val.toFixed(2);
+    return val.toLocaleString(undefined, { maximumFractionDigits: 1 });
   };
 
-  // Calculate trend from time series
+  // Enhanced trend calculation with better thresholds
   const getTrend = (): { direction: 'up' | 'down' | 'flat'; percent: number } | null => {
-    if (!timeSeries || timeSeries.length < 2) return null;
+    if (!timeSeries || timeSeries.length < 3) return null;
+    
+    // Use first and last values, but also consider recent trend
     const first = timeSeries[0].value;
     const last = timeSeries[timeSeries.length - 1].value;
-    if (first === 0) return null;
-    const percent = ((last - first) / first) * 100;
+    
+    // If both are 0, no trend to show
+    if (first === 0 && last === 0) return null;
+    
+    // Handle case where first is 0 but last has value
+    if (first === 0 && last > 0) {
+      return { direction: 'up', percent: 100 };
+    }
+    
+    // Handle case where first has value but last is 0  
+    if (first > 0 && last === 0) {
+      return { direction: 'down', percent: 100 };
+    }
+    
+    // Normal percentage calculation
+    const percent = ((last - first) / Math.abs(first)) * 100;
     return {
-      direction: percent > 1 ? 'up' : percent < -1 ? 'down' : 'flat',
+      direction: percent > 0.5 ? 'up' : percent < -0.5 ? 'down' : 'flat',
       percent: Math.abs(percent),
     };
   };
 
   const trend = getTrend();
 
-  // Simple SVG sparkline
+  // Simple SVG sparkline (copied from OpenShift Metrics page)
   const renderSparkline = () => {
-    if (!timeSeries || timeSeries.length < 2) return null;
+    if (!timeSeries || timeSeries.length < 2) {
+      console.log(`${label}: No sparkline - ${!timeSeries ? 'no timeSeries' : `only ${timeSeries.length} points`}`);
+      return null;
+    }
+    
+    console.log(`${label}: Rendering sparkline with ${timeSeries.length} points`);
     
     const values = timeSeries.map(p => p.value);
     const min = Math.min(...values);
     const max = Math.max(...values);
     const range = max - min || 1;
     
-    const width = 80;
-    const height = 24;
+    const width = 60;
+    const height = 20;
     const points = values.map((v, i) => {
       const x = (i / (values.length - 1)) * width;
       const y = height - ((v - min) / range) * height;
@@ -186,56 +209,65 @@ const MetricCard: React.FC<MetricCardProps> = ({ label, value, unit = '', descri
     );
   };
 
+  const displayValue = formatValue(value);
+  const isZero = value === 0;
+  const isNull = value === null;
+
   return (
-    <Card isCompact style={{ height: '100%' }}>
-      <CardBody>
-        {loading ? (
-          <Bullseye>
-            <Spinner size="md" />
-          </Bullseye>
-        ) : (
-          <>
-            <TextContent>
-              <Text component={TextVariants.small} style={{ color: 'var(--pf-v5-global--Color--200)' }}>
-                {label}
-              </Text>
-            </TextContent>
-            <Flex alignItems={{ default: 'alignItemsCenter' }} style={{ marginTop: '8px' }}>
-              <FlexItem>
-                <span style={{ 
-                  fontSize: '1.75rem', 
-                  fontWeight: 600, 
-                  color: 'var(--pf-v5-global--primary-color--100)' 
-                }}>
-                  {formatValue(value)}
-                </span>
-                {unit && (
-                  <span style={{ fontSize: '0.875rem', color: 'var(--pf-v5-global--Color--200)', marginLeft: '4px' }}>
-                    {unit}
-                  </span>
-                )}
-              </FlexItem>
-              <FlexItem>
-                {renderSparkline()}
-              </FlexItem>
-              {trend && trend.direction !== 'flat' && (
-                <FlexItem>
-                  <span style={{ 
-                    fontSize: '0.75rem', 
-                    color: trend.direction === 'up' ? '#3e8635' : '#c9190b',
-                    marginLeft: '4px',
-                  }}>
-                    {trend.direction === 'up' ? '↑' : '↓'} {trend.percent.toFixed(1)}%
-                  </span>
-                </FlexItem>
-              )}
-            </Flex>
-            {description && (
-              <Text component={TextVariants.small} style={{ color: 'var(--pf-v5-global--Color--200)', marginTop: '4px', fontSize: '0.75rem' }}>
-                {description}
-              </Text>
-            )}
-          </>
+    <Card 
+      isCompact 
+      style={{ 
+        height: '100%',
+        transition: 'all 0.3s ease',
+        cursor: 'default',
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.transform = 'translateY(-2px)';
+        e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.transform = 'translateY(0)';
+        e.currentTarget.style.boxShadow = '';
+      }}
+    >
+      <CardBody style={{ padding: '12px' }}>
+        <TextContent>
+          <Text component={TextVariants.small} style={{ color: 'var(--pf-v5-global--Color--200)', marginBottom: '4px' }}>
+            {label}
+          </Text>
+        </TextContent>
+        <Flex alignItems={{ default: 'alignItemsCenter' }}>
+          <FlexItem>
+            <Text 
+              component={TextVariants.h2} 
+              style={{ 
+                color: isNull ? 'var(--pf-v5-global--Color--200)' : isZero ? 'var(--pf-v5-global--success-color--100)' : 'inherit',
+                marginBottom: '2px',
+                fontSize: '1.5rem',
+              }}
+            >
+              {displayValue}{unit && value !== null ? ` ${unit}` : ''}
+            </Text>
+          </FlexItem>
+          <FlexItem>
+            {renderSparkline()}
+          </FlexItem>
+          {trend && trend.direction !== 'flat' && (
+            <FlexItem>
+              <span style={{ 
+                fontSize: '0.7rem', 
+                color: trend.direction === 'up' ? '#3e8635' : '#c9190b',
+                marginLeft: '4px',
+              }}>
+                {trend.direction === 'up' ? '↑' : '↓'} {trend.percent.toFixed(0)}%
+              </span>
+            </FlexItem>
+          )}
+        </Flex>
+        {description && (
+          <Text component={TextVariants.small} style={{ color: 'var(--pf-v5-global--Color--200)', fontSize: '0.75rem' }}>
+            {description}
+          </Text>
         )}
       </CardBody>
     </Card>
@@ -366,6 +398,16 @@ const VLLMMetricsPage: React.FC = () => {
         return;
       }
 
+      // Use only real data from MCP server - no mock data
+      console.log('Received metrics data:', Object.keys(metricsResponse.metrics).length, 'metrics');
+      
+      // Debug: Check which metrics have time series
+      const metricsWithTimeSeries = Object.entries(metricsResponse.metrics)
+        .filter(([, data]) => data.time_series && data.time_series.length > 0)
+        .map(([key, data]) => ({ key, points: data.time_series?.length || 0 }));
+      
+      console.log('Metrics with time series:', metricsWithTimeSeries);
+      
       setMetricsData(metricsResponse.metrics);
     } catch (err) {
       console.error('Failed to fetch metrics:', err);
@@ -442,22 +484,91 @@ const VLLMMetricsPage: React.FC = () => {
   }
 
   return (
-    <Page>
-      <PageSection variant="light">
+    <Page className="vllm-dashboard">
+      {/* Header with animated gradient background */}
+      <PageSection 
+        variant="light" 
+        style={{ 
+          background: 'linear-gradient(-45deg, #7c3aed, #4f46e5, #3b82f6, #06b6d4, #8b5cf6)',
+          backgroundSize: '400% 400%',
+          animation: 'gradientShift 15s ease infinite',
+          color: 'white',
+          paddingBottom: '24px',
+          position: 'relative',
+          overflow: 'hidden',
+        }}
+      >
+        <style>
+          {`
+            @keyframes gradientShift {
+              0% {
+                background-position: 0% 50%;
+              }
+              50% {
+                background-position: 100% 50%;
+              }
+              100% {
+                background-position: 0% 50%;
+              }
+            }
+            
+            @keyframes shimmer {
+              0% {
+                transform: translateX(-100%);
+              }
+              100% {
+                transform: translateX(100%);
+              }
+            }
+            
+            @keyframes subtleGlow {
+              0%, 100% {
+                box-shadow: 0 0 20px rgba(124,58,237,0.1);
+              }
+              50% {
+                box-shadow: 0 0 30px rgba(124,58,237,0.2);
+              }
+            }
+            
+            .vllm-dashboard {
+              animation: subtleGlow 12s ease-in-out infinite;
+            }
+          `}
+        </style>
+        
+        {/* Subtle overlay shimmer effect */}
+        <div
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent)',
+            animation: 'shimmer 8s ease-in-out infinite',
+            pointerEvents: 'none',
+          }}
+        />
         <Flex justifyContent={{ default: 'justifyContentSpaceBetween' }} alignItems={{ default: 'alignItemsCenter' }}>
           <FlexItem>
-            <Title headingLevel="h1" size="2xl">vLLM Metrics Dashboard</Title>
-            <TextContent>
-              <Text component={TextVariants.p} style={{ color: 'var(--pf-v5-global--Color--200)' }}>
-                Monitor and analyze vLLM model performance and resource utilization
-              </Text>
-            </TextContent>
+            <Title headingLevel="h1" style={{ color: 'white' }}>
+              <TachometerAltIcon style={{ marginRight: '12px' }} />
+              vLLM Metrics
+            </Title>
+            <Text style={{ color: 'rgba(255,255,255,0.8)', marginTop: '8px' }}>
+              Monitor and analyze vLLM model performance and resource utilization
+            </Text>
           </FlexItem>
           <FlexItem>
             <Button
-              variant="plain"
+              variant="secondary"
               onClick={() => { handleRefresh(); }}
               isLoading={metricsLoading}
+              style={{ 
+                backgroundColor: 'rgba(255,255,255,0.1)',
+                borderColor: 'rgba(255,255,255,0.3)',
+                color: 'white',
+              }}
             >
               <SyncIcon /> Refresh
             </Button>
@@ -465,89 +576,133 @@ const VLLMMetricsPage: React.FC = () => {
         </Flex>
       </PageSection>
 
-      <PageSection variant="light" style={{ paddingTop: 0 }}>
-        <Card>
-          <CardBody>
-            <Toolbar>
-              <ToolbarContent>
-                <ToolbarItem>
-                  <FormGroup label="Namespace" fieldId="namespace-select">
-                    <FormSelect
-                      id="namespace-select"
-                      value={namespace}
-                      onChange={(_e, val) => setNamespace(val)}
-                      style={{ minWidth: '180px' }}
-                    >
-                      <FormSelectOption key="all" value="all" label="All Namespaces" />
-                      {namespaces.map((ns) => (
-                        <FormSelectOption key={ns.name} value={ns.name} label={ns.name} />
-                      ))}
-                    </FormSelect>
-                  </FormGroup>
-                </ToolbarItem>
-                <ToolbarItem>
-                  <FormGroup label="Model" fieldId="model-select">
-                    <FormSelect
-                      id="model-select"
-                      value={model}
-                      onChange={(_e, val) => setModel(val)}
-                      style={{ minWidth: '280px' }}
-                    >
-                      <FormSelectOption key="all" value="all" label="All Models" />
-                      {filteredModels.map((m) => (
-                        <FormSelectOption
-                          key={`${m.namespace}-${m.name}`}
-                          value={`${m.namespace} | ${m.name}`}
-                          label={`${m.namespace} | ${m.name}`}
-                        />
-                      ))}
-                    </FormSelect>
-                  </FormGroup>
-                </ToolbarItem>
-                <ToolbarItem>
-                  <FormGroup label="Time Range" fieldId="time-range-select">
-                    <FormSelect
-                      id="time-range-select"
-                      value={timeRange}
-                      onChange={(_e, val) => setTimeRange(val)}
-                    >
-                      <FormSelectOption value="15m" label="15 minutes" />
-                      <FormSelectOption value="1h" label="1 hour" />
-                      <FormSelectOption value="6h" label="6 hours" />
-                      <FormSelectOption value="24h" label="24 hours" />
-                      <FormSelectOption value="7d" label="7 days" />
-                    </FormSelect>
-                  </FormGroup>
-                </ToolbarItem>
-                <ToolbarItem align={{ default: 'alignRight' }}>
-                  <Button
-                    variant="primary"
-                    onClick={handleAnalyze}
-                    isLoading={analysisLoading}
-                    isDisabled={model === 'all'}
-                    icon={<OutlinedLightbulbIcon />}
-                    style={{ background: 'linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%)', border: 'none' }}
-                  >
-                    Analyze with AI
-                  </Button>
-                </ToolbarItem>
-              </ToolbarContent>
-            </Toolbar>
-          </CardBody>
-        </Card>
+      {/* Filters Toolbar */}
+      <PageSection variant="light" style={{ paddingTop: '16px', paddingBottom: '16px' }}>
+        <Toolbar>
+          <ToolbarContent>
+            <ToolbarItem>
+              <FormGroup label="Namespace" fieldId="namespace-select">
+                <FormSelect
+                  id="namespace-select"
+                  value={namespace}
+                  onChange={(_e, val) => setNamespace(val)}
+                  style={{ minWidth: '200px' }}
+                >
+                  <FormSelectOption key="all" value="all" label="All Namespaces" />
+                  {namespaces.map((ns) => (
+                    <FormSelectOption key={ns.name} value={ns.name} label={ns.name} />
+                  ))}
+                </FormSelect>
+              </FormGroup>
+            </ToolbarItem>
+            <ToolbarItem>
+              <FormGroup label="Model" fieldId="model-select">
+                <FormSelect
+                  id="model-select"
+                  value={model}
+                  onChange={(_e, val) => setModel(val)}
+                  style={{ minWidth: '300px' }}
+                >
+                  <FormSelectOption key="all" value="all" label="All Models" />
+                  {filteredModels.map((m) => (
+                    <FormSelectOption
+                      key={`${m.namespace}-${m.name}`}
+                      value={`${m.namespace} | ${m.name}`}
+                      label={`${m.namespace} | ${m.name}`}
+                    />
+                  ))}
+                </FormSelect>
+              </FormGroup>
+            </ToolbarItem>
+            <ToolbarItem>
+              <FormGroup label="Time Range" fieldId="time-range-select">
+                <FormSelect
+                  id="time-range-select"
+                  value={timeRange}
+                  onChange={(_e, val) => setTimeRange(val)}
+                  style={{ minWidth: '120px' }}
+                >
+                  <FormSelectOption value="15m" label="15 minutes" />
+                  <FormSelectOption value="1h" label="1 hour" />
+                  <FormSelectOption value="6h" label="6 hours" />
+                  <FormSelectOption value="24h" label="24 hours" />
+                  <FormSelectOption value="7d" label="7 days" />
+                </FormSelect>
+              </FormGroup>
+            </ToolbarItem>
+            <ToolbarItem align={{ default: 'alignRight' }}>
+              <Button
+                variant="secondary"
+                onClick={() => { handleRefresh(); }}
+                isLoading={metricsLoading}
+                icon={<SyncIcon />}
+              >
+                Refresh
+              </Button>
+            </ToolbarItem>
+            <ToolbarItem>
+              <Button
+                variant="primary"
+                onClick={handleAnalyze}
+                isLoading={analysisLoading}
+                isDisabled={model === 'all'}
+                icon={<OutlinedLightbulbIcon />}
+                style={{
+                  background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 50%, #6366f1 100%)',
+                  backgroundSize: '200% 200%',
+                  animation: 'gradientShift 12s ease infinite',
+                  border: 'none',
+                  transition: 'all 0.3s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-1px) scale(1.02)';
+                  e.currentTarget.style.boxShadow = '0 8px 25px rgba(139,92,246,0.4)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0) scale(1)';
+                  e.currentTarget.style.boxShadow = '';
+                }}
+              >
+                Analyze with AI
+              </Button>
+            </ToolbarItem>
+          </ToolbarContent>
+        </Toolbar>
       </PageSection>
 
-      {error && (
-        <PageSection style={{ paddingTop: 0, paddingBottom: '8px' }}>
-          <Alert variant={AlertVariant.warning} title="Warning" isInline>
+      {/* Main Content */}
+      <PageSection>
+        {/* Current Selection Labels */}
+        {model !== 'all' && (
+          <Flex style={{ marginBottom: '16px' }}>
+            <FlexItem>
+              <Label color="blue" icon={<CubesIcon />}>
+                {namespace === 'all' ? 'All Namespaces' : namespace}
+              </Label>
+            </FlexItem>
+            <FlexItem>
+              <Label color="purple" icon={<TachometerAltIcon />}>
+                {model.split(' | ')[1] || model}
+              </Label>
+            </FlexItem>
+            <FlexItem>
+              <Label color="grey">
+                Last {timeRange === '15m' ? '15 minutes' : timeRange === '1h' ? '1 hour' : timeRange === '6h' ? '6 hours' : timeRange === '24h' ? '24 hours' : '7 days'}
+              </Label>
+            </FlexItem>
+          </Flex>
+        )}
+
+        {/* Error Alert */}
+        {error && (
+          <Alert variant={AlertVariant.warning} title="Warning" isInline style={{ marginBottom: '16px' }}>
             {error}
           </Alert>
-        </PageSection>
-      )}
+        )}
 
-      {analysisResult && (
-        <PageSection style={{ paddingTop: 0 }}>
-          <Card style={{ background: 'linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%)', border: '1px solid #c4b5fd' }}>
+        {/* AI Analysis Result */}
+        {analysisResult && (
+          <Card style={{ marginBottom: '16px', background: 'linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%)', border: '1px solid #c4b5fd' }}>
             <CardTitle>
               <Flex alignItems={{ default: 'alignItemsCenter' }}>
                 <FlexItem>
@@ -565,17 +720,28 @@ const VLLMMetricsPage: React.FC = () => {
               </div>
             </CardBody>
           </Card>
-        </PageSection>
-      )}
+        )}
 
-      <PageSection>
+        {/* Loading */}
+        {metricsLoading && (
+          <Bullseye style={{ minHeight: '200px' }}>
+            <div style={{ textAlign: 'center' }}>
+              <Spinner size="xl" />
+              <Text component={TextVariants.p} style={{ marginTop: '16px', color: 'var(--pf-v5-global--Color--200)' }}>
+                Fetching vLLM metrics for {model}...
+              </Text>
+            </div>
+          </Bullseye>
+        )}
+
+        {/* Metrics Display */}
         {model === 'all' ? (
           <EmptyState>
             <EmptyStateBody>
               Select a specific model to view detailed metrics.
             </EmptyStateBody>
           </EmptyState>
-        ) : (
+        ) : !metricsLoading && (
           <>
             {Object.entries(METRIC_CATEGORIES)
               .sort(([, a], [, b]) => (a.priority || 999) - (b.priority || 999))
@@ -591,6 +757,13 @@ const VLLMMetricsPage: React.FC = () => {
                 />
               ))}
           </>
+        )}
+
+        {/* No data message */}
+        {!metricsLoading && model !== 'all' && Object.keys(metricsData).length === 0 && (
+          <Alert variant={AlertVariant.warning} title="No metrics data" isInline>
+            No metrics data available for {model}. Make sure the model is active and metrics are enabled.
+          </Alert>
         )}
       </PageSection>
 
@@ -609,3 +782,4 @@ const VLLMMetricsPage: React.FC = () => {
 };
 
 export default VLLMMetricsPage;
+
