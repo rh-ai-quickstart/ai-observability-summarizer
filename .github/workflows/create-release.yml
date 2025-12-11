@@ -8,7 +8,7 @@ on:
       target_branch:
         description: 'Branch to create release from'
         required: false
-        default: 'dev'
+        default: 'main'
         type: choice
         options:
           - dev
