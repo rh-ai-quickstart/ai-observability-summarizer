@@ -1,0 +1,91 @@
+# Default values for tempo-stack
+replicaCount: 1
+
+nameOverride: ""
+fullnameOverride: ""
+
+# Global configuration
+global:
+  namespace: observability-hub
+
+# TempoStack configuration
+tempoStack:
+  name: tempostack
+  storageSize: 15Gi
+  
+  # Resource limits for TempoStack
+  resources:
+    total:
+      limits:
+        memory: 10Gi
+        cpu: 5000m
+      requests:
+        memory: 2Gi
+        cpu: 1000m
+  
+  # Tenant configuration
+  tenants:
+    mode: openshift
+    authentication:
+      - tenantName: dev
+        tenantId: "1610b0c3-c509-4592-a256-a1871353dbfa"
+  
+  # Template configuration
+  template:
+    gateway:
+      enabled: true
+    queryFrontend:
+      jaegerQuery:
+        enabled: true
+        # ingress:
+        #   type: route
+
+# MinIO storage configuration - now using shared MinIO instance
+minio:
+  # Use shared MinIO instance instead of dedicated deployment
+  enabled: false  # Disable dedicated MinIO deployment
+  
+  # Reference to shared MinIO instance
+  shared:
+    serviceName: minio-observability-storage
+    namespace: observability-hub
+    ports:
+      api: 9000
+      console: 9001
+  
+  # S3 configuration for Tempo (points to shared MinIO)
+  # Credentials are passed via Makefile helm_tempo_args
+  s3:
+    accessKeyId: "admin"
+    accessKeySecret: "minio123"
+    bucket: tempo
+    endpoint: http://minio-observability-storage.observability-hub.svc.cluster.local:9000
+
+# RBAC configuration
+rbac:
+  create: true
+  
+# Security configuration
+podSecurityContext:
+  runAsNonRoot: true
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: false
+  runAsNonRoot: true
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity
+affinity: {}
+
+# Additional labels and annotations
+commonLabels: {}
+commonAnnotations: {}

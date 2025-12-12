@@ -1,0 +1,54 @@
+# alerts/templates/cronjob.yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "alerts.fullname" . }}
+spec:
+  schedule: {{ .Values.schedule | quote }}
+  concurrencyPolicy: Forbid # Ensure only one job runs at a time
+  suspend: false
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: {{ .Values.serviceAccountName }}
+          restartPolicy: OnFailure
+          containers:
+            - name: alert-notifier
+              image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              env:
+                - name: TIME_WINDOW
+                  value: "{{ .Values.config.timeWindow }}"
+                - name: ALERTMANAGER_URL
+                  value: "{{ .Values.config.alertmanagerUrl }}"
+                - name: LLAMA_STACK_URL
+                  value: "http://llamastack.{{ .Release.Namespace }}.svc.cluster.local:8321"
+                - name: SLACK_WEBHOOK_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.slackWebhook.secretName | quote }}
+                      key: {{ .Values.slackWebhook.secretKey | quote }}
+                - name: AUTH_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.serviceAccountName }}
+                      key: token
+              volumeMounts:
+              - name: auth-token
+                mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+                readOnly: true
+              - name: trusted-ca
+                mountPath: /etc/pki/ca-trust/extracted/pem
+                readOnly: true
+          volumes:
+            - name: auth-token
+              secret:
+                secretName: {{ .Values.serviceAccountName }}
+                defaultMode: 0440
+            - name: trusted-ca
+              configMap:
+                name: trusted-ca-bundle-alerts
+                items:
+                  - key: service-ca.crt
+                    path: ca-bundle.crt

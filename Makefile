@@ -72,7 +72,7 @@ MCP_SERVER_RELEASE_NAME ?= mcp-server
 MCP_SERVER_CHART_PATH ?= mcp-server
 # Console plugin chart
 CONSOLE_PLUGIN_RELEASE_NAME ?= ai-obs-plugin
-CONSOLE_PLUGIN_CHART_PATH ?= ../../openshift-plugin/charts/openshift-console-plugin
+CONSOLE_PLUGIN_CHART_PATH ?= openshift-console-plugin
 # Korrel8r chart
 KORREL8R_RELEASE_NAME ?= korrel8r-summarizer
 KORREL8R_CHART_PATH ?= observability/korrel8r

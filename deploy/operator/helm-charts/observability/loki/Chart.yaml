@@ -1,0 +1,25 @@
+apiVersion: v2
+name: loki-stack
+description: A Helm chart for LokiStack with MinIO storage integration for OpenShift AI Observability
+type: application
+version: 0.1.0
+appVersion: "2.9.0"
+
+keywords:
+  - loki
+  - logging
+  - observability
+  - openshift
+  - lokistack
+  - minio
+  - storage
+  - opentelemetry
+
+maintainers:
+  - name: OpenShift AI Observability Team
+
+dependencies: []
+
+annotations:
+  category: Observability
+  description: "LokiStack deployment with shared MinIO storage backend"

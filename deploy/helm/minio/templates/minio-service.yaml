@@ -1,0 +1,30 @@
+{{/*
+MinIO Service - Deployed to observability-hub namespace
+Skipped if MinIO Service already exists in the target namespace
+*/}}
+{{- $namespace := include "minio.namespace" . }}
+{{- $serviceName := include "minio.fullname" . }}
+{{- $existingService := lookup "v1" "Service" $namespace $serviceName }}
+{{- if not $existingService }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $serviceName }}
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "minio.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+  - name: api
+    port: 9000
+    targetPort: api
+    protocol: TCP
+  - name: webui
+    port: 9090
+    targetPort: webui
+    protocol: TCP
+  selector:
+    {{- include "minio.selectorLabels" . | nindent 4 }}
+{{- end }}
+

@@ -1,0 +1,463 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: |-
+      [
+        {
+          "apiVersion": "aiobs.rh-ai-quickstart.io/v1alpha1",
+          "kind": "AIObservabilitySummarizer",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/created-by": "aiobs-operator",
+              "app.kubernetes.io/instance": "cluster-ai-observability",
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "aiobservabilitysummarizer",
+              "app.kubernetes.io/part-of": "aiobs-operator"
+            },
+            "name": "cluster-ai-observability",
+            "namespace": "ai-observability"
+          },
+          "spec": {
+            "aiobs-app": {
+              "alerting": {
+                "enabled": false
+              },
+              "rag": {
+                "enabled": true,
+                "global": {
+                  "models": {
+                    "llama-3-1-8b-instruct": {
+                      "enabled": true
+                    }
+                  }
+                },
+                "llm-service": {
+                  "device": "gpu",
+                  "secret": {
+                    "hf_token": ""
+                  }
+                }
+              }
+            },
+            "aiobs-infra": {
+              "korrel8r": {
+                "enabled": true
+              }
+            },
+            "infrastructure": {
+              "enabled": true
+            }
+          }
+        }
+      ]
+    capabilities: Basic Install
+    categories: AI/Machine Learning, Monitoring
+    containerImage: quay.io/ecosystem-appeng/aiobs-operator:v0.0.1
+    createdAt: "2025-12-11T20:29:00Z"
+    description: Deploy AI-powered observability summarization for OpenShift
+    operatorframework.io/suggested-namespace: ai-observability
+    operators.operatorframework.io/builder: operator-sdk-v1.37.0
+    operators.operatorframework.io/project_layout: helm.sdk.operatorframework.io/v1
+    repository: https://github.com/rh-ai-quickstart/openshift-ai-observability-summarizer
+    support: Community
+  name: aiobs-operator.v0.0.1
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+    - description: Deploys the AI Observability Summarizer stack
+      displayName: AI Observability Summarizer
+      kind: AIObservabilitySummarizer
+      name: aiobservabilitysummarizers.aiobs.rh-ai-quickstart.io
+      specDescriptors:
+      - description: 'REQUIRED: Your HuggingFace API token for downloading LLM models.
+          Get one at https://huggingface.co/settings/tokens'
+        displayName: HuggingFace Token (Required)
+        path: aiobs-app.rag.llm-service.secret.hf_token
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:fieldGroup:LLM Configuration
+        - urn:alm:descriptor:com.tectonic.ui:password
+      - description: Hardware type for LLM deployment
+        displayName: Device Type
+        path: aiobs-app.rag.llm-service.device
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:fieldGroup:LLM Configuration
+        - urn:alm:descriptor:com.tectonic.ui:select:gpu
+        - urn:alm:descriptor:com.tectonic.ui:select:hpu
+        - urn:alm:descriptor:com.tectonic.ui:select:gpu-amd
+        - urn:alm:descriptor:com.tectonic.ui:select:cpu
+      - description: RECOMMENDED - Good balance of performance and resource usage
+          (16GB GPU). Enabled by default.
+        displayName: Llama 3.1 8B Instruct (Recommended)
+        path: aiobs-app.rag.global.models.llama-3-1-8b-instruct.enabled
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:fieldGroup:Model Selection
+        - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+      - description: Smallest model, fastest inference (2GB GPU)
+        displayName: Llama 3.2 1B Instruct
+        path: aiobs-app.rag.global.models.llama-3-2-1b-instruct.enabled
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:fieldGroup:More Models
+        - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: Small model, good for limited GPU memory (6GB GPU)
+        displayName: Llama 3.2 3B Instruct
+        path: aiobs-app.rag.global.models.llama-3-2-3b-instruct.enabled
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:fieldGroup:More Models
+        - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: Largest model, best quality but requires 4 GPUs
+        displayName: Llama 3.3 70B Instruct
+        path: aiobs-app.rag.global.models.llama-3-3-70b-instruct.enabled
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:fieldGroup:More Models
+        - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: Runs a CronJob to analyze and summarize alerts using the LLM
+        displayName: Enable Alert Analysis
+        path: aiobs-app.alerting.enabled
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:fieldGroup:Other Settings
+        - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+      - description: Correlates metrics, logs, and traces for better observability
+          insights. Enabled by default - disable only if you have an existing installation.
+        displayName: Enable Korrel8r
+        path: aiobs-infra.korrel8r.enabled
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:fieldGroup:Other Settings
+        - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+      statusDescriptors:
+      - description: Current status conditions
+        displayName: Conditions
+        path: conditions
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes.conditions
+      version: v1alpha1
+  description: "## AI Observability Summarizer Operator\n\nThe AI Observability Summarizer
+    Operator provides an easy way to deploy an AI-powered \nobservability stack on
+    OpenShift. It leverages LLMs to analyze and summarize metrics, \nlogs, and traces
+    from your cluster.\n\n### Recommended Namespace\n\nInstall this operator and create
+    the CR in the **`ai-observability`** namespace.\n\n### Always Installed\n\n- **MCP
+    Server**: Model Context Protocol server for AI-driven observability queries\n-
+    **OpenShift Console Plugin**: Native integration with OpenShift Console\n\n###
+    Optional Features\n\n- **Alerting**: Enable automated alert analysis and summarization\n-
+    **RAG Stack**: Deploy LLM infrastructure (requires GPU resources)\n- **Shared
+    Infrastructure**: Deploy Tempo, OTEL Collector, Korrel8r, MinIO (disable if already
+    installed)\n\n### Quick Start\n\n1. Create namespace: `oc new-project ai-observability`\n2.
+    Install the operator from OperatorHub into `ai-observability`\n3. Go to **Installed
+    Operators** → **AI Observability Summarizer**\n4. Click **Create AIObservabilitySummarizer**\n5.
+    Toggle optional features as needed\n6. Click **Create**\n\n### Prerequisites\n\n-
+    OpenShift 4.12+\n- Cluster admin access\n- For RAG: GPU nodes available\n"
+  displayName: AI Observability Summarizer
+  icon:
+  - base64data: iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAACXBIWXMAAAsTAAALEwEAmpwYAAAF8WlUWHRYTUw6Y29tLmFkb2JlLnhtcAAAAAAAPD94cGFja2V0IGJlZ2luPSLvu78iIGlkPSJXNU0wTXBDZWhpSHpyZVN6TlRjemtjOWQiPz4gPHg6eG1wbWV0YSB4bWxuczp4PSJhZG9iZTpuczptZXRhLyIgeDp4bXB0az0iQWRvYmUgWE1QIENvcmUgNy4yLWMwMDAgNzkuMWI2NWE3OWI0LCAyMDIyLzA2LzEzLTIyOjAxOjAxICAgICAgICAiPiA8cmRmOlJERiB4bWxuczpyZGY9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkvMDIvMjItcmRmLXN5bnRheC1ucyMiPiA8cmRmOkRlc2NyaXB0aW9uIHJkZjphYm91dD0iIiB4bWxuczp4bXA9Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC8iIHhtbG5zOmRjPSJodHRwOi8vcHVybC5vcmcvZGMvZWxlbWVudHMvMS4xLyIgeG1sbnM6cGhvdG9zaG9wPSJodHRwOi8vbnMuYWRvYmUuY29tL3Bob3Rvc2hvcC8xLjAvIiB4bWxuczp4bXBNTT0iaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wL21tLyIgeG1sbnM6c3RFdnQ9Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC9zVHlwZS9SZXNvdXJjZUV2ZW50IyIgeG1wOkNyZWF0b3JUb29sPSJBZG9iZSBQaG90b3Nob3AgMjQuMCAoTWFjaW50b3NoKSIgeG1wOkNyZWF0ZURhdGU9IjIwMjQtMTItMDhUMTI6MDA6MDAtMDU6MDAiIHhtcDpNb2RpZnlEYXRlPSIyMDI0LTEyLTA4VDEyOjAwOjAwLTA1OjAwIiB4bXA6TWV0YWRhdGFEYXRlPSIyMDI0LTEyLTA4VDEyOjAwOjAwLTA1OjAwIiBkYzpmb3JtYXQ9ImltYWdlL3BuZyIgcGhvdG9zaG9wOkNvbG9yTW9kZT0iMyIgeG1wTU06SW5zdGFuY2VJRD0ieG1wLmlpZDo4YzBiYjBkZC0wNmM0LTQ2NzgtOTIxZS0zMzQ5YjM5YTQzYWMiIHhtcE1NOkRvY3VtZW50SUQ9ImFkb2JlOmRvY2lkOnBob3Rvc2hvcDo3NzU1ZjQyMC02YjBkLTExZWQtYjNlNC1kNTEyZTMyMjU4ZmQiIHhtcE1NOk9yaWdpbmFsRG9jdW1lbnRJRD0ieG1wLmRpZDo4YzBiYjBkZC0wNmM0LTQ2NzgtOTIxZS0zMzQ5YjM5YTQzYWMiPiA8L3JkZjpEZXNjcmlwdGlvbj4gPC9yZGY6UkRGPiA8L3g6eG1wbWV0YT4gPD94cGFja2V0IGVuZD0iciI/PgAAAA1JREFUeJztwTEBAAAAwiD7p7bGDlgAAHgNCWgAAQ==
+    mediatype: image/png
+  install:
+    spec:
+      clusterPermissions:
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - namespaces
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+        - apiGroups:
+          - ""
+          resources:
+          - secrets
+          verbs:
+          - '*'
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+        - apiGroups:
+          - aiobs.rh-ai-quickstart.io
+          resources:
+          - aiobservabilitysummarizers
+          - aiobservabilitysummarizers/status
+          - aiobservabilitysummarizers/finalizers
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          - secrets
+          - serviceaccounts
+          - services
+          - persistentvolumeclaims
+          - pods
+          verbs:
+          - '*'
+        - apiGroups:
+          - apps
+          resources:
+          - deployments
+          - statefulsets
+          - daemonsets
+          - replicasets
+          verbs:
+          - '*'
+        - apiGroups:
+          - batch
+          resources:
+          - jobs
+          - cronjobs
+          verbs:
+          - '*'
+        - apiGroups:
+          - route.openshift.io
+          resources:
+          - routes
+          - routes/custom-host
+          verbs:
+          - '*'
+        - apiGroups:
+          - rbac.authorization.k8s.io
+          resources:
+          - roles
+          - rolebindings
+          - clusterroles
+          - clusterrolebindings
+          verbs:
+          - '*'
+        - apiGroups:
+          - tempo.grafana.com
+          resources:
+          - tempostacks
+          verbs:
+          - '*'
+        - apiGroups:
+          - loki.grafana.com
+          resources:
+          - lokistacks
+          verbs:
+          - '*'
+        - apiGroups:
+          - opentelemetry.io
+          resources:
+          - opentelemetrycollectors
+          - instrumentations
+          verbs:
+          - '*'
+        - apiGroups:
+          - logging.openshift.io
+          resources:
+          - clusterlogforwarders
+          - clusterloggings
+          verbs:
+          - '*'
+        - apiGroups:
+          - observability.openshift.io
+          resources:
+          - uiplugins
+          verbs:
+          - '*'
+        - apiGroups:
+          - monitoring.coreos.com
+          resources:
+          - prometheusrules
+          - servicemonitors
+          - podmonitors
+          verbs:
+          - '*'
+        - apiGroups:
+          - networking.k8s.io
+          resources:
+          - networkpolicies
+          - ingresses
+          verbs:
+          - '*'
+        - apiGroups:
+          - serving.kserve.io
+          resources:
+          - inferenceservices
+          - inferenceservices/status
+          - servingruntimes
+          - servingruntimes/status
+          - clusterservingruntimes
+          verbs:
+          - '*'
+        - apiGroups:
+          - console.openshift.io
+          resources:
+          - consoleplugins
+          verbs:
+          - '*'
+        - apiGroups:
+          - authentication.k8s.io
+          resources:
+          - tokenreviews
+          verbs:
+          - create
+        - apiGroups:
+          - authorization.k8s.io
+          resources:
+          - subjectaccessreviews
+          verbs:
+          - create
+        serviceAccountName: aiobs-operator-controller-manager
+      deployments:
+      - label:
+          app.kubernetes.io/managed-by: kustomize
+          app.kubernetes.io/name: aiobs-operator
+          control-plane: controller-manager
+        name: aiobs-operator-controller-manager
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              control-plane: controller-manager
+          strategy: {}
+          template:
+            metadata:
+              annotations:
+                kubectl.kubernetes.io/default-container: manager
+              labels:
+                control-plane: controller-manager
+            spec:
+              containers:
+              - args:
+                - --secure-listen-address=0.0.0.0:8443
+                - --upstream=http://127.0.0.1:8080/
+                - --logtostderr=true
+                - --v=0
+                image: gcr.io/kubebuilder/kube-rbac-proxy:v0.16.0
+                name: kube-rbac-proxy
+                ports:
+                - containerPort: 8443
+                  name: https
+                  protocol: TCP
+                resources:
+                  limits:
+                    cpu: 500m
+                    memory: 512Mi
+                  requests:
+                    cpu: 10m
+                    memory: 128Mi
+                securityContext:
+                  allowPrivilegeEscalation: false
+                  capabilities:
+                    drop:
+                    - ALL
+              - args:
+                - --health-probe-bind-address=:8081
+                - --metrics-bind-address=127.0.0.1:8080
+                - --leader-elect
+                - --leader-election-id=aiobs-operator
+                image: quay.io/ecosystem-appeng/aiobs-operator:v0.0.1
+                imagePullPolicy: Always
+                livenessProbe:
+                  httpGet:
+                    path: /healthz
+                    port: 8081
+                  initialDelaySeconds: 15
+                  periodSeconds: 20
+                name: manager
+                readinessProbe:
+                  httpGet:
+                    path: /readyz
+                    port: 8081
+                  initialDelaySeconds: 5
+                  periodSeconds: 10
+                resources:
+                  limits:
+                    cpu: "1"
+                    memory: 2Gi
+                  requests:
+                    cpu: 100m
+                    memory: 512Mi
+                securityContext:
+                  allowPrivilegeEscalation: false
+                  capabilities:
+                    drop:
+                    - ALL
+              securityContext:
+                runAsNonRoot: true
+              serviceAccountName: aiobs-operator-controller-manager
+              terminationGracePeriodSeconds: 10
+      permissions:
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - coordination.k8s.io
+          resources:
+          - leases
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        serviceAccountName: aiobs-operator-controller-manager
+    strategy: deployment
+  installModes:
+  - supported: true
+    type: OwnNamespace
+  - supported: true
+    type: SingleNamespace
+  - supported: false
+    type: MultiNamespace
+  - supported: true
+    type: AllNamespaces
+  keywords:
+  - ai
+  - observability
+  - monitoring
+  - llm
+  - openshift
+  - prometheus
+  - tempo
+  - loki
+  - rag
+  - gpu
+  links:
+  - name: Documentation
+    url: https://github.com/rh-ai-quickstart/openshift-ai-observability-summarizer
+  - name: Source Code
+    url: https://github.com/rh-ai-quickstart/openshift-ai-observability-summarizer
+  maintainers:
+  - email: aiobs-team@example.com
+    name: AI Observability Team
+  maturity: alpha
+  minKubeVersion: 1.25.0
+  provider:
+    name: RH AI Quickstart
+    url: https://github.com/rh-ai-quickstart
+  version: 0.0.1
