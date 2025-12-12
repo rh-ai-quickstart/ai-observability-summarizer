@@ -458,7 +458,9 @@ make build
 ./scripts/local-dev.sh -n <DEFAULT_NAMESPACE>
 
 # 2. Activate virtual environment (for testing)
+# Sync and seed pip into the venv:
 uv sync --group dev
+uv venv --seed
 source .venv/bin/activate
 
 # 3. Run specific test
