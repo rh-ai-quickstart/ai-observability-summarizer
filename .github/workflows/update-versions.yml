@@ -1,0 +1,85 @@
+name: "Shared: Update Versions"
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: 'Version to update in files'
+        required: true
+        type: string
+      commit_message:
+        description: 'Commit message for version update'
+        required: false
+        default: 'chore: update versions'
+        type: string
+      push_changes:
+        description: 'Whether to commit and push changes'
+        required: false
+        default: true
+        type: boolean
+      target_branch:
+        description: 'Branch to checkout and push changes to'
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  update-versions:
+    name: Update versions in Helm charts and Makefile
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.target_branch || github.ref }}
+          fetch-depth: 0
+
+      - name: Update ui values.yaml
+        run: |
+          if [ -f "deploy/helm/ui/values.yaml" ]; then
+            sed -i 's|tag: .*|tag: '"${{ inputs.version }}"'|' deploy/helm/ui/values.yaml
+            echo "Updated deploy/helm/ui/values.yaml"
+          fi
+
+      - name: Update alerting values.yaml
+        run: |
+          if [ -f "deploy/helm/alerting/values.yaml" ]; then
+            sed -i 's|tag: .*|tag: '"${{ inputs.version }}"'|' deploy/helm/alerting/values.yaml
+            echo "Updated deploy/helm/alerting/values.yaml"
+          fi
+
+      - name: Update mcp-server values.yaml
+        run: |
+          if [ -f "deploy/helm/mcp-server/values.yaml" ]; then
+            sed -i 's|tag: .*|tag: '"${{ inputs.version }}"'|' deploy/helm/mcp-server/values.yaml
+            echo "Updated deploy/helm/mcp-server/values.yaml"
+          fi
+
+      - name: Update Makefile version
+        run: |
+          if [ -f "Makefile" ]; then
+            sed -i 's|VERSION ?= .*|VERSION ?= '"${{ inputs.version }}"'|' Makefile
+            echo "Updated Makefile"
+          fi
+
+      - name: Configure Git
+        if: ${{ inputs.push_changes }}
+        run: |
+          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+
+      - name: Commit and push changes
+        if: ${{ inputs.push_changes }}
+        run: |
+          git add deploy/helm/*/values.yaml Makefile 2>/dev/null || true
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "${{ inputs.commit_message }}"
+            BRANCH="${{ inputs.target_branch || github.ref_name }}"
+            git push origin "$BRANCH"
+          fi
+

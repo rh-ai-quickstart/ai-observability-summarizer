@@ -1,0 +1,343 @@
+name: Prepare Release
+
+run-name: ${{ inputs.dry_run == true && 'Prepare Release (Dry Run)' || 'Prepare Release' }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump_type:
+        description: 'Version bump type'
+        required: true
+        type: choice
+        options:
+          - major
+          - minor
+          - patch
+      custom_version:
+        description: 'Custom version (optional, overrides bump_type). Format: X.Y.Z'
+        required: false
+        type: string
+      target_branch:
+        description: 'Target branch for release preparation'
+        required: false
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - main
+      dry_run:
+        description: 'Dry run mode (only show what would happen, do not push)'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  REGISTRY: quay.io
+  ORG: ecosystem-appeng
+  IMAGE_PREFIX: aiobs
+
+jobs:
+  compute-next-version:
+    name: Compute next version
+    runs-on: ubuntu-latest
+    outputs:
+      expected_version: ${{ steps.calculate.outputs.expected_version }}
+      commit_message: ${{ steps.calculate.outputs.commit_message }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.target_branch }}
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+
+      - name: Calculate expected version and commit message
+        id: calculate
+        run: |
+          # Get current version from Makefile
+          CURRENT_VERSION=$(grep "^VERSION.*=" Makefile | sed 's/VERSION.*= //' | head -1)
+          echo "Current version: $CURRENT_VERSION"
+
+          # Check if custom version is provided
+          if [ -n "${{ inputs.custom_version }}" ]; then
+            # Validate custom version format
+            if ! echo "${{ inputs.custom_version }}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+              echo "Error: Custom version must be in format X.Y.Z (e.g., 1.2.3)"
+              exit 1
+            fi
+            EXPECTED_VERSION="${{ inputs.custom_version }}"
+            COMMIT_PREFIX="chore"
+            echo "Using custom version: $EXPECTED_VERSION"
+          else
+            # Calculate version based on bump type
+            IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+
+            case "${{ inputs.bump_type }}" in
+              major)
+                MAJOR=$((MAJOR + 1))
+                MINOR=0
+                PATCH=0
+                COMMIT_PREFIX="major"
+                ;;
+              minor)
+                MINOR=$((MINOR + 1))
+                PATCH=0
+                COMMIT_PREFIX="minor"
+                ;;
+              patch)
+                PATCH=$((PATCH + 1))
+                COMMIT_PREFIX="patch"
+                ;;
+            esac
+
+            EXPECTED_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+            echo "Calculated version for ${{ inputs.bump_type }} bump: $EXPECTED_VERSION"
+          fi
+
+          # Construct commit message
+          COMMIT_MSG="$COMMIT_PREFIX: prepare release $EXPECTED_VERSION"
+
+          echo "expected_version=$EXPECTED_VERSION" >> $GITHUB_OUTPUT
+          echo "commit_message=$COMMIT_MSG" >> $GITHUB_OUTPUT
+          echo "Expected version: $EXPECTED_VERSION"
+          echo "Commit message: $COMMIT_MSG"
+
+  update-version:
+    name: Update version files
+    needs: compute-next-version
+    if: ${{ !inputs.dry_run }}
+    uses: ./.github/workflows/update-versions.yml
+    with:
+      version: ${{ needs.compute-next-version.outputs.expected_version }}
+      commit_message: ${{ needs.compute-next-version.outputs.commit_message }}
+      push_changes: true
+      target_branch: ${{ inputs.target_branch }}
+    secrets: inherit
+
+  version-bump-commit:
+    name: Verify version bump commit
+    runs-on: ubuntu-latest
+    needs: [compute-next-version, update-version]
+    if: always() && (needs.update-version.result == 'success' || needs.update-version.result == 'skipped')
+    outputs:
+      expected_version: ${{ needs.compute-next-version.outputs.expected_version }}
+      commit_sha: ${{ steps.verify.outputs.commit_sha }}
+    steps:
+      - name: Checkout repository
+        if: ${{ !inputs.dry_run }}
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.target_branch }}
+          fetch-depth: 0
+
+      - name: Verify commit was created
+        if: ${{ !inputs.dry_run }}
+        id: verify
+        run: |
+          # Get the latest commit SHA
+          COMMIT_SHA=$(git rev-parse HEAD)
+          echo "commit_sha=$COMMIT_SHA" >> $GITHUB_OUTPUT
+          echo "Verified commit: $COMMIT_SHA"
+          
+          # Show commit details
+          echo "::group::Commit Details"
+          git log -1 --format=fuller
+          echo "::endgroup::"
+
+      - name: Dry run - show commit details
+        if: ${{ inputs.dry_run }}
+        run: |
+          echo "=== DRY RUN MODE ==="
+          echo "The following files would be updated:"
+          echo ""
+          echo "Version: ${{ needs.compute-next-version.outputs.expected_version }}"
+          echo "Commit message: ${{ needs.compute-next-version.outputs.commit_message }}"
+          echo ""
+          echo "Files that would be updated:"
+          echo "  - deploy/helm/ui/values.yaml"
+          echo "  - deploy/helm/alerting/values.yaml"
+          echo "  - deploy/helm/mcp-server/values.yaml"
+          echo "  - Makefile"
+          echo ""
+          echo "Commit would be pushed to: origin/${{ inputs.target_branch }}"
+          echo ""
+          echo "This would trigger the build workflow to create images with version: ${{ needs.compute-next-version.outputs.expected_version }}"
+
+  build-image:
+    name: Build and Push container image
+    needs: version-bump-commit
+    if: ${{ !inputs.dry_run }}
+    uses: ./.github/workflows/build-images.yml
+    with:
+      version: ${{ needs.version-bump-commit.outputs.expected_version }}
+      registry: quay.io
+      org: ecosystem-appeng
+      image_prefix: aiobs
+    secrets: inherit
+
+  create-pr:
+    name: Create PR from dev to main
+    runs-on: ubuntu-latest
+    needs: [version-bump-commit, build-image]
+    if: ${{ !inputs.dry_run && inputs.target_branch == 'dev' }}
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create PR from dev to main
+        run: |
+          set +e  # Don't exit on error - we'll handle permissions gracefully
+
+          VERSION_NUMBER="${{ needs.version-bump-commit.outputs.expected_version }}"
+          
+          echo "Checking for existing PR from dev to main..."
+          # Check if PR already exists
+          EXISTING_PR=$(gh pr list --base main --head dev --json number --jq '.[0].number' 2>&1 || echo "")
+          
+          if [ -n "$EXISTING_PR" ] && [ "$EXISTING_PR" != "null" ] && [ "$EXISTING_PR" != "" ]; then
+            echo "✅ PR already exists: #$EXISTING_PR"
+            PR_URL="https://github.com/${{ github.repository }}/pull/$EXISTING_PR"
+          else
+            echo "Creating PR from dev to main for version $VERSION_NUMBER"
+            
+            # Build PR body using a temporary file to avoid shell escaping issues
+            PR_BODY_FILE=$(mktemp)
+            cat > "$PR_BODY_FILE" <<EOF
+          ## Release Preparation $VERSION_NUMBER
+          
+          This PR merges the release preparation changes from \`dev\` to \`main\`.
+          
+          ### Release Details
+          - **Version:** $VERSION_NUMBER
+          - **Commit:** ${{ needs.version-bump-commit.outputs.commit_sha }}
+          
+          ### Container Images
+          - \`${{ env.IMAGE_PREFIX }}-metrics-ui:$VERSION_NUMBER\`
+          - \`${{ env.IMAGE_PREFIX }}-metrics-alerting:$VERSION_NUMBER\`
+          - \`${{ env.IMAGE_PREFIX }}-mcp-server:$VERSION_NUMBER\`
+          
+          ### Checklist
+          - [ ] All images verified in Quay.io
+          - [ ] Version files updated correctly
+          - [ ] Ready to merge to main
+          EOF
+            
+            echo "Attempting to create PR..."
+            # Capture both stdout and stderr
+            PR_OUTPUT=$(gh pr create \
+              --base main \
+              --head dev \
+              --title "Release Preparation $VERSION_NUMBER" \
+              --body-file "$PR_BODY_FILE" \
+              2>&1) || PR_EXIT_CODE=$?
+
+            rm -f "$PR_BODY_FILE"
+
+            # Check if PR creation succeeded (URL should contain /pull/)
+            if echo "$PR_OUTPUT" | grep -qE "(https://.*/pull/[0-9]+|http://.*/pull/[0-9]+)"; then
+              PR_URL=$(echo "$PR_OUTPUT" | grep -oE "(https://.*/pull/[0-9]+|http://.*/pull/[0-9]+)" | head -1)
+              echo "✅ PR created successfully: $PR_URL"
+            else
+              # Check if it's a permissions error
+              if echo "$PR_OUTPUT" | grep -qi "not permitted to create"; then
+                echo "⚠️  PR creation skipped due to repository permissions"
+                echo ""
+                echo "The workflow does not have permission to create pull requests."
+                echo "This is a repository-level setting that needs to be enabled:"
+                echo ""
+                echo "To fix this:"
+                echo "1. Go to Repository Settings → Actions → General"
+                echo "2. Under 'Workflow permissions', select 'Read and write permissions'"
+                echo "3. Check 'Allow GitHub Actions to create and approve pull requests'"
+                echo ""
+                echo "For now, please create the PR manually:"
+                echo "  - Base: main"
+                echo "  - Head: dev"
+                echo "  - Title: Release Preparation $VERSION_NUMBER"
+                echo ""
+                PR_URL=""  # Set empty so summary knows PR wasn't created
+              else
+                echo "❌ Failed to create PR"
+                echo "Exit code: ${PR_EXIT_CODE:-unknown}"
+                echo "Output:"
+                echo "$PR_OUTPUT"
+                echo ""
+                echo "Debugging info:"
+                echo "- Repository: ${{ github.repository }}"
+                echo "- Base branch: main"
+                echo "- Head branch: dev"
+                echo "- Version: $VERSION_NUMBER"
+                exit 1
+              fi
+            fi
+          fi
+          
+          echo "pr_url=$PR_URL" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  summary:
+    name: Summary
+    runs-on: ubuntu-latest
+    needs: [compute-next-version, version-bump-commit, build-image, create-pr]
+    if: always() && (needs.create-pr.result == 'success' || needs.create-pr.result == 'skipped')
+    steps:
+      - name: Summary
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            echo "## Dry Run - Release Preparation Preview :mag:" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "> **This was a DRY RUN - no changes were pushed**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Expected Version:** \`${{ needs.compute-next-version.outputs.expected_version }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "**Commit Message:** \`${{ needs.compute-next-version.outputs.commit_message }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "**Target Branch:** \`${{ inputs.target_branch }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### What Would Happen:" >> $GITHUB_STEP_SUMMARY
+            echo "1. Version files would be updated to \`${{ needs.compute-next-version.outputs.expected_version }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "2. Commit would be created with message: \`${{ needs.compute-next-version.outputs.commit_message }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "3. Commit would be pushed to \`${{ inputs.target_branch }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "4. Images would be built with version \`${{ needs.compute-next-version.outputs.expected_version }}\`:" >> $GITHUB_STEP_SUMMARY
+            echo "   - \`${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-metrics-ui:${{ needs.compute-next-version.outputs.expected_version }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "   - \`${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-metrics-alerting:${{ needs.compute-next-version.outputs.expected_version }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "   - \`${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-mcp-server:${{ needs.compute-next-version.outputs.expected_version }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### To Execute for Real:" >> $GITHUB_STEP_SUMMARY
+            echo "Run this workflow again with the same settings but **uncheck the dry_run option**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## Release Preparation Complete! :rocket:" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Expected Version:** \`${{ needs.version-bump-commit.outputs.expected_version }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "**Commit SHA:** \`${{ needs.version-bump-commit.outputs.commit_sha }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "**Target Branch:** \`${{ inputs.target_branch }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Next Steps:" >> $GITHUB_STEP_SUMMARY
+            echo "1. Verify images are built with version \`${{ needs.version-bump-commit.outputs.expected_version }}\`:" >> $GITHUB_STEP_SUMMARY
+            echo "   - [${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-metrics-ui:${{ needs.version-bump-commit.outputs.expected_version }}](https://${{ env.REGISTRY }}/repository/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-metrics-ui?tab=tags)" >> $GITHUB_STEP_SUMMARY
+            echo "   - [${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-metrics-alerting:${{ needs.version-bump-commit.outputs.expected_version }}](https://${{ env.REGISTRY }}/repository/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-metrics-alerting?tab=tags)" >> $GITHUB_STEP_SUMMARY
+            echo "   - [${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-mcp-server:${{ needs.version-bump-commit.outputs.expected_version }}](https://${{ env.REGISTRY }}/repository/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-mcp-server?tab=tags)" >> $GITHUB_STEP_SUMMARY
+            if [ "${{ inputs.target_branch }}" = "dev" ]; then
+              # Check if PR was created (create-pr job succeeded)
+              if [ "${{ needs.create-pr.result }}" = "success" ]; then
+                echo "2. Review and merge the PR from \`dev\` to \`main\`" >> $GITHUB_STEP_SUMMARY
+                echo "3. Once PR is merged, run the [Create Release workflow](https://github.com/${{ github.repository }}/actions/workflows/create-release.yml) with version \`v${{ needs.version-bump-commit.outputs.expected_version }}\`" >> $GITHUB_STEP_SUMMARY
+              else
+                echo "2. ⚠️  PR creation was skipped or failed. You may need to create a PR manually from \`dev\` to \`main\`" >> $GITHUB_STEP_SUMMARY
+                echo "3. Once PR is merged, run the [Create Release workflow](https://github.com/${{ github.repository }}/actions/workflows/create-release.yml) with version \`v${{ needs.version-bump-commit.outputs.expected_version }}\`" >> $GITHUB_STEP_SUMMARY
+              fi
+            else
+              echo "2. Run the [Create Release workflow](https://github.com/${{ github.repository }}/actions/workflows/create-release.yml) with version \`v${{ needs.version-bump-commit.outputs.expected_version }}\`" >> $GITHUB_STEP_SUMMARY
+            fi
+          fi

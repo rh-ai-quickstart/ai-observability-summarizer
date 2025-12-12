@@ -30,12 +30,10 @@ setup(
     packages=[
         "mcp_server",
         "mcp_server.tools",
-        "mcp_server.utils",
     ],
     package_dir={
         "mcp_server": ".",
         "mcp_server.tools": "tools",
-        "mcp_server.utils": "utils",
     },
     python_requires=">=3.10",
     install_requires=read_requirements(),
