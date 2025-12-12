@@ -16,7 +16,7 @@ service:
 
 route:
   name: mcp-server-route
-  enabled: false  # Not needed - console plugin proxies internally via service
+  enabled: true # Allows local testing with MCP server inspector
   host: ""
   tls:
     termination: edge

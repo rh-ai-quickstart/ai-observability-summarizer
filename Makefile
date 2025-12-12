@@ -72,7 +72,7 @@ MCP_SERVER_RELEASE_NAME ?= mcp-server
 MCP_SERVER_CHART_PATH ?= mcp-server
 # Console plugin chart
 CONSOLE_PLUGIN_RELEASE_NAME ?= ai-obs-plugin
-CONSOLE_PLUGIN_CHART_PATH ?= ../../openshift-plugin/charts/openshift-console-plugin
+CONSOLE_PLUGIN_CHART_PATH ?= openshift-console-plugin
 # Korrel8r chart
 KORREL8R_RELEASE_NAME ?= korrel8r-summarizer
 KORREL8R_CHART_PATH ?= observability/korrel8r
@@ -278,6 +278,7 @@ help:
 	@echo "  LLM                - Model id (eg. llama-3-1-8b-instruct)"
 	@echo "  LLM_URL            - Use existing model URL (auto-adds :8080/v1 if no port specified)"
 	@echo "  SAFETY             - Safety model id"
+	@echo "  ENABLE_RAG         - Set to 'false' to skip RAG backend services (default: true)"
 	@echo "  ALERTS             - Set to TRUE to install alerting with main deployment"
 	@echo "  SLACK_WEBHOOK_URL  - Slack Webhook URL for alerting (will prompt if not provided)"
 	@echo "  MINIO_USER         - MinIO username for observability storage (default: admin)"
@@ -401,8 +402,6 @@ install-mcp-server: namespace
 	@if oc get clusterrole grafana-prometheus-reader > /dev/null 2>&1; then \
 		echo "ClusterRole exists. Deploying without creating Grafana role..."; \
 		cd deploy/helm && helm upgrade --install $(MCP_SERVER_RELEASE_NAME) $(MCP_SERVER_CHART_PATH) -n $(NAMESPACE) \
-			--set image.repository=$(MCP_SERVER_IMAGE) \
-			--set image.tag=$(VERSION) \
 			--set rbac.createGrafanaRole=false \
 			--set LLM_PREDICTOR=$(LLM)-predictor \
 			$(if $(MCP_SERVER_ROUTE_HOST),--set route.host='$(MCP_SERVER_ROUTE_HOST)',) \
@@ -428,9 +427,13 @@ install-console-plugin: namespace
 		--set mcpServer.serviceName=$(MCP_SERVER_RELEASE_NAME)-svc \
 		$(if $(PLUGIN_AUTO_ENABLE),--set plugin.autoEnable=$(PLUGIN_AUTO_ENABLE),)
 	@echo "✅ Console plugin deployed"
-	@echo ""
-	@echo "To enable the plugin in OpenShift Console, run:"
-	@echo "  oc patch consoles.operator.openshift.io cluster --type=json -p='[{\"op\": \"add\", \"path\": \"/spec/plugins/-\", \"value\": \"ai-observability-plugin\"}]'"
+	@echo "→ Enabling plugin in OpenShift Console..."
+	-@if oc get console.operator.openshift.io cluster -o jsonpath='{.spec.plugins}' 2>/dev/null | grep -q "openshift-ai-observability"; then \
+		echo "  → Plugin 'openshift-ai-observability' already enabled"; \
+	else \
+		oc patch console.operator.openshift.io cluster --type=json -p='[{\"op\": \"add\", \"path\": \"/spec/plugins/-\", \"value\": \"openshift-ai-observability\"}]' 1>/dev/null; \
+		echo "  → Plugin 'openshift-ai-observability' enabled"; \
+	fi
 
 .PHONY: uninstall-console-plugin
 uninstall-console-plugin:
@@ -467,7 +470,11 @@ install-rag: namespace
 
 
 .PHONY: install
-install: namespace depend validate-llm install-operators install-observability-stack install-rag install-metric-ui install-mcp-server install-korrel8r delete-jobs
+install: namespace depend validate-llm install-operators install-observability-stack install-metric-ui install-mcp-server install-korrel8r delete-jobs
+	@if [ "$(ENABLE_RAG)" != "false" ]; then \
+		echo "Installing RAG backend services (set ENABLE_RAG=false to skip)..."; \
+		$(MAKE) install-rag NAMESPACE=$(NAMESPACE); \
+	fi
 	@if [ "$(ALERTS)" = "TRUE" ]; then \
 		echo "ALERTS flag is set to TRUE. Installing alerting..."; \
 		$(MAKE) install-alerts NAMESPACE=$(NAMESPACE); \
@@ -1172,12 +1179,23 @@ install-loki:
 		echo "  ✅ Cleanup complete"; \
 		echo "→ Installing loki-stack helm chart"; \
 		COLLECTOR_CREATE=$$($(check_collector_sa_and_get_flag)); \
+		DEFAULT_SC=$$(oc get sc -o jsonpath='{.items[?(@.metadata.annotations.storageclass\.kubernetes\.io/is-default-class=="true")].metadata.name}' 2>/dev/null); \
+		if [ -z "$$DEFAULT_SC" ]; then \
+			DEFAULT_SC=$$(oc get sc -o jsonpath='{.items[?(@.metadata.annotations.storageclass\.beta\.kubernetes\.io/is-default-class=="true")].metadata.name}' 2>/dev/null); \
+		fi; \
+		if [ -z "$$DEFAULT_SC" ]; then \
+			echo "  ⚠️  Could not detect default StorageClass; falling back to chart default 'gp3'"; \
+			DEFAULT_SC=gp3; \
+		else \
+			echo "  → Detected default StorageClass: $$DEFAULT_SC"; \
+		fi; \
 		cd deploy/helm && helm upgrade --install loki-stack observability/loki \
 			--namespace $(LOKI_NAMESPACE) \
 			--create-namespace \
 			--atomic --timeout 15m \
 			--set global.namespace=$(LOKI_NAMESPACE) \
 			--set rbac.collector.create=$$COLLECTOR_CREATE \
+			--set lokiStack.storageClassName=$$DEFAULT_SC \
 			$(helm_loki_args); \
 		echo "✅ loki-stack installed successfully"; \
 	fi
