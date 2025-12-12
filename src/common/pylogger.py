@@ -86,6 +86,14 @@ def _configure_third_party_loggers(log_level: str) -> None:
         _setup_logger(name, log_level)
 
 
+def _normalize_log_level(level: str | None, default: str = "INFO") -> str:
+    valid = {"CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", "NOTSET"}
+    if not level:
+        return default
+    upper = str(level).upper()
+    return upper if upper in valid else default
+
+
 def force_reconfigure_all_loggers(log_level: str = "INFO") -> None:
     global _LOGGING_CONFIGURED
     _LOGGING_CONFIGURED = False
@@ -99,7 +107,7 @@ def get_python_logger(log_level: str = "INFO") -> structlog.BoundLogger:
     should use `logging.getLogger(__name__)` and standard log levels.
     """
     global _LOGGING_CONFIGURED
-    log_level = log_level.upper()
+    log_level = _normalize_log_level(log_level)
     if not _LOGGING_CONFIGURED:
         logging.basicConfig(format="%(message)s", stream=sys.stdout, level=log_level)
         structlog.configure(
@@ -125,7 +133,7 @@ def get_python_logger(log_level: str = "INFO") -> structlog.BoundLogger:
 
 
 def get_uvicorn_log_config(log_level: str = "INFO") -> Dict[str, Any]:
-    log_level = log_level.upper()
+    log_level = _normalize_log_level(log_level)
     default_formatter = {
         "()": "structlog.stdlib.ProcessorFormatter",
         "processor": structlog.processors.JSONRenderer(),

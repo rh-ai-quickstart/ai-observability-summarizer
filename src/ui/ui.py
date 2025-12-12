@@ -29,7 +29,6 @@ from mcp_client_helper import (
     get_gpu_info_mcp,
     get_deployment_info_mcp,
     chat_vllm_mcp,
-    chat_tempo_mcp,
 )
 # Import MCP utilities from common module (breaks circular dependency)
 from common.mcp_utils import (
@@ -266,21 +265,6 @@ page = st.sidebar.radio(
 
 # --- Shared Utilities ---
 
-def detect_trace_question(question: str) -> bool:
-    """Detect if the question is about traces/tracing"""
-    question_lower = question.lower()
-    trace_keywords = [
-        "trace", "traces", "span", "spans", "latency", "request flow",
-        "distributed tracing", "request tracing", "performance trace",
-        "slow request", "request duration", "end-to-end trace",
-        "request path", "service call", "microservice", "request chain",
-        "error trace", "failed trace", "timeout trace", "performance",
-        "performance issues", "performance problems", "slow", "slowest",
-        "fastest", "response time", "execution time", "processing time",
-        "active", "services", "service activity", "most active", "busy",
-        "request flows", "analyze flows", "service performance"
-    ]
-    return any(keyword in question_lower for keyword in trace_keywords)
 
 @st.cache_data(ttl=300)
 def get_models():
@@ -1449,88 +1433,23 @@ elif page == "Chat with Prometheus":
                 # Update status
                 message_placeholder.markdown("⚡ **Starting analysis...**")
                 
-                # Check if this is a trace-related question
-                is_trace_question = detect_trace_question(user_question)
-                trace_analysis = None
-                skip_ai = False  # Flag to skip AI analysis for pure trace questions
+                # Use unified AI chatbot approach - let AI decide which tools to use
+                logger.info(f"📤 Calling {ai_chatbot.__class__.__name__}.chat() with model={ai_chatbot.model_name} for question: {user_question[:50]}...")
+                response = ai_chatbot.chat(
+                    user_question,
+                    namespace=None,  # Cluster-wide analysis
+                    progress_callback=update_progress
+                )
+                logger.info(f"📥 Received response from {ai_chatbot.model_name}: {len(response) if response else 0} chars")
 
-                # Log trace detection result
-                logger.debug(f"Question: {user_question}")
-                logger.debug(f"Is trace question: {is_trace_question}")
-
-                if is_trace_question:
-                    message_placeholder.markdown("🔍 **Detected trace question - analyzing traces...**")
-                    try:
-                        # Query Tempo for trace analysis (backend will extract time range)
-                        trace_result = chat_tempo_mcp(user_question)
-                        if trace_result["status"] == "success":
-                            # Extract text and handle nested JSON structure
-                            raw_text = extract_text_from_mcp_result(trace_result["data"])
-                            if raw_text:
-                                # Check if the text contains nested JSON
-                                if raw_text.startswith('[') and raw_text.endswith(']'):
-                                    try:
-                                        # Parse the nested JSON
-                                        nested_data = json.loads(raw_text)
-                                        if isinstance(nested_data, list) and len(nested_data) > 0:
-                                            nested_item = nested_data[0]
-                                            if isinstance(nested_item, dict) and "text" in nested_item:
-                                                trace_analysis = nested_item["text"]
-                                            else:
-                                                trace_analysis = raw_text
-                                        else:
-                                            trace_analysis = raw_text
-                                    except json.JSONDecodeError:
-                                        trace_analysis = raw_text
-                                else:
-                                    trace_analysis = raw_text
-                            else:
-                                trace_analysis = None
-                            message_placeholder.markdown("✅ **Trace analysis complete**")
-
-                            # For pure trace questions, show only trace analysis
-                            if trace_analysis:
-                                message_placeholder.markdown(trace_analysis)
-                                full_response = trace_analysis
-                                st.session_state.claude_messages.append({"role": "assistant", "content": full_response})
-                                skip_ai = True  # Skip AI/Prometheus analysis for pure trace questions
-                        else:
-                            message_placeholder.markdown("⚠️ **Trace analysis failed, continuing with metrics only**")
-                    except Exception as e:
-                        message_placeholder.markdown(f"⚠️ **Trace analysis error: {str(e)}, continuing with metrics only**")
-
-                # Get response from AI with real-time progress (PromQL queries always included)
-                if not skip_ai:
-                    logger.info(f"📤 Calling {ai_chatbot.__class__.__name__}.chat() with model={ai_chatbot.model_name} for question: {user_question[:50]}...")
-                    response = ai_chatbot.chat(
-                        user_question,
-                        namespace=None,  # Cluster-wide analysis
-                        progress_callback=update_progress
-                    )
-                    logger.info(f"📥 Received response from {ai_chatbot.model_name}: {len(response) if response else 0} chars")
-                else:
-                    response = None  # Skip AI analysis for pure trace questions
-
-                # Display final response with better formatting
+                # Display final response
                 if response:
                     # Format the response for better readability
                     formatted_response = response.replace("\\n", "\n")
-
-                    # If we have trace analysis, append it to the response
-                    if trace_analysis:
-                        formatted_response += "\n\n---\n\n## 🔍 **Trace Analysis**\n\n" + trace_analysis
-
                     message_placeholder.markdown(formatted_response)
                     
-                    # Add AI's response to history (including trace analysis if available)
-                    full_response = response
-                    if trace_analysis:
-                        full_response += "\n\n---\n\n## 🔍 **Trace Analysis**\n\n" + trace_analysis
-                    st.session_state.claude_messages.append({"role": "assistant", "content": full_response})
-                elif skip_ai:
-                    # For pure trace questions, we already displayed the trace analysis above
-                    # No additional processing needed
-                    pass
+                    # Add AI's response to history
+                    st.session_state.claude_messages.append({"role": "assistant", "content": formatted_response})
                 else:
                     error_msg = "I couldn't generate a response. Please try again."
                     message_placeholder.markdown(f"❌ **Error:** {error_msg}")

@@ -23,7 +23,7 @@ The project uses 6 GitHub Actions workflows with the following execution order a
 3. **Build and Push** (`.github/workflows/build-and-push.yml`)
    - **Trigger:** PRs merged to `main` or `dev` branches, manual dispatch
    - **Purpose:** Builds and pushes container images with semantic versioning
-   - **Actions:** 
+   - **Actions:**
    - **Analyzes PR labels and title first**, then falls back to commit messages for version bumps
    - Gets current version from Makefile (not git tags)
    - Builds 3 container images (using `IMAGE_PREFIX`-component naming):
@@ -31,7 +31,9 @@ The project uses 6 GitHub Actions workflows with the following execution order a
      - aiobs-metrics-alerting
      - aiobs-mcp-server
      - Updates Helm charts and Makefile with new version (**non-main branches only**)
-   - **Image naming:** Semantic versions (e.g., `0.1.2`, `1.0.0`)
+   - **Image tagging:** Each image is tagged with both:
+     - Semantic version tag (e.g., `0.1.2`, `1.0.0`)
+     - `latest` tag for the most recent build
    - **Version priority:** PR Labels → PR Title → Commit Messages
    - **Version updates:** _Only occur when pushing to non-main branches_
    - **Dependencies:** None - runs after merge
@@ -39,7 +41,11 @@ The project uses 6 GitHub Actions workflows with the following execution order a
 4. **Deploy to OpenShift** (`.github/workflows/deploy.yml`)
    - **Trigger:** Automatic after successful Build workflow, manual dispatch
    - **Purpose:** Deploys application and observability stack to OpenShift cluster
-   - **Default namespace:** `dev`
+   - **Namespace logic:**
+     - Manual dispatch: Uses the `namespace` input if provided
+     - Automatic workflow_run: Deploys to namespace matching the branch name that triggered the workflow
+     - Workflow_dispatch: Deploys to namespace matching the current branch name
+     - Example: PR merged to `feature-x` → deploys to `feature-x` namespace
    - **Components deployed:**
      - Application components (ui, mcp-server, alerting)
      - Observability stack (MinIO + TempoStack + OTEL + tracing)
@@ -162,9 +168,12 @@ After running the setup script, configure these secrets in your GitHub repositor
 
 **Deploy Workflow:**
 - **Automatic trigger:** Runs after successful build workflow
-- **Manual trigger:** Can specify custom namespace (default: `dev`)
+- **Manual trigger:** Can specify custom namespace
 - **Force deploy option:** Deploy even if build workflow didn't run
-- **Default namespace:** `dev`
+- **Namespace selection:**
+  - Manual dispatch with input: Uses the specified namespace
+  - Automatic workflow_run: Uses the branch name that triggered the workflow
+  - Workflow_dispatch without input: Uses the current branch name
 
 **Undeploy Workflow:**
 - **Manual trigger only:** No automatic execution
@@ -201,9 +210,10 @@ Most workflows run automatically, but some can be triggered manually:
 - No parameters required - runs with default settings
 
 **Deploy to OpenShift:**
-- `namespace`: Target namespace (default: `dev`)
+- `namespace`: Target namespace (optional - defaults to branch name)
 - `force_deploy`: Deploy even if build workflow didn't run (default: `false`)
 - **Note**: The deploy workflow installs the complete observability stack (MinIO + TempoStack + OTEL + tracing) automatically
+- **Note**: If namespace is not specified, deployment will use the current branch name as the namespace
 
 **Undeploy from OpenShift:**
 - `namespace`: Target namespace (required)
@@ -219,7 +229,7 @@ Most workflows run automatically, but some can be triggered manually:
 The workflows use these environment variables and inputs:
 
 **Deploy Workflow:**
-- `namespace`: Target OpenShift namespace (default: `dev`)
+- `namespace`: Target OpenShift namespace (optional - defaults to branch name)
 - `force_deploy`: Boolean to force deployment (default: `false`)
 
 **Undeploy Workflow:**

@@ -1,0 +1,74 @@
+name: "Shared: Build Images"
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: 'Version to tag images with'
+        required: true
+        type: string
+      registry:
+        description: 'Container registry (default: quay.io)'
+        required: false
+        default: 'quay.io'
+        type: string
+      org:
+        description: 'Organization/namespace in registry'
+        required: true
+        type: string
+      image_prefix:
+        description: 'Image name prefix'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build-image:
+    name: Build and Push container image
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - name: metrics-ui
+            context: src
+            dockerfile: src/ui/Dockerfile
+            component: metrics-ui
+
+          - name: metrics-alerting
+            context: src
+            dockerfile: src/alerting/Dockerfile
+            component: metrics-alerting
+
+          - name: mcp-server
+            context: src
+            dockerfile: src/mcp_server/Dockerfile
+            component: mcp-server
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Quay.io
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ inputs.registry }}
+          username: ${{ secrets.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_PASSWORD }}
+
+      - name: Build and push ${{ matrix.name }}
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: |
+            ${{ inputs.registry }}/${{ inputs.org }}/${{ inputs.image_prefix }}-${{ matrix.component }}:${{ inputs.version }}
+            ${{ inputs.registry }}/${{ inputs.org }}/${{ inputs.image_prefix }}-${{ matrix.component }}:latest
+          build-args: |
+            IMAGE_TAG=${{ inputs.version }}
+
