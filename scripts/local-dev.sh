@@ -217,7 +217,7 @@ start_port_forwards() {
     create_port_forward "$TEMPO_SERVICE" "$TEMPO_PORT" "8080" "$OBSERVABILITY_NAMESPACE" "Tempo" "🔍"
 
     # Find Loki gateway service (optional - only if LokiStack is installed)
-    LOKI_SERVICE=$(oc get services -n "$LOKI_NAMESPACE" -o name -l 'app.kubernetes.io/name=loki,app.kubernetes.io/component=gateway' 2>/dev/null)
+    LOKI_SERVICE=$(oc get services -n "$LOKI_NAMESPACE" -o name -l 'app.kubernetes.io/name=lokistack,app.kubernetes.io/component=lokistack-gateway' 2>/dev/null)
     if [ -n "$LOKI_SERVICE" ]; then
         create_port_forward "$LOKI_SERVICE" "$LOKI_PORT" "8080" "$LOKI_NAMESPACE" "Loki" "📋"
     else
@@ -319,6 +319,7 @@ start_local_services() {
     echo -e "${BLUE}🧩 Starting MCP Server (HTTP)...${NC}"
     ensure_port_free "$MCP_PORT"
     (cd src && \
+      PYTHONPATH="$(pwd)/.." \
       MCP_TRANSPORT_PROTOCOL=http \
       MODEL_CONFIG="$MODEL_CONFIG" \
       PROMETHEUS_URL="$PROMETHEUS_URL" \
@@ -337,15 +338,29 @@ start_local_services() {
     MCP_SRV_PID=$!
 
     # Wait for MCP server to start
-    sleep 3
-
-    # Test MCP server health
-    if curl -s --connect-timeout 5 "http://localhost:$MCP_PORT/health" | grep -q '"status"'; then
-        echo -e "${GREEN}✅ MCP Server started successfully on port $MCP_PORT${NC}"
-    else
-        echo -e "${RED}❌ MCP Server failed to start${NC}"
-        exit 1
-    fi
+    echo "Waiting for MCP server to start..."
+    sleep 5
+    
+    # Test MCP server health with retry logic
+    echo "Testing MCP server health on port $MCP_PORT..."
+    HEALTH_CHECK_RETRIES=5
+    for i in $(seq 1 $HEALTH_CHECK_RETRIES); do
+        echo "Health check attempt $i/$HEALTH_CHECK_RETRIES..."
+        if curl -s --connect-timeout 5 "http://localhost:$MCP_PORT/health" | grep -q '"healthy"'; then
+            echo -e "${GREEN}✅ MCP Server started successfully on port $MCP_PORT${NC}"
+            break
+        else
+            if [ $i -eq $HEALTH_CHECK_RETRIES ]; then
+                echo -e "${RED}❌ MCP Server failed to start after $HEALTH_CHECK_RETRIES attempts${NC}"
+                echo "Server log output:"
+                cat /tmp/summarizer-mcp-server.log
+                exit 1
+            else
+                echo "Health check failed, waiting 2 seconds before retry..."
+                sleep 2
+            fi
+        fi
+    done
 
     # Start Streamlit UI
     echo -e "${BLUE}🎨 Starting Streamlit UI...${NC}"
