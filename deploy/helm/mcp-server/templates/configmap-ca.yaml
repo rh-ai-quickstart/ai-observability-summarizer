@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ default (printf "%s-trusted-ca-bundle" .Release.Name) .Values.trustedCA.configMapName }}
+  name: {{ .Values.trustedCA.configMapName | default "mcp-server-trusted-ca-bundle" }}
   annotations:
     service.beta.openshift.io/inject-cabundle: "true"
 data:

@@ -1,0 +1,66 @@
+---
+plugin:
+  # Plugin name - should match consolePlugin.name in package.json
+  name: "openshift-ai-observability"
+  description: "AI Observability Plugin"
+  image: "quay.io/ecosystem-appeng/aiobs-console-plugin:latest"
+  imagePullPolicy: Always
+  imagePullSecrets: []
+  replicas: 2
+  port: 9443
+  securityContext:
+    enabled: true
+  podSecurityContext:
+    enabled: true
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  containerSecurityContext:
+    enabled: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+  resources:
+    requests:
+      cpu: 10m
+      memory: 50Mi
+  basePath: /
+  certificateSecretName: ""
+  serviceAccount:
+    create: true
+    annotations: {}
+    name: ""
+  patcherServiceAccount:
+    create: true
+    annotations: {}
+    name: ""
+  jobs:
+    patchConsoles:
+      enabled: true
+      image: "registry.redhat.io/openshift4/ose-tools-rhel9@sha256:ee65b244fc94d5765514c604dc0a288517dcdce68de65128d047622b6b30a618"
+      podSecurityContext:
+        enabled: true
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containerSecurityContext:
+        enabled: true
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+            - ALL
+      resources:
+        requests:
+          cpu: 10m
+          memory: 50Mi
+
+# MCP Server proxy configuration
+mcpServer:
+  enabled: true
+  # The service name of the MCP server in the cluster
+  serviceName: "mcp-server-svc"
+  # The namespace where MCP server is deployed
+  namespace: ""  # If empty, uses the release namespace
+  # The port the MCP server listens on
+  port: 8085

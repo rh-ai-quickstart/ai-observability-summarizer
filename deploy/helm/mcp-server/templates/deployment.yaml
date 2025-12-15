@@ -1,12 +1,12 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .Release.Name }}-app
+  name: {{ .Values.deployment.name | default "mcp-server" }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      app: {{ .Release.Name }}-app
+      app: {{ .Values.deployment.name | default "mcp-server" }}
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -15,7 +15,7 @@ spec:
   template:
     metadata:
       labels:
-        app: {{ .Release.Name }}-app
+        app: {{ .Values.deployment.name | default "mcp-server" }}
     spec:
       serviceAccountName: mcp-analyzer
       restartPolicy: Always
@@ -80,13 +80,22 @@ spec:
               value: "http://llamastack.{{ .Release.Namespace }}.svc.cluster.local:8321/v1/openai/v1"
             {{- end }}
             - name: MODEL_CONFIG
+              {{- if .Values.modelConfig }}
               value: '{{ .Values.modelConfig | toJson }}'
+              {{- else }}
+              value: {{ .Files.Get "model-config.json" | fromJson | toJson | squote }}
+              {{- end }}
           livenessProbe:
             exec:
               command:
                 - curl
                 - -f
+                {{- if .Values.tls.enabled }}
+                - -k
+                - https://0.0.0.0:{{ .Values.env.MCP_PORT }}/health
+                {{- else }}
                 - http://0.0.0.0:{{ .Values.env.MCP_PORT }}/health
+                {{- end }}
             initialDelaySeconds: 30
             periodSeconds: 60
             timeoutSeconds: 30
@@ -96,7 +105,12 @@ spec:
               command:
                 - curl
                 - -f
+                {{- if .Values.tls.enabled }}
+                - -k
+                - https://0.0.0.0:{{ .Values.env.MCP_PORT }}/health
+                {{- else }}
                 - http://0.0.0.0:{{ .Values.env.MCP_PORT }}/health
+                {{- end }}
             initialDelaySeconds: 10
             periodSeconds: 20
             timeoutSeconds: 20
@@ -107,6 +121,11 @@ spec:
             - name: thanos-token
               mountPath: /var/run/secrets/kubernetes.io/serviceaccount
               readOnly: true
+            {{- if .Values.tls.enabled }}
+            - name: tls-certs
+              mountPath: /run/secrets/tls
+              readOnly: true
+            {{- end }}
             {{- if .Values.trustedCA.enabled }}
             - name: trusted-ca
               mountPath: /etc/pki/ca-trust/extracted/pem
@@ -117,10 +136,16 @@ spec:
           secret:
             secretName: mcp-analyzer
             defaultMode: 0440
+        {{- if .Values.tls.enabled }}
+        - name: tls-certs
+          secret:
+            secretName: {{ .Values.tls.secretName }}
+            defaultMode: 0440
+        {{- end }}
         {{- if .Values.trustedCA.enabled }}
         - name: trusted-ca
           configMap:
-            name: {{ default (printf "%s-trusted-ca-bundle" .Release.Name) .Values.trustedCA.configMapName }}
+            name: {{ .Values.trustedCA.configMapName | default "mcp-server-trusted-ca-bundle" }}
             items:
               - key: service-ca.crt
                 path: ca-bundle.crt
