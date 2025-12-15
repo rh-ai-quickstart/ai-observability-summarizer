@@ -32,18 +32,25 @@ This operator provides a single Custom Resource (`AIObservabilitySummarizer`) to
 - Cluster admin access
 - GPU node (for LLM deployment)
 
-### Required Operators (install before using this operator)
+### Required Operators (OLM Dependencies)
 
-These operators must be installed from OperatorHub **before** creating an AIObservabilitySummarizer CR:
+These operators are declared as OLM dependencies and must be installed **before** our operator:
 
-| Operator | Required For | Notes |
-|----------|--------------|-------|
-| **OpenShift AI (RHOAI)** or **KServe** | LLM deployment | Provides InferenceService, ServingRuntime CRDs |
-| **Tempo Operator** | Distributed tracing | Provides TempoStack CRD |
-| **OpenTelemetry Operator** | Trace collection | Provides OpenTelemetryCollector CRD |
-| **Cluster Observability Operator** | Korrel8r (optional) | Only needed if enabling Korrel8r |
+| Operator | Required For | Package Name |
+|----------|--------------|--------------|
+| **Tempo Operator** | Distributed tracing (TempoStack) | `tempo-product` |
+| **OpenTelemetry Operator** | Trace collection (OpenTelemetryCollector) | `opentelemetry-product` |
+| **OpenShift Serverless** | LLM deployment (InferenceService) | `serverless-operator` |
+| **Cluster Observability Operator** | Korrel8r (optional) | `cluster-observability-operator` |
+
+OLM will validate these dependencies during installation. If missing, OperatorHub will show which operators need to be installed first.
 
 > **Note:** This operator creates *instances* of resources (TempoStack, OpenTelemetryCollector, InferenceService) but does not install the operators that provide these CRDs.
+
+To install prerequisites via Makefile:
+```bash
+make install-operators
+```
 
 ## Installation
 
