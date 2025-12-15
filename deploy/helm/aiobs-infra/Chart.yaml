@@ -1,0 +1,50 @@
+apiVersion: v2
+name: aiobs-infra
+description: AI Observability Summarizer - Shared Infrastructure (cluster-wide)
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+
+# These components are shared infrastructure
+# Deployed once per cluster, reused by all applications
+# Each component goes to its designated namespace
+
+dependencies:
+  # TempoStack - Distributed tracing backend
+  # Namespace: observability-hub
+  - name: tempo-stack
+    version: ">=0.0.0"
+    repository: "file://../observability/tempo"
+    condition: tempo.enabled
+    alias: tempo
+
+  # LokiStack - Log aggregation
+  # Namespace: openshift-logging
+  - name: loki-stack
+    version: ">=0.0.0"
+    repository: "file://../observability/loki"
+    condition: loki.enabled
+    alias: loki
+
+  # OpenTelemetry Collector - Trace/metric collection
+  # Namespace: observability-hub
+  - name: otel-collector
+    version: ">=0.0.0"
+    repository: "file://../observability/otel-collector"
+    condition: otelCollector.enabled
+
+  # Korrel8r - Signal correlation engine
+  # Namespace: openshift-cluster-observability-operator
+  - name: korrel8r
+    version: ">=0.0.0"
+    repository: "file://../observability/korrel8r"
+    condition: korrel8r.enabled
+
+  # MinIO - S3-compatible object storage for Tempo/Loki
+  # Namespace: observability-hub
+  - name: minio-observability-storage
+    version: ">=0.0.0"
+    repository: "file://../minio"
+    condition: minio.enabled
+    alias: minio
+
