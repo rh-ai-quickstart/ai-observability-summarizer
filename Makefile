@@ -413,6 +413,18 @@ install-stack: namespace depend install-operators
 	@echo "  → ALERTING_ENABLED=$(ALERTING_ENABLED)"
 	@echo "  → KORREL8R_ENABLED=$(KORREL8R_ENABLED)"
 	@echo "  → INFRASTRUCTURE_ENABLED=$(INFRASTRUCTURE_ENABLED)"
+	@echo ""
+	@echo "→ Ensuring infrastructure namespaces exist..."
+	@if [ "$(INFRASTRUCTURE_ENABLED)" = "true" ]; then \
+		oc create namespace $(OBSERVABILITY_NAMESPACE) 2>/dev/null || echo "  → $(OBSERVABILITY_NAMESPACE) already exists"; \
+		oc create namespace $(LOKI_NAMESPACE) 2>/dev/null || echo "  → $(LOKI_NAMESPACE) already exists"; \
+		oc create namespace $(KORREL8R_NAMESPACE) 2>/dev/null || echo "  → $(KORREL8R_NAMESPACE) already exists"; \
+	fi
+	@echo ""
+	@echo "→ Verifying operators are ready..."
+	@$(MAKE) verify-operators-ready
+	@echo ""
+	@echo "→ Installing Helm chart..."
 	@cd deploy/helm && helm upgrade --install $(AIOBS_STACK_RELEASE_NAME) $(AIOBS_STACK_CHART_PATH) \
 		-n $(NAMESPACE) \
 		--create-namespace \
@@ -426,6 +438,7 @@ install-stack: namespace depend install-operators
 		$(if $(HF_TOKEN),--set aiobs-app.rag.llm-service.secret.hf_token=$(HF_TOKEN),) \
 		$(if $(DEVICE),--set aiobs-app.rag.llm-service.device=$(DEVICE),) \
 		$(if $(LLM),--set aiobs-app.rag.global.models.$(LLM).enabled=true,)
+	@echo ""
 	@echo "✅ Full stack deployment complete!"
 	@echo ""
 	@echo "Components deployed:"
