@@ -66,11 +66,6 @@ def detect_environment() -> str:
 
 def is_rag_available() -> bool:
     """Check if RAG (local model) infrastructure is available."""
-    # Check environment variable for explicit override
-    rag_enabled_env = os.getenv("RAG_ENABLED")
-    if rag_enabled_env is not None:
-        return rag_enabled_env.lower() in ("true", "1", "yes", "on")
-    
     # Auto-detect based on LLAMA_STACK_URL availability
     llama_stack_url = os.getenv("LLAMA_STACK_URL", "http://localhost:8321/v1/openai/v1")
     try:
