@@ -1,0 +1,45 @@
+{{/*
+  Create infrastructure namespaces if they don't already exist.
+  Uses lookup to check existence - skips if namespace is already present.
+  This allows both fresh installs and installs on clusters with existing infra.
+*/}}
+
+{{- if .Values.createNamespaces | default true }}
+
+{{/* Observability Hub namespace - for Tempo, OTEL Collector, MinIO */}}
+{{- if not (lookup "v1" "Namespace" "" "observability-hub") }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: observability-hub
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/part-of: aiobs-infra
+---
+{{- end }}
+
+{{/* OpenShift Logging namespace - for Loki */}}
+{{- if not (lookup "v1" "Namespace" "" "openshift-logging") }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: openshift-logging
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/part-of: aiobs-infra
+---
+{{- end }}
+
+{{/* Cluster Observability Operator namespace - for Korrel8r */}}
+{{- if not (lookup "v1" "Namespace" "" "openshift-cluster-observability-operator") }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: openshift-cluster-observability-operator
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/part-of: aiobs-infra
+{{- end }}
+
+{{- end }}
+
