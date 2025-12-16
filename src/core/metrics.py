@@ -1691,11 +1691,26 @@ def get_summarization_models() -> List[str]:
     """Return available summarization model IDs from MODEL_CONFIG.
 
     External models are sorted after internal ones to match UI expectations.
+    When RAG infrastructure is not available, local models are filtered out.
     """
     try:
         if not isinstance(MODEL_CONFIG, dict) or not MODEL_CONFIG:
             return []
-        sorted_items = sorted(MODEL_CONFIG.items(), key=lambda x: x[1].get("external", True))
+        
+        # Import here to avoid circular imports
+        from core.config import RAG_AVAILABLE
+        
+        # Filter out local models if RAG is not available
+        available_models = []
+        for name, config in MODEL_CONFIG.items():
+            is_external = config.get("external", True)
+            if not is_external and not RAG_AVAILABLE:
+                # Skip local models when RAG infrastructure is unavailable
+                continue
+            available_models.append((name, config))
+        
+        # Sort with internal models first, external models second
+        sorted_items = sorted(available_models, key=lambda x: x[1].get("external", True))
         return [name for name, _ in sorted_items]
     except Exception:
         return []

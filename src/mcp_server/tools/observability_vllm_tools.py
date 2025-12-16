@@ -66,6 +66,24 @@ from mcp_server.exceptions import (
 # Configure structured logging
 logger = get_python_logger()
 
+
+def check_rag_availability():
+    """Check if RAG infrastructure is available for vLLM operations."""
+    try:
+        from core.config import RAG_AVAILABLE
+        if not RAG_AVAILABLE:
+            error = MCPException(
+                message="vLLM infrastructure not available",
+                error_code=MCPErrorCode.CONFIGURATION_ERROR,
+                recovery_suggestion="RAG infrastructure is not installed or accessible. vLLM metrics require local model deployment. Install with: make install ENABLE_RAG=true"
+            )
+            return error.to_mcp_response()
+        return None
+    except Exception:
+        # If we can't determine availability, allow the operation to continue
+        return None
+
+
 def resolve_time_range(
     time_range: Optional[str] = None,
     start_datetime: Optional[str] = None,
@@ -138,6 +156,11 @@ def list_vllm_namespaces() -> List[Dict[str, Any]]:
     Returns:
         List of vLLM namespace names with monitoring status
     """
+    # Check if RAG infrastructure is available
+    rag_error = check_rag_availability()
+    if rag_error:
+        return rag_error
+    
     try:
         namespaces = get_vllm_namespaces_helper()
         if not namespaces:
@@ -159,12 +182,26 @@ def get_model_config() -> List[Dict[str, Any]]:
     
     Uses the exact same logic as the metrics API's /model_config endpoint:
     - Reads MODEL_CONFIG from environment (JSON string)
+    - Filters out local models when RAG infrastructure is unavailable
     - Parses to dict and sorts with external:false models first
     - Returns a human-readable list formatted for MCP
     """
     try:
         model_config_str = os.getenv("MODEL_CONFIG", "{}")
-        model_config = safe_json_loads(model_config_str, "MODEL_CONFIG environment variable")
+        full_model_config = safe_json_loads(model_config_str, "MODEL_CONFIG environment variable")
+        
+        # Import here to avoid circular imports
+        from core.config import RAG_AVAILABLE
+        
+        # Filter out local models if RAG is not available
+        model_config = {}
+        for name, config in full_model_config.items():
+            is_external = config.get("external", True)
+            if not is_external and not RAG_AVAILABLE:
+                # Skip local models when RAG infrastructure is unavailable
+                continue
+            model_config[name] = config
+        
         model_config = dict(
             sorted(model_config.items(), key=lambda x: x[1].get("external", True))
         )
@@ -173,6 +210,8 @@ def get_model_config() -> List[Dict[str, Any]]:
         model_config = {}
 
     if not model_config:
+        if not RAG_AVAILABLE:
+            return make_mcp_text_response("No LLM models available. RAG infrastructure is not installed or accessible. Please configure external models (Anthropic, OpenAI, Google) with API keys.")
         return make_mcp_text_response("No LLM models configured for summarization.")
 
     response = f"Available Model Config ({len(model_config)} total):\n\n"
@@ -617,6 +656,10 @@ def list_summarization_models() -> List[Dict[str, Any]]:
     try:
         models = get_summarization_models()
         if not models:
+            # Import here to avoid circular imports
+            from core.config import RAG_AVAILABLE
+            if not RAG_AVAILABLE:
+                return make_mcp_text_response("No summarization models available. RAG infrastructure is not installed or accessible. Please configure external models (Anthropic, OpenAI, Google) with API keys.")
             return make_mcp_text_response("No summarization models configured.")
         content_lines = [f"• {name}" for name in models]
         content = f"Available Summarization Models ({len(models)} total):\n\n" + "\n".join(content_lines)

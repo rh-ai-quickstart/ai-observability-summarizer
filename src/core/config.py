@@ -63,6 +63,20 @@ def detect_environment() -> str:
     else:
         return "local"  # Default to local for safety
 
+
+def is_rag_available() -> bool:
+    """Check if RAG (local model) infrastructure is available."""
+    # Auto-detect based on LLAMA_STACK_URL availability
+    llama_stack_url = os.getenv("LLAMA_STACK_URL", "http://localhost:8321/v1/openai/v1")
+    try:
+        import requests
+        # Try to reach the llama stack endpoint with a quick timeout
+        response = requests.get(f"{llama_stack_url.rstrip('/v1/openai/v1')}/health", timeout=3)
+        return response.status_code == 200
+    except Exception:
+        # If we can't reach llama stack or don't have requests, assume RAG unavailable
+        return False
+
 def get_prometheus_url() -> str:
     """Get Prometheus URL based on environment."""
     # Allow explicit override
@@ -118,6 +132,7 @@ REQUEST_TIMEOUT_SECONDS = 30.0  # HTTP request timeout
 MODEL_CONFIG = load_model_config()
 THANOS_TOKEN = load_thanos_token()
 VERIFY_SSL = get_ca_verify_setting()
+RAG_AVAILABLE = is_rag_available()
 
 # Log configuration for debugging
 import logging
@@ -126,6 +141,7 @@ logger.info(f"Environment detected: {detect_environment()}")
 logger.info(f"Prometheus URL: {PROMETHEUS_URL}")
 logger.info(f"Tempo URL: {TEMPO_URL}")
 logger.info(f"SSL Verification: {VERIFY_SSL}")
+logger.info(f"RAG Available: {RAG_AVAILABLE}")
 logger.info(f"Thanos Token: {'***configured***' if THANOS_TOKEN else 'not set'}") 
 
 # Common constants

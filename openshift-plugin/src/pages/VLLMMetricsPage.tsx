@@ -344,6 +344,7 @@ const VLLMMetricsPage: React.FC = () => {
   const [loading, setLoading] = React.useState(true);
   const [metricsLoading, setMetricsLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [ragAvailable, setRagAvailable] = React.useState<boolean | null>(null);
   const [analysisLoading, setAnalysisLoading] = React.useState(false);
   const [analysisResult, setAnalysisResult] = React.useState<AnalysisResult | null>(null);
   const [metricsData, setMetricsData] = React.useState<Record<string, MetricDataValue>>({});
@@ -368,6 +369,9 @@ const VLLMMetricsPage: React.FC = () => {
       ]);
       setModels(modelsData);
       setNamespaces(namespacesData);
+      
+      // Detect RAG availability based on presence of vLLM models
+      setRagAvailable(modelsData.length > 0);
       
       // Auto-select first namespace/model if available
       if (namespacesData.length > 0) {
@@ -771,7 +775,31 @@ const VLLMMetricsPage: React.FC = () => {
         <PageSection>
           <EmptyState>
             <EmptyStateBody>
-              No vLLM models found. Make sure models are deployed and the MCP server is properly configured.
+              {ragAvailable === false ? (
+                <div>
+                  <Text component={TextVariants.h2} style={{ color: 'var(--pf-v5-global--warning-color--100)', marginBottom: '16px' }}>
+                    vLLM Infrastructure Not Available
+                  </Text>
+                  <Text style={{ marginBottom: '16px' }}>
+                    No local vLLM models are available because the RAG infrastructure is not installed or not accessible.
+                  </Text>
+                  <Text style={{ marginBottom: '16px' }}>
+                    The vLLM metrics dashboard requires local model deployment with RAG infrastructure.
+                  </Text>
+                  <Text component={TextVariants.small} style={{ color: 'var(--pf-v5-global--Color--200)' }}>
+                    To enable vLLM metrics, install the RAG infrastructure using: <code>make install ENABLE_RAG=true</code>
+                  </Text>
+                </div>
+              ) : (
+                <div>
+                  <Text component={TextVariants.h2} style={{ marginBottom: '16px' }}>
+                    No vLLM Models Found
+                  </Text>
+                  <Text>
+                    Make sure models are deployed and the MCP server is properly configured.
+                  </Text>
+                </div>
+              )}
             </EmptyStateBody>
             <Button variant="primary" onClick={loadData}>Retry</Button>
           </EmptyState>
