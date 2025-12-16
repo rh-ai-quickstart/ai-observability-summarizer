@@ -2,6 +2,13 @@
 # These are deployed once per cluster and shared by all applications
 
 # =============================================================================
+# Namespace Management
+# =============================================================================
+# When true, creates infrastructure namespaces if they don't exist
+# Uses lookup to skip creation if namespace already exists (no conflicts)
+createNamespaces: true
+
+# =============================================================================
 # Target Namespaces (where each component will be deployed)
 # =============================================================================
 global:
