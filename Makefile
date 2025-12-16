@@ -78,6 +78,16 @@ KORREL8R_RELEASE_NAME ?= korrel8r-summarizer
 KORREL8R_CHART_PATH ?= observability/korrel8r
 KORREL8R_NAMESPACE ?= openshift-cluster-observability-operator
 
+# Umbrella chart configuration
+AIOBS_STACK_RELEASE_NAME ?= aiobs
+AIOBS_STACK_CHART_PATH ?= aiobs-stack
+
+# Component toggles for install-stack
+RAG_ENABLED ?= true
+ALERTING_ENABLED ?= false
+KORREL8R_ENABLED ?= true
+INFRASTRUCTURE_ENABLED ?= true
+
 TOLERATIONS_TEMPLATE=[{"key":"$(1)","effect":"NoSchedule","operator":"Exists"}]
 GEN_MODEL_CONFIG_PREFIX = /tmp/gen_model_config
 
@@ -194,6 +204,7 @@ help:
 	@echo "  push-alert-example  - Push alert-example test image"
 	@echo ""
 	@echo "Deployment:"
+	@echo "  install-stack      - Deploy full stack using umbrella chart (recommended)"
 	@echo "  install            - Deploy to OpenShift using Helm"
 	@echo "  install-with-alerts - Deploy with alerting enabled"
 	@echo "  install-local      - Set up local development environment"
@@ -384,6 +395,54 @@ depend:
 
 	@echo "Updating Helm dependencies (for $(MINIO_CHART))..."
 	@cd deploy/helm && helm dependency update $(MINIO_CHART_PATH) || exit 1
+
+	@echo "Updating Helm dependencies (for aiobs-app)..."
+	@cd deploy/helm && helm dependency update aiobs-app || exit 1
+
+	@echo "Updating Helm dependencies (for aiobs-infra)..."
+	@cd deploy/helm && helm dependency update aiobs-infra || exit 1
+
+	@echo "Updating Helm dependencies (for aiobs-stack)..."
+	@cd deploy/helm && helm dependency update aiobs-stack || exit 1
+
+
+# Install full stack using umbrella chart
+.PHONY: install-stack
+install-stack: namespace depend install-operators
+	@echo "🚀 Deploying full AI Observability stack using umbrella chart..."
+	@echo "  → RAG_ENABLED=$(RAG_ENABLED)"
+	@echo "  → ALERTING_ENABLED=$(ALERTING_ENABLED)"
+	@echo "  → KORREL8R_ENABLED=$(KORREL8R_ENABLED)"
+	@echo "  → INFRASTRUCTURE_ENABLED=$(INFRASTRUCTURE_ENABLED)"
+	@cd deploy/helm && helm upgrade --install $(AIOBS_STACK_RELEASE_NAME) $(AIOBS_STACK_CHART_PATH) \
+		-n $(NAMESPACE) \
+		--create-namespace \
+		--timeout 30m \
+		--set aiobs-app.rag.enabled=$(RAG_ENABLED) \
+		--set aiobs-app.alerting.enabled=$(ALERTING_ENABLED) \
+		--set aiobs-app.mcpServer.enabled=true \
+		--set aiobs-app.consolePlugin.enabled=true \
+		--set infrastructure.enabled=$(INFRASTRUCTURE_ENABLED) \
+		--set aiobs-infra.korrel8r.enabled=$(KORREL8R_ENABLED) \
+		$(if $(HF_TOKEN),--set aiobs-app.rag.llm-service.secret.hf_token=$(HF_TOKEN),) \
+		$(if $(DEVICE),--set aiobs-app.rag.llm-service.device=$(DEVICE),) \
+		$(if $(LLM),--set aiobs-app.rag.global.models.$(LLM).enabled=true,)
+	@echo "✅ Full stack deployment complete!"
+	@echo ""
+	@echo "Components deployed:"
+	@echo "  → MCP Server: enabled"
+	@echo "  → Console Plugin: enabled"
+	@echo "  → RAG/LLM: $(RAG_ENABLED)"
+	@echo "  → Alerting: $(ALERTING_ENABLED)"
+	@echo "  → Infrastructure: $(INFRASTRUCTURE_ENABLED)"
+	@echo "  → Korrel8r: $(KORREL8R_ENABLED)"
+
+# Uninstall full stack
+.PHONY: uninstall-stack
+uninstall-stack:
+	@echo "🗑️  Uninstalling full AI Observability stack..."
+	@helm -n $(NAMESPACE) uninstall $(AIOBS_STACK_RELEASE_NAME) --ignore-not-found
+	@echo "✅ Stack uninstalled"
 
 
 .PHONY: install-metric-ui
