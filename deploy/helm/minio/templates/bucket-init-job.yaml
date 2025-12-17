@@ -1,9 +1,10 @@
 {{- if .Values.minio.buckets }}
+{{- $namespace := include "minio.namespace" . }}
 apiVersion: batch/v1
 kind: Job
 metadata:
   name: {{ .Release.Name }}-bucket-init
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ $namespace }}
   labels:
     app.kubernetes.io/name: {{ include "minio.name" . }}
     app.kubernetes.io/instance: {{ .Release.Name }}
@@ -34,7 +35,7 @@ spec:
         - |
           set -e
           echo "Waiting for MinIO to be ready..."
-          until mc alias set myminio http://{{ include "minio.fullname" . }}:9000 {{ .Values.minio.secret.user }} {{ .Values.minio.secret.password }}; do
+          until mc alias set myminio http://{{ include "minio.fullname" . }}.{{ $namespace }}.svc.cluster.local:9000 {{ .Values.minio.secret.user }} {{ .Values.minio.secret.password }}; do
             echo "Still waiting for MinIO..."
             sleep 5
           done

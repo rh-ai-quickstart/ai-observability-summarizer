@@ -1,16 +1,16 @@
-# MinIO chart for Tempo trace storage only
-# Using external chart from rh-ai-quickstart.github.io/ai-architecture-charts
+# MinIO chart for Tempo/Loki storage
+# Always deploys to observability-hub namespace
 
 minio:
   # Override naming to match our chart name
   nameOverride: "minio-observability-storage"
   fullnameOverride: "minio-observability-storage"
 
-  # Root credentials (admin access) - these override the upstream chart's defaults
+  # Root credentials (admin access)
   secret:
     user: admin
     password: minio123
-    host: minio-observability-storage
+    host: minio-observability-storage.observability-hub.svc.cluster.local
     port: "9000"
 
   # Service configuration
@@ -20,18 +20,9 @@ minio:
     port: 9090
     apiPort: 9000
 
-  # Disable upstream chart's bucket creation - we'll handle it ourselves
-  sampleFileUpload:
-    enabled: false
-
   # Bucket configuration - array of bucket names
-  # Will be overridden by MINIO_BUCKETS from Makefile
   buckets: ["tempo", "loki"]
 
-  # Security Context - Set to empty to let OpenShift assign automatically
-  # This fixes SCC (Security Context Constraint) issues in OpenShift
+  # Security Context - empty to let OpenShift assign
   podSecurityContext: {}
   containerSecurityContext: {}
-  bucketInit:
-    securityContext: {}
-    podSecurityContext: {}
