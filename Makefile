@@ -464,12 +464,16 @@ install-stack: namespace depend install-operators
 	@cd deploy/helm && helm upgrade --install $(AIOBS_STACK_RELEASE_NAME) $(AIOBS_STACK_CHART_PATH) \
 		-n $(NAMESPACE) \
 		--create-namespace \
-		--timeout 30m \
+		--timeout 10m \
 		--set rag.enabled=$(RAG_ENABLED) \
 		--set alerting.enabled=$(ALERTING_ENABLED) \
 		--set mcpServer.enabled=true \
 		--set consolePlugin.enabled=true \
 		--set infrastructure.enabled=$(INFRASTRUCTURE_ENABLED) \
+		--set tempo.enabled=$(INFRASTRUCTURE_ENABLED) \
+		--set loki.enabled=false \
+		--set otelCollector.enabled=$(INFRASTRUCTURE_ENABLED) \
+		--set minio.enabled=$(INFRASTRUCTURE_ENABLED) \
 		--set korrel8r.enabled=$(KORREL8R_ENABLED) \
 		$(if $(HF_TOKEN),--set rag.llm-service.secret.hf_token=$(HF_TOKEN),) \
 		$(if $(DEVICE),--set rag.llm-service.device=$(DEVICE),) \
