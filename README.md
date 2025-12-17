@@ -62,6 +62,8 @@ Use the included `Makefile` to install everything:
 make install NAMESPACE=your-namespace
 ```
 
+> **Note**: The installation automatically enables user workload monitoring for metrics collection.
+
 This will install the project with the default LLM deployment, `llama-3-1-8b-instruct`.
 
 ### Choosing different models during installation
