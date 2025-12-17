@@ -308,8 +308,8 @@ help:
 	@echo "  LLM                - Model id (eg. llama-3-1-8b-instruct)"
 	@echo "  LLM_URL            - Use existing model URL (auto-adds :8080/v1 if no port specified)"
 	@echo "  SAFETY             - Safety model id"
-	@echo "  ENABLE_RAG         - Set to 'false' to skip RAG backend services (default: true)"
-	@echo "  ALERTS             - Set to TRUE to install alerting with main deployment"
+	@echo "  RAG_ENABLED         - Set to 'false' to skip RAG backend services (default: true)"
+	@echo "  ALERTING_ENABLED    - Set to 'true' to install alerting (default: false)"
 	@echo "  SLACK_WEBHOOK_URL  - Slack Webhook URL for alerting (will prompt if not provided)"
 	@echo "  MINIO_USER         - MinIO username for observability storage (default: admin)"
 	@echo "  MINIO_PASSWORD     - MinIO password for observability storage (default: minio123)"
@@ -636,12 +636,12 @@ install: namespace enable-user-workload-monitoring depend validate-llm install-o
 		echo "→ DEV_MODE=false: Installing OpenShift Console Plugin only"; \
 		$(MAKE) install-console-plugin NAMESPACE=$(NAMESPACE); \
 	fi
-	@if [ "$(ENABLE_RAG)" != "false" ]; then \
-		echo "Installing RAG backend services (set ENABLE_RAG=false to skip)..."; \
+	@if [ "$(RAG_ENABLED)" != "false" ]; then \
+		echo "Installing RAG backend services (set RAG_ENABLED=false to skip)..."; \
 		$(MAKE) install-rag NAMESPACE=$(NAMESPACE); \
 	fi
-	@if [ "$(ALERTS)" = "TRUE" ]; then \
-		echo "ALERTS flag is set to TRUE. Installing alerting..."; \
+	@if [ "$(ALERTING_ENABLED)" = "true" ]; then \
+		echo "ALERTING_ENABLED is set to true. Installing alerting..."; \
 		$(MAKE) install-alerts NAMESPACE=$(NAMESPACE); \
 	fi
 	@echo "Installation complete."
