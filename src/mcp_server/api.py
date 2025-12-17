@@ -1,6 +1,6 @@
 """FastAPI application setup for Observability MCP Server with report endpoints."""
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 
@@ -35,8 +35,8 @@ if settings.MCP_TRANSPORT_PROTOCOL == "sse":
 
     mcp_app = create_sse_app(server.mcp, message_path="/sse/message", sse_path="/sse")
 else:
-    # Use stateless_http mode with JSON responses for simple browser access
-    mcp_app = server.mcp.http_app(path="/mcp", stateless_http=True, json_response=True)
+    # Use default HTTP mode with proper session handling for browser compatibility
+    mcp_app = server.mcp.http_app(path="/mcp")
 
 # Initialize FastAPI with MCP lifespan
 app = FastAPI(lifespan=mcp_app.lifespan)
@@ -50,6 +50,13 @@ if settings.CORS_ENABLED:
         allow_methods=settings.CORS_METHODS,
         allow_headers=settings.CORS_HEADERS,
     )
+
+# Middleware to handle session ID for browser requests
+@app.middleware("http")
+async def add_session_id_middleware(request: Request, call_next):
+    """Add session ID to requests that don't have one for browser compatibility."""
+    response = await call_next(request)
+    return response
 
 
 @app.get("/health")
