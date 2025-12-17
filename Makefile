@@ -423,12 +423,16 @@ install-stack: namespace depend install-operators
 	@cd deploy/helm && helm upgrade --install $(AIOBS_STACK_RELEASE_NAME) $(AIOBS_STACK_CHART_PATH) \
 		-n $(NAMESPACE) \
 		--create-namespace \
-		--timeout 30m \
+		--timeout 10m \
 		--set rag.enabled=$(RAG_ENABLED) \
 		--set alerting.enabled=$(ALERTING_ENABLED) \
 		--set mcpServer.enabled=true \
 		--set consolePlugin.enabled=true \
 		--set infrastructure.enabled=$(INFRASTRUCTURE_ENABLED) \
+		--set tempo.enabled=$(INFRASTRUCTURE_ENABLED) \
+		--set loki.enabled=false \
+		--set otelCollector.enabled=$(INFRASTRUCTURE_ENABLED) \
+		--set minio.enabled=$(INFRASTRUCTURE_ENABLED) \
 		--set korrel8r.enabled=$(KORREL8R_ENABLED) \
 		$(if $(HF_TOKEN),--set rag.llm-service.secret.hf_token=$(HF_TOKEN),) \
 		$(if $(DEVICE),--set rag.llm-service.device=$(DEVICE),) \
@@ -539,7 +543,7 @@ install-rag: namespace
 
 
 .PHONY: install
-install: namespace enable-user-workload-monitoring depend validate-llm install-operators install-observability-stack install-metric-ui install-mcp-server install-korrel8r delete-jobs
+install: namespace enable-user-workload-monitoring depend validate-llm install-operators install-observability-stack install-metric-ui install-mcp-server install-console-plugin install-korrel8r delete-jobs
 	@if [ "$(RAG_ENABLED)" != "false" ]; then \
 		echo "Installing RAG backend services (set RAG_ENABLED=false to skip)..."; \
 		$(MAKE) install-rag NAMESPACE=$(NAMESPACE); \
@@ -617,6 +621,8 @@ uninstall:
 	- @helm -n $(NAMESPACE) uninstall $(METRICS_UI_RELEASE_NAME) --ignore-not-found
 	@echo "Uninstalling $(MCP_SERVER_RELEASE_NAME) helm chart (if installed)"
 	- @helm -n $(NAMESPACE) uninstall $(MCP_SERVER_RELEASE_NAME) --ignore-not-found
+	@echo "Uninstalling OpenShift Console Plugin (if installed)"
+	@$(MAKE) uninstall-console-plugin NAMESPACE=$(NAMESPACE) || true
 	@echo "Uninstalling Korrel8r helm-managed resources (if installed)"
 	@$(MAKE) uninstall-korrel8r || true
 

@@ -5,8 +5,5 @@ type: application
 version: 0.1.0
 appVersion: "latest"
 
-dependencies:
-  - name: minio
-    version: 0.1.0
-    repository: https://rh-ai-quickstart.github.io/ai-architecture-charts
-
+# No external dependencies - using our own templates with configurable namespace
+# Set targetNamespace in values.yaml to deploy to a specific namespace

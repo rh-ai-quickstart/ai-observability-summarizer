@@ -5,9 +5,6 @@
 # GLOBAL SETTINGS
 # =============================================================================
 
-# Namespace management - creates infrastructure namespaces if they don't exist
-createNamespaces: true
-
 # Target namespaces for infrastructure components
 global:
   observabilityNamespace: observability-hub
