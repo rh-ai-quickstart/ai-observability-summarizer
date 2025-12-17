@@ -1,0 +1,24 @@
+{{/*
+MinIO Service - Deployed to observability-hub namespace
+*/}}
+{{- $namespace := include "minio.namespace" . }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "minio.fullname" . }}
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "minio.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.minio.service.type }}
+  ports:
+    - port: {{ .Values.minio.service.apiPort }}
+      targetPort: api
+      protocol: TCP
+      name: api
+    - port: {{ .Values.minio.service.port }}
+      targetPort: webui
+      protocol: TCP
+      name: webui
+  selector:
+    {{- include "minio.selectorLabels" . | nindent 4 }}
