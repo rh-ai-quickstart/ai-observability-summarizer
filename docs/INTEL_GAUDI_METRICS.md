@@ -251,6 +251,22 @@ In OpenShift Container Platform, Intel Gaudi metrics are collected through user 
 
 **Reference**: [OpenShift Container Platform - Enabling monitoring for user-defined projects](https://docs.redhat.com/en/documentation/openshift_container_platform/4.20/html/monitoring/configuring-user-workload-monitoring#enabling-monitoring-for-user-defined-projects-uwm_preparing-to-configure-the-monitoring-stack-uwm)
 
+### Automatic Enablement During Installation
+
+The `make install` command automatically enables user workload monitoring during installation. This step happens early in the installation process, right after namespace creation.
+
+**What happens:**
+- Automatically sets `enableUserWorkload: true` in the cluster-monitoring-config ConfigMap
+- The process is idempotent - safe to run multiple times
+- User workload monitoring pods start automatically in the `openshift-user-workload-monitoring` namespace
+
+**To manually enable user workload monitoring without running full installation:**
+```bash
+make enable-user-workload-monitoring
+```
+
+This target is idempotent and safe to run multiple times.
+
 ### Accessing Metrics
 
 Once user workload monitoring is enabled, metrics are automatically collected and can be queried through:

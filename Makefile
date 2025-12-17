@@ -234,6 +234,7 @@ help:
 	@echo "  uninstall-observability - Uninstall TempoStack, LokiStack and OTEL Collector only"
 	@echo "  upgrade-observability - Force upgrade observability components (even if already installed)"
 	@echo "  check-observability-drift - Check for configuration drift in observability-hub"
+	@echo "  enable-user-workload-monitoring - Enable cluster-level user workload monitoring"
 	@echo "  setup-tracing - Enable auto-instrumentation for tracing in target namespace (idempotent)"
 	@echo "  remove-tracing - Disable auto-instrumentation for tracing in target namespace"
 	@echo "  enable-tracing-ui - Enable 'Observe → Traces' menu in OpenShift Console"
@@ -472,7 +473,7 @@ install-rag: namespace
 
 
 .PHONY: install
-install: namespace depend validate-llm install-operators install-observability-stack install-metric-ui install-mcp-server install-korrel8r delete-jobs
+install: namespace enable-user-workload-monitoring depend validate-llm install-operators install-observability-stack install-metric-ui install-mcp-server install-korrel8r delete-jobs
 	@if [ "$(ENABLE_RAG)" != "false" ]; then \
 		echo "Installing RAG backend services (set ENABLE_RAG=false to skip)..."; \
 		$(MAKE) install-rag NAMESPACE=$(NAMESPACE); \
@@ -794,6 +795,12 @@ validate-llm:
 		echo "\n❌ Error: LLM variable is not set or empty. Please set LLM=<model_name>"; \
 		exit 1; \
 	fi
+
+# Enable cluster-level user workload monitoring
+.PHONY: enable-user-workload-monitoring
+enable-user-workload-monitoring:
+	@echo ""
+	@bash scripts/enable-user-workload-monitoring.sh
 
 .PHONY: install-observability
 install-observability:
