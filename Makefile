@@ -395,12 +395,6 @@ depend:
 	@echo "Updating Helm dependencies (for $(MINIO_CHART))..."
 	@cd deploy/helm && helm dependency update $(MINIO_CHART_PATH) || exit 1
 
-	@echo "Updating Helm dependencies (for aiobs-app)..."
-	@cd deploy/helm && helm dependency update aiobs-app || exit 1
-
-	@echo "Updating Helm dependencies (for aiobs-infra)..."
-	@cd deploy/helm && helm dependency update aiobs-infra || exit 1
-
 	@echo "Updating Helm dependencies (for aiobs-stack)..."
 	@cd deploy/helm && helm dependency update aiobs-stack || exit 1
 
@@ -429,15 +423,15 @@ install-stack: namespace depend install-operators
 		-n $(NAMESPACE) \
 		--create-namespace \
 		--timeout 30m \
-		--set aiobs-app.rag.enabled=$(RAG_ENABLED) \
-		--set aiobs-app.alerting.enabled=$(ALERTING_ENABLED) \
-		--set aiobs-app.mcpServer.enabled=true \
-		--set aiobs-app.consolePlugin.enabled=true \
+		--set rag.enabled=$(RAG_ENABLED) \
+		--set alerting.enabled=$(ALERTING_ENABLED) \
+		--set mcpServer.enabled=true \
+		--set consolePlugin.enabled=true \
 		--set infrastructure.enabled=$(INFRASTRUCTURE_ENABLED) \
-		--set aiobs-infra.korrel8r.enabled=$(KORREL8R_ENABLED) \
-		$(if $(HF_TOKEN),--set aiobs-app.rag.llm-service.secret.hf_token=$(HF_TOKEN),) \
-		$(if $(DEVICE),--set aiobs-app.rag.llm-service.device=$(DEVICE),) \
-		$(if $(LLM),--set aiobs-app.rag.global.models.$(LLM).enabled=true,)
+		--set korrel8r.enabled=$(KORREL8R_ENABLED) \
+		$(if $(HF_TOKEN),--set rag.llm-service.secret.hf_token=$(HF_TOKEN),) \
+		$(if $(DEVICE),--set rag.llm-service.device=$(DEVICE),) \
+		$(if $(LLM),--set rag.global.models.$(LLM).enabled=true,)
 	@echo ""
 	@echo "✅ Full stack deployment complete!"
 	@echo ""

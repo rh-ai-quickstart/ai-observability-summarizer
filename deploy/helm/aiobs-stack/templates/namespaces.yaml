@@ -4,7 +4,7 @@
   This allows both fresh installs and installs on clusters with existing infra.
 */}}
 
-{{- if .Values.createNamespaces | default true }}
+{{- if and (.Values.infrastructure.enabled) (.Values.createNamespaces | default true) }}
 
 {{/* Observability Hub namespace - for Tempo, OTEL Collector, MinIO */}}
 {{- if not (lookup "v1" "Namespace" "" "observability-hub") }}
@@ -13,8 +13,8 @@ kind: Namespace
 metadata:
   name: observability-hub
   labels:
-    app.kubernetes.io/managed-by: {{ .Release.Service }}
-    app.kubernetes.io/part-of: aiobs-infra
+    {{- include "aiobs-stack.labels" . | nindent 4 }}
+    app.kubernetes.io/component: infrastructure
 ---
 {{- end }}
 
@@ -25,8 +25,8 @@ kind: Namespace
 metadata:
   name: openshift-logging
   labels:
-    app.kubernetes.io/managed-by: {{ .Release.Service }}
-    app.kubernetes.io/part-of: aiobs-infra
+    {{- include "aiobs-stack.labels" . | nindent 4 }}
+    app.kubernetes.io/component: infrastructure
 ---
 {{- end }}
 
@@ -37,8 +37,8 @@ kind: Namespace
 metadata:
   name: openshift-cluster-observability-operator
   labels:
-    app.kubernetes.io/managed-by: {{ .Release.Service }}
-    app.kubernetes.io/part-of: aiobs-infra
+    {{- include "aiobs-stack.labels" . | nindent 4 }}
+    app.kubernetes.io/component: infrastructure
 {{- end }}
 
 {{- end }}
