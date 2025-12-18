@@ -1,0 +1,72 @@
+{{/*
+Create required namespaces for infrastructure components.
+Uses lookup to skip if namespace already exists.
+This runs as a pre-install/pre-upgrade hook to ensure namespaces exist
+before other resources are deployed.
+*/}}
+
+{{- if .Values.infrastructure.enabled }}
+
+{{/* observability-hub namespace for Tempo, OTEL, MinIO */}}
+{{- if or .Values.tempo.enabled .Values.otelCollector.enabled .Values.minio.enabled }}
+{{- if not (lookup "v1" "Namespace" "" .Values.global.observabilityNamespace) }}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.global.observabilityNamespace }}
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/part-of: aiobs-operator
+    app.kubernetes.io/created-by: aiobs-stack
+  annotations:
+    openshift.io/description: "AI Observability infrastructure components (Tempo, OTEL, MinIO)"
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "-100"
+    helm.sh/resource-policy: keep
+{{- end }}
+{{- end }}
+
+{{/* openshift-logging namespace for Loki */}}
+{{- if .Values.loki.enabled }}
+{{- if not (lookup "v1" "Namespace" "" .Values.global.lokiNamespace) }}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.global.lokiNamespace }}
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/part-of: aiobs-operator
+    app.kubernetes.io/created-by: aiobs-stack
+    openshift.io/cluster-monitoring: "true"
+  annotations:
+    openshift.io/description: "OpenShift Logging namespace for LokiStack"
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "-100"
+    helm.sh/resource-policy: keep
+{{- end }}
+{{- end }}
+
+{{/* openshift-cluster-observability-operator namespace for Korrel8r */}}
+{{- if .Values.korrel8r.enabled }}
+{{- if not (lookup "v1" "Namespace" "" .Values.global.korrel8rNamespace) }}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.global.korrel8rNamespace }}
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/part-of: aiobs-operator
+    app.kubernetes.io/created-by: aiobs-stack
+  annotations:
+    openshift.io/description: "Cluster Observability Operator namespace for Korrel8r"
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "-100"
+    helm.sh/resource-policy: keep
+{{- end }}
+{{- end }}
+
+{{- end }}
+
