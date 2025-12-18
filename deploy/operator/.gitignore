@@ -1,0 +1,28 @@
+
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin
+
+# editor and IDE paraphernalia
+.idea
+*.swp
+*.swo
+*~
+
+# Helm charts copied during build (source is deploy/helm/)
+# These are copied by `make prepare-build` and should not be committed
+helm-charts/aiobs-stack/
+helm-charts/alerting/
+helm-charts/mcp-server/
+helm-charts/minio/
+helm-charts/observability/
+helm-charts/openshift-console-plugin/
+helm-charts/rag/
+helm-charts/ui/
+
+# Temporary/generated files
+helm-charts/gen_model_config*.json

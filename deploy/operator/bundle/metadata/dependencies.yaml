@@ -1,0 +1,39 @@
+# OLM Operator Dependencies
+# These operators will be automatically installed by OLM when this operator is installed.
+# Using olm.package ensures OLM installs the operators (not just checks for APIs).
+
+dependencies:
+  # Cluster Observability Operator - Korrel8r and UIPlugin
+  # Provides: UIPlugin, Korrel8r CRDs
+  - type: olm.package
+    value:
+      packageName: cluster-observability-operator
+      version: ">=0.0.0"
+
+  # Red Hat build of OpenTelemetry Operator - Trace collection
+  # Provides: OpenTelemetryCollector CRD
+  - type: olm.package
+    value:
+      packageName: opentelemetry-product
+      version: ">=0.0.0"
+
+  # Tempo Operator - Distributed tracing backend
+  # Provides: TempoStack CRD
+  - type: olm.package
+    value:
+      packageName: tempo-product
+      version: ">=0.0.0"
+
+  # Red Hat OpenShift Logging Operator - Log forwarding
+  # Provides: ClusterLogForwarder CRD
+  - type: olm.package
+    value:
+      packageName: cluster-logging
+      version: ">=0.0.0"
+
+  # Loki Operator - Log storage backend
+  # Provides: LokiStack CRD
+  - type: olm.package
+    value:
+      packageName: loki-operator
+      version: ">=0.0.0"

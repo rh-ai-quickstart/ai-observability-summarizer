@@ -1,0 +1,80 @@
+apiVersion: aiobs.rh-ai-quickstart.io/v1alpha1
+kind: AIObservabilitySummarizer
+metadata:
+  labels:
+    app.kubernetes.io/name: aiobservabilitysummarizer
+    app.kubernetes.io/instance: cluster-ai-observability
+    app.kubernetes.io/part-of: aiobs-operator
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: aiobs-operator
+  name: cluster-ai-observability
+  namespace: ai-observability
+spec:
+  # ==========================================================================
+  # RAG / LLM Configuration
+  # ==========================================================================
+  rag:
+    enabled: true
+    
+    # Model selection - Enable only ONE model
+    global:
+      models:
+        # Llama 3.1 8B - RECOMMENDED (16GB GPU)
+        llama-3-1-8b-instruct:
+          enabled: true
+        # Other options (enable only ONE):
+        # llama-3-2-1b-instruct:
+        #   enabled: true  # Smallest (2GB GPU)
+        # llama-3-2-3b-instruct:
+        #   enabled: true  # Small (6GB GPU)
+        # llama-3-3-70b-instruct:
+        #   enabled: true  # Large (4 GPUs required)
+    
+    llm-service:
+      # Device type for LLM deployment
+      device: gpu  # Options: gpu, hpu, gpu-amd, cpu
+      
+      # REQUIRED: Your HuggingFace token for model download
+      # Get one at: https://huggingface.co/settings/tokens
+      secret:
+        hf_token: ""
+
+  # ==========================================================================
+  # Application Components
+  # ==========================================================================
+  
+  # MCP Server - Model Context Protocol server
+  mcpServer:
+    enabled: true
+
+  # Console Plugin - OpenShift Console integration
+  consolePlugin:
+    enabled: true
+
+  # Alerting - Automated alert analysis (optional)
+  alerting:
+    enabled: false
+
+  # ==========================================================================
+  # Infrastructure Components
+  # ==========================================================================
+  
+  # TempoStack - Distributed tracing
+  tempo:
+    enabled: true
+
+  # LokiStack - Log aggregation
+  loki:
+    enabled: true
+
+  # OpenTelemetry Collector - Trace/metric collection
+  otelCollector:
+    enabled: true
+
+  # Korrel8r - Signal correlation
+  korrel8r:
+    enabled: true
+
+  # MinIO - S3-compatible object storage
+  minio:
+    enabled: true

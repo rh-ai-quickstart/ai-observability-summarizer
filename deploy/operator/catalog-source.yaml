@@ -1,0 +1,16 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: CatalogSource
+metadata:
+  name: aiobs-operator-catalog
+  namespace: openshift-marketplace
+spec:
+  sourceType: grpc
+  image: quay.io/ecosystem-appeng/aiobs-operator-catalog:v0.0.1
+  displayName: AI Observability Operator
+  publisher: RH AI Quickstart
+  # Lower priority than redhat-operators (-100) so OLM resolves dependencies from there
+  priority: -500
+  updateStrategy:
+    registryPoll:
+      interval: 10m
+

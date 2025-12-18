@@ -27,4 +27,4 @@ dependencies:
   repository: file://../minio
   version: 0.1.0
 digest: sha256:b0b1e1282ce97ce7c5a57f8d67ffce1aa3554ddb804bc53f529c8e508a2f0c25
-generated: "2025-12-17T09:53:47.252863-05:00"
+generated: "2025-12-18T14:57:59.917387-05:00"

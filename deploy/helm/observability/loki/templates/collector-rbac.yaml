@@ -1,7 +1,9 @@
 {{- if .Values.rbac.create }}
 # Collector Service Account and RBAC for OpenShift Logging
 # This creates the necessary service account and permissions for log collection
+# Uses lookup to skip resources that already exist (e.g., created by Loki Operator)
 {{- if .Values.rbac.collector.create }}
+{{- if not (lookup "v1" "ServiceAccount" "openshift-logging" "collector") }}
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -13,6 +15,8 @@ metadata:
   annotations:
     helm.sh/resource-policy: keep
 {{- end }}
+{{- end }}
+{{- if not (lookup "rbac.authorization.k8s.io/v1" "ClusterRole" "" "collect-application-logs") }}
 ---
 # ClusterRole for collecting application logs using new observability API
 apiVersion: rbac.authorization.k8s.io/v1
@@ -31,6 +35,8 @@ rules:
   - logs
   verbs:
   - collect
+{{- end }}
+{{- if not (lookup "rbac.authorization.k8s.io/v1" "ClusterRole" "" "collect-infrastructure-logs") }}
 ---
 # ClusterRole for collecting infrastructure logs using new observability API
 apiVersion: rbac.authorization.k8s.io/v1
@@ -49,6 +55,8 @@ rules:
   - logs
   verbs:
   - collect
+{{- end }}
+{{- if not (lookup "rbac.authorization.k8s.io/v1" "ClusterRole" "" "collect-audit-logs") }}
 ---
 # ClusterRole for collecting audit logs using new observability API
 apiVersion: rbac.authorization.k8s.io/v1
@@ -67,6 +75,8 @@ rules:
   - logs
   verbs:
   - collect
+{{- end }}
+{{- if not (lookup "rbac.authorization.k8s.io/v1" "ClusterRole" "" "logging-collector-logs-writer") }}
 ---
 # ClusterRole for writing logs to LokiStack tenants
 apiVersion: rbac.authorization.k8s.io/v1
@@ -79,6 +89,8 @@ rules:
 - apiGroups: ["loki.grafana.com"]
   resources: ["application", "infrastructure", "audit"]
   verbs: ["create"]
+{{- end }}
+{{- if not (lookup "rbac.authorization.k8s.io/v1" "ClusterRoleBinding" "" "collect-application-logs") }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -94,6 +106,8 @@ subjects:
 - kind: ServiceAccount
   name: collector
   namespace: openshift-logging
+{{- end }}
+{{- if not (lookup "rbac.authorization.k8s.io/v1" "ClusterRoleBinding" "" "collect-infrastructure-logs") }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -109,6 +123,8 @@ subjects:
 - kind: ServiceAccount
   name: collector
   namespace: openshift-logging
+{{- end }}
+{{- if not (lookup "rbac.authorization.k8s.io/v1" "ClusterRoleBinding" "" "collect-audit-logs") }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -124,6 +140,8 @@ subjects:
 - kind: ServiceAccount
   name: collector
   namespace: openshift-logging
+{{- end }}
+{{- if not (lookup "rbac.authorization.k8s.io/v1" "ClusterRoleBinding" "" "logging-collector-logs-writer") }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -139,4 +157,5 @@ subjects:
 - kind: ServiceAccount
   name: collector
   namespace: openshift-logging
+{{- end }}
 {{- end }}
