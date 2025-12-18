@@ -14,7 +14,7 @@ MAKEFLAGS += --no-print-directory
 REGISTRY ?= quay.io
 ORG ?= ecosystem-appeng
 IMAGE_PREFIX ?= aiobs
-VERSION ?= 1.0.7
+VERSION ?= plugin
 PLATFORM ?= linux/amd64
 
 # Container image names

@@ -1,0 +1,50 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  creationTimestamp: null
+  name: aiobservabilitysummarizers.aiobs.rh-ai-quickstart.io
+spec:
+  group: aiobs.rh-ai-quickstart.io
+  names:
+    kind: AIObservabilitySummarizer
+    listKind: AIObservabilitySummarizerList
+    plural: aiobservabilitysummarizers
+    shortNames:
+    - aiobs
+    singular: aiobservabilitysummarizer
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: AIObservabilitySummarizer deploys the full AI Observability stack
+        properties:
+          apiVersion:
+            type: string
+          kind:
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: Desired state of AIObservabilitySummarizer
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+          status:
+            description: Observed state of AIObservabilitySummarizer
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

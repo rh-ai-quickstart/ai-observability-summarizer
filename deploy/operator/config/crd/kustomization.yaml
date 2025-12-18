@@ -1,0 +1,4 @@
+resources:
+  - bases/aiobs.rh-ai-quickstart.io_aiobservabilitysummarizers.yaml
+#+kubebuilder:scaffold:crdkustomizeresource
+

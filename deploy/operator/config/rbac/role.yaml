@@ -1,0 +1,207 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: manager-role
+rules:
+##
+## Base operator rules
+##
+# We need to get namespaces so the operator can read namespaces to ensure they exist
+- apiGroups:
+  - ""
+  resources:
+  - namespaces
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+# We need to manage Helm release secrets
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - "*"
+# We need to create events on CRs about things happening during reconciliation
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+
+##
+## Rules for aiobs.rh-ai-quickstart.io/v1alpha1, Kind: AIObservabilitySummarizer
+##
+- apiGroups:
+  - aiobs.rh-ai-quickstart.io
+  resources:
+  - aiobservabilitysummarizers
+  - aiobservabilitysummarizers/status
+  - aiobservabilitysummarizers/finalizers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+
+##
+## Core Kubernetes Resources
+##
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - secrets
+  - serviceaccounts
+  - services
+  - persistentvolumeclaims
+  - pods
+  verbs:
+  - "*"
+
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  - statefulsets
+  - daemonsets
+  - replicasets
+  verbs:
+  - "*"
+
+- apiGroups:
+  - batch
+  resources:
+  - jobs
+  - cronjobs
+  verbs:
+  - "*"
+
+##
+## OpenShift Resources
+##
+- apiGroups:
+  - route.openshift.io
+  resources:
+  - routes
+  - routes/custom-host
+  verbs:
+  - "*"
+
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - roles
+  - rolebindings
+  - clusterroles
+  - clusterrolebindings
+  verbs:
+  - "*"
+
+##
+## Observability Operator CRDs (Tempo, Loki, OTEL)
+##
+- apiGroups:
+  - tempo.grafana.com
+  resources:
+  - tempostacks
+  verbs:
+  - "*"
+
+- apiGroups:
+  - loki.grafana.com
+  resources:
+  - lokistacks
+  verbs:
+  - "*"
+
+- apiGroups:
+  - opentelemetry.io
+  resources:
+  - opentelemetrycollectors
+  - instrumentations
+  verbs:
+  - "*"
+
+##
+## OpenShift Logging and Observability
+##
+- apiGroups:
+  - logging.openshift.io
+  resources:
+  - clusterlogforwarders
+  - clusterloggings
+  verbs:
+  - "*"
+
+- apiGroups:
+  - observability.openshift.io
+  resources:
+  - uiplugins
+  - clusterlogforwarders
+  verbs:
+  - "*"
+
+##
+## Korrel8r CRDs
+##
+- apiGroups:
+  - korrel8r.openshift.io
+  resources:
+  - korrel8rs
+  verbs:
+  - "*"
+
+##
+## Monitoring Resources
+##
+- apiGroups:
+  - monitoring.coreos.com
+  resources:
+  - prometheusrules
+  - servicemonitors
+  - podmonitors
+  verbs:
+  - "*"
+
+##
+## Networking
+##
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - networkpolicies
+  - ingresses
+  verbs:
+  - "*"
+
+##
+## KServe Resources (for RAG/LLM deployment)
+##
+- apiGroups:
+  - serving.kserve.io
+  resources:
+  - inferenceservices
+  - inferenceservices/status
+  - servingruntimes
+  - servingruntimes/status
+  - clusterservingruntimes
+  verbs:
+  - "*"
+
+##
+## OpenShift Console Plugin
+##
+- apiGroups:
+  - console.openshift.io
+  resources:
+  - consoleplugins
+  verbs:
+  - "*"
+
+#+kubebuilder:scaffold:rules
