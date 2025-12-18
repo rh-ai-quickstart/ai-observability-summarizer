@@ -9,7 +9,6 @@ import {
   FormSelect,
   FormSelectOption,
   TextInput,
-  TextArea,
   Flex,
   FlexItem,
   Text,
@@ -22,7 +21,6 @@ import {
 } from '@patternfly/react-core';
 import {
   PlusCircleIcon,
-  InfoCircleIcon,
 } from '@patternfly/react-icons';
 
 import { AIModelState, ModelFormData, Provider } from '../types/models';
@@ -51,7 +49,7 @@ export const AddModelTab: React.FC<AddModelTabProps> = ({
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  const providers = getAllProviders().filter(p => p.provider !== 'internal'); // Exclude internal for custom models
+  const providers = getAllProviders().filter(p => p.provider !== 'internal' && p.provider !== 'other'); // Exclude internal and custom provider
 
   const handleProviderChange = (provider: Provider) => {
     const template = getProviderTemplate(provider);
@@ -71,7 +69,7 @@ export const AddModelTab: React.FC<AddModelTabProps> = ({
       return;
     }
 
-    if (formData.provider !== 'other' && formData.apiKey && !isValidApiKey(formData.provider, formData.apiKey)) {
+    if (formData.apiKey && !isValidApiKey(formData.provider, formData.apiKey)) {
       setError(`Invalid API key format for ${getProviderTemplate(formData.provider).label}`);
       return;
     }
@@ -125,8 +123,9 @@ export const AddModelTab: React.FC<AddModelTabProps> = ({
 
       <TextContent style={{ marginBottom: '24px' }}>
         <Text component={TextVariants.p}>
-          Add a custom AI model to the available models list. You can configure models from supported providers 
-          or add custom endpoints for other AI services.
+          Add a custom AI model to the available models list. You can configure models from supported providers.
+          Models will be displayed in <strong>provider/model-id</strong> format. External providers require valid API keys for authentication.
+          Use OpenShift secrets for secure, persistent credential storage.
         </Text>
       </TextContent>
 
@@ -199,30 +198,6 @@ export const AddModelTab: React.FC<AddModelTabProps> = ({
               </FormGroup>
             )}
 
-            {/* API Endpoint */}
-            <FormGroup label="API Endpoint (Optional)" fieldId="endpoint" style={{ marginTop: '16px' }}>
-              <TextInput
-                id="endpoint"
-                value={formData.endpoint}
-                onChange={(_event, value) => setFormData(prev => ({ ...prev, endpoint: value }))}
-                placeholder={template.defaultEndpoint}
-              />
-              <Text component={TextVariants.small} style={{ color: 'var(--pf-v5-global--Color--200)', marginTop: '4px' }}>
-                Leave empty to use default endpoint for {template.label}
-              </Text>
-            </FormGroup>
-
-            {/* Description */}
-            <FormGroup label="Description (Optional)" fieldId="description" style={{ marginTop: '16px' }}>
-              <TextArea
-                id="description"
-                value={formData.description}
-                onChange={(_event, value) => setFormData(prev => ({ ...prev, description: value }))}
-                placeholder="Optional description for this model"
-                rows={2}
-              />
-            </FormGroup>
-
             {/* API Key Section (for external providers) */}
             {requiresApiKey && (
               <>
@@ -293,36 +268,6 @@ export const AddModelTab: React.FC<AddModelTabProps> = ({
               </Flex>
             </div>
           </Form>
-        </CardBody>
-      </Card>
-
-      {/* Information Card */}
-      <Card isCompact style={{ marginTop: '24px', backgroundColor: 'var(--pf-v5-global--BackgroundColor--light-200)' }}>
-        <CardBody>
-          <Flex alignItems={{ default: 'alignItemsFlexStart' }}>
-            <FlexItem>
-              <InfoCircleIcon style={{ color: 'var(--pf-v5-global--info-color--100)', marginRight: '8px', marginTop: '2px' }} />
-            </FlexItem>
-            <FlexItem>
-              <TextContent>
-                <Text component={TextVariants.h4} style={{ margin: '0 0 8px 0' }}>
-                  Custom Model Guidelines
-                </Text>
-                <Text component={TextVariants.small}>
-                  • Models will be displayed in <strong>provider/model-id</strong> format
-                </Text>
-                <Text component={TextVariants.small}>
-                  • External providers require valid API keys for authentication
-                </Text>
-                <Text component={TextVariants.small}>
-                  • Use OpenShift secrets for secure, persistent credential storage
-                </Text>
-                <Text component={TextVariants.small}>
-                  • Custom models can be removed from the Available Models tab
-                </Text>
-              </TextContent>
-            </FlexItem>
-          </Flex>
         </CardBody>
       </Card>
     </div>
