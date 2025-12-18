@@ -73,7 +73,7 @@ export async function callMcpTool<T = unknown>(
     headers: {
       'Content-Type': 'application/json',
       'Accept': 'application/json, text/event-stream',
-      'X-Session-ID': 'browser-session',
+      'mcp-session-id': 'browser-session',
     },
     body: JSON.stringify({
       jsonrpc: '2.0',
@@ -151,7 +151,7 @@ export async function callMcpToolText(toolName: string, args: Record<string, unk
     headers: {
       'Content-Type': 'application/json',
       'Accept': 'application/json, text/event-stream',
-      'X-Session-ID': 'browser-session',
+      'mcp-session-id': 'browser-session',
     },
     body: JSON.stringify({
       jsonrpc: '2.0',
