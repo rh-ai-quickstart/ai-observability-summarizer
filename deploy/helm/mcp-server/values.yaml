@@ -41,10 +41,7 @@ env:
 LLM_PREDICTOR: "llama-3-1-8b-instruct-predictor"
 
 tls:
-  # IMPORTANT:
-  # - When route.tls.termination is "edge" (default), the OpenShift router forwards plain HTTP to the Service.
-  # - If you enable TLS here, the pod will serve HTTPS on :8085, and the edge-terminated Route will fail with 502.
-  # Keep this disabled unless you also change the Route termination to "reencrypt" or "passthrough".
+  # If tls is enabled, the Route termination must be set to "reencrypt" or "passthrough".
   enabled: true
   secretName: mcp-server-tls
   serviceCertAnnotation: service.beta.openshift.io/serving-cert-secret-name
