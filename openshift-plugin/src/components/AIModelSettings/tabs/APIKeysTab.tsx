@@ -1,7 +1,5 @@
 import * as React from 'react';
 import {
-  Card,
-  CardBody,
   Flex,
   FlexItem,
   Text,
@@ -9,7 +7,6 @@ import {
   TextVariants,
 } from '@patternfly/react-core';
 import {
-  CheckCircleIcon,
   KeyIcon,
 } from '@patternfly/react-icons';
 
@@ -43,7 +40,7 @@ export const APIKeysTab: React.FC<APIKeysTabProps> = ({
               API Key Management
             </Text>
             <Text component={TextVariants.p} style={{ marginTop: '8px' }}>
-              Configure API keys for external AI providers. Keys can be stored securely in OpenShift secrets or temporarily in browser cache.
+              Configure API keys for external AI providers. Keys are securely stored as OpenShift Secrets.
             </Text>
           </TextContent>
         </FlexItem>
@@ -64,26 +61,6 @@ export const APIKeysTab: React.FC<APIKeysTabProps> = ({
           );
         })}
       </div>
-
-      {/* Security Notice */}
-      <Card isCompact style={{ marginTop: '32px', backgroundColor: 'var(--pf-v5-global--BackgroundColor--light-300)' }}>
-        <CardBody>
-          <TextContent>
-            <Text component={TextVariants.h4}>
-              <CheckCircleIcon style={{ color: 'var(--pf-v5-global--success-color--100)', marginRight: '8px' }} />
-              Security Best Practices
-            </Text>
-            <Text component={TextVariants.small} style={{ marginTop: '8px' }}>
-              <strong>OpenShift Secrets</strong> (Recommended): API keys are encrypted and stored securely in your cluster. 
-              They persist across browser sessions and are protected by Kubernetes RBAC.
-            </Text>
-            <Text component={TextVariants.small} style={{ marginTop: '8px' }}>
-              <strong>Browser Cache</strong> (Temporary): API keys are stored in your browser's local storage. 
-              They will be lost when you clear browser data or use a different device.
-            </Text>
-          </TextContent>
-        </CardBody>
-      </Card>
     </div>
   );
 };

@@ -9,7 +9,6 @@ import {
   Label,
   Button,
   TextInput,
-  Checkbox,
   Alert,
   AlertVariant,
 } from '@patternfly/react-core';
@@ -31,7 +30,6 @@ export const ProviderInlineItem: React.FC<ProviderInlineItemProps> = ({
 }) => {
   const [isExpanded, setIsExpanded] = React.useState(false);
   const [apiKey, setApiKey] = React.useState('');
-  const [useSecret, setUseSecret] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
   const [testing, setTesting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -85,22 +83,17 @@ export const ProviderInlineItem: React.FC<ProviderInlineItemProps> = ({
     }
     setSaving(true);
     try {
-      if (useSecret) {
-        await secretManager.saveProviderSecret({
-          provider: provider.provider,
-          apiKey,
-          endpoint: provider.defaultEndpoint,
-          metadata: {
-            description: `API key for ${provider.label}`,
-            createdBy: 'ai-model-settings',
-            lastUpdated: new Date().toISOString(),
-          },
-        });
-      } else {
-        const config = JSON.parse(localStorage.getItem('openshift_ai_observability_config') || '{}');
-        config.api_key = apiKey;
-        localStorage.setItem('openshift_ai_observability_config', JSON.stringify(config));
-      }
+      // Save to OpenShift secret (only secure storage allowed)
+      await secretManager.saveProviderSecret({
+        provider: provider.provider,
+        apiKey,
+        endpoint: provider.defaultEndpoint,
+        metadata: {
+          description: `API key for ${provider.label}`,
+          createdBy: 'ai-model-settings',
+          lastUpdated: new Date().toISOString(),
+        },
+      });
       setApiKey('');
       setNotice('API key saved successfully');
       onUpdate();
@@ -196,16 +189,8 @@ export const ProviderInlineItem: React.FC<ProviderInlineItemProps> = ({
             placeholder={`Enter your ${provider.label} API key`}
           />
           <Text component={TextVariants.small} style={{ color: 'var(--pf-v5-global--Color--200)', marginTop: 4 }}>
-            Get your API key from the {provider.label} dashboard or developer portal
+            Get your API key from the {provider.label} dashboard or developer portal. Keys are securely stored as OpenShift Secrets.
           </Text>
-          <Checkbox
-            id={`use-secret-${provider.provider}`}
-            label="Save as OpenShift Secret (Recommended)"
-            description="Secure, persistent storage protected by Kubernetes RBAC"
-            isChecked={useSecret}
-            onChange={(_ev, checked) => setUseSecret(checked)}
-            style={{ marginTop: 8 }}
-          />
         </FlexItem>
         <FlexItem>
           <Button variant="primary" onClick={handleSave} isDisabled={saving || !apiKey.trim()} isLoading={saving}>

@@ -18,7 +18,6 @@ import {
   TextInput,
   Alert,
   AlertVariant,
-  Checkbox,
 } from '@patternfly/react-core';
 import {
   CheckCircleIcon,
@@ -52,7 +51,6 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
 }) => {
   const [showModal, setShowModal] = React.useState(false);
   const [apiKey, setApiKey] = React.useState('');
-  const [useSecret, setUseSecret] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [testResult, setTestResult] = React.useState<{ success: boolean; error?: string } | null>(null);
@@ -93,9 +91,8 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
 
   const getStorageInfo = () => {
     if (status.status === 'configured') {
-      const storageType = status.storage === 'secret' ? 'OpenShift Secret' : 'Browser Cache';
       const secretName = status.secretName ? ` (${status.secretName})` : '';
-      return `Stored via ${storageType}${secretName}`;
+      return `Stored via OpenShift Secret${secretName}`;
     }
     return 'No API key configured';
   };
@@ -115,24 +112,17 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
     setError(null);
 
     try {
-      if (useSecret) {
-        // Save to OpenShift secret
-        await secretManager.saveProviderSecret({
-          provider: provider.provider,
-          apiKey: apiKey,
-          endpoint: provider.defaultEndpoint,
-          metadata: {
-            description: `API key for ${provider.label}`,
-            createdBy: 'ai-model-settings',
-            lastUpdated: new Date().toISOString(),
-          },
-        });
-      } else {
-        // Save to browser cache (via session config)
-        const config = JSON.parse(localStorage.getItem('openshift_ai_observability_config') || '{}');
-        config.api_key = apiKey;
-        localStorage.setItem('openshift_ai_observability_config', JSON.stringify(config));
-      }
+      // Save to OpenShift secret (only secure storage allowed)
+      await secretManager.saveProviderSecret({
+        provider: provider.provider,
+        apiKey: apiKey,
+        endpoint: provider.defaultEndpoint,
+        metadata: {
+          description: `API key for ${provider.label}`,
+          createdBy: 'ai-model-settings',
+          lastUpdated: new Date().toISOString(),
+        },
+      });
 
       setShowModal(false);
       setApiKey('');
@@ -177,7 +167,6 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
     setApiKey('');
     setError(null);
     setTestResult(null);
-    setUseSecret(true);
   };
 
   return (
@@ -352,18 +341,8 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
               placeholder={`Enter your ${provider.label} API key`}
             />
             <Text component={TextVariants.small} style={{ color: 'var(--pf-v5-global--Color--200)', marginTop: '4px' }}>
-              Get your API key from the {provider.label} dashboard or developer portal
+              Get your API key from the {provider.label} dashboard or developer portal. Keys are securely stored as OpenShift Secrets.
             </Text>
-          </FormGroup>
-
-          <FormGroup fieldId="storage-options" style={{ marginTop: '16px' }}>
-            <Checkbox
-              id="use-secret"
-              label="Save as OpenShift Secret (Recommended)"
-              description="Secure, persistent storage protected by Kubernetes RBAC"
-              isChecked={useSecret}
-              onChange={(_event, checked) => setUseSecret(checked)}
-            />
           </FormGroup>
 
           <Flex style={{ marginTop: '16px' }}>

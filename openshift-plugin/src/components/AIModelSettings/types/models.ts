@@ -1,6 +1,6 @@
 export type Provider = 'openai' | 'anthropic' | 'google' | 'meta' | 'internal' | 'other';
 
-export type StorageType = 'secret' | 'browser' | 'none';
+export type StorageType = 'secret' | 'none';
 
 export type CredentialStatus = 'configured' | 'missing' | 'invalid' | 'testing';
 
@@ -93,7 +93,6 @@ export interface ModelFormData {
   endpoint?: string;
   description?: string;
   apiKey?: string;
-  saveToSecret: boolean;
 }
 
 export interface ConnectionTestResult {

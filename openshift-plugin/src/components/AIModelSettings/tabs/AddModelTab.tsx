@@ -16,7 +16,6 @@ import {
   TextVariants,
   Alert,
   AlertVariant,
-  Checkbox,
   Title,
 } from '@patternfly/react-core';
 import {
@@ -44,7 +43,6 @@ export const AddModelTab: React.FC<AddModelTabProps> = ({
     endpoint: '',
     description: '',
     apiKey: '',
-    saveToSecret: true,
   });
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -88,7 +86,6 @@ export const AddModelTab: React.FC<AddModelTabProps> = ({
         endpoint: getProviderTemplate('openai').defaultEndpoint,
         description: '',
         apiKey: '',
-        saveToSecret: true,
       });
 
       // Notify parent components
@@ -107,7 +104,6 @@ export const AddModelTab: React.FC<AddModelTabProps> = ({
   };
 
   const template = getProviderTemplate(formData.provider);
-  const requiresApiKey = template.requiresApiKey;
 
   return (
     <div style={{ padding: '20px 0' }}>
@@ -198,41 +194,6 @@ export const AddModelTab: React.FC<AddModelTabProps> = ({
               </FormGroup>
             )}
 
-            {/* API Key Section (for external providers) */}
-            {requiresApiKey && (
-              <>
-                <FormGroup 
-                  label="API Key (Optional)" 
-                  fieldId="api-key" 
-                  style={{ marginTop: '24px', paddingTop: '16px', borderTop: '1px solid var(--pf-v5-global--BorderColor--100)' }}
-                >
-                  <TextInput
-                    id="api-key"
-                    type="password"
-                    value={formData.apiKey}
-                    onChange={(_event, value) => setFormData(prev => ({ ...prev, apiKey: value }))}
-                    placeholder={`Enter ${template.label} API key`}
-                  />
-                  <Text component={TextVariants.small} style={{ color: 'var(--pf-v5-global--Color--200)', marginTop: '4px' }}>
-                    You can add this later in the API Keys tab if you prefer
-                  </Text>
-                </FormGroup>
-
-                {/* Storage Option */}
-                {formData.apiKey && (
-                  <FormGroup fieldId="storage-option" style={{ marginTop: '12px' }}>
-                    <Checkbox
-                      id="save-to-secret"
-                      label="Save API key as OpenShift Secret"
-                      description="Recommended for security and persistence across browser sessions"
-                      isChecked={formData.saveToSecret}
-                      onChange={(_event, checked) => setFormData(prev => ({ ...prev, saveToSecret: checked }))}
-                    />
-                  </FormGroup>
-                )}
-              </>
-            )}
-
             {/* Action Buttons */}
             <div style={{ marginTop: '32px', paddingTop: '16px', borderTop: '1px solid var(--pf-v5-global--BorderColor--100)' }}>
               <Flex>
@@ -257,7 +218,6 @@ export const AddModelTab: React.FC<AddModelTabProps> = ({
                         endpoint: getProviderTemplate('openai').defaultEndpoint,
                         description: '',
                         apiKey: '',
-                        saveToSecret: true,
                       });
                       setError(null);
                     }}

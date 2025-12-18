@@ -130,8 +130,8 @@ class ModelService {
       isAvailable: true,
     };
     
-    // Save API key if provided
-    if (formData.apiKey && formData.saveToSecret && newModel.requiresApiKey) {
+    // Save API key if provided (always to OpenShift secret)
+    if (formData.apiKey && newModel.requiresApiKey) {
       try {
         await secretManager.saveProviderSecret({
           provider: formData.provider,
@@ -233,18 +233,13 @@ class ModelService {
         return { ready: true };
       }
       
-      // Check if API key is available
+      // Check if API key is available in OpenShift secret
       const secretStatus = await secretManager.checkProviderSecret(model.provider);
-      const hasSecret = secretStatus.exists;
-      
-      // Check browser storage as fallback
-      const config = localStorage.getItem('openshift_ai_observability_config');
-      const hasBrowserKey = config && JSON.parse(config).api_key;
-      
-      if (!hasSecret && !hasBrowserKey) {
+
+      if (!secretStatus.exists) {
         return { ready: false, reason: 'API key required' };
       }
-      
+
       return { ready: true };
     } catch (error) {
       console.error('Error checking model readiness:', error);
