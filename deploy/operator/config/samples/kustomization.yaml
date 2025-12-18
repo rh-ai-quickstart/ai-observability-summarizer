@@ -1,0 +1,4 @@
+resources:
+  - aiobs_v1alpha1_aiobservabilitysummarizer.yaml
+#+kubebuilder:scaffold:manifestskustomizesamples
+
