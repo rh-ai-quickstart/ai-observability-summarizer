@@ -78,6 +78,16 @@ KORREL8R_RELEASE_NAME ?= korrel8r-summarizer
 KORREL8R_CHART_PATH ?= observability/korrel8r
 KORREL8R_NAMESPACE ?= openshift-cluster-observability-operator
 
+# Umbrella chart configuration
+AIOBS_STACK_RELEASE_NAME ?= aiobs
+AIOBS_STACK_CHART_PATH ?= aiobs-stack
+
+# Component toggles for install-stack
+RAG_ENABLED ?= true
+ALERTING_ENABLED ?= false
+KORREL8R_ENABLED ?= true
+INFRASTRUCTURE_ENABLED ?= true
+
 TOLERATIONS_TEMPLATE=[{"key":"$(1)","effect":"NoSchedule","operator":"Exists"}]
 GEN_MODEL_CONFIG_PREFIX = /tmp/gen_model_config
 
@@ -194,6 +204,7 @@ help:
 	@echo "  push-alert-example  - Push alert-example test image"
 	@echo ""
 	@echo "Deployment:"
+	@echo "  install-stack      - Deploy full stack using umbrella chart (recommended)"
 	@echo "  install            - Deploy to OpenShift using Helm"
 	@echo "  install-with-alerts - Deploy with alerting enabled"
 	@echo "  install-local      - Set up local development environment"
@@ -279,8 +290,8 @@ help:
 	@echo "  LLM                - Model id (eg. llama-3-1-8b-instruct)"
 	@echo "  LLM_URL            - Use existing model URL (auto-adds :8080/v1 if no port specified)"
 	@echo "  SAFETY             - Safety model id"
-	@echo "  ENABLE_RAG         - Set to 'false' to skip RAG backend services (default: true)"
-	@echo "  ALERTS             - Set to TRUE to install alerting with main deployment"
+	@echo "  RAG_ENABLED         - Set to 'false' to skip RAG backend services (default: true)"
+	@echo "  ALERTING_ENABLED    - Set to 'true' to install alerting (default: false)"
 	@echo "  SLACK_WEBHOOK_URL  - Slack Webhook URL for alerting (will prompt if not provided)"
 	@echo "  MINIO_USER         - MinIO username for observability storage (default: admin)"
 	@echo "  MINIO_PASSWORD     - MinIO password for observability storage (default: minio123)"
@@ -385,6 +396,65 @@ depend:
 	@echo "Updating Helm dependencies (for $(MINIO_CHART))..."
 	@cd deploy/helm && helm dependency update $(MINIO_CHART_PATH) || exit 1
 
+	@echo "Updating Helm dependencies (for aiobs-stack)..."
+	@cd deploy/helm && helm dependency update aiobs-stack || exit 1
+
+
+# Install full stack using umbrella chart
+.PHONY: install-stack
+install-stack: namespace depend install-operators
+	@echo "🚀 Deploying full AI Observability stack using umbrella chart..."
+	@echo "  → RAG_ENABLED=$(RAG_ENABLED)"
+	@echo "  → ALERTING_ENABLED=$(ALERTING_ENABLED)"
+	@echo "  → KORREL8R_ENABLED=$(KORREL8R_ENABLED)"
+	@echo "  → INFRASTRUCTURE_ENABLED=$(INFRASTRUCTURE_ENABLED)"
+	@echo ""
+	@echo "→ Ensuring infrastructure namespaces exist..."
+	@if [ "$(INFRASTRUCTURE_ENABLED)" = "true" ]; then \
+		oc create namespace $(OBSERVABILITY_NAMESPACE) 2>/dev/null || echo "  → $(OBSERVABILITY_NAMESPACE) already exists"; \
+		oc create namespace $(LOKI_NAMESPACE) 2>/dev/null || echo "  → $(LOKI_NAMESPACE) already exists"; \
+		oc create namespace $(KORREL8R_NAMESPACE) 2>/dev/null || echo "  → $(KORREL8R_NAMESPACE) already exists"; \
+	fi
+	@echo ""
+	@echo "→ Verifying operators are ready..."
+	@$(MAKE) verify-operators-ready
+	@echo ""
+	@echo "→ Installing Helm chart..."
+	@cd deploy/helm && helm upgrade --install $(AIOBS_STACK_RELEASE_NAME) $(AIOBS_STACK_CHART_PATH) \
+		-n $(NAMESPACE) \
+		--create-namespace \
+		--timeout 10m \
+		--set rag.enabled=$(RAG_ENABLED) \
+		--set alerting.enabled=$(ALERTING_ENABLED) \
+		--set mcpServer.enabled=true \
+		--set consolePlugin.enabled=true \
+		--set infrastructure.enabled=$(INFRASTRUCTURE_ENABLED) \
+		--set tempo.enabled=$(INFRASTRUCTURE_ENABLED) \
+		--set loki.enabled=false \
+		--set otelCollector.enabled=$(INFRASTRUCTURE_ENABLED) \
+		--set minio.enabled=$(INFRASTRUCTURE_ENABLED) \
+		--set korrel8r.enabled=$(KORREL8R_ENABLED) \
+		$(if $(HF_TOKEN),--set rag.llm-service.secret.hf_token=$(HF_TOKEN),) \
+		$(if $(DEVICE),--set rag.llm-service.device=$(DEVICE),) \
+		$(if $(LLM),--set rag.global.models.$(LLM).enabled=true,)
+	@echo ""
+	@echo "✅ Full stack deployment complete!"
+	@echo ""
+	@echo "Components deployed:"
+	@echo "  → MCP Server: enabled"
+	@echo "  → Console Plugin: enabled"
+	@echo "  → RAG/LLM: $(RAG_ENABLED)"
+	@echo "  → Alerting: $(ALERTING_ENABLED)"
+	@echo "  → Infrastructure: $(INFRASTRUCTURE_ENABLED)"
+	@echo "  → Korrel8r: $(KORREL8R_ENABLED)"
+
+# Uninstall full stack
+.PHONY: uninstall-stack
+uninstall-stack:
+	@echo "🗑️  Uninstalling full AI Observability stack..."
+	@helm -n $(NAMESPACE) uninstall $(AIOBS_STACK_RELEASE_NAME) --ignore-not-found
+	@echo "✅ Stack uninstalled"
+
 
 .PHONY: install-metric-ui
 install-metric-ui: namespace
@@ -473,13 +543,13 @@ install-rag: namespace
 
 
 .PHONY: install
-install: namespace enable-user-workload-monitoring depend validate-llm install-operators install-observability-stack install-metric-ui install-mcp-server install-korrel8r delete-jobs
-	@if [ "$(ENABLE_RAG)" != "false" ]; then \
-		echo "Installing RAG backend services (set ENABLE_RAG=false to skip)..."; \
+install: namespace enable-user-workload-monitoring depend validate-llm install-operators install-observability-stack install-metric-ui install-mcp-server install-console-plugin install-korrel8r delete-jobs
+	@if [ "$(RAG_ENABLED)" != "false" ]; then \
+		echo "Installing RAG backend services (set RAG_ENABLED=false to skip)..."; \
 		$(MAKE) install-rag NAMESPACE=$(NAMESPACE); \
 	fi
-	@if [ "$(ALERTS)" = "TRUE" ]; then \
-		echo "ALERTS flag is set to TRUE. Installing alerting..."; \
+	@if [ "$(ALERTING_ENABLED)" = "true" ]; then \
+		echo "ALERTING_ENABLED is set to true. Installing alerting..."; \
 		$(MAKE) install-alerts NAMESPACE=$(NAMESPACE); \
 	fi
 	@echo "Installation complete."
@@ -551,6 +621,8 @@ uninstall:
 	- @helm -n $(NAMESPACE) uninstall $(METRICS_UI_RELEASE_NAME) --ignore-not-found
 	@echo "Uninstalling $(MCP_SERVER_RELEASE_NAME) helm chart (if installed)"
 	- @helm -n $(NAMESPACE) uninstall $(MCP_SERVER_RELEASE_NAME) --ignore-not-found
+	@echo "Uninstalling OpenShift Console Plugin (if installed)"
+	@$(MAKE) uninstall-console-plugin NAMESPACE=$(NAMESPACE) || true
 	@echo "Uninstalling Korrel8r helm-managed resources (if installed)"
 	@$(MAKE) uninstall-korrel8r || true
 

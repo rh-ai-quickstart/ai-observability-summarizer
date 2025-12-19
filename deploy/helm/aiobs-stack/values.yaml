@@ -1,0 +1,84 @@
+# AI Observability Summarizer - Full Stack Values
+# Single umbrella chart combining all application and infrastructure components
+
+# =============================================================================
+# GLOBAL SETTINGS
+# =============================================================================
+
+# Target namespaces for infrastructure components
+global:
+  observabilityNamespace: observability-hub
+  lokiNamespace: openshift-logging
+  korrel8rNamespace: openshift-cluster-observability-operator
+
+# =============================================================================
+# APPLICATION COMPONENTS (deployed in CR namespace)
+# =============================================================================
+
+# MCP Server - Model Context Protocol server for AI observability
+mcpServer:
+  enabled: true  # Always deployed
+  # replicaCount: 1
+  # image:
+  #   repository: quay.io/ecosystem-appeng/aiobs-mcp-server
+  #   tag: latest
+
+# OpenShift Console Plugin - Native console integration
+consolePlugin:
+  enabled: true  # Always deployed
+  plugin:
+    name: "openshift-ai-observability"
+    description: "AI Observability Plugin"
+    image: "quay.io/ecosystem-appeng/aiobs-console-plugin:latest"
+    imagePullPolicy: Always
+    replicas: 2
+    port: 9443
+
+# Alerting - Alert processing CronJob
+alerting:
+  enabled: false  # Optional - toggle in OLM form
+
+# RAG - LLM Stack (llama-stack, llm-service, pgvector)
+rag:
+  enabled: true  # Always enabled
+  
+  # Model selection - Enable ONE model via OLM UI toggle
+  global:
+    models:
+      # Default: Llama 3.1 8B (RECOMMENDED, 16GB GPU)
+      llama-3-1-8b-instruct:
+        enabled: true
+  
+  # LLM Service configuration
+  llm-service:
+    device: gpu  # Options: gpu, hpu, gpu-amd, cpu
+    secret:
+      hf_token: ""  # Required - set via OLM UI
+
+# =============================================================================
+# INFRASTRUCTURE COMPONENTS (deployed to fixed namespaces)
+# =============================================================================
+
+# Master toggle - set to false if infrastructure already exists
+infrastructure:
+  enabled: true
+
+# TempoStack - Distributed tracing backend (observability-hub)
+tempo:
+  enabled: true
+
+# LokiStack - Log aggregation (openshift-logging)
+loki:
+  enabled: false  # Requires Loki Operator
+
+# OpenTelemetry Collector - Trace/metric collection (observability-hub)
+otelCollector:
+  enabled: true
+
+# Korrel8r - Signal correlation engine (openshift-cluster-observability-operator)
+korrel8r:
+  enabled: true
+
+# MinIO - S3-compatible object storage (observability-hub)
+minio:
+  enabled: true
