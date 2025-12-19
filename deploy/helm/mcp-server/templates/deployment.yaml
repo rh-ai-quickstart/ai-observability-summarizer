@@ -80,11 +80,10 @@ spec:
               value: "http://llamastack.{{ .Release.Namespace }}.svc.cluster.local:8321/v1/openai/v1"
             {{- end }}
             - name: MODEL_CONFIG
-              {{- if .Values.modelConfig }}
-              value: '{{ .Values.modelConfig | toJson }}'
-              {{- else }}
-              value: {{ .Files.Get "model-config.json" | fromJson | toJson | squote }}
-              {{- end }}
+              valueFrom:
+                configMapKeyRef:
+                  name: ai-model-config
+                  key: model-config.json
           livenessProbe:
             exec:
               command:

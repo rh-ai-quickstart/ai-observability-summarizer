@@ -104,3 +104,12 @@ export interface ConnectionTestResult {
     supportedFeatures?: string[];
   };
 }
+
+export interface ProviderModel {
+  id: string;              // Model ID from provider
+  name: string;            // Display name
+  description?: string;    // Model description
+  context_length?: number; // Token limit
+  created?: number;        // Release date (timestamp)
+  owned_by?: string;       // Owner/organization
+}

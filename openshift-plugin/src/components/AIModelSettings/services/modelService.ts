@@ -1,7 +1,7 @@
-import { Model, Provider, AIModelState, ModelFormData } from '../types/models';
+import { Model, Provider, AIModelState, ModelFormData, ProviderModel } from '../types/models';
 import { formatModelName, parseModelName, detectProvider } from './providerTemplates';
 import { secretManager } from './secretManager';
-import { listSummarizationModels } from '../../../services/mcpClient';
+import { listSummarizationModels, callMcpTool } from '../../../services/mcpClient';
 
 class ModelService {
   /**
@@ -244,6 +244,132 @@ class ModelService {
     } catch (error) {
       console.error('Error checking model readiness:', error);
       return { ready: false, reason: 'Error checking model status' };
+    }
+  }
+
+  /**
+   * Get configured models from ConfigMap
+   */
+  async getConfiguredModels(): Promise<string[]> {
+    try {
+      const response = await callMcpTool<any>('get_current_model_config', {});
+
+      console.log('Get configured models response:', response);
+
+      // Handle different response formats
+      let config: { [key: string]: any };
+
+      if (typeof response === 'string') {
+        try {
+          config = JSON.parse(response);
+        } catch (parseError) {
+          console.error('Failed to parse config response:', response);
+          return [];
+        }
+      } else if (response && typeof response === 'object') {
+        config = response;
+      } else {
+        console.error('Unexpected config response type:', typeof response, response);
+        return [];
+      }
+
+      return Object.keys(config);  // ["openai/gpt-4o-mini", "anthropic/claude-opus-4", ...]
+    } catch (error) {
+      console.error('Failed to fetch configured models:', error);
+      return [];
+    }
+  }
+
+  /**
+   * List available models from a provider
+   */
+  async listProviderModels(provider: Provider, apiKey?: string): Promise<ProviderModel[]> {
+    try {
+      const response = await callMcpTool<any>(
+        'list_provider_models',
+        { provider, api_key: apiKey }
+      );
+
+      console.log('Raw MCP response:', response);
+
+      // Handle different response formats
+      let data: any;
+
+      if (typeof response === 'string') {
+        // If it's a string, try to parse it
+        try {
+          data = JSON.parse(response);
+        } catch (parseError) {
+          console.error('Failed to parse response string:', response);
+          throw new Error(`Invalid response format: ${response.substring(0, 100)}`);
+        }
+      } else if (response && typeof response === 'object') {
+        // If it's already an object, use it directly
+        data = response;
+      } else {
+        console.error('Unexpected response type:', typeof response, response);
+        throw new Error('Unexpected response format from server');
+      }
+
+      // Check for error response
+      if (data.error) {
+        throw new Error(data.message || 'Unknown error from server');
+      }
+
+      // Validate data structure
+      if (!data.models || !Array.isArray(data.models)) {
+        console.error('Invalid data structure:', data);
+        throw new Error('Server returned invalid data structure');
+      }
+
+      return data.models;
+    } catch (error) {
+      console.error('Failed to list provider models:', error);
+      throw new Error(`Failed to fetch models from ${provider}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Add a new model to ConfigMap
+   */
+  async addModelToConfig(formData: ModelFormData): Promise<{ success: boolean; model_key: string; message: string }> {
+    try {
+      // Call MCP tool to add model to ConfigMap
+      const response = await callMcpTool<any>(
+        'add_model_to_config',
+        {
+          provider: formData.provider,
+          model_id: formData.modelId,
+          model_name: formData.modelId, // Use modelId as name for now
+          description: formData.description,
+        }
+      );
+
+      console.log('Add model response:', response);
+
+      // Handle different response formats
+      let data: any;
+      if (typeof response === 'string') {
+        try {
+          data = JSON.parse(response);
+        } catch (parseError) {
+          console.error('Failed to parse add model response:', response);
+          throw new Error('Invalid response from server');
+        }
+      } else if (response && typeof response === 'object') {
+        data = response;
+      } else {
+        throw new Error('Unexpected response format from server');
+      }
+
+      return {
+        success: data.success,
+        model_key: data.model_key,
+        message: data.message || `Model ${data.model_key} added successfully`
+      };
+    } catch (error) {
+      console.error('Failed to add model to config:', error);
+      throw new Error(`Failed to add model: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
