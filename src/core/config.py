@@ -18,7 +18,21 @@ logger = logging.getLogger(__name__)
 
 
 def load_model_config() -> Dict[str, Any]:
-    """Load unified model configuration from environment."""
+    """
+    DEPRECATED: Load unified model configuration from environment.
+
+    This function is deprecated. Use get_model_config() from
+    core.model_config_manager instead, which reads from ConfigMap
+    with automatic refresh.
+
+    This function is kept for backward compatibility only.
+    """
+    import warnings
+    warnings.warn(
+        "load_model_config() is deprecated, use get_model_config() from model_config_manager",
+        DeprecationWarning,
+        stacklevel=2
+    )
     try:
         model_config_str = os.getenv("MODEL_CONFIG", "{}")
         return json.loads(model_config_str)
@@ -129,10 +143,23 @@ DEFAULT_QUERY_LIMIT = 20  # Default limit for regular queries
 REQUEST_TIMEOUT_SECONDS = 30.0  # HTTP request timeout
 
 # Load complex configurations
+# NOTE: MODEL_CONFIG is deprecated - use get_model_config() from model_config_manager
+# This is kept for backward compatibility only and reads from env var
 MODEL_CONFIG = load_model_config()
 THANOS_TOKEN = load_thanos_token()
 VERIFY_SSL = get_ca_verify_setting()
 RAG_AVAILABLE = is_rag_available()
+
+# Import new dynamic config manager functions
+# These should be used instead of MODEL_CONFIG for all new code
+try:
+    from core.model_config_manager import get_model_config, get_default_models, reload_model_config
+except ImportError:
+    # Fallback if model_config_manager is not available yet
+    logger.warning("model_config_manager not available, using legacy MODEL_CONFIG")
+    get_model_config = load_model_config
+    get_default_models = load_model_config
+    reload_model_config = lambda: None
 
 # Log configuration for debugging
 import logging

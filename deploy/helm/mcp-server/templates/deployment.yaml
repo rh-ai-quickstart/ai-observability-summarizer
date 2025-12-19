@@ -80,10 +80,8 @@ spec:
               value: "http://llamastack.{{ .Release.Namespace }}.svc.cluster.local:8321/v1/openai/v1"
             {{- end }}
             - name: MODEL_CONFIG
-              valueFrom:
-                configMapKeyRef:
-                  name: ai-model-config
-                  key: model-config.json
+              value: |
+{{ .Files.Get "model-config.json" | indent 16 }}
           livenessProbe:
             exec:
               command:

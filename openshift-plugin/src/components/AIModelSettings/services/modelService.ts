@@ -248,32 +248,13 @@ class ModelService {
   }
 
   /**
-   * Get configured models from ConfigMap
+   * Get configured models from ConfigMap (for duplicate checking)
+   * Uses the same tool as loadAvailableModels - single source of truth
    */
   async getConfiguredModels(): Promise<string[]> {
     try {
-      const response = await callMcpTool<any>('get_current_model_config', {});
-
-      console.log('Get configured models response:', response);
-
-      // Handle different response formats
-      let config: { [key: string]: any };
-
-      if (typeof response === 'string') {
-        try {
-          config = JSON.parse(response);
-        } catch (parseError) {
-          console.error('Failed to parse config response:', response);
-          return [];
-        }
-      } else if (response && typeof response === 'object') {
-        config = response;
-      } else {
-        console.error('Unexpected config response type:', typeof response, response);
-        return [];
-      }
-
-      return Object.keys(config);  // ["openai/gpt-4o-mini", "anthropic/claude-opus-4", ...]
+      // Use list_summarization_models for consistency
+      return await listSummarizationModels();
     } catch (error) {
       console.error('Failed to fetch configured models:', error);
       return [];

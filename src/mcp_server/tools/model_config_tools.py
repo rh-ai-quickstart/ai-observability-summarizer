@@ -370,6 +370,11 @@ def add_model_to_config(
             "cost": {
                 "prompt_rate": cost_prompt_rate if cost_prompt_rate is not None else 0.0,
                 "output_rate": cost_output_rate if cost_output_rate is not None else 0.0,
+            },
+            "_metadata": {
+                "source": "user",
+                "addedBy": "console-plugin",
+                "addedAt": datetime.utcnow().isoformat() + "Z"
             }
         }
 
@@ -378,34 +383,19 @@ def add_model_to_config(
         if context_length:
             model_config["context_length"] = context_length
 
-        # Get ConfigMap
+        # Get current config from runtime config manager (with force refresh)
+        from core.model_config_manager import get_model_config
+        current_config = get_model_config(force_refresh=True)
+
+        # Add/update model in config
+        current_config[model_key] = model_config
+
+        # Update ConfigMap
         configmap_name = "ai-model-config"
         url = f"{K8S_API_URL}/api/v1/namespaces/{ns}/configmaps/{configmap_name}"
         headers = _get_k8s_headers()
         verify = K8S_SA_CA_PATH if os.path.exists(K8S_SA_CA_PATH) else True
 
-        # Try to get existing ConfigMap
-        r = requests.get(url, headers=headers, timeout=5, verify=verify)
-
-        if r.status_code == 404:
-            # ConfigMap doesn't exist, create it
-            logger.info(f"Creating new ConfigMap: {configmap_name}")
-            current_config = {}
-        elif r.status_code == 200:
-            # ConfigMap exists, read current config
-            configmap_data = r.json()
-            config_json = configmap_data.get("data", {}).get("model-config.json", "{}")
-            current_config = json.loads(config_json)
-        else:
-            raise MCPException(
-                message=f"Failed to get ConfigMap {configmap_name}: {r.status_code} {r.text}",
-                error_code=MCPErrorCode.KUBERNETES_API_ERROR,
-            )
-
-        # Add/update model in config
-        current_config[model_key] = model_config
-
-        # Prepare ConfigMap payload
         configmap_payload = {
             "apiVersion": "v1",
             "kind": "ConfigMap",
@@ -414,7 +404,8 @@ def add_model_to_config(
                 "namespace": ns,
                 "labels": {
                     "app.kubernetes.io/name": "mcp-server",
-                    "app.kubernetes.io/component": "model-config"
+                    "app.kubernetes.io/component": "model-config",
+                    "app.kubernetes.io/managed-by": "mcp-server"
                 },
                 "annotations": {
                     "config.kubernetes.io/last-modified": datetime.utcnow().isoformat() + "Z"
@@ -425,32 +416,27 @@ def add_model_to_config(
             }
         }
 
-        # Create or update ConfigMap
-        if r.status_code == 404:
-            # Create new ConfigMap
-            create_url = f"{K8S_API_URL}/api/v1/namespaces/{ns}/configmaps"
-            r = requests.post(create_url, headers=headers, json=configmap_payload, timeout=10, verify=verify)
-            status = "created"
-        else:
-            # Update existing ConfigMap
-            r = requests.put(url, headers=headers, json=configmap_payload, timeout=10, verify=verify)
-            status = "updated"
+        r = requests.put(url, headers=headers, json=configmap_payload, timeout=10, verify=verify)
 
         if r.status_code not in (200, 201):
             raise MCPException(
-                message=f"Failed to save ConfigMap {configmap_name}: {r.status_code} {r.text}",
+                message=f"Failed to update ConfigMap {configmap_name}: {r.status_code} {r.text}",
                 error_code=MCPErrorCode.KUBERNETES_API_ERROR,
             )
+
+        # Force refresh runtime config to pick up new model immediately
+        from core.model_config_manager import reload_model_config
+        reload_model_config()
 
         result = {
             "success": True,
             "model_key": model_key,
             "configmap_name": configmap_name,
             "namespace": ns,
-            "status": status,
-            "message": f"Model {model_key} {status} successfully. Note: Backend pod restart may be required for changes to take effect."
+            "status": "updated",
+            "message": f"Model {model_key} added successfully and configuration reloaded."
         }
-        logger.info(f"Model {model_key} {status} in ConfigMap")
+        logger.info(f"Model {model_key} added to ConfigMap and runtime config refreshed")
         return make_mcp_text_response(json.dumps(result))
 
     except MCPException as e:
@@ -464,53 +450,6 @@ def add_model_to_config(
         return err.to_mcp_response()
 
 
-def get_current_model_config() -> List[Dict[str, Any]]:
-    """
-    Retrieve current MODEL_CONFIG from ConfigMap.
-
-    Returns:
-        MCP response with current model configuration as JSON object
-    """
-    try:
-        logger.info("Retrieving current model configuration")
-
-        ns = os.getenv("NAMESPACE", "")
-        if not ns:
-            raise MCPException(
-                message="Server namespace not detected; cannot read ConfigMap",
-                error_code=MCPErrorCode.INTERNAL_ERROR,
-            )
-
-        configmap_name = "ai-model-config"
-        url = f"{K8S_API_URL}/api/v1/namespaces/{ns}/configmaps/{configmap_name}"
-        headers = _get_k8s_headers()
-        verify = K8S_SA_CA_PATH if os.path.exists(K8S_SA_CA_PATH) else True
-
-        r = requests.get(url, headers=headers, timeout=5, verify=verify)
-
-        if r.status_code == 404:
-            # ConfigMap doesn't exist yet, return empty config
-            logger.info(f"ConfigMap {configmap_name} not found, returning empty config")
-            return make_mcp_text_response("{}")
-
-        if r.status_code != 200:
-            raise MCPException(
-                message=f"Failed to get ConfigMap {configmap_name}: {r.status_code} {r.text}",
-                error_code=MCPErrorCode.KUBERNETES_API_ERROR,
-            )
-
-        configmap_data = r.json()
-        config_json = configmap_data.get("data", {}).get("model-config.json", "{}")
-
-        logger.info(f"Retrieved model configuration with {len(json.loads(config_json))} models")
-        return make_mcp_text_response(config_json)
-
-    except MCPException as e:
-        return e.to_mcp_response()
-    except Exception as e:
-        logger.error(f"Error retrieving model config: {e}")
-        err = MCPException(
-            message=f"Failed to retrieve model config: {str(e)}",
-            error_code=MCPErrorCode.INTERNAL_ERROR,
-        )
-        return err.to_mcp_response()
+# get_current_model_config has been removed - use list_summarization_models instead
+# The console plugin now uses list_summarization_models for both displaying models
+# and checking for duplicates, providing a single source of truth.

@@ -12,7 +12,8 @@ from .config import CHAT_SCOPE_FLEET_WIDE
 from datetime import datetime, timedelta, timezone, time
 from dateparser.search import search_dates
 
-from .config import MODEL_CONFIG, LLM_API_TOKEN, LLAMA_STACK_URL, VERIFY_SSL
+from .config import LLM_API_TOKEN, LLAMA_STACK_URL, VERIFY_SSL
+from .model_config_manager import get_model_config
 
 import logging
 from common.pylogger import get_python_logger
@@ -127,8 +128,9 @@ def summarize_with_llm(
         LLM-generated summary text (cleaned if validation enabled)
     """
     headers = {"Content-Type": "application/json"}
-    # Get model configuration
-    model_info = MODEL_CONFIG.get(summarize_model_id, {})
+    # Get model configuration from runtime config
+    runtime_config = get_model_config()
+    model_info = runtime_config.get(summarize_model_id, {})
     is_external = model_info.get("external", False)
 
     # For local vLLM models, use a smaller max_tokens limit to prevent repetition loops

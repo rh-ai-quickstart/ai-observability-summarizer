@@ -652,21 +652,23 @@ def calculate_metrics(
 
 
 def list_summarization_models() -> List[Dict[str, Any]]:
-    """List available summarization models, including internal and external models."""
+    """
+    List all configured models from runtime configuration.
+
+    Returns all models without filtering. UI handles availability filtering.
+    """
     try:
-        models = get_summarization_models()
+        models = get_summarization_models()  # Now reads from ConfigMap
+
         if not models:
-            # Import here to avoid circular imports
-            from core.config import RAG_AVAILABLE
-            if not RAG_AVAILABLE:
-                return make_mcp_text_response("No summarization models available. RAG infrastructure is not installed or accessible. Please configure external models (Anthropic, OpenAI, Google) with API keys.")
-            return make_mcp_text_response("No summarization models configured.")
+            return make_mcp_text_response("No models configured.")
+
         content_lines = [f"• {name}" for name in models]
-        content = f"Available Summarization Models ({len(models)} total):\n\n" + "\n".join(content_lines)
+        content = f"Available Models ({len(models)} total):\n\n" + "\n".join(content_lines)
         return make_mcp_text_response(content)
     except Exception as e:
         error = MCPException(
-            message=f"Failed to list summarization models: {str(e)}",
+            message=f"Failed to list models: {str(e)}",
             error_code=MCPErrorCode.CONFIGURATION_ERROR,
             recovery_suggestion="Ensure model configuration is valid."
         )
