@@ -88,6 +88,16 @@ def _provider_api_url(provider: str) -> str:
     return ""
 
 
+def _is_gpt5_model(model_id: str) -> bool:
+    """Check if a model is GPT-5 or later (uses /v1/responses endpoint)."""
+    if not model_id:
+        return False
+    model_lower = model_id.lower()
+    # GPT-5 series models use the new /v1/responses endpoint
+    # This includes: gpt-5, gpt-5.1, gpt-5.2, gpt-5-mini, gpt-5-nano, etc.
+    return model_lower.startswith("gpt-5")
+
+
 def list_provider_models(
     provider: str,
     api_key: Optional[str] = None
@@ -152,7 +162,7 @@ def list_provider_models(
 
             data = r.json()
             # Filter to chat models only - only include known valid GPT chat models
-            valid_prefixes = ["gpt-4o", "gpt-4-turbo", "gpt-4", "gpt-3.5-turbo"]
+            valid_prefixes = ["gpt-5.2", "gpt-5.1", "gpt-5", "gpt-4o", "gpt-4-turbo", "gpt-4", "gpt-3.5-turbo"]
             for model in data.get("data", []):
                 model_id = model.get("id", "")
                 # Only include models that start with known valid chat model prefixes
@@ -356,9 +366,14 @@ def add_model_to_config(
             # Google uses specific endpoint format
             api_url = f"{api_url}/models/{model_id}:generateContent"
         elif provider_lower in ["openai", "anthropic", "meta"]:
-            # Standard chat completions endpoint
+            # OpenAI endpoint selection based on model version
             if provider_lower == "openai":
-                api_url = f"{api_url}/chat/completions"
+                # GPT-5 and later use the new /v1/responses endpoint
+                # GPT-4 and earlier use /v1/chat/completions
+                if _is_gpt5_model(model_id):
+                    api_url = f"{api_url}/responses"
+                else:
+                    api_url = f"{api_url}/chat/completions"
 
         model_config = {
             "external": True,

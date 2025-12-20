@@ -102,11 +102,54 @@ def _classify_requests_error(e: Exception) -> str:
         text = f"{url} {str(e)}".lower()
         if "/api/v1/query" in text or "/api/v1/query_range" in text:
             return "prom"
-        if "/v1/openai" in text or "/completions" in text or "llamastack" in text or "openai" in text:
+        if "/v1/openai" in text or "/completions" in text or "llamastack" in text or "openai" in text or "/responses" in text:
             return "llm"
         return "unknown"
     except Exception:
         return "unknown"
+
+
+def _extract_llm_error_message(e: requests.exceptions.HTTPError) -> str:
+    """Extract detailed error message from LLM API HTTP error response."""
+    try:
+        resp = getattr(e, "response", None)
+        if resp is None:
+            return "Cannot reach LLM service."
+
+        # Try to parse JSON error response (OpenAI, Anthropic, etc.)
+        try:
+            error_data = resp.json()
+            # OpenAI format: {"error": {"message": "...", "type": "...", "code": "..."}}
+            if "error" in error_data and isinstance(error_data["error"], dict):
+                error_obj = error_data["error"]
+                message = error_obj.get("message", "")
+                error_type = error_obj.get("type", "")
+                error_code = error_obj.get("code", "")
+
+                if message:
+                    # Include error type and code if available for better context
+                    if error_type or error_code:
+                        details = []
+                        if error_type:
+                            details.append(f"type: {error_type}")
+                        if error_code:
+                            details.append(f"code: {error_code}")
+                        return f"{message} ({', '.join(details)})"
+                    return message
+
+            # Fallback: try to find any "message" field
+            if "message" in error_data:
+                return error_data["message"]
+        except Exception:
+            pass
+
+        # Fallback to response text if JSON parsing fails
+        if resp.text:
+            return f"LLM service error (HTTP {resp.status_code}): {resp.text[:200]}"
+
+        return f"LLM service returned HTTP {resp.status_code}"
+    except Exception:
+        return "Cannot reach LLM service."
 
 def analyze_openshift(
     metric_category: str,
@@ -239,7 +282,8 @@ def analyze_openshift(
     except requests.exceptions.HTTPError as e:
         cls = _classify_requests_error(e)
         if cls == "llm":
-            return LLMServiceError(message="Cannot reach LLM service.").to_mcp_response()
+            error_msg = _extract_llm_error_message(e)
+            return LLMServiceError(message=error_msg).to_mcp_response()
         # Default: treat as Prometheus HTTP error
         prom_err = parse_prometheus_error(getattr(e, 'response', None))
         return prom_err.to_mcp_response()
@@ -516,7 +560,8 @@ def chat_openshift(
     except requests.exceptions.HTTPError as e:
         cls = _classify_requests_error(e)
         if cls == "llm":
-            return LLMServiceError(message="Cannot reach LLM service.").to_mcp_response()
+            error_msg = _extract_llm_error_message(e)
+            return LLMServiceError(message=error_msg).to_mcp_response()
         prom_err = parse_prometheus_error(getattr(e, 'response', None))
         return prom_err.to_mcp_response()
     except requests.exceptions.ConnectionError as e:

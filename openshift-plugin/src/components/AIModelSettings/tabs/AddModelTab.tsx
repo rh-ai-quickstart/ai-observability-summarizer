@@ -239,11 +239,6 @@ export const AddModelTab: React.FC<AddModelTabProps> = ({
                   <Text component={TextVariants.small} style={{ color: 'var(--pf-v5-global--Color--200)', marginTop: '4px' }}>
                     <strong>Preview:</strong> {getModelPreview()}
                   </Text>
-                  {availableModels.length > 0 && (
-                    <Text component={TextVariants.small} style={{ color: 'var(--pf-v5-global--Color--200)', marginTop: '4px' }}>
-                      {availableModels.length} model(s) available for {template.label}
-                    </Text>
-                  )}
                 </>
               )}
             </FormGroup>

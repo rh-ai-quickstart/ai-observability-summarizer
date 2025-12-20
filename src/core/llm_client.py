@@ -40,6 +40,13 @@ def _make_api_request(
 ) -> dict:
     """Make API request with consistent error handling"""
     response = requests.post(url, headers=headers, json=payload, verify=verify_ssl)
+    if response.status_code != 200:
+        # Log the error response for debugging
+        try:
+            error_body = response.json()
+            logger.error(f"API request failed with status {response.status_code}: {error_body}")
+        except Exception:
+            logger.error(f"API request failed with status {response.status_code}: {response.text}")
     response.raise_for_status()
     return response.json()
 
@@ -83,11 +90,40 @@ def _validate_and_extract_response(
 
             return "".join(text_parts).strip()
         else:
-            # OpenAI and other providers using "choices" format
-            if "choices" not in response_json or not response_json["choices"]:
-                raise ValueError(f"Invalid {provider} response format")
+            # OpenAI: Check for both Responses API (GPT-5+) and Chat Completions (GPT-4 and earlier) formats
+            # Responses API format (GPT-5 and later): uses "output" array
+            if "output" in response_json:
+                # New Responses API format
+                output = response_json.get("output", [])
+                if not output:
+                    raise ValueError(f"Invalid {provider} response format: empty output")
 
-            return response_json["choices"][0]["message"]["content"].strip()
+                # Extract text from output items
+                # output_text shortcut may not always be available, so iterate through items
+                text_parts = []
+                for item in output:
+                    # Each item can have a content array
+                    if "content" in item:
+                        for content_item in item["content"]:
+                            if "text" in content_item:
+                                text_parts.append(content_item["text"])
+
+                if not text_parts:
+                    # Try the output_text shortcut if available
+                    if "output_text" in response_json:
+                        return response_json["output_text"].strip()
+                    raise ValueError(f"Invalid {provider} response format: no text content in output")
+
+                return "".join(text_parts).strip()
+
+            # Chat Completions API format (GPT-4 and earlier): uses "choices" array
+            elif "choices" in response_json:
+                if not response_json["choices"]:
+                    raise ValueError(f"Invalid {provider} response format: empty choices")
+                return response_json["choices"][0]["message"]["content"].strip()
+
+            else:
+                raise ValueError(f"Invalid {provider} response format: missing both 'output' and 'choices'")
     else:
         # Local model response format
         if "choices" not in response_json or not response_json["choices"]:
@@ -203,12 +239,28 @@ def summarize_with_llm(
             # OpenAI and compatible APIs
             headers["Authorization"] = f"Bearer {api_key}"
 
-            payload = {
-                "model": model_name,
-                "messages": llm_messages,
-                "temperature": DETERMINISTIC_TEMPERATURE,  # Deterministic output
-                "max_tokens": max_tokens,
-            }
+            # Determine payload format based on endpoint
+            # Responses API (/v1/responses) uses "input" field
+            # Chat Completions API (/v1/chat/completions) uses "messages" field
+            is_responses_api = "/responses" in api_url
+
+            if is_responses_api:
+                # New Responses API format (GPT-5 and later)
+                # Responses API uses "input" instead of "messages" and "max_output_tokens" instead of "max_tokens"
+                payload = {
+                    "model": model_name,
+                    "input": llm_messages,  # Responses API uses "input" instead of "messages"
+                    "temperature": DETERMINISTIC_TEMPERATURE,  # Deterministic output
+                    "max_output_tokens": max_tokens,  # Responses API uses "max_output_tokens"
+                }
+            else:
+                # Chat Completions API format (GPT-4 and earlier)
+                payload = {
+                    "model": model_name,
+                    "messages": llm_messages,
+                    "temperature": DETERMINISTIC_TEMPERATURE,  # Deterministic output
+                    "max_tokens": max_tokens,
+                }
 
         if provider == "anthropic":
             # Anthropic response already handled above
