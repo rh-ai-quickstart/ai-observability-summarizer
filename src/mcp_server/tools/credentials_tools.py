@@ -33,7 +33,6 @@ def validate_api_key(provider: str, api_key: str, endpoint: Optional[str] = None
     Returns structured MCP content with { success, details }.
     """
     try:
-        logger.debug(f"ZZZZ Validating API key for provider: {provider} with API key: {api_key} and endpoint: {endpoint}")
         if not provider or not api_key:
             raise MCPException(
                 message="provider and api_key are required",
@@ -82,7 +81,6 @@ def validate_api_key(provider: str, api_key: str, endpoint: Optional[str] = None
             )
 
         result = {"success": bool(ok), "details": details}
-        logger.debug(f"ZZZZ validate_api_key Result: {result}")
         return make_mcp_text_response(json.dumps(result))
     except MCPException as e:
         return e.to_mcp_response()
@@ -169,24 +167,20 @@ def save_api_key(
             status = "created"
 
         if r.status_code not in (200, 201):
-            logger.debug(f"ZZZZ save_api_key Failed to save Secret {name}: {r.status_code} {r.text}")
             raise MCPException(
                 message=f"Failed to save Secret {name}: {r.status_code} {r.text}",
                 error_code=MCPErrorCode.KUBERNETES_API_ERROR,
             )
 
         result = {"secret_name": name, "namespace": ns, "status": status}
-        logger.debug(f"ZZZZ save_api_key Result: {result}")
         return make_mcp_text_response(json.dumps(result))
     except MCPException as e:
-        logger.debug(f"ZZZZ save_api_key Exception: {e}")
         return e.to_mcp_response()
     except Exception as e:
         err = MCPException(
             message=f"Failed to save API key: {str(e)}",
             error_code=MCPErrorCode.INTERNAL_ERROR,
         )
-        logger.debug(f"ZZZZ save_api_key Exception: {err}")
         return err.to_mcp_response()
 
 

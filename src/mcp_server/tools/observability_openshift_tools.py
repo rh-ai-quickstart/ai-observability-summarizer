@@ -80,7 +80,7 @@ def _fetch_api_key_from_secret(provider: Optional[str]) -> Optional[str]:
         url = f"{K8S_API_URL}/api/v1/namespaces/{ns}/secrets/{secret_name}"
         resp = requests.get(url, headers=headers, timeout=5, verify=verify)
         if resp.status_code != 200:
-            logger.debug("Secret fetch failed: %s %s", resp.status_code, resp.text[:200])
+            logger.debug("Secret fetch failed: %s", resp.status_code)
             return None
         data = resp.json().get("data", {})
         api_key_b64 = data.get("api-key")

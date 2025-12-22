@@ -25,7 +25,7 @@ env:
   MCP_HOST: "0.0.0.0"
   MCP_PORT: 8085
   MCP_TRANSPORT_PROTOCOL: "http"
-  PYTHON_LOG_LEVEL: "DEBUG"
+  PYTHON_LOG_LEVEL: "INFO"
   PROMETHEUS_URL: "https://thanos-querier.openshift-monitoring.svc.cluster.local:9091"
   TEMPO_URL: "https://tempo-tempostack-gateway.observability-hub.svc.cluster.local:8080"
   TEMPO_TENANT_ID: "dev"

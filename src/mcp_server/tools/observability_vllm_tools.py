@@ -736,7 +736,7 @@ def chat_vllm(
         ...     summarize_model_id="meta-llama/Llama-3.2-3B-Instruct"
         ... )
     """
-    logger.debug("chat_vllm tool with model_name=%s, prompt_summary=%s, question=%s, summarize_model_id=%s, api_key=%s", model_name, prompt_summary, question, summarize_model_id, api_key)
+    logger.debug("chat_vllm tool with model_name=%s, prompt_summary=%s, question=%s, summarize_model_id=%s, api_key=<redacted>", model_name, prompt_summary, question, summarize_model_id)
     try:
         # Validate required parameters
         validate_required_params(
