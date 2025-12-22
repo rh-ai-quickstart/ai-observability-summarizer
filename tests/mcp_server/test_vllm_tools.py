@@ -23,8 +23,9 @@ def test_list_models_empty(_):
     assert any("No models are currently available" in t for t in texts)
 
 
+@patch("src.mcp_server.tools.observability_vllm_tools.check_rag_availability", return_value=None)
 @patch("src.mcp_server.tools.observability_vllm_tools.get_vllm_namespaces_helper", return_value=["ns1", "ns2"])  # type: ignore[arg-type]
-def test_list_vllm_namespaces_success(_):
+def test_list_vllm_namespaces_success(_, __):
     out = tools.list_vllm_namespaces()
     texts = _texts(out)
     assert any("Monitored vLLM Namespaces" in t for t in texts)
@@ -32,8 +33,9 @@ def test_list_vllm_namespaces_success(_):
     assert any("ns2" in t for t in texts)
 
 
+@patch("src.mcp_server.tools.observability_vllm_tools.check_rag_availability", return_value=None)
 @patch("src.mcp_server.tools.observability_vllm_tools.get_vllm_namespaces_helper", return_value=[])  # type: ignore[arg-type]
-def test_list_vllm_namespaces_empty(_):
+def test_list_vllm_namespaces_empty(_, __):
     out = tools.list_vllm_namespaces()
     texts = _texts(out)
     assert any("No monitored vLLM namespaces found" in t for t in texts)
@@ -48,10 +50,15 @@ def test_get_model_config_success(_):
     assert text.find("m1") < text.find("m2")
 
 
-@patch("os.getenv", return_value="{}")
-def test_get_model_config_empty(_):
+@patch("core.config.RAG_AVAILABLE", True)
+@patch("src.mcp_server.tools.observability_vllm_tools.os.getenv")
+def test_get_model_config_empty(mock_getenv):
+    # Return "{}" for MODEL_CONFIG, None for all other env vars
+    mock_getenv.side_effect = lambda key, default=None: "{}" if key == "MODEL_CONFIG" else default
+
     out = tools.get_model_config()
     texts = _texts(out)
+    # When RAG_AVAILABLE is True and config is empty, should show this message
     assert any("No LLM models configured" in t for t in texts)
 @patch("src.mcp_server.tools.observability_vllm_tools.get_vllm_metrics", return_value={"latency": "q1", "tps": "q2"})
 @patch("src.mcp_server.tools.observability_vllm_tools.execute_range_queries_parallel")
@@ -265,20 +272,34 @@ def test_get_vllm_metrics_tool_error(mock_get_vllm_metrics):
 
 # --- New MCP tools tests ---
 
-@patch("src.mcp_server.tools.observability_vllm_tools.get_summarization_models", return_value=["m1", "m2"])  # type: ignore[arg-type]
-def test_list_summarization_models_success(_):
+@patch("core.model_config_manager.get_model_config")
+def test_list_summarization_models_success(mock_get_config):
+    mock_get_config.return_value = {
+        "m1": {"external": False, "requiresApiKey": False, "provider": "internal", "modelName": "m1"},
+        "m2": {"external": True, "requiresApiKey": True, "provider": "openai", "modelName": "m2"}
+    }
     out = tools.list_summarization_models()
     text = "\n".join(_texts(out))
-    assert "Available Summarization Models (2 total):" in text
-    assert "• m1" in text
-    assert "• m2" in text
+
+    import json
+    data = json.loads(text)
+
+    assert "models" in data
+    assert len(data["models"]) == 2
+    assert any(m["name"] == "m1" for m in data["models"])
+    assert any(m["name"] == "m2" for m in data["models"])
 
 
-@patch("src.mcp_server.tools.observability_vllm_tools.get_summarization_models", return_value=[])  # type: ignore[arg-type]
+@patch("core.model_config_manager.get_model_config", return_value={})
 def test_list_summarization_models_empty(_):
     out = tools.list_summarization_models()
     text = "\n".join(_texts(out))
-    assert "No summarization models configured" in text
+
+    import json
+    data = json.loads(text)
+
+    assert "models" in data
+    assert len(data["models"]) == 0
 
 
 @patch("src.mcp_server.tools.observability_vllm_tools.get_cluster_gpu_info")

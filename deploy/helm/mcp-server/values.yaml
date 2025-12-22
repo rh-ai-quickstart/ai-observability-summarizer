@@ -19,7 +19,7 @@ route:
   enabled: true # Allows local testing with MCP server inspector
   host: ""
   tls:
-    termination: edge
+    termination: reencrypt
 
 env:
   MCP_HOST: "0.0.0.0"
@@ -41,7 +41,8 @@ env:
 LLM_PREDICTOR: "llama-3-1-8b-instruct-predictor"
 
 tls:
-  enabled: true  # Enable TLS for console plugin proxy
+  # If tls is enabled, the Route termination must be set to "reencrypt" or "passthrough".
+  enabled: true
   secretName: mcp-server-tls
   serviceCertAnnotation: service.beta.openshift.io/serving-cert-secret-name
 
@@ -72,5 +73,4 @@ resources:
   limits:
     cpu: "1"
     memory: "1Gi"
-
 

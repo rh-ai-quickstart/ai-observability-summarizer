@@ -64,7 +64,7 @@ let requestId = 0;
 /**
  * Call an MCP tool directly via HTTP (stateless, JSON response)
  */
-async function callMcpTool<T = unknown>(
+export async function callMcpTool<T = unknown>(
   toolName: string,
   args: Record<string, unknown> = {}
 ): Promise<T> {
@@ -73,6 +73,7 @@ async function callMcpTool<T = unknown>(
     headers: {
       'Content-Type': 'application/json',
       'Accept': 'application/json, text/event-stream',
+      'mcp-session-id': 'browser-session',
     },
     body: JSON.stringify({
       jsonrpc: '2.0',
@@ -144,12 +145,13 @@ async function callMcpTool<T = unknown>(
 /**
  * Call MCP tool and get raw text response
  */
-async function callMcpToolText(toolName: string, args: Record<string, unknown> = {}): Promise<string> {
+export async function callMcpToolText(toolName: string, args: Record<string, unknown> = {}): Promise<string> {
   const response = await fetch(MCP_SERVER_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Accept': 'application/json, text/event-stream',
+      'mcp-session-id': 'browser-session',
     },
     body: JSON.stringify({
       jsonrpc: '2.0',
@@ -199,9 +201,15 @@ async function callMcpToolText(toolName: string, args: Record<string, unknown> =
 
 // Helper to parse bulleted list responses from MCP
 function parseMCPListResponse(text: string): string[] {
-  return text.split('\n')
+  const modelNamePattern = /^([a-z]+\/)?[A-Za-z0-9._-]+$/;
+  return text
+    .split('\n')
     .map(line => line.replace(/•\s*/, '').trim())
-    .filter(line => line.length > 0);
+    // Drop obvious headings/separators
+    .filter(line => line.length > 0 && !line.endsWith(':'))
+    .filter(line => !/available.+models/i.test(line))
+    // Keep only plausible model identifiers (provider/model or single token without spaces)
+    .filter(line => modelNamePattern.test(line));
 }
 
 // ============ MCP API Calls ============
@@ -384,12 +392,25 @@ export async function getAlerts(_namespace?: string): Promise<AlertInfo[]> {
 }
 
 /**
- * List available summarization models
+ * List available summarization models with metadata
  */
-export async function listSummarizationModels(): Promise<string[]> {
+export async function listSummarizationModels(): Promise<any[]> {
   try {
     const text = await callMcpToolText('list_summarization_models');
-    return parseMCPListResponse(text);
+
+    // Try to parse as JSON first (new format with metadata)
+    try {
+      const data = JSON.parse(text);
+      if (data.models && Array.isArray(data.models)) {
+        return data.models;
+      }
+    } catch (e) {
+      // Not JSON, fall back to old text format
+    }
+
+    // Fallback to old text format (list of names)
+    const modelNames = parseMCPListResponse(text);
+    return modelNames.map(name => ({ name }));
   } catch (error) {
     console.error('Failed to list summarization models:', error);
     return [];

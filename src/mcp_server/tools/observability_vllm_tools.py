@@ -652,21 +652,43 @@ def calculate_metrics(
 
 
 def list_summarization_models() -> List[Dict[str, Any]]:
-    """List available summarization models, including internal and external models."""
+    """
+    List all configured models from runtime configuration.
+
+    Returns all models with metadata (name, external, requiresApiKey, provider, etc).
+    UI uses this to categorize models correctly.
+    """
     try:
-        models = get_summarization_models()
-        if not models:
-            # Import here to avoid circular imports
-            from core.config import RAG_AVAILABLE
-            if not RAG_AVAILABLE:
-                return make_mcp_text_response("No summarization models available. RAG infrastructure is not installed or accessible. Please configure external models (Anthropic, OpenAI, Google) with API keys.")
-            return make_mcp_text_response("No summarization models configured.")
-        content_lines = [f"• {name}" for name in models]
-        content = f"Available Summarization Models ({len(models)} total):\n\n" + "\n".join(content_lines)
-        return make_mcp_text_response(content)
+        from core.model_config_manager import get_model_config
+
+        config = get_model_config()  # Get full config with metadata
+
+        if not config:
+            return make_mcp_text_response(json.dumps({"models": []}))
+
+        # Build model list with metadata
+        models_list = []
+        for model_name, model_config in config.items():
+            model_entry = {
+                "name": model_name,
+                "external": model_config.get("external", True),
+                "requiresApiKey": model_config.get("requiresApiKey", True),
+                "provider": model_config.get("provider", "unknown"),
+                "modelName": model_config.get("modelName", model_name),
+            }
+            # Add optional fields if present
+            if "serviceName" in model_config:
+                model_entry["serviceName"] = model_config["serviceName"]
+            if "description" in model_config:
+                model_entry["description"] = model_config["description"]
+
+            models_list.append(model_entry)
+
+        result = {"models": models_list}
+        return make_mcp_text_response(json.dumps(result))
     except Exception as e:
         error = MCPException(
-            message=f"Failed to list summarization models: {str(e)}",
+            message=f"Failed to list models: {str(e)}",
             error_code=MCPErrorCode.CONFIGURATION_ERROR,
             recovery_suggestion="Ensure model configuration is valid."
         )
@@ -734,7 +756,7 @@ def chat_vllm(
         ...     summarize_model_id="meta-llama/Llama-3.2-3B-Instruct"
         ... )
     """
-    logger.debug("chat_vllm tool with model_name=%s, prompt_summary=%s, question=%s, summarize_model_id=%s, api_key=%s", model_name, prompt_summary, question, summarize_model_id, api_key)
+    logger.debug("chat_vllm tool with model_name=%s, prompt_summary=%s, question=%s, summarize_model_id=%s, api_key=<redacted>", model_name, prompt_summary, question, summarize_model_id)
     try:
         # Validate required parameters
         validate_required_params(
