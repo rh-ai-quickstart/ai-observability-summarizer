@@ -247,10 +247,10 @@ def summarize_with_llm(
             if is_responses_api:
                 # New Responses API format (GPT-5 and later)
                 # Responses API uses "input" instead of "messages" and "max_output_tokens" instead of "max_tokens"
+                # Note: GPT-5 models do NOT support temperature parameter - only default value (1) is supported
                 payload = {
                     "model": model_name,
                     "input": llm_messages,  # Responses API uses "input" instead of "messages"
-                    "temperature": DETERMINISTIC_TEMPERATURE,  # Deterministic output
                     "max_output_tokens": max_tokens,  # Responses API uses "max_output_tokens"
                 }
             else:
