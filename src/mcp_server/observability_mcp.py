@@ -124,4 +124,3 @@ class ObservabilityMCPServer:
         # Register model config tools
         self.mcp.tool()(list_provider_models)
         self.mcp.tool()(add_model_to_config)
-        # get_current_model_config removed - use list_summarization_models instead

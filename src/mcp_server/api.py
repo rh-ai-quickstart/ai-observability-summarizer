@@ -1,6 +1,6 @@
 """FastAPI application setup for Observability MCP Server with report endpoints."""
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 
