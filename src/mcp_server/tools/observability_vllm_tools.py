@@ -655,17 +655,37 @@ def list_summarization_models() -> List[Dict[str, Any]]:
     """
     List all configured models from runtime configuration.
 
-    Returns all models without filtering. UI handles availability filtering.
+    Returns all models with metadata (name, external, requiresApiKey, provider, etc).
+    UI uses this to categorize models correctly.
     """
     try:
-        models = get_summarization_models()  # Now reads from ConfigMap
+        from core.model_config_manager import get_model_config
 
-        if not models:
-            return make_mcp_text_response("No models configured.")
+        config = get_model_config()  # Get full config with metadata
 
-        content_lines = [f"• {name}" for name in models]
-        content = f"Available Models ({len(models)} total):\n\n" + "\n".join(content_lines)
-        return make_mcp_text_response(content)
+        if not config:
+            return make_mcp_text_response(json.dumps({"models": []}))
+
+        # Build model list with metadata
+        models_list = []
+        for model_name, model_config in config.items():
+            model_entry = {
+                "name": model_name,
+                "external": model_config.get("external", True),
+                "requiresApiKey": model_config.get("requiresApiKey", True),
+                "provider": model_config.get("provider", "unknown"),
+                "modelName": model_config.get("modelName", model_name),
+            }
+            # Add optional fields if present
+            if "serviceName" in model_config:
+                model_entry["serviceName"] = model_config["serviceName"]
+            if "description" in model_config:
+                model_entry["description"] = model_config["description"]
+
+            models_list.append(model_entry)
+
+        result = {"models": models_list}
+        return make_mcp_text_response(json.dumps(result))
     except Exception as e:
         error = MCPException(
             message=f"Failed to list models: {str(e)}",

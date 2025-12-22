@@ -1,5 +1,5 @@
 import { Model, Provider, AIModelState, ModelFormData, ProviderModel } from '../types/models';
-import { formatModelName, parseModelName, detectProvider } from './providerTemplates';
+import { formatModelName, parseModelName } from './providerTemplates';
 import { secretManager } from './secretManager';
 import { listSummarizationModels, callMcpTool } from '../../../services/mcpClient';
 
@@ -9,19 +9,19 @@ class ModelService {
    */
   async loadAvailableModels(): Promise<{ internal: Model[]; external: Model[]; custom: Model[] }> {
     try {
-      // Get models from MCP server
-      const mcpModels = await listSummarizationModels();
-      
+      // Get models with metadata from MCP server
+      const mcpModelsData = await listSummarizationModels();
+
       // Transform and categorize models
-      const transformedModels = mcpModels.map(modelName => this.transformMcpModel(modelName));
-      
+      const transformedModels = mcpModelsData.map(modelData => this.transformMcpModelWithMetadata(modelData));
+
       // Load custom models from localStorage
       const customModels = this.loadCustomModels();
-      
+
       // Separate into categories
       const internal: Model[] = [];
       const external: Model[] = [];
-      
+
       transformedModels.forEach(model => {
         if (model.type === 'internal') {
           internal.push(model);
@@ -29,7 +29,7 @@ class ModelService {
           external.push(model);
         }
       });
-      
+
       return { internal, external, custom: customModels };
     } catch (error) {
       console.error('Error loading available models:', error);
@@ -38,33 +38,33 @@ class ModelService {
   }
 
   /**
-   * Transform MCP model name to our Model interface
+   * Transform MCP model data with metadata to our Model interface
    */
-  private transformMcpModel(modelName: string): Model {
-    const detectedProvider = detectProvider(modelName);
-    let provider: Provider;
+  private transformMcpModelWithMetadata(modelData: any): Model {
+    // Use metadata from backend instead of detecting
+    const modelName = modelData.name;
+    const external = modelData.external !== false; // Default to true if not specified
+    const requiresApiKey = modelData.requiresApiKey !== false; // Default to true if not specified
+    const provider = modelData.provider || 'unknown';
+
     let modelId: string;
-    
-    // Check if already in provider/modelId format
+    // Extract modelId from the name
     if (modelName.includes('/')) {
       const parsed = parseModelName(modelName);
-      provider = parsed.provider;
       modelId = parsed.modelId;
     } else {
-      provider = detectedProvider;
-      modelId = modelName;
+      modelId = modelData.modelName || modelName;
     }
-    
-    const requiresApiKey = provider !== 'internal';
-    
+
     return {
       id: modelName,
-      name: formatModelName(provider, modelId),
-      provider,
+      name: modelName,
+      provider: provider as Provider,
       modelId,
-      type: requiresApiKey ? 'external' : 'internal',
+      type: external ? 'external' : 'internal',
       requiresApiKey,
       isAvailable: true,
+      description: modelData.description,
     };
   }
 
@@ -254,7 +254,9 @@ class ModelService {
   async getConfiguredModels(): Promise<string[]> {
     try {
       // Use list_summarization_models for consistency
-      return await listSummarizationModels();
+      const modelsData = await listSummarizationModels();
+      // Extract just the names
+      return modelsData.map(m => m.name || m);
     } catch (error) {
       console.error('Failed to fetch configured models:', error);
       return [];

@@ -41,10 +41,18 @@ export const AddModelTab: React.FC<AddModelTabProps> = ({
   onModelAdd,
   onSuccess,
 }) => {
+  // Find first provider with configured API key, or default to openai
+  const getInitialProvider = (): Provider => {
+    const availableProviders = getAllProviders().filter(p => p.provider !== 'internal' && p.provider !== 'other');
+    const configuredProvider = availableProviders.find(p => state.providers[p.provider]?.status === 'configured');
+    return configuredProvider?.provider || 'openai';
+  };
+
+  const initialProvider = getInitialProvider();
   const [formData, setFormData] = React.useState<ModelFormData>({
-    provider: 'openai',
+    provider: initialProvider,
     modelId: '',
-    endpoint: '',
+    endpoint: getProviderTemplate(initialProvider).defaultEndpoint,
     description: '',
   });
   const [saving, setSaving] = React.useState(false);
@@ -96,9 +104,21 @@ export const AddModelTab: React.FC<AddModelTabProps> = ({
     fetchAvailableModels(provider);
   };
 
-  // Fetch models on initial load
+  // Fetch models on initial load only if the provider has an API key configured
   React.useEffect(() => {
-    fetchAvailableModels('openai');
+    // Check if any provider has an API key configured
+    const hasAnyConfiguredProvider = providers.some(p => state.providers[p.provider]?.status === 'configured');
+
+    if (!hasAnyConfiguredProvider) {
+      // No providers configured - show helpful message instead of error
+      setError('No API keys configured. Please configure at least one provider API key in the API Keys tab.');
+      return;
+    }
+
+    // Fetch models for the initially selected provider (which has a key)
+    if (state.providers[formData.provider]?.status === 'configured') {
+      fetchAvailableModels(formData.provider);
+    }
   }, []);
 
   const handleSubmit = async () => {
@@ -115,13 +135,12 @@ export const AddModelTab: React.FC<AddModelTabProps> = ({
       // Add model to ConfigMap via MCP tool
       await modelService.addModelToConfig(formData);
 
-      // Reset form
-      setFormData({
-        provider: 'openai',
+      // Reset form (keep the same provider)
+      setFormData(prev => ({
+        ...prev,
         modelId: '',
-        endpoint: getProviderTemplate('openai').defaultEndpoint,
         description: '',
-      });
+      }));
 
       // Refresh available models
       await fetchAvailableModels(formData.provider);

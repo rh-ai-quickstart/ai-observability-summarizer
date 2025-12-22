@@ -392,12 +392,25 @@ export async function getAlerts(_namespace?: string): Promise<AlertInfo[]> {
 }
 
 /**
- * List available summarization models
+ * List available summarization models with metadata
  */
-export async function listSummarizationModels(): Promise<string[]> {
+export async function listSummarizationModels(): Promise<any[]> {
   try {
     const text = await callMcpToolText('list_summarization_models');
-    return parseMCPListResponse(text);
+
+    // Try to parse as JSON first (new format with metadata)
+    try {
+      const data = JSON.parse(text);
+      if (data.models && Array.isArray(data.models)) {
+        return data.models;
+      }
+    } catch (e) {
+      // Not JSON, fall back to old text format
+    }
+
+    // Fallback to old text format (list of names)
+    const modelNames = parseMCPListResponse(text);
+    return modelNames.map(name => ({ name }));
   } catch (error) {
     console.error('Failed to list summarization models:', error);
     return [];
