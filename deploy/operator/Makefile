@@ -57,7 +57,8 @@ OPERATOR_SDK_VERSION ?= v1.37.0
 CONTAINER_TOOL ?= $(shell which podman 2>/dev/null || which docker 2>/dev/null)
 
 # Image URL to use all building/pushing image targets
-IMG ?= quay.io/ecosystem-appeng/aiobs-operator:v0.0.1
+# Derived from IMAGE_TAG_BASE and VERSION for consistency
+IMG ?= $(IMAGE_TAG_BASE):v$(VERSION)
 
 .PHONY: all
 all: docker-build
@@ -113,17 +114,15 @@ clean-charts: ## Remove copied helm charts (keep only config files)
 
 .PHONY: docker-build
 docker-build: prepare-build ## Build container image with the manager.
-	$(CONTAINER_TOOL) build $(DOCKER_BUILD_ARGS) -t ${IMG} .
+	$(CONTAINER_TOOL) build --platform=$(PLATFORMS) $(DOCKER_BUILD_ARGS) -t ${IMG} .
 
 .PHONY: docker-push
 docker-push: ## Push container image with the manager.
 	$(CONTAINER_TOOL) push ${IMG}
 
-# PLATFORMS defines the target platforms for the manager image to provide support to multiple
-# architectures. (i.e. make docker-buildx IMG=myregistry/mypoperator:0.0.1). To use this option you need to:
-# - able to use docker buildx or podman build --platform
-# - be able to push the image to your registry
-PLATFORMS ?= linux/arm64,linux/amd64,linux/s390x,linux/ppc64le
+# PLATFORMS defines the target platforms for the manager image.
+# Default is linux/amd64, can be overridden (e.g., PLATFORMS=linux/arm64 or PLATFORMS=linux/amd64,linux/arm64)
+PLATFORMS ?= linux/amd64
 .PHONY: docker-buildx
 docker-buildx: ## Build and push container image for the manager for cross-platform support
 	$(CONTAINER_TOOL) build --platform=$(PLATFORMS) --manifest ${IMG} -f Dockerfile .
@@ -208,7 +207,7 @@ bundle: kustomize operator-sdk ## Generate bundle manifests and metadata, then v
 
 .PHONY: bundle-build
 bundle-build: prepare-build ## Build the bundle image.
-	$(CONTAINER_TOOL) build -f bundle.Dockerfile -t $(BUNDLE_IMG) .
+	$(CONTAINER_TOOL) build --platform=$(PLATFORMS) -f bundle.Dockerfile -t $(BUNDLE_IMG) .
 
 .PHONY: bundle-push
 bundle-push: ## Push the bundle image.
@@ -246,8 +245,8 @@ endif
 # This recipe invokes 'opm' in 'semver' bundle add mode. For more information on add modes, see:
 # https://github.com/operator-framework/community-operators/blob/7f1438c/docs/packaging-operator.md#updating-your-existing-operator
 .PHONY: catalog-build
-catalog-build: opm prepare-build ## Build a catalog image.
-	$(OPM) index add --container-tool podman --mode semver --tag $(CATALOG_IMG) --bundles $(BUNDLE_IMGS) $(FROM_INDEX_OPT)
+catalog-build: prepare-build ## Build a catalog image using file-based catalog.
+	$(CONTAINER_TOOL) build --platform=$(PLATFORMS) -f catalog.Dockerfile -t $(CATALOG_IMG) .
 
 # Push the catalog image.
 .PHONY: catalog-push
