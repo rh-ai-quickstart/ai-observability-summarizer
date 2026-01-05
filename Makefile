@@ -3,7 +3,7 @@
 
 # NAMESPACE validation for deployment targets
 ifeq ($(NAMESPACE),)
-ifeq (,$(filter install-local depend install-ingestion-pipeline list-models% generate-model-config help build build-alerting build-mcp-server build-console-plugin build-react-ui push push-alerting push-mcp-server push-console-plugin push-react-ui clean config test test-python test-react check-observability-drift install-operators uninstall-operators check-operators verify-operators-ready cleanup-loki-clusterroles install-cluster-observability-operator install-opentelemetry-operator install-tempo-operator install-logging-operator install-loki-operator uninstall-cluster-observability-operator uninstall-opentelemetry-operator uninstall-tempo-operator uninstall-logging-operator uninstall-loki-operator enable-tracing-ui disable-tracing-ui enable-logging-ui disable-logging-ui install-loki uninstall-loki upgrade-observability install-korrel8r uninstall-korrel8r,$(MAKECMDGOALS)))
+ifeq (,$(filter install-local depend install-ingestion-pipeline list-models% generate-model-config help build build-alerting build-mcp-server build-console-plugin build-react-ui push push-alerting push-mcp-server push-console-plugin push-react-ui clean config test test-python test-react check-observability-drift install-operators uninstall-operators check-operators verify-operators-ready cleanup-loki-clusterroles install-cluster-observability-operator install-opentelemetry-operator install-tempo-operator install-logging-operator install-loki-operator uninstall-cluster-observability-operator uninstall-opentelemetry-operator uninstall-tempo-operator uninstall-logging-operator uninstall-loki-operator enable-tracing-ui disable-tracing-ui enable-logging-ui disable-logging-ui install-loki uninstall-loki upgrade-observability install-korrel8r uninstall-korrel8r operator-build operator-push operator-bundle-build operator-bundle-push operator-catalog-build operator-catalog-push operator-build-all operator-push-all operator-deploy operator-config,$(MAKECMDGOALS)))
 $(error NAMESPACE is not set)
 endif
 endif
@@ -1356,6 +1356,60 @@ uninstall-loki:
 	@echo "  → ClusterRole cleanup complete"
 
 	@$(MAKE) disable-logging-ui
+
+# -- Operator Image Build targets (delegates to deploy/operator/Makefile) --
+
+OPERATOR_DIR := deploy/operator
+OPERATOR_IMAGE_TAG_BASE := $(REGISTRY)/$(ORG)/aiobs-operator
+
+# Common args to pass to operator Makefile
+OPERATOR_MAKE_ARGS := VERSION=$(VERSION) IMAGE_TAG_BASE=$(OPERATOR_IMAGE_TAG_BASE) PLATFORMS=$(PLATFORM)
+
+.PHONY: operator-build operator-push operator-bundle-build operator-bundle-push operator-catalog-build operator-catalog-push operator-build-all operator-push-all operator-deploy operator-config
+
+operator-config:
+	@echo "🔧 Operator Build Configuration:"
+	@echo "  Registry: $(REGISTRY)"
+	@echo "  Org: $(ORG)"
+	@echo "  Version: $(VERSION)"
+	@echo "  Platform: $(PLATFORM)"
+	@echo "  Image Tag Base: $(OPERATOR_IMAGE_TAG_BASE)"
+	@echo "  Operator Image: $(OPERATOR_IMAGE_TAG_BASE):v$(VERSION)"
+	@echo "  Bundle Image: $(OPERATOR_IMAGE_TAG_BASE)-bundle:v$(VERSION)"
+	@echo "  Catalog Image: $(OPERATOR_IMAGE_TAG_BASE)-catalog:v$(VERSION)"
+
+operator-build:
+	@echo "🔨 Building operator image..."
+	$(MAKE) -C $(OPERATOR_DIR) docker-build $(OPERATOR_MAKE_ARGS)
+
+operator-push:
+	@echo "📤 Pushing operator image..."
+	$(MAKE) -C $(OPERATOR_DIR) docker-push $(OPERATOR_MAKE_ARGS)
+
+operator-bundle-build:
+	@echo "📦 Building bundle image..."
+	$(MAKE) -C $(OPERATOR_DIR) bundle-build $(OPERATOR_MAKE_ARGS)
+
+operator-bundle-push:
+	@echo "📤 Pushing bundle image..."
+	$(MAKE) -C $(OPERATOR_DIR) bundle-push $(OPERATOR_MAKE_ARGS)
+
+operator-catalog-build:
+	@echo "📚 Building catalog image..."
+	$(MAKE) -C $(OPERATOR_DIR) catalog-build $(OPERATOR_MAKE_ARGS)
+
+operator-catalog-push:
+	@echo "📤 Pushing catalog image..."
+	$(MAKE) -C $(OPERATOR_DIR) catalog-push $(OPERATOR_MAKE_ARGS)
+
+operator-build-all: operator-build operator-bundle-build operator-catalog-build
+	@echo "✅ All operator images built"
+
+operator-push-all: operator-push operator-bundle-push operator-catalog-push
+	@echo "✅ All operator images pushed"
+
+operator-deploy: operator-build-all operator-push-all
+	@echo "✅ All operator images built and pushed"
 
 # -- Operator Installation targets --
 
