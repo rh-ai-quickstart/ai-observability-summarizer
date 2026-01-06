@@ -135,6 +135,40 @@ Without this project, teams typically:
 
 ## Deploy
 
+### Option 1: Install via Operator (Recommended)
+
+The easiest way to install is via the AI Observability Operator from OperatorHub.
+
+1. **Create the namespace:**
+   ```bash
+   oc new-project ai-observability
+   ```
+
+2. **Install the operator** from OperatorHub:
+   - Go to **Operators → OperatorHub** in OpenShift Console
+   - Search for "AI Observability"
+   - Click **Install** and select `ai-observability` namespace
+
+3. **Create an AIObservabilitySummarizer CR:**
+   - Go to **Installed Operators → AI Observability Summarizer**
+   - Click **Create AIObservabilitySummarizer**
+   - Configure options (HuggingFace token required for RAG)
+   - Click **Create**
+
+#### Building Operator Images (Development)
+
+```bash
+# Show current configuration
+make operator-config
+
+# Build and push all images (in correct order)
+make operator-build operator-push operator-bundle-build operator-bundle-push operator-catalog-build operator-catalog-push
+
+# Apply catalog source
+oc apply -f deploy/operator/catalog-source.yaml
+```
+
+### Option 2: Install via Helm
 ### Quick Start - OpenShift Deployment
 
 **Default (production-style): OpenShift Console Plugin UI**
