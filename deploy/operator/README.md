@@ -12,7 +12,7 @@ This operator provides a single Custom Resource (`AIObservabilitySummarizer`) to
 - **MCP Server**: Model Context Protocol server for AI-driven observability queries (with TLS)
 - **OpenShift Console Plugin**: Native integration with OpenShift Console
 
-**RAG Stack (Always Enabled):**
+**RAG Stack (When Enabled):**
 - **LLM Service**: KServe InferenceService with vLLM for local model deployment
 - **LlamaStack**: LLM orchestration layer
 - **PGVector**: Vector database for RAG
@@ -25,12 +25,13 @@ This operator provides a single Custom Resource (`AIObservabilitySummarizer`) to
 - **MinIO**: Object storage for Tempo/Loki
 - **TempoStack**: Distributed tracing backend
 - **OTEL Collector**: OpenTelemetry trace collection
+- **LokiStack**: Log aggregation
 
 ## Prerequisites
 
 - OpenShift 4.12+
 - Cluster admin access
-- GPU node (for LLM deployment)
+- GPU node (for LLM deployment with RAG enabled)
 
 ### Required Operators (Auto-Installed by OLM)
 
@@ -38,174 +39,111 @@ These operators are declared as OLM dependencies and will be **automatically ins
 
 | Operator | Required API | Auto-Installed |
 |----------|--------------|----------------|
-| **Cluster Observability Operator** | `UIPlugin` | ✅ Yes |
+| **Cluster Observability Operator** | `UIPlugin`, `Korrel8r` | ✅ Yes |
 | **OpenTelemetry Operator** | `OpenTelemetryCollector` | ✅ Yes |
 | **Tempo Operator** | `TempoStack` | ✅ Yes |
 | **Loki Operator** | `LokiStack` | ✅ Yes |
+| **Cluster Logging Operator** | `ClusterLogForwarder` | ✅ Yes |
 
-OLM automatically resolves and installs operators that provide these APIs from the catalog.
-
-> **Note:** OpenShift AI (RHOAI) for KServe/InferenceService is NOT auto-installed and must be installed separately if using local LLM deployment.
+> **Note:** OpenShift AI (RHOAI) for KServe/InferenceService is NOT auto-installed and must be installed separately if using RAG with local LLM deployment.
 
 ## Installation
 
-### From OperatorHub (Recommended)
-
-1. Open OpenShift Console
-2. Navigate to **Operators → OperatorHub**
-3. Search for "AI Observability Summarizer"
-4. Click **Install**
-5. **Suggested namespace:** `ai-observability`
-6. Click **Install**
-
-### Quick Install via Catalog Source
-
-If the operator is not yet published to OperatorHub, apply the catalog source directly:
+### Step 1: Create Namespace
 
 ```bash
-# 1. Apply the catalog source
+oc new-project ai-observability
+```
+
+### Step 2: Apply Catalog Source
+
+```bash
 oc apply -f deploy/operator/catalog-source.yaml
 
-# 2. Wait for catalog to be ready
+# Wait for catalog to be ready
 oc get catalogsource aiobs-operator-catalog -n openshift-marketplace -w
-
-# 3. Install via OperatorHub UI or create subscription:
-oc apply -f - <<EOF
-apiVersion: operators.coreos.com/v1alpha1
-kind: Subscription
-metadata:
-  name: aiobs-operator
-  namespace: ai-observability
-spec:
-  channel: alpha
-  name: aiobs-operator
-  source: aiobs-operator-catalog
-  sourceNamespace: openshift-marketplace
-  installPlanApproval: Automatic
-EOF
 ```
 
-### Using Deployment Script
+### Step 3: Install via OpenShift Console
 
-```bash
-# Full build and deploy
-./scripts/operator-deploy.sh full
+1. Open **OpenShift Console**
+2. Navigate to **Operators → OperatorHub**
+3. Search for **"AI Observability"**
+4. Click **Install**
+5. Select **ai-observability** namespace
+6. Click **Install**
 
-# Or step by step:
-./scripts/operator-deploy.sh build    # Build images
-./scripts/operator-deploy.sh push     # Push to registry
-./scripts/operator-deploy.sh deploy   # Deploy to cluster
-```
-
-### Manual Installation
-
-```bash
-cd deploy/operator
-
-# Build and push operator image
-make docker-build docker-push IMG=quay.io/ecosystem-appeng/aiobs-operator:v0.0.1
-
-# Generate and push bundle
-make bundle bundle-build bundle-push BUNDLE_IMG=quay.io/ecosystem-appeng/aiobs-operator-bundle:v0.0.1
-
-# Build and push catalog
-make catalog-build catalog-push CATALOG_IMG=quay.io/ecosystem-appeng/aiobs-operator-catalog:v0.0.1
-```
-
-## Usage
-
-### Create an AIObservabilitySummarizer Instance
-
-**Recommended:** Create the CR in the `ai-observability` namespace.
-
-#### Via OpenShift Console (OLM UI)
+### Step 4: Create AIObservabilitySummarizer
 
 1. Navigate to **Operators → Installed Operators → AI Observability Summarizer**
 2. Click **Create AIObservabilitySummarizer**
 3. Fill in the form:
-   - **HuggingFace Token** (required): Your HF token for model download
+   - **HuggingFace Token** (required for RAG): Your HF token for model download
    - **Device Type**: `gpu`, `hpu`, `gpu-amd`, or `cpu`
    - **Model Selection**: Choose LLM model (default: Llama 3.1 8B)
    - **Enable Alert Analysis**: Toggle for alert summarization
    - **Enable Korrel8r**: Toggle for signal correlation
 4. Click **Create**
 
-#### Via YAML
+## Uninstallation
 
-```yaml
-apiVersion: aiobs.rh-ai-quickstart.io/v1alpha1
-kind: AIObservabilitySummarizer
-metadata:
-  name: cluster-ai-observability
-  namespace: ai-observability
-spec:
-  # RAG/LLM Configuration (required)
-  aiobs-app:
-    rag:
-      enabled: true
-      global:
-        models:
-          llama-3-1-8b-instruct:
-            enabled: true    # Recommended model
-      llm-service:
-        device: gpu          # gpu | hpu | gpu-amd | cpu
-        secret:
-          hf_token: "hf_xxx" # Your HuggingFace token (required)
-    
-    # Optional: Alert Analysis
-    alerting:
-      enabled: false
+### Via OpenShift Console
 
-  # Infrastructure
-  infrastructure:
-    enabled: true
-  
-  aiobs-infra:
-    korrel8r:
-      enabled: true          # Signal correlation
-```
+1. **Delete the CR:**
+   - Go to **Operators → Installed Operators → AI Observability Summarizer**
+   - Click on **AIObservabilitySummarizer** tab
+   - Delete the CR instance
 
+2. **Uninstall the Operator:**
+   - Go to **Operators → Installed Operators**
+   - Find **AI Observability Summarizer**
+   - Click **⋮ → Uninstall Operator**
+
+3. **Delete the Catalog Source:**
+   - Go to **Administration → CustomResourceDefinitions**
+   - Search for **CatalogSource**
+   - Find `aiobs-operator-catalog` in `openshift-marketplace`
+   - Delete it
+
+Or via CLI:
 ```bash
-oc apply -f config/samples/aiobs_v1alpha1_aiobservabilitysummarizer.yaml
-```
-
-### Check Status
-
-```bash
-# Get CR status
-oc get aiobservabilitysummarizer -n ai-observability
-
-# Check deployed pods
-oc get pods -n ai-observability
-
-# Check operator logs
-oc logs -n ai-observability deployment/aiobs-operator-controller-manager
+oc delete aiobservabilitysummarizer --all -n ai-observability
+oc delete subscription aiobs-operator -n ai-observability
+oc delete csv -l operators.coreos.com/aiobs-operator.ai-observability -n ai-observability
+oc delete catalogsource aiobs-operator-catalog -n openshift-marketplace
 ```
 
 ## Configuration Reference
 
-### OLM UI Fields
-
 | Field | Path | Default | Description |
 |-------|------|---------|-------------|
-| HuggingFace Token | `aiobs-app.rag.llm-service.secret.hf_token` | *required* | Token for model download |
-| Device Type | `aiobs-app.rag.llm-service.device` | `gpu` | Hardware accelerator type |
-| Llama 3.1 8B | `aiobs-app.rag.global.models.llama-3-1-8b-instruct.enabled` | `true` | Recommended model (16GB VRAM) |
-| Llama 3.2 1B | `aiobs-app.rag.global.models.llama-3-2-1b-instruct.enabled` | `false` | Smallest model (2GB VRAM) |
-| Llama 3.2 3B | `aiobs-app.rag.global.models.llama-3-2-3b-instruct.enabled` | `false` | Small model (6GB VRAM) |
-| Llama 3.3 70B | `aiobs-app.rag.global.models.llama-3-3-70b-instruct.enabled` | `false` | Largest model (4 GPUs) |
-| Alert Analysis | `aiobs-app.alerting.enabled` | `false` | Enable alert summarization |
-| Korrel8r | `aiobs-infra.korrel8r.enabled` | `true` | Enable signal correlation |
-
-### Infrastructure Handling
-
-The operator uses Helm `lookup` to detect existing infrastructure:
-- **MinIO**: Installed in `observability-hub` if not present
-- **TempoStack**: Skipped if already exists in `observability-hub`
-- **OTEL Collector**: Skipped if already exists in `observability-hub`
-- **Korrel8r**: Installed in `openshift-cluster-observability-operator`
+| HuggingFace Token | `rag.llm-service.secret.hf_token` | *required* | Token for model download |
+| Device Type | `rag.llm-service.device` | `gpu` | Hardware accelerator type |
+| Llama 3.1 8B | `rag.global.models.llama-3-1-8b-instruct.enabled` | `true` | Recommended model (16GB VRAM) |
+| Llama 3.2 1B | `rag.global.models.llama-3-2-1b-instruct.enabled` | `false` | Smallest model (2GB VRAM) |
+| Llama 3.2 3B | `rag.global.models.llama-3-2-3b-instruct.enabled` | `false` | Small model (6GB VRAM) |
+| Llama 3.3 70B | `rag.global.models.llama-3-3-70b-instruct.enabled` | `false` | Largest model (4 GPUs) |
+| Alert Analysis | `alerting.enabled` | `false` | Enable alert summarization |
+| Korrel8r | `korrel8r.enabled` | `true` | Enable signal correlation |
 
 ## Development
+
+### Building Operator Images
+
+Use the root Makefile for consistent builds:
+
+```bash
+# Show current configuration
+make operator-config
+
+# Build and push all images (in correct order)
+make operator-build operator-push \
+     operator-bundle-build operator-bundle-push \
+     operator-catalog-build operator-catalog-push
+
+# Or with custom version/registry
+make operator-build operator-push VERSION=1.0.8 ORG=myorg
+```
 
 ### Project Structure
 
@@ -216,10 +154,9 @@ deploy/operator/
 ├── PROJECT                 # Operator SDK project config
 ├── watches.yaml            # Helm chart to CR mapping
 ├── catalog-source.yaml     # CatalogSource for OLM installation
-├── helm-charts/            # Helm charts (copied during build)
 ├── config/
 │   ├── crd/                # Custom Resource Definition
-│   ├── manager/            # Operator deployment (memory: 2Gi)
+│   ├── manager/            # Operator deployment
 │   ├── rbac/               # RBAC permissions
 │   ├── samples/            # Example CRs
 │   └── manifests/          # OLM manifests base
@@ -229,36 +166,12 @@ deploy/operator/
     └── tests/              # Scorecard tests
 ```
 
-### Build Commands
-
-```bash
-# Update Helm dependencies
-cd deploy/helm && helm dependency update aiobs-stack
-
-# Build operator image
-make docker-build IMG=quay.io/ecosystem-appeng/aiobs-operator:v0.0.1
-
-# Generate bundle manifests
-make bundle
-
-# Build bundle image
-make bundle-build BUNDLE_IMG=quay.io/ecosystem-appeng/aiobs-operator-bundle:v0.0.1
-
-# Build catalog image
-make catalog-build CATALOG_IMG=quay.io/ecosystem-appeng/aiobs-operator-catalog:v0.0.1
-```
-
 ### Run Locally (Development)
 
 ```bash
+cd deploy/operator
 make install   # Install CRDs
-make run       # Run operator locally (watches all namespaces)
-```
-
-### Test Bundle
-
-```bash
-operator-sdk run bundle quay.io/ecosystem-appeng/aiobs-operator-bundle:v0.0.1
+make run       # Run operator locally
 ```
 
 ## Troubleshooting
@@ -266,12 +179,8 @@ operator-sdk run bundle quay.io/ecosystem-appeng/aiobs-operator-bundle:v0.0.1
 ### Operator OOMKilled
 The operator requires 2Gi memory. Check `config/manager/manager.yaml` for resource limits.
 
-### MinIO Buckets Not Created
-The bucket-init job runs as a Helm hook. Check:
-```bash
-oc get jobs -n observability-hub
-oc logs -n observability-hub job/minio-observability-storage-bucket-init
-```
+### Namespaces Already Exist
+The operator uses Helm `lookup` to skip creating namespaces that already exist. If you see ownership errors, the namespace may have been created by another operator.
 
 ### LLM Model Not Loading
 Ensure HuggingFace token is valid and has access to the model:
@@ -286,22 +195,17 @@ oc get consoleplugin openshift-ai-observability
 oc get console.operator.openshift.io cluster -o jsonpath='{.spec.plugins}'
 ```
 
-## Deployment Script
-
-The `scripts/operator-deploy.sh` script automates the complete workflow:
-
+### Check Operator Logs
 ```bash
-./scripts/operator-deploy.sh <command>
-
-Commands:
-  build      - Build operator, bundle, and catalog images
-  push       - Push all images to registry
-  deploy     - Deploy catalog source and install operator
-  cleanup    - Remove all operator resources
-  reinstall  - Cleanup and redeploy (full refresh)
-  status     - Check operator status
-  full       - Build, push, cleanup, and deploy
+oc logs -n ai-observability -l control-plane=controller-manager -f
 ```
+
+## Validation Rules
+
+The operator enforces these rules:
+1. **Namespace**: CR must be created in `ai-observability` namespace
+2. **Singleton**: Only one CR allowed per cluster
+3. **HuggingFace Token**: Required when RAG is enabled
 
 ## License
 
