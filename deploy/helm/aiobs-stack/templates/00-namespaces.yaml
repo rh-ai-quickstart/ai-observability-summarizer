@@ -1,8 +1,7 @@
 {{/*
 Create required namespaces for infrastructure components.
-Uses lookup to skip if namespace already exists.
-This runs as a pre-install/pre-upgrade hook to ensure namespaces exist
-before other resources are deployed.
+Uses lookup to check if namespace already exists - if it does, skip creation.
+This prevents conflicts with namespaces created by other operators or manually.
 */}}
 
 {{- if .Values.infrastructure.enabled }}
@@ -21,13 +20,10 @@ metadata:
     app.kubernetes.io/created-by: aiobs-stack
   annotations:
     openshift.io/description: "AI Observability infrastructure components (Tempo, OTEL, MinIO)"
-    helm.sh/hook: pre-install,pre-upgrade
-    helm.sh/hook-weight: "-100"
-    helm.sh/resource-policy: keep
 {{- end }}
 {{- end }}
 
-{{/* openshift-logging namespace for Loki */}}
+{{/* openshift-logging namespace for Loki - likely already exists from OpenShift Logging */}}
 {{- if .Values.loki.enabled }}
 {{- if not (lookup "v1" "Namespace" "" .Values.global.lokiNamespace) }}
 ---
@@ -42,9 +38,6 @@ metadata:
     openshift.io/cluster-monitoring: "true"
   annotations:
     openshift.io/description: "OpenShift Logging namespace for LokiStack"
-    helm.sh/hook: pre-install,pre-upgrade
-    helm.sh/hook-weight: "-100"
-    helm.sh/resource-policy: keep
 {{- end }}
 {{- end }}
 
@@ -62,9 +55,6 @@ metadata:
     app.kubernetes.io/created-by: aiobs-stack
   annotations:
     openshift.io/description: "Cluster Observability Operator namespace for Korrel8r"
-    helm.sh/hook: pre-install,pre-upgrade
-    helm.sh/hook-weight: "-100"
-    helm.sh/resource-policy: keep
 {{- end }}
 {{- end }}
 
