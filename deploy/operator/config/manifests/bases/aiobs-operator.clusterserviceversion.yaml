@@ -66,13 +66,13 @@ spec:
       - description: 'REQUIRED: Your HuggingFace API token for downloading LLM models.
           Get one at https://huggingface.co/settings/tokens'
         displayName: HuggingFace Token (Required)
-        path: aiobs-app.rag.llm-service.secret.hf_token
+        path: rag.llm-service.secret.hf_token
         x-descriptors:
         - urn:alm:descriptor:com.tectonic.ui:fieldGroup:LLM Configuration
         - urn:alm:descriptor:com.tectonic.ui:password
       - description: Hardware type for LLM deployment
         displayName: Device Type
-        path: aiobs-app.rag.llm-service.device
+        path: rag.llm-service.device
         x-descriptors:
         - urn:alm:descriptor:com.tectonic.ui:fieldGroup:LLM Configuration
         - urn:alm:descriptor:com.tectonic.ui:select:gpu
@@ -82,41 +82,41 @@ spec:
       - description: RECOMMENDED - Good balance of performance and resource usage
           (16GB GPU). Enabled by default.
         displayName: Llama 3.1 8B Instruct (Recommended)
-        path: aiobs-app.rag.global.models.llama-3-1-8b-instruct.enabled
+        path: rag.global.models.llama-3-1-8b-instruct.enabled
         x-descriptors:
         - urn:alm:descriptor:com.tectonic.ui:fieldGroup:Model Selection
         - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
       - description: Smallest model, fastest inference (2GB GPU)
         displayName: Llama 3.2 1B Instruct
-        path: aiobs-app.rag.global.models.llama-3-2-1b-instruct.enabled
+        path: rag.global.models.llama-3-2-1b-instruct.enabled
         x-descriptors:
         - urn:alm:descriptor:com.tectonic.ui:fieldGroup:More Models
         - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
         - urn:alm:descriptor:com.tectonic.ui:advanced
       - description: Small model, good for limited GPU memory (6GB GPU)
         displayName: Llama 3.2 3B Instruct
-        path: aiobs-app.rag.global.models.llama-3-2-3b-instruct.enabled
+        path: rag.global.models.llama-3-2-3b-instruct.enabled
         x-descriptors:
         - urn:alm:descriptor:com.tectonic.ui:fieldGroup:More Models
         - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
         - urn:alm:descriptor:com.tectonic.ui:advanced
       - description: Largest model, best quality but requires 4 GPUs
         displayName: Llama 3.3 70B Instruct
-        path: aiobs-app.rag.global.models.llama-3-3-70b-instruct.enabled
+        path: rag.global.models.llama-3-3-70b-instruct.enabled
         x-descriptors:
         - urn:alm:descriptor:com.tectonic.ui:fieldGroup:More Models
         - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
         - urn:alm:descriptor:com.tectonic.ui:advanced
       - description: Runs a CronJob to analyze and summarize alerts using the LLM
         displayName: Enable Alert Analysis
-        path: aiobs-app.alerting.enabled
+        path: alerting.enabled
         x-descriptors:
         - urn:alm:descriptor:com.tectonic.ui:fieldGroup:Other Settings
         - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
       - description: Correlates metrics, logs, and traces for better observability
           insights. Enabled by default - disable only if you have an existing installation.
         displayName: Enable Korrel8r
-        path: aiobs-infra.korrel8r.enabled
+        path: korrel8r.enabled
         x-descriptors:
         - urn:alm:descriptor:com.tectonic.ui:fieldGroup:Other Settings
         - urn:alm:descriptor:com.tectonic.ui:booleanSwitch

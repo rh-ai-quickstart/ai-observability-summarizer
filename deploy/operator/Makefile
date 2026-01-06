@@ -245,8 +245,8 @@ endif
 # This recipe invokes 'opm' in 'semver' bundle add mode. For more information on add modes, see:
 # https://github.com/operator-framework/community-operators/blob/7f1438c/docs/packaging-operator.md#updating-your-existing-operator
 .PHONY: catalog-build
-catalog-build: prepare-build ## Build a catalog image using file-based catalog.
-	$(CONTAINER_TOOL) build --platform=$(PLATFORMS) -f catalog.Dockerfile -t $(CATALOG_IMG) .
+catalog-build: opm prepare-build ## Build a catalog image.
+	$(OPM) index add --container-tool podman --mode semver --tag $(CATALOG_IMG) --bundles $(BUNDLE_IMGS) $(FROM_INDEX_OPT)
 
 # Push the catalog image.
 .PHONY: catalog-push

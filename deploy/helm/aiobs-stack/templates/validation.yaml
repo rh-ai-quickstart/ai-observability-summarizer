@@ -2,6 +2,8 @@
 This template validates required configuration before deployment.
 It creates a ConfigMap to ensure validation runs during helm install/upgrade.
 */}}
+{{- include "aiobs-stack.validateNamespace" . }}
+{{- include "aiobs-stack.validateSingleton" . }}
 {{- include "aiobs-stack.validateRag" . }}
 apiVersion: v1
 kind: ConfigMap
