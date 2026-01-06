@@ -55,3 +55,33 @@ Fails the Helm release if HuggingFace token is not provided when RAG is enabled
 {{- end }}
 {{- end }}
 
+{{/*
+Validate namespace - CR must be created in ai-observability namespace only
+*/}}
+{{- define "aiobs-stack.validateNamespace" -}}
+{{- $allowedNamespace := "ai-observability" }}
+{{- if ne .Release.Namespace $allowedNamespace }}
+  {{- fail (printf "\n\nERROR: AIObservabilitySummarizer must be created in the '%s' namespace.\nCurrent namespace: '%s'\nPlease create the CR in the '%s' namespace.\n" $allowedNamespace .Release.Namespace $allowedNamespace) }}
+{{- end }}
+{{- end }}
+
+{{/*
+Validate singleton - only one AIObservabilitySummarizer CR is allowed cluster-wide
+Fails if another CR exists in a different namespace
+*/}}
+{{- define "aiobs-stack.validateSingleton" -}}
+{{- $existingCRs := (lookup "aiobs.rh-ai-quickstart.io/v1alpha1" "AIObservabilitySummarizer" "" "").items }}
+{{- if $existingCRs }}
+  {{- range $existingCRs }}
+    {{- $existingName := .metadata.name }}
+    {{- $existingNamespace := .metadata.namespace }}
+    {{- $currentReleaseName := $.Release.Name }}
+    {{- $currentReleaseNamespace := $.Release.Namespace }}
+    {{/* Check if this is a different CR (not the current one being reconciled) */}}
+    {{- if or (ne $existingName $currentReleaseName) (ne $existingNamespace $currentReleaseNamespace) }}
+      {{- fail (printf "\n\nERROR: Only one AIObservabilitySummarizer is allowed per cluster.\nAn instance '%s' already exists in namespace '%s'.\nPlease delete the existing CR before creating a new one.\n" $existingName $existingNamespace) }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+{{- end }}
+
