@@ -71,7 +71,9 @@ def is_rag_available() -> bool:
     try:
         import requests
         # Try to reach the llama stack endpoint with a quick timeout
-        response = requests.get(f"{llama_stack_url.rstrip('/v1/openai/v1')}/health", timeout=3)
+        # Use removesuffix to properly strip the path suffix (not rstrip which removes characters)
+        base_url = llama_stack_url.removesuffix('/v1/openai/v1')
+        response = requests.get(f"{base_url}/health", timeout=3)
         return response.status_code == 200
     except Exception:
         # If we can't reach llama stack or don't have requests, assume RAG unavailable
