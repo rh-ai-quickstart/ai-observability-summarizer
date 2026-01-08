@@ -1,11 +1,4 @@
 {
-  "llama-3-1-8b-instruct": {
-    "external": false,
-    "requiresApiKey": false,
-    "serviceName": "llama-3-1-8b-instruct-predictor",
-    "provider": "vllm",
-    "modelName": "llama-3-1-8b-instruct"
-  },
   "openai/gpt-4o-mini": {
     "external": true,
     "requiresApiKey": true,
