@@ -98,13 +98,12 @@ def save_api_key(
     provider: str,
     api_key: str,
     model_id: Optional[str] = None,
-    endpoint: Optional[str] = None,
     description: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """
     Save or update provider API key in a namespaced Secret:
       name: ai-<provider>-credentials
-      data: api-key (b64), provider, endpoint?, model-id?, description?
+      data: api-key (b64), model-id?, description?
     """
     try:
         
@@ -144,11 +143,8 @@ def save_api_key(
             "type": "Opaque",
             "data": {
                 "api-key": base64.b64encode(api_key.encode("utf-8")).decode("utf-8"),
-                "provider": base64.b64encode(provider_lower.encode("utf-8")).decode("utf-8"),
             },
         }
-        if endpoint:
-            payload["data"]["endpoint"] = base64.b64encode(endpoint.encode("utf-8")).decode("utf-8")
         if model_id:
             payload["data"]["model-id"] = base64.b64encode(model_id.encode("utf-8")).decode("utf-8")
         if description:

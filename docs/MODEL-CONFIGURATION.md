@@ -158,8 +158,6 @@ The model configuration system provides a dynamic, user-managed way to configure
 │  │                                                 │    │
 │  │  data:                                          │    │
 │  │    api-key: <base64>                           │    │
-│  │    provider: <base64>                          │    │
-│  │    endpoint: <base64> (optional)               │    │
 │  └────────────────────────────────────────────────┘    │
 │                                                          │
 │  ┌────────────────────────────────────────────────┐    │
@@ -266,8 +264,6 @@ metadata:
 type: Opaque
 data:
   api-key: <base64>
-  provider: <base64>
-  endpoint: <base64>  # optional
   model-id: <base64>  # optional
   description: <base64>  # optional
 ```
@@ -687,8 +683,6 @@ metadata:
 type: Opaque
 data:
   api-key: <base64-encoded-api-key>
-  provider: <base64-encoded-provider-name>
-  endpoint: <base64-encoded-endpoint>  # optional
   model-id: <base64-encoded-model-id>  # optional
   description: <base64-encoded-description>  # optional
 ```
@@ -743,7 +737,6 @@ from mcp_server.tools.credentials_tools import save_api_key
 result = save_api_key(
     provider="openai",
     api_key="sk-...",
-    endpoint="https://api.openai.com/v1/chat/completions",
     description="OpenAI API key for GPT models"
 )
 # Creates/updates Secret: ai-openai-credentials

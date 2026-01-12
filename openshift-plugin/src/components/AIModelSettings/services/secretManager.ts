@@ -110,36 +110,11 @@ class AISecretManager {
       throw new Error(`Invalid API key format for ${template.label}`);
     }
 
-    // Prepare secret data (base64 encoded)
-    const secretData: Record<string, string> = {
-      'api-key': btoa(config.apiKey),
-      'provider': btoa(config.provider),
-    };
-
-    if (config.endpoint) {
-      secretData['endpoint'] = btoa(config.endpoint);
-    }
-
-    if (config.modelId) {
-      secretData['model-id'] = btoa(config.modelId);
-    }
-
-    // Add metadata
-    if (config.metadata) {
-      if (config.metadata.description) {
-        secretData['description'] = btoa(config.metadata.description);
-      }
-      if (config.metadata.createdBy) {
-        secretData['created-by'] = btoa(config.metadata.createdBy);
-      }
-    }
-
     try {
       const result = await callMcpTool<{ secret_name: string }>('save_api_key', {
         provider: config.provider,
         api_key: config.apiKey,
         model_id: config.modelId || undefined,
-        endpoint: config.endpoint || undefined,
         description: config.metadata?.description || undefined,
       });
       return result.secret_name || secretName;
