@@ -88,10 +88,11 @@ def _validate_and_extract_response(
 
             return response_json["choices"][0]["message"]["content"].strip()
     else:
-        # Local model response format
+        # Local model response format (using /chat/completions endpoint)
         if "choices" not in response_json or not response_json["choices"]:
             raise ValueError(f"Invalid {provider} response format")
-        return response_json["choices"][0]["text"].strip()
+        # LlamaStack uses OpenAI-compatible chat format: choices[0]["message"]["content"]
+        return response_json["choices"][0]["message"]["content"].strip()
 
 
 def _clean_llm_summary_string(text: str) -> str:
@@ -234,12 +235,12 @@ def summarize_with_llm(
             or summarize_model_id
         )
 
-        # Combine all messages into a single prompt
-        prompt_text = ""
+        # Build messages array for chat completions API
+        chat_messages = []
         if messages:
-            for msg in messages:
-                prompt_text += f"{msg['role']}: {msg['content']}\n"
-        prompt_text += prompt  # Add the current prompt
+            chat_messages.extend(messages)
+        # Add the current prompt as a user message
+        chat_messages.append({"role": "user", "content": prompt})
         # Try multiple possible model identifiers to maximize compatibility
         # LlamaStack may expect different model IDs than MODEL_CONFIG keys
         # Priority: serviceName (LlamaStack backend) -> modelName (alt ID) -> summarize_model_id (user key)
@@ -262,7 +263,7 @@ def summarize_with_llm(
             # 3. External models don't need this parameter as they handle repetition internally
             payload = {
                 "model": candidate_model_id,
-                "prompt": prompt_text,
+                "messages": chat_messages,
                 "temperature": 0.1,  # Very low temperature to minimize randomness and repetition
                 "max_tokens": max_tokens,
                 "repetition_penalty": 1.5,  # Strong penalty to prevent loops (1.0=none, 1.5=strong)
@@ -277,7 +278,7 @@ def summarize_with_llm(
             }
             try:
                 response_json = _make_api_request(
-                    f"{LLAMA_STACK_URL}/completions", headers, payload, verify_ssl=VERIFY_SSL
+                    f"{LLAMA_STACK_URL}/chat/completions", headers, payload, verify_ssl=VERIFY_SSL
                 )
                 break  # Success - stop trying other candidates
             except requests.exceptions.HTTPError as http_err:  # type: ignore[name-defined]
@@ -303,7 +304,7 @@ def summarize_with_llm(
             # All model ID candidates failed
             if last_err:
                 raise last_err
-            raise RuntimeError("Failed to obtain response from LlamaStack completions endpoint")
+            raise RuntimeError("Failed to obtain response from LlamaStack chat/completions endpoint")
 
         raw_response = _validate_and_extract_response(
             response_json, is_external=False, provider="LLM"
