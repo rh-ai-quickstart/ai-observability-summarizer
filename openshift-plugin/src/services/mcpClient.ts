@@ -180,20 +180,25 @@ async function callMcpToolText(toolName: string, args: Record<string, unknown> =
 
   // Extract text content - handle different response formats
   let text = '';
-  
+
   // Format 1: structuredContent.result is a string (direct JSON)
   if (typeof result.structuredContent?.result === 'string') {
     text = result.structuredContent.result;
   }
-  // Format 2: structuredContent.result is an array with text objects
+  // Format 2: structuredContent.result is an array with text objects (check BEFORE generic object!)
   else if (Array.isArray(result.structuredContent?.result) && result.structuredContent.result[0]?.text) {
     text = result.structuredContent.result[0].text;
   }
-  // Format 3: content array with text objects
+  // Format 3: structuredContent.result is an object (already parsed)
+  else if (result.structuredContent?.result && typeof result.structuredContent.result === 'object') {
+    // If it's already an object with a response field, stringify it so we can parse it again in chat()
+    text = JSON.stringify(result.structuredContent.result);
+  }
+  // Format 4: content array with text objects
   else if (result.content?.[0]?.text) {
     text = result.content[0].text;
   }
-  
+
   return text;
 }
 
@@ -201,7 +206,13 @@ async function callMcpToolText(toolName: string, args: Record<string, unknown> =
 function parseMCPListResponse(text: string): string[] {
   return text.split('\n')
     .map(line => line.replace(/•\s*/, '').trim())
-    .filter(line => line.length > 0);
+    .filter(line => {
+      // Filter out empty lines
+      if (line.length === 0) return false;
+      // Filter out header lines (contain "total:" or end with ":")
+      if (line.includes('total') || line.endsWith(':')) return false;
+      return true;
+    });
 }
 
 // ============ MCP API Calls ============
@@ -499,6 +510,7 @@ export async function analyzeVLLM(
 
 /**
  * Chat with AI about observability
+ * Returns both the response and progress log for replay
  */
 export async function chat(
   modelName: string,
@@ -508,7 +520,7 @@ export async function chat(
     scope?: string;
     apiKey?: string;
   }
-): Promise<string> {
+): Promise<{ response: string; progressLog: Array<{ timestamp: string; message: string }> }> {
   try {
     const text = await callMcpToolText('chat', {
       model_name: modelName,
@@ -517,7 +529,36 @@ export async function chat(
       scope: options?.scope,
       api_key: options?.apiKey,
     });
-    return text;
+
+    // The backend returns a JSON response with {response, progress_log, model, iterations}
+    try {
+      const parsed = JSON.parse(text);
+      console.log('[Chat] Parsed response:', {
+        hasResponse: !!parsed?.response,
+        progressLogEntries: parsed?.progress_log?.length || 0
+      });
+
+      if (parsed && typeof parsed.response === 'string') {
+        return {
+          response: parsed.response,
+          progressLog: parsed.progress_log || [],
+        };
+      }
+
+      // If parsed but no response field, return original
+      console.warn('[Chat] Parsed JSON but no response field found');
+      return {
+        response: text,
+        progressLog: [],
+      };
+    } catch (parseError) {
+      // If parsing fails, return the original text
+      console.debug('[Chat] Response is not JSON, returning as-is:', parseError);
+      return {
+        response: text,
+        progressLog: [],
+      };
+    }
   } catch (error) {
     console.error('Failed to chat:', error);
     throw error;

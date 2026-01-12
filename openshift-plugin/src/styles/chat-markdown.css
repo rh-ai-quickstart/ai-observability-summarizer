@@ -1,0 +1,168 @@
+/* Chat Markdown Styles */
+.chat-markdown {
+  font-family: inherit;
+  line-height: 1.6;
+  color: inherit;
+}
+
+/* Headings */
+.chat-markdown h1,
+.chat-markdown h2,
+.chat-markdown h3,
+.chat-markdown h4,
+.chat-markdown h5,
+.chat-markdown h6 {
+  margin-top: 16px;
+  margin-bottom: 8px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.chat-markdown h1 {
+  font-size: 1.5em;
+  border-bottom: 1px solid var(--pf-v5-global--BorderColor--100);
+  padding-bottom: 8px;
+}
+
+.chat-markdown h2 {
+  font-size: 1.3em;
+}
+
+.chat-markdown h3 {
+  font-size: 1.15em;
+}
+
+/* Paragraphs */
+.chat-markdown p {
+  margin: 8px 0;
+}
+
+/* Inline code */
+.chat-markdown code {
+  background-color: rgba(0, 0, 0, 0.05);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'source-code-pro', monospace;
+  font-size: 0.9em;
+  color: var(--pf-v5-global--danger-color--200);
+}
+
+/* Code blocks */
+.chat-markdown pre {
+  background-color: rgba(0, 0, 0, 0.05);
+  padding: 12px;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 12px 0;
+  border: 1px solid var(--pf-v5-global--BorderColor--100);
+}
+
+.chat-markdown pre code {
+  background-color: transparent;
+  padding: 0;
+  border-radius: 0;
+  color: inherit;
+  font-size: 0.85em;
+  display: block;
+  white-space: pre;
+}
+
+/* Tables */
+.chat-markdown table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 12px 0;
+  font-size: 0.9em;
+}
+
+.chat-markdown table th,
+.chat-markdown table td {
+  border: 1px solid var(--pf-v5-global--BorderColor--100);
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.chat-markdown table th {
+  background-color: rgba(0, 0, 0, 0.05);
+  font-weight: 600;
+}
+
+.chat-markdown table tr:nth-child(even) {
+  background-color: rgba(0, 0, 0, 0.02);
+}
+
+.chat-markdown table tr:hover {
+  background-color: rgba(0, 0, 0, 0.04);
+}
+
+/* Lists */
+.chat-markdown ul,
+.chat-markdown ol {
+  margin: 8px 0;
+  padding-left: 24px;
+}
+
+.chat-markdown li {
+  margin: 4px 0;
+}
+
+.chat-markdown ul ul,
+.chat-markdown ol ol,
+.chat-markdown ul ol,
+.chat-markdown ol ul {
+  margin: 0;
+}
+
+/* Blockquotes */
+.chat-markdown blockquote {
+  border-left: 4px solid #7c3aed;
+  padding-left: 16px;
+  margin: 12px 0;
+  color: var(--pf-v5-global--Color--200);
+  font-style: italic;
+}
+
+/* Links */
+.chat-markdown a {
+  color: var(--pf-v5-global--link--Color);
+  text-decoration: none;
+}
+
+.chat-markdown a:hover {
+  text-decoration: underline;
+}
+
+/* Horizontal rules */
+.chat-markdown hr {
+  border: none;
+  border-top: 1px solid var(--pf-v5-global--BorderColor--100);
+  margin: 16px 0;
+}
+
+/* Strong and emphasis */
+.chat-markdown strong {
+  font-weight: 600;
+}
+
+.chat-markdown em {
+  font-style: italic;
+}
+
+/* Strike through */
+.chat-markdown del {
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+
+/* Images */
+.chat-markdown img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+  margin: 8px 0;
+}
+
+/* Task lists */
+.chat-markdown input[type="checkbox"] {
+  margin-right: 8px;
+}
