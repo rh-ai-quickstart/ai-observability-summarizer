@@ -37,6 +37,9 @@ Object.defineProperty(window, 'location', {
   writable: true,
 });
 
+// Mock scrollIntoView (not implemented in jsdom)
+Element.prototype.scrollIntoView = jest.fn();
+
 // Suppress expected console output during tests
 const originalError = console.error;
 const originalWarn = console.warn;
@@ -51,6 +54,8 @@ beforeAll(() => {
     if (
       message.includes('Warning: ReactDOM.render') ||
       message.includes('Warning: An update to TestComponent') ||
+      message.includes('Warning: An update to AIChatPage') ||
+      message.includes('was not wrapped in act') ||
       message.includes('Failed to chat:') ||
       message.includes('Error loading chat history')
     ) {
