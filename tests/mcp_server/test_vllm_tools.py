@@ -23,8 +23,9 @@ def test_list_models_empty(_):
     assert any("No models are currently available" in t for t in texts)
 
 
+@patch('core.config.RAG_AVAILABLE', True)
 @patch("src.mcp_server.tools.observability_vllm_tools.get_vllm_namespaces_helper", return_value=["ns1", "ns2"])  # type: ignore[arg-type]
-def test_list_vllm_namespaces_success(_):
+def test_list_vllm_namespaces_success(*_):
     out = tools.list_vllm_namespaces()
     texts = _texts(out)
     assert any("Monitored vLLM Namespaces" in t for t in texts)
@@ -32,8 +33,9 @@ def test_list_vllm_namespaces_success(_):
     assert any("ns2" in t for t in texts)
 
 
+@patch('core.config.RAG_AVAILABLE', True)
 @patch("src.mcp_server.tools.observability_vllm_tools.get_vllm_namespaces_helper", return_value=[])  # type: ignore[arg-type]
-def test_list_vllm_namespaces_empty(_):
+def test_list_vllm_namespaces_empty(*_):
     out = tools.list_vllm_namespaces()
     texts = _texts(out)
     assert any("No monitored vLLM namespaces found" in t for t in texts)
@@ -48,8 +50,9 @@ def test_get_model_config_success(_):
     assert text.find("m1") < text.find("m2")
 
 
+@patch('core.config.RAG_AVAILABLE', True)
 @patch("os.getenv", return_value="{}")
-def test_get_model_config_empty(_):
+def test_get_model_config_empty(*_):
     out = tools.get_model_config()
     texts = _texts(out)
     assert any("No LLM models configured" in t for t in texts)
@@ -274,8 +277,9 @@ def test_list_summarization_models_success(_):
     assert "• m2" in text
 
 
+@patch('core.config.RAG_AVAILABLE', True)
 @patch("src.mcp_server.tools.observability_vllm_tools.get_summarization_models", return_value=[])  # type: ignore[arg-type]
-def test_list_summarization_models_empty(_):
+def test_list_summarization_models_empty(*_):
     out = tools.list_summarization_models()
     text = "\n".join(_texts(out))
     assert "No summarization models configured" in text

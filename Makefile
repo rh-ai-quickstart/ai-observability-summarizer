@@ -3,7 +3,7 @@
 
 # NAMESPACE validation for deployment targets
 ifeq ($(NAMESPACE),)
-ifeq (,$(filter install-local depend install-ingestion-pipeline list-models% generate-model-config help build build-ui build-alerting build-mcp-server build-console-plugin push push-ui push-alerting push-mcp-server push-console-plugin clean config test check-observability-drift install-operators uninstall-operators check-operators install-cluster-observability-operator install-opentelemetry-operator install-tempo-operator install-logging-operator install-loki-operator uninstall-cluster-observability-operator uninstall-opentelemetry-operator uninstall-tempo-operator uninstall-logging-operator uninstall-loki-operator enable-tracing-ui disable-tracing-ui enable-logging-ui disable-logging-ui install-loki uninstall-loki upgrade-observability install-korrel8r uninstall-korrel8r,$(MAKECMDGOALS)))
+ifeq (,$(filter install-local depend install-ingestion-pipeline list-models% generate-model-config help build build-ui build-alerting build-mcp-server build-console-plugin push push-ui push-alerting push-mcp-server push-console-plugin clean config test test-python test-react check-observability-drift install-operators uninstall-operators check-operators install-cluster-observability-operator install-opentelemetry-operator install-tempo-operator install-logging-operator install-loki-operator uninstall-cluster-observability-operator uninstall-opentelemetry-operator uninstall-tempo-operator uninstall-logging-operator uninstall-loki-operator enable-tracing-ui disable-tracing-ui enable-logging-ui disable-logging-ui install-loki uninstall-loki upgrade-observability install-korrel8r uninstall-korrel8r,$(MAKECMDGOALS)))
 $(error NAMESPACE is not set)
 endif
 endif
@@ -264,7 +264,9 @@ help:
 	@echo "  config             - Show current configuration"
 	@echo ""
 	@echo "Tests:"
-	@echo "  test               - Run unit tests with coverage"
+	@echo "  test               - Run all tests (Python + React)"
+	@echo "  test-python        - Run Python tests only"
+	@echo "  test-react         - Run React tests only"
 	@echo ""
 	@echo "Configuration (set via environment variables):"
 	@echo "  REGISTRY           - Container registry (default: quay.io)"
@@ -640,12 +642,24 @@ clean:
 		echo "⚠️  Cleanup completed with $$ERRORS warning(s)"; \
 	fi
 
-# Run tests
+# Run all tests (Python + React)
 .PHONY: test
-test:
-	@echo "🧪 Running tests with coverage..."
+test: test-python test-react
+	@echo "✅ All tests completed successfully"
+
+# Run Python tests only
+.PHONY: test-python
+test-python:
+	@echo "🧪 Running Python tests with coverage..."
 	@uv sync --group test
 	@uv run pytest -v --cov=src --cov-report=html --cov-report=term
+
+# Run React tests only
+.PHONY: test-react
+test-react:
+	@echo "🧪 Running React tests..."
+	@cd openshift-plugin && yarn install
+	@cd openshift-plugin && yarn test --ci
 
 # Convenience targets for common workflows
 .PHONY: build-and-push
