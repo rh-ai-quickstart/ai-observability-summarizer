@@ -3,7 +3,9 @@ plugin:
   # Plugin name - should match consolePlugin.name in package.json
   name: "openshift-ai-observability"
   description: "AI Observability Plugin"
-  image: "quay.io/ecosystem-appeng/aiobs-console-plugin:latest"
+  image:
+    repository: quay.io/ecosystem-appeng/aiobs-console-plugin
+    tag: 1.0.7
   imagePullPolicy: Always
   imagePullSecrets: []
   replicas: 2

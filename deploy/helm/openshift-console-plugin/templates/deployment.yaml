@@ -22,7 +22,7 @@ spec:
       {{- end }}
       containers:
         - name: {{ template "openshift-console-plugin.name" . }}
-          image: {{ required "Plugin image must be specified!" .Values.plugin.image }}
+          image: "{{ .Values.plugin.image.repository }}:{{ .Values.plugin.image.tag }}"
           ports:
             - containerPort: {{ .Values.plugin.port }}
               protocol: TCP

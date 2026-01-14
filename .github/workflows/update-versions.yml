@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       version:
-        description: 'Version to update in files'
+        description: 'Version to update in Makefile and Helm charts (may include suffix like -feature for feature branch)'
         required: true
         type: string
       commit_message:
@@ -56,6 +56,13 @@ jobs:
           if [ -f "deploy/helm/mcp-server/values.yaml" ]; then
             sed -i 's|tag: .*|tag: '"${{ inputs.version }}"'|' deploy/helm/mcp-server/values.yaml
             echo "Updated deploy/helm/mcp-server/values.yaml"
+          fi
+
+      - name: Update openshift-console-plugin values.yaml
+        run: |
+          if [ -f "deploy/helm/openshift-console-plugin/values.yaml" ]; then
+            sed -i 's|tag: .*|tag: '"${{ inputs.version }}"'|' deploy/helm/openshift-console-plugin/values.yaml
+            echo "Updated deploy/helm/openshift-console-plugin/values.yaml"
           fi
 
       - name: Update Makefile version
