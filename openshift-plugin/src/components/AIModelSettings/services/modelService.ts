@@ -2,6 +2,16 @@ import { Model, Provider, AIModelState, ModelFormData, ProviderModel } from '../
 import { formatModelName, parseModelName } from './providerTemplates';
 import { secretManager } from './secretManager';
 import { listSummarizationModels, callMcpTool } from '../../../services/mcpClient';
+import { isDevMode } from '../../../services/devCredentials';
+
+/**
+ * Get the appropriate storage mechanism based on dev mode
+ * - sessionStorage in dev mode (cleared on tab close)
+ * - localStorage in production mode (persists across sessions)
+ */
+function getStorage(): Storage {
+  return isDevMode() ? sessionStorage : localStorage;
+}
 
 class ModelService {
   /**
@@ -9,7 +19,7 @@ class ModelService {
    */
   async loadAvailableModels(): Promise<{ internal: Model[]; external: Model[]; custom: Model[] }> {
     try {
-      // Get models with metadata from MCP server
+      // Get models with metadata from MCP server (includes ConfigMap models)
       const mcpModelsData = await listSummarizationModels();
 
       // Transform and categorize models
@@ -69,15 +79,16 @@ class ModelService {
   }
 
   /**
-   * Load custom models from localStorage
+   * Load custom models from browser storage
+   * Uses sessionStorage in dev mode, localStorage in production
    */
   loadCustomModels(): Model[] {
     try {
-      const stored = localStorage.getItem('ai_custom_models');
+      const stored = getStorage().getItem('ai_custom_models');
       if (!stored) {
         return [];
       }
-      
+
       const customModels: Model[] = JSON.parse(stored);
       return customModels.map(model => ({
         ...model,
@@ -90,13 +101,15 @@ class ModelService {
     }
   }
 
+
   /**
-   * Save custom models to localStorage
+   * Save custom models to browser storage
+   * Uses sessionStorage in dev mode, localStorage in production
    */
   saveCustomModels(models: Model[]): void {
     try {
       const customModels = models.filter(m => m.type === 'custom');
-      localStorage.setItem('ai_custom_models', JSON.stringify(customModels));
+      getStorage().setItem('ai_custom_models', JSON.stringify(customModels));
     } catch (error) {
       console.error('Error saving custom models:', error);
       throw new Error('Failed to save custom models');
@@ -178,10 +191,11 @@ class ModelService {
 
   /**
    * Get current selected model from session config
+   * Uses sessionStorage in dev mode, localStorage in production
    */
   getCurrentModel(): string | null {
     try {
-      const config = localStorage.getItem('openshift_ai_observability_config');
+      const config = getStorage().getItem('openshift_ai_observability_config');
       if (config) {
         const parsed = JSON.parse(config);
         return parsed.ai_model || null;
@@ -194,22 +208,23 @@ class ModelService {
 
   /**
    * Set current selected model in session config
+   * Uses sessionStorage in dev mode, localStorage in production
    */
   setCurrentModel(modelName: string): void {
     try {
       let config: any = {};
-      
+
       // Load existing config
-      const existingConfig = localStorage.getItem('openshift_ai_observability_config');
+      const existingConfig = getStorage().getItem('openshift_ai_observability_config');
       if (existingConfig) {
         config = JSON.parse(existingConfig);
       }
-      
+
       // Update model selection
       config.ai_model = modelName;
-      
+
       // Save updated config
-      localStorage.setItem('openshift_ai_observability_config', JSON.stringify(config));
+      getStorage().setItem('openshift_ai_observability_config', JSON.stringify(config));
     } catch (error) {
       console.error('Error saving current model:', error);
       throw new Error('Failed to save model selection');
@@ -313,11 +328,13 @@ class ModelService {
   }
 
   /**
-   * Add a new model to ConfigMap
+   * Add a new model to ConfigMap (both dev and production modes)
+   * Dev mode only affects where API keys are stored, not models
    */
   async addModelToConfig(formData: ModelFormData): Promise<{ success: boolean; model_key: string; message: string }> {
     try {
-      // Call MCP tool to add model to ConfigMap
+      // Always add to ConfigMap via MCP tool (dev and production)
+      // The server needs the model config to know how to call the LLM
       const response = await callMcpTool<any>(
         'add_model_to_config',
         {
@@ -330,9 +347,10 @@ class ModelService {
 
       console.log('Add model response:', response);
 
-      // Handle different response formats
+      // Handle MCP text response format
       let data: any;
       if (typeof response === 'string') {
+        // Direct string response
         try {
           data = JSON.parse(response);
         } catch (parseError) {
@@ -340,9 +358,23 @@ class ModelService {
           throw new Error('Invalid response from server');
         }
       } else if (response && typeof response === 'object') {
-        data = response;
+        // MCP response format: {type: "text", text: "..."}
+        if (response.type === 'text' && typeof response.text === 'string') {
+          try {
+            data = JSON.parse(response.text);
+          } catch (parseError) {
+            console.error('Failed to parse MCP text response:', response.text);
+            throw new Error('Invalid response from server');
+          }
+        } else if (response.success !== undefined) {
+          // Already parsed object
+          data = response;
+        } else {
+          console.error('Unexpected response format:', response);
+          throw new Error('Unexpected response format from server');
+        }
       } else {
-        throw new Error('Unexpected response format from server');
+        throw new Error('Invalid response from server');
       }
 
       return {

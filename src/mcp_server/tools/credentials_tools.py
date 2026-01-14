@@ -101,18 +101,31 @@ def save_api_key(
     description: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """
-    Save or update provider API key in a namespaced Secret:
+    Save or update provider API key in a Kubernetes Secret.
+
+    In dev mode, the frontend handles credential storage in browser sessionStorage,
+    so this function is only called in production mode to save to K8s Secrets.
+
+    Secret format:
       name: ai-<provider>-credentials
       data: api-key (b64), model-id?, description?
+
+    Args:
+        provider: Provider name (openai, anthropic, google, meta)
+        api_key: API key to save
+        model_id: Optional model identifier
+        description: Optional description
     """
     try:
-        
+
         if not provider or not api_key:
             raise MCPException(
                 message="provider and api_key are required",
                 error_code=MCPErrorCode.INVALID_INPUT,
             )
         provider_lower = provider.lower()
+
+        # Save to K8s Secret
         ns = os.getenv("NAMESPACE", "")
         if not ns:
             raise MCPException(

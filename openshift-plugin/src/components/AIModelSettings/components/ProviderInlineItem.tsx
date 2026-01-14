@@ -16,6 +16,7 @@ import { KeyIcon, SyncAltIcon, TrashIcon, ExternalLinkAltIcon, CheckCircleIcon, 
 import { ProviderTemplate, ProviderCredential } from '../types/models';
 import { secretManager } from '../services/secretManager';
 import { isValidApiKey } from '../services/providerTemplates';
+import { isDevMode } from '../../../services/devCredentials';
 
 interface ProviderInlineItemProps {
   provider: ProviderTemplate;
@@ -65,7 +66,14 @@ export const ProviderInlineItem: React.FC<ProviderInlineItemProps> = ({
 
   const storageInfo = (() => {
     if (status.status !== 'configured') return 'No API key configured';
-    const storageType = status.storage === 'secret' ? 'OpenShift Secret' : 'Browser Cache';
+
+    let storageType = 'Browser Cache';
+    if (status.storage === 'secret') {
+      storageType = 'OpenShift Secret';
+    } else if (status.storage === 'cache') {
+      storageType = 'Browser Session';
+    }
+
     const secretName = status.secretName ? ` (${status.secretName})` : '';
     return `Stored via ${storageType}${secretName}${status.lastUpdated ? ` • Updated ${new Date(status.lastUpdated).toLocaleDateString()}` : ''}`;
   })();
@@ -83,7 +91,7 @@ export const ProviderInlineItem: React.FC<ProviderInlineItemProps> = ({
     }
     setSaving(true);
     try {
-      // Save to OpenShift secret (only secure storage allowed)
+      // Save to browser cache (dev mode) or OpenShift secret (production mode)
       await secretManager.saveProviderSecret({
         provider: provider.provider,
         apiKey,
@@ -189,7 +197,9 @@ export const ProviderInlineItem: React.FC<ProviderInlineItemProps> = ({
             placeholder={`Enter your ${provider.label} API key`}
           />
           <Text component={TextVariants.small} style={{ color: 'var(--pf-v5-global--Color--200)', marginTop: 4 }}>
-            Get your API key from the {provider.label} dashboard or developer portal. Keys are securely stored as OpenShift Secrets.
+            Get your API key from the {provider.label} dashboard or developer portal. {isDevMode()
+              ? 'Keys are cached in your browser session (dev mode).'
+              : 'Keys are securely stored as OpenShift Secrets.'}
           </Text>
         </FlexItem>
         <FlexItem>
@@ -204,7 +214,7 @@ export const ProviderInlineItem: React.FC<ProviderInlineItemProps> = ({
             {testing ? 'Testing...' : 'Test'}
           </Button>
         </FlexItem>
-        {status.status === 'configured' && status.storage === 'secret' && (
+        {status.status === 'configured' && (status.storage === 'secret' || status.storage === 'cache') && (
           <FlexItem>
             <Button variant="link" onClick={handleDelete} isDanger>
               <TrashIcon style={{ marginRight: 8 }} />

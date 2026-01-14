@@ -65,6 +65,19 @@ async def health_check():
     )
 
 
+@app.get("/config")
+async def get_config():
+    """Return runtime configuration for console plugin."""
+    import os
+    dev_mode = os.getenv("DEV_MODE", "false").lower() in ("true", "1", "yes")
+    return JSONResponse(
+        status_code=200,
+        content={
+            "devMode": dev_mode
+        },
+    )
+
+
 # === REPORT ENDPOINTS (moved from metrics-api) ===
 
 @app.get("/download_report/{report_id}")

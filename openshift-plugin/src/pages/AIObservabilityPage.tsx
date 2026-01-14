@@ -38,6 +38,7 @@ import { OpenShiftMetricsPage } from './OpenShiftMetricsPage';
 import { AIChatPage } from './AIChatPage';
 import { SettingsModal } from '../components/SettingsModal';
 import { healthCheck, listModels, listNamespaces, getSessionConfig } from '../services/mcpClient';
+import { initializeRuntimeConfig } from '../services/runtimeConfig';
 
 // Status Card Component
 interface StatusCardProps {
@@ -292,6 +293,11 @@ const AIObservabilityPage: React.FC = () => {
   const [configuredModel, setConfiguredModel] = React.useState<string>('');
 
   React.useEffect(() => {
+    // Initialize runtime config on first load
+    initializeRuntimeConfig().catch((error) => {
+      console.error('Failed to initialize runtime config:', error);
+    });
+
     const config = getSessionConfig();
     setConfiguredModel(config.ai_model || '');
   }, []);

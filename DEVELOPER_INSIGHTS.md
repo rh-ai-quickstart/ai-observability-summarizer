@@ -455,6 +455,76 @@ export PLATFORM=linux/amd64
 make config
 ```
 
+### Development Mode (DEV_MODE)
+
+The project supports a **Development Mode** that simplifies testing and development by storing credentials in browser session storage instead of Kubernetes Secrets.
+
+#### When to Use DEV_MODE
+
+Use DEV_MODE when:
+- Testing the OpenShift Console Plugin locally or in a development cluster
+- Quickly experimenting with different AI model providers without persisting credentials
+- Developing features that involve API key management
+- Avoiding creation of Kubernetes Secrets during development iterations
+
+**Do NOT use DEV_MODE in production environments.**
+
+#### How It Works
+
+**DEV_MODE=false (Production - Default)**:
+- API keys → Saved to Kubernetes Secrets (`ai-<provider>-credentials`)
+- Model selection → Persists across browser sessions (localStorage)
+- Custom models → Persists across browser sessions (localStorage)
+
+**DEV_MODE=true (Development)**:
+- API keys → Cached in browser sessionStorage (cleared on tab close)
+- Model selection → Cached in browser sessionStorage (cleared on tab close)
+- Custom models → Cached in browser sessionStorage (cleared on tab close)
+- No Kubernetes Secrets created
+- Dev mode banner shown in the UI
+
+#### Deployment with DEV_MODE
+
+```bash
+# Deploy MCP Server with DEV_MODE enabled
+make install-mcp-server NAMESPACE=your-namespace DEV_MODE=true
+
+# Deploy with default (production mode)
+make install-mcp-server NAMESPACE=your-namespace
+```
+
+The MCP Server exposes the dev mode status via its `/config` endpoint:
+```bash
+curl http://<mcp-server-url>/config
+# Response: {"devMode": true}
+```
+
+The OpenShift Console Plugin automatically fetches this configuration and adjusts its behavior accordingly.
+
+#### User Experience
+
+**In Production Mode**:
+1. User enters API key in Settings page
+2. Frontend calls MCP server's `save_provider_credentials` tool
+3. MCP server creates/updates Kubernetes Secret
+4. API key persists across browser sessions
+5. Model selection persists across browser sessions
+
+**In Dev Mode**:
+1. User enters API key in Settings page
+2. Frontend stores API key in browser sessionStorage
+3. No Kubernetes Secret created
+4. API key automatically injected into MCP tool calls
+5. Close browser tab → All credentials and selections cleared
+6. Dev mode banner displayed in the UI
+
+#### Architecture Details
+
+- **MCP Server**: Controlled by `DEV_MODE` environment variable set via Helm chart
+- **Console Plugin**: Fetches dev mode status from MCP server's `/config` endpoint at startup
+- **Storage Strategy**: Uses `sessionStorage` in dev mode, `localStorage` in production mode
+- **Credential Injection**: Frontend automatically injects cached API keys into MCP tool calls in dev mode
+
 ### Available Models
 
 See [Choosing different models](#choosing-different-models) section for the complete list of available models.

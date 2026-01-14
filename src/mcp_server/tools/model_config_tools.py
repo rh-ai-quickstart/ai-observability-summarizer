@@ -108,6 +108,8 @@ def list_provider_models(
     Args:
         provider: Provider name (openai, anthropic, google, meta)
         api_key: API key for authentication (optional, reads from secret if not provided)
+                 In dev mode, this is passed from browser session cache.
+                 In production, this is retrieved from Kubernetes Secret.
 
     Returns:
         MCP response with list of available models and metadata
@@ -125,8 +127,11 @@ def list_provider_models(
 
         provider_lower = provider.lower()
 
-        # Get API key from secret if not provided
-        if not api_key:
+        # Get API key: use provided key (dev mode) or retrieve from K8s Secret (production)
+        if api_key:
+            logger.info(f"Using provided API key for {provider_lower} (dev mode)")
+        else:
+            logger.info(f"Retrieving API key from K8s Secret for {provider_lower} (production mode)")
             api_key = _get_api_key_from_secret(provider_lower)
             if not api_key:
                 error_result = {

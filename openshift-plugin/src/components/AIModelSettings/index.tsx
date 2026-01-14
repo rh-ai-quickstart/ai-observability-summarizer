@@ -26,6 +26,7 @@ import { secretManager } from './services/secretManager';
 import { ModelsTab } from './tabs/ModelsTab';
 import { APIKeysTab } from './tabs/APIKeysTab';
 import { AddModelTab } from './tabs/AddModelTab';
+import { isDevMode } from '../../services/devCredentials';
 
 interface AIModelSettingsProps {
   isOpen: boolean;
@@ -99,11 +100,17 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
       // Check each external provider for existing secrets
       for (const provider of ['openai', 'anthropic', 'google', 'meta', 'other'] as const) {
         const secretStatus = await secretManager.checkProviderSecret(provider);
-        
+
+        // Determine storage type based on dev mode
+        let storageType: 'secret' | 'cache' | 'none' = 'none';
+        if (secretStatus.exists) {
+          storageType = isDevMode() ? 'cache' : 'secret';
+        }
+
         providers[provider] = {
           provider,
           status: secretStatus.exists ? 'configured' : 'missing',
-          storage: secretStatus.exists ? 'secret' : 'none',
+          storage: storageType,
           secretName: secretStatus.secretName,
           lastUpdated: secretStatus.lastUpdated,
           isValid: secretStatus.isValid,

@@ -200,8 +200,18 @@ def summarize_with_llm(
             # Google Gemini API format
             headers["x-goog-api-key"] = api_key
 
+            # Convert messages to Google Gemini format
+            gemini_contents = []
+            for msg in llm_messages:
+                # Google uses "user" and "model" roles (not "assistant")
+                role = "user" if msg["role"] == "user" else "model"
+                gemini_contents.append({
+                    "role": role,
+                    "parts": [{"text": msg["content"]}]
+                })
+
             payload = {
-                "contents": [{"parts": [{"text": prompt}]}],
+                "contents": gemini_contents,
             }
         elif provider == "anthropic":
             # Use official Anthropic client instead of raw HTTP requests

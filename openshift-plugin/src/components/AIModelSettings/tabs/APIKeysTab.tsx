@@ -13,6 +13,8 @@ import {
 import { AIModelState } from '../types/models';
 import { ProviderInlineItem } from '../components/ProviderInlineItem';
 import { getExternalProviders } from '../services/providerTemplates';
+import { DevModeBanner } from '../components/DevModeBanner';
+import { isDevMode } from '../../../services/devCredentials';
 
 interface APIKeysTabProps {
   state: AIModelState;
@@ -31,6 +33,9 @@ export const APIKeysTab: React.FC<APIKeysTabProps> = ({
 
   return (
     <div style={{ padding: '20px 0' }}>
+      {/* Dev Mode Banner */}
+      <DevModeBanner />
+
       {/* Header */}
       <Flex justifyContent={{ default: 'justifyContentSpaceBetween' }} alignItems={{ default: 'alignItemsCenter' }} style={{ marginBottom: '24px' }}>
         <FlexItem>
@@ -40,7 +45,9 @@ export const APIKeysTab: React.FC<APIKeysTabProps> = ({
               API Key Management
             </Text>
             <Text component={TextVariants.p} style={{ marginTop: '8px' }}>
-              Configure API keys for external AI providers. Keys are securely stored as OpenShift Secrets.
+              Configure API keys for external AI providers. {isDevMode()
+                ? 'Keys are cached in your browser session (dev mode).'
+                : 'Keys are securely stored as OpenShift Secrets.'}
             </Text>
           </TextContent>
         </FlexItem>

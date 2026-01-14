@@ -5,6 +5,9 @@
  * Uses stateless HTTP mode - no session management needed
  */
 
+import { getDevCredentials } from './devCredentials';
+import { fetchRuntimeConfig, isDevMode as checkDevMode } from './runtimeConfig';
+
 // Determine MCP server URL based on environment
 // - Production: Use OpenShift Console proxy (path starts with /api/proxy/)
 // - Local dev: Use localhost directly (when running yarn start + start-console)
@@ -28,7 +31,9 @@ function getMcpServerUrl(): string {
 
 const MCP_SERVER_URL = getMcpServerUrl();
 
-// ============ Session Config (localStorage) ============
+// ============ Session Config ============
+// Uses sessionStorage in dev mode (cleared on tab close)
+// Uses localStorage in production mode (persists across sessions)
 
 export interface SessionConfig {
   ai_model: string;
@@ -37,9 +42,16 @@ export interface SessionConfig {
 
 const SESSION_CONFIG_KEY = 'openshift_ai_observability_config';
 
+/**
+ * Get the appropriate storage mechanism based on dev mode
+ */
+function getStorage(): Storage {
+  return checkDevMode() ? sessionStorage : localStorage;
+}
+
 export function getSessionConfig(): SessionConfig {
   try {
-    const stored = localStorage.getItem(SESSION_CONFIG_KEY);
+    const stored = getStorage().getItem(SESSION_CONFIG_KEY);
     if (stored) {
       return JSON.parse(stored);
     }
@@ -50,11 +62,84 @@ export function getSessionConfig(): SessionConfig {
 }
 
 export function setSessionConfig(config: SessionConfig): void {
-  localStorage.setItem(SESSION_CONFIG_KEY, JSON.stringify(config));
+  getStorage().setItem(SESSION_CONFIG_KEY, JSON.stringify(config));
 }
 
 export function clearSessionConfig(): void {
-  localStorage.removeItem(SESSION_CONFIG_KEY);
+  getStorage().removeItem(SESSION_CONFIG_KEY);
+}
+
+// ============ Dev Mode Credential Injection ============
+
+/**
+ * Detect provider from model ID or name
+ */
+function detectProviderFromModelId(modelId: string): string | null {
+  const patterns: Record<string, RegExp> = {
+    openai: /^(openai\/|gpt-)/,
+    anthropic: /^(anthropic\/|claude-)/,
+    google: /^(google\/|gemini-)/,
+    meta: /^(meta\/|llama-)/,
+  };
+
+  for (const [provider, pattern] of Object.entries(patterns)) {
+    if (pattern.test(modelId)) {
+      return provider;
+    }
+  }
+  return null;
+}
+
+/**
+ * Auto-inject dev credentials into MCP tool arguments
+ * In dev mode, adds cached API keys to tool calls that support them
+ */
+async function injectDevCredentials(toolName: string, args: Record<string, unknown>): Promise<Record<string, unknown>> {
+  // Ensure runtime config is loaded before checking dev mode
+  await fetchRuntimeConfig();
+
+  if (!checkDevMode()) {
+    return args;
+  }
+
+  // Skip credential injection for tools that don't need API keys
+  const skipTools = ['add_model_to_config', 'save_provider_credentials', 'delete_secret'];
+  if (skipTools.includes(toolName)) {
+    return args;
+  }
+
+  // If api_key already provided, don't override
+  if (args.api_key) {
+    return args;
+  }
+
+  const devCreds = getDevCredentials();
+
+  // Try to detect provider from various parameters
+  let provider: string | null = null;
+
+  // Check explicit provider parameter first
+  if (typeof args.provider === 'string') {
+    provider = args.provider.toLowerCase();
+  }
+  // Try to detect from model_id parameters
+  else {
+    const modelId = (args.summarize_model_id as string) || (args.model_name as string);
+    if (modelId) {
+      provider = detectProviderFromModelId(modelId);
+    }
+  }
+
+  // Inject the key if provider detected and key available
+  if (provider && devCreds[provider]?.apiKey) {
+    console.log(`[DevMode] Auto-injecting API key for ${provider}`);
+    return {
+      ...args,
+      api_key: devCreds[provider].apiKey,
+    };
+  }
+
+  return args;
 }
 
 // ============ MCP Tool Calls (Stateless) ============
@@ -68,6 +153,9 @@ export async function callMcpTool<T = unknown>(
   toolName: string,
   args: Record<string, unknown> = {}
 ): Promise<T> {
+  // Auto-inject dev credentials if in dev mode
+  const enhancedArgs = await injectDevCredentials(toolName, args);
+
   const response = await fetch(MCP_SERVER_URL, {
     method: 'POST',
     headers: {
@@ -80,7 +168,7 @@ export async function callMcpTool<T = unknown>(
       method: 'tools/call',
       params: {
         name: toolName,
-        arguments: args,
+        arguments: enhancedArgs,
       },
       id: ++requestId,
     }),
@@ -146,6 +234,9 @@ export async function callMcpTool<T = unknown>(
  * Call MCP tool and get raw text response
  */
 export async function callMcpToolText(toolName: string, args: Record<string, unknown> = {}): Promise<string> {
+  // Auto-inject dev credentials if in dev mode
+  const enhancedArgs = await injectDevCredentials(toolName, args);
+
   const response = await fetch(MCP_SERVER_URL, {
     method: 'POST',
     headers: {
@@ -158,7 +249,7 @@ export async function callMcpToolText(toolName: string, args: Record<string, unk
       method: 'tools/call',
       params: {
         name: toolName,
-        arguments: args,
+        arguments: enhancedArgs,
       },
       id: ++requestId,
     }),

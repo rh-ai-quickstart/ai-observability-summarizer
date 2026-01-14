@@ -1,6 +1,6 @@
 export type Provider = 'openai' | 'anthropic' | 'google' | 'meta' | 'internal' | 'other';
 
-export type StorageType = 'secret' | 'none';
+export type StorageType = 'secret' | 'cache' | 'none';
 
 export type CredentialStatus = 'configured' | 'missing' | 'invalid' | 'testing';
 

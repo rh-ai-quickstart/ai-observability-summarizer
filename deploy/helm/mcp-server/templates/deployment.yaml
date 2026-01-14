@@ -35,6 +35,8 @@ spec:
               value: "{{ .Values.env.MCP_TRANSPORT_PROTOCOL }}"
             - name: PYTHON_LOG_LEVEL
               value: "{{ .Values.env.PYTHON_LOG_LEVEL }}"
+            - name: DEV_MODE
+              value: "{{ .Values.env.DEV_MODE }}"
             {{- if .Values.tls.enabled }}
             - name: MCP_SSL_KEYFILE
               value: "/run/secrets/tls/tls.key"

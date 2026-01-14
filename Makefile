@@ -16,6 +16,7 @@ ORG ?= ecosystem-appeng
 IMAGE_PREFIX ?= aiobs
 VERSION ?= 1.0.7
 PLATFORM ?= linux/amd64
+DEV_MODE ?= false
 
 # Container image names
 METRICS_UI_IMAGE = $(REGISTRY)/$(ORG)/$(IMAGE_PREFIX)-metrics-ui
@@ -407,6 +408,7 @@ install-mcp-server: namespace
 			--set image.tag=$(VERSION) \
 			--set rbac.createGrafanaRole=false \
 			--set LLM_PREDICTOR=$(LLM)-predictor \
+			--set env.DEV_MODE=$(DEV_MODE) \
 			$(if $(MCP_SERVER_ROUTE_HOST),--set route.host='$(MCP_SERVER_ROUTE_HOST)',) \
 			$(if $(LLAMA_STACK_URL),--set llm.url='$(LLAMA_STACK_URL)',) \
 			-f $(GEN_MODEL_CONFIG_PREFIX)-for_helm.yaml; \
@@ -417,6 +419,7 @@ install-mcp-server: namespace
 			--set image.tag=$(VERSION) \
 			--set rbac.createGrafanaRole=true \
 			--set LLM_PREDICTOR=$(LLM)-predictor \
+			--set env.DEV_MODE=$(DEV_MODE) \
 			$(if $(MCP_SERVER_ROUTE_HOST),--set route.host='$(MCP_SERVER_ROUTE_HOST)',) \
 			$(if $(LLAMA_STACK_URL),--set llm.url='$(LLAMA_STACK_URL)',) \
 			-f $(GEN_MODEL_CONFIG_PREFIX)-for_helm.yaml; \
