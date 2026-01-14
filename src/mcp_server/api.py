@@ -51,7 +51,6 @@ if settings.CORS_ENABLED:
         allow_headers=settings.CORS_HEADERS,
     )
 
-
 @app.get("/health")
 async def health_check():
     return JSONResponse(

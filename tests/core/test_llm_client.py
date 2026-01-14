@@ -20,56 +20,60 @@ class TestLLMClientAuthentication:
     """Test LLM client authentication for different providers"""
 
     @patch('src.core.llm_client._make_api_request')
-    def test_openai_authentication_headers(self, mock_api_request):
+    @patch('src.core.llm_client.get_model_config')
+    def test_openai_authentication_headers(self, mock_get_config, mock_api_request):
         """Test that OpenAI uses correct Authorization Bearer header"""
         mock_api_request.return_value = {
             "choices": [{"message": {"content": "Test response"}}]
         }
-        
+
         # Mock model config for OpenAI
         model_config = {
             "provider": "openai",
             "apiUrl": "https://api.openai.com/v1/chat/completions",
             "external": True,
-            "requiresApiKey": True
+            "requiresApiKey": True,
+            "modelName": "test-model"
         }
-        
-        with patch('src.core.llm_client.MODEL_CONFIG', {"test-model": model_config}):
-            summarize_with_llm(
-                prompt="Test prompt",
-                summarize_model_id="test-model",
-                response_type=ResponseType.GENERAL_CHAT,
-                api_key="test-openai-key"
-            )
-        
+        mock_get_config.return_value = {"test-model": model_config}
+
+        summarize_with_llm(
+            prompt="Test prompt",
+            summarize_model_id="test-model",
+            response_type=ResponseType.GENERAL_CHAT,
+            api_key="test-openai-key"
+        )
+
         # Verify the API request was made with correct headers
         call_args = mock_api_request.call_args
         headers = call_args[0][1]  # Second argument is headers
         assert headers["Authorization"] == "Bearer test-openai-key"
 
     @patch('src.core.llm_client._make_api_request')
-    def test_google_authentication_headers(self, mock_api_request):
+    @patch('src.core.llm_client.get_model_config')
+    def test_google_authentication_headers(self, mock_get_config, mock_api_request):
         """Test that Google uses correct x-goog-api-key header"""
         mock_api_request.return_value = {
             "candidates": [{"content": {"parts": [{"text": "Test response"}]}}]
         }
-        
+
         # Mock model config for Google
         model_config = {
             "provider": "google",
             "apiUrl": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
             "external": True,
-            "requiresApiKey": True
+            "requiresApiKey": True,
+            "modelName": "test-model"
         }
-        
-        with patch('src.core.llm_client.MODEL_CONFIG', {"test-model": model_config}):
-            summarize_with_llm(
-                prompt="Test prompt",
-                summarize_model_id="test-model",
-                response_type=ResponseType.GENERAL_CHAT,
-                api_key="test-google-key"
-            )
-        
+        mock_get_config.return_value = {"test-model": model_config}
+
+        summarize_with_llm(
+            prompt="Test prompt",
+            summarize_model_id="test-model",
+            response_type=ResponseType.GENERAL_CHAT,
+            api_key="test-google-key"
+        )
+
         # Verify the API request was made with correct headers
         call_args = mock_api_request.call_args
         headers = call_args[0][1]  # Second argument is headers
@@ -98,7 +102,7 @@ class TestLLMClientAuthentication:
             "requiresApiKey": True
         }
         
-        with patch('src.core.llm_client.MODEL_CONFIG', {"test-model": model_config}):
+        with patch('src.core.llm_client.get_model_config', return_value={"test-model": model_config}):
             result = summarize_with_llm(
                 prompt="Test prompt",
                 summarize_model_id="test-model",
@@ -244,7 +248,7 @@ class TestLLMClientErrorHandling:
             "requiresApiKey": True
         }
         
-        with patch('src.core.llm_client.MODEL_CONFIG', {"test-model": model_config}):
+        with patch('src.core.llm_client.get_model_config', return_value={"test-model": model_config}):
             with pytest.raises(ValueError, match="Anthropic client not available"):
                 summarize_with_llm(
                     prompt="Test prompt",
@@ -267,7 +271,7 @@ class TestLLMClientErrorHandling:
             "requiresApiKey": True
         }
         
-        with patch('src.core.llm_client.MODEL_CONFIG', {"test-model": model_config}):
+        with patch('src.core.llm_client.get_model_config', return_value={"test-model": model_config}):
             with pytest.raises(ValueError, match="Anthropic API error"):
                 summarize_with_llm(
                     prompt="Test prompt",
@@ -303,7 +307,7 @@ class TestLLMClientIntegration:
             "modelName": "claude-3-5-haiku-20241022"
         }
         
-        with patch('src.core.llm_client.MODEL_CONFIG', {"test-model": model_config}):
+        with patch('src.core.llm_client.get_model_config', return_value={"test-model": model_config}):
             result = summarize_with_llm(
                 prompt="Summarize this data",
                 summarize_model_id="test-model",
@@ -346,7 +350,7 @@ class TestLLMClientIntegration:
             "modelName": "claude-3-5-haiku-20241022"
         }
         
-        with patch('src.core.llm_client.MODEL_CONFIG', {"test-model": model_config}):
+        with patch('src.core.llm_client.get_model_config', return_value={"test-model": model_config}):
             # Test with multiple messages (conversation)
             result = summarize_with_llm(
                 prompt="Test prompt",
@@ -392,7 +396,7 @@ class TestLLMClientBackwardCompatibility:
             "requiresApiKey": True
         }
         
-        with patch('src.core.llm_client.MODEL_CONFIG', {"test-model": model_config}):
+        with patch('src.core.llm_client.get_model_config', return_value={"test-model": model_config}):
             result = summarize_with_llm(
                 prompt="Test prompt",
                 summarize_model_id="test-model",
@@ -418,7 +422,7 @@ class TestLLMClientBackwardCompatibility:
             "requiresApiKey": True
         }
         
-        with patch('src.core.llm_client.MODEL_CONFIG', {"test-model": model_config}):
+        with patch('src.core.llm_client.get_model_config', return_value={"test-model": model_config}):
             result = summarize_with_llm(
                 prompt="Test prompt",
                 summarize_model_id="test-model",
@@ -489,7 +493,7 @@ class TestLLMClientEdgeCases:
             "requiresApiKey": True
         }
         
-        with patch('src.core.llm_client.MODEL_CONFIG', {"test-model": model_config}):
+        with patch('src.core.llm_client.get_model_config', return_value={"test-model": model_config}):
             result = summarize_with_llm(
                 prompt="Test prompt",
                 summarize_model_id="test-model",

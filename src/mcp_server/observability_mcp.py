@@ -63,6 +63,11 @@ class ObservabilityMCPServer:
             chat_tempo_tool
         )
         from .tools.chat_tool import chat
+        from .tools.credentials_tools import validate_api_key, save_api_key
+        from .tools.model_config_tools import (
+            list_provider_models,
+            add_model_to_config,
+        )
 
         from core.config import KORREL8R_ENABLED
 
@@ -113,3 +118,9 @@ class ObservabilityMCPServer:
             self.mcp.tool()(korrel8r_get_correlated)
 
         self.mcp.tool()(chat)
+        self.mcp.tool()(validate_api_key)
+        self.mcp.tool()(save_api_key)
+
+        # Register model config tools
+        self.mcp.tool()(list_provider_models)
+        self.mcp.tool()(add_model_to_config)

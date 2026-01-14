@@ -500,6 +500,8 @@ export const OpenShiftMetricsPage: React.FC = () => {
         setLoadingAnalysis(false);
         return;
       }
+      // Let MCP server resolve provider secret if api_key is not present in session
+      const apiKey = (config.api_key as string | undefined) || undefined;
       
       console.log('[OpenShift] Calling analyzeOpenShift:', { 
         category: selectedCategory, 
@@ -514,7 +516,7 @@ export const OpenShiftMetricsPage: React.FC = () => {
         scope,
         scope === 'namespace_scoped' ? selectedNamespace : undefined,
         config.ai_model,
-        config.api_key,
+        apiKey,
         timeRange
       );
       

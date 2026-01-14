@@ -1688,31 +1688,32 @@ def build_log_trace_context_for_pod_issues(
         return ""
 
 def get_summarization_models() -> List[str]:
-    """Return available summarization model IDs from MODEL_CONFIG.
+    """
+    Return all configured model IDs from runtime configuration.
+
+    Returns all models in ConfigMap without filtering.
+    UI is responsible for filtering based on availability, API key status, etc.
 
     External models are sorted after internal ones to match UI expectations.
-    When RAG infrastructure is not available, local models are filtered out.
+
+    Returns:
+        List of model names (e.g., ["openai/gpt-4o-mini", "anthropic/claude-opus-4"])
     """
     try:
-        if not isinstance(MODEL_CONFIG, dict) or not MODEL_CONFIG:
+        from core.model_config_manager import get_model_config
+
+        config = get_model_config()  # Auto-refreshes if stale
+
+        if not isinstance(config, dict) or not config:
             return []
-        
-        # Import here to avoid circular imports
-        from core.config import RAG_AVAILABLE
-        
-        # Filter out local models if RAG is not available
-        available_models = []
-        for name, config in MODEL_CONFIG.items():
-            is_external = config.get("external", True)
-            if not is_external and not RAG_AVAILABLE:
-                # Skip local models when RAG infrastructure is unavailable
-                continue
-            available_models.append((name, config))
-        
-        # Sort with internal models first, external models second
-        sorted_items = sorted(available_models, key=lambda x: x[1].get("external", True))
-        return [name for name, _ in sorted_items]
-    except Exception:
+
+        # Sort: internal models first, external models second
+        models_with_meta = [(name, cfg) for name, cfg in config.items()]
+        models_with_meta.sort(key=lambda x: x[1].get("external", True))
+
+        return [name for name, _ in models_with_meta]
+    except Exception as e:
+        logger.error(f"Error getting summarization models: {e}")
         return []
 
 
