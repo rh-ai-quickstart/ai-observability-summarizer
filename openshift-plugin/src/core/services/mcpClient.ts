@@ -1,35 +1,15 @@
 /**
- * MCP Client for OpenShift Console Plugin
- * Communicates with the MCP server via the console's proxy (production)
- * or directly via localhost (local development)
+ * MCP Client for OpenShift Console Plugin and React UI
+ * Communicates with the MCP server via the console's proxy (plugin mode)
+ * or directly via nginx proxy/localhost (React UI mode / local development)
  * Uses stateless HTTP mode - no session management needed
  */
 
 import { getDevCredentials } from './devCredentials';
 import { fetchRuntimeConfig, isDevMode as checkDevMode } from './runtimeConfig';
+import config from '../../shared/config';
 
-// Determine MCP server URL based on environment
-// - Production: Use OpenShift Console proxy (path starts with /api/proxy/)
-// - Local dev: Use localhost directly (when running yarn start + start-console)
-function getMcpServerUrl(): string {
-  // Check if we're running in local development mode
-  // In local dev, window.location.origin is http://localhost:9000 (console container)
-  // The browser makes requests, so we need to use localhost:8085 directly
-  const isLocalDev = window.location.hostname === 'localhost' || 
-                     window.location.hostname === '127.0.0.1';
-  
-  if (isLocalDev) {
-    // Local development: connect directly to MCP server on host
-    return 'http://localhost:8085/mcp';
-  }
-  
-  // Production: Use OpenShift Console's proxy to reach the MCP server
-  // The proxy is configured in the ConsolePlugin CR via Helm chart
-  // Format: /api/proxy/plugin/<plugin-name>/<alias>/<path>
-  return '/api/proxy/plugin/openshift-ai-observability/mcp/mcp';
-}
-
-const MCP_SERVER_URL = getMcpServerUrl();
+const MCP_SERVER_URL = config.mcpServerUrl;
 
 // ============ Session Config ============
 // Uses sessionStorage in dev mode (cleared on tab close)
@@ -193,7 +173,7 @@ export async function callMcpTool<T = unknown>(
   // Extract text from structuredContent or content
   if (result.structuredContent?.result) {
     const structured = result.structuredContent.result;
-    
+
     // Format 1: structuredContent.result is a string (JSON)
     if (typeof structured === 'string') {
       try {
@@ -202,7 +182,7 @@ export async function callMcpTool<T = unknown>(
         return structured as T;
       }
     }
-    
+
     // Format 2: structuredContent.result is an array with text objects
     if (Array.isArray(structured) && structured[0]?.text) {
       try {
@@ -211,7 +191,7 @@ export async function callMcpTool<T = unknown>(
         return structured[0].text as T;
       }
     }
-    
+
     // Format 3: structuredContent.result is already parsed object
     return structured as T;
   }
@@ -346,7 +326,7 @@ export async function healthCheck(): Promise<boolean> {
       method: 'GET',
       headers: { 'Accept': 'application/json' },
     });
-    
+
     if (!response.ok) {
       console.warn('Health endpoint failed:', response.status);
       return false;
@@ -467,7 +447,7 @@ export async function fetchOpenShiftMetrics(
       time_range: timeRange,
       namespace: namespace || undefined,
     });
-    
+
     const data = JSON.parse(text) as OpenShiftMetricsDataResponse;
     console.log('[OpenShift] Metrics received:', Object.keys(data.metrics || {}).length, 'metrics');
     return data;
@@ -541,22 +521,22 @@ export async function analyzeOpenShift(
       api_key: apiKey || undefined,
       time_range: timeRange || '1h',
     });
-    
+
     console.log('[OpenShift] Analysis response length:', text.length);
-    
+
     // The response might contain STRUCTURED_DATA at the end, extract just the summary
     let summary = text;
     const structuredIndex = text.indexOf('STRUCTURED_DATA:');
     if (structuredIndex > 0) {
       summary = text.substring(0, structuredIndex).trim();
     }
-    
+
     // Remove the header line if present (e.g., "OpenShift Analysis (Fleet Overview) — cluster_wide")
     const lines = summary.split('\n');
     if (lines[0]?.startsWith('OpenShift Analysis')) {
       summary = lines.slice(1).join('\n').trim();
     }
-    
+
     return {
       summary,
       category,
@@ -598,14 +578,14 @@ export async function analyzeVLLM(
       time_range: timeRange,
       api_key: apiKey || undefined,
     });
-    
+
     return result;
   } catch (error) {
     console.error('Failed to analyze vLLM:', error);
-    
+
     // Check if error message contains error details
     const errorMessage = error instanceof Error ? error.message : String(error);
-    
+
     // Return error as summary for display
     return {
       model_name: modelName,
@@ -697,7 +677,7 @@ export async function fetchVLLMMetrics(
       time_range: timeRange,
       namespace: namespace || undefined,
     });
-    
+
     // Parse the JSON response
     const data = JSON.parse(text) as VLLMMetricsResponse;
     return data;

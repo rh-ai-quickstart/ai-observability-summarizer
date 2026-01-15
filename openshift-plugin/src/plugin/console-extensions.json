@@ -1,0 +1,52 @@
+[
+  {
+    "type": "console.navigation/href",
+    "properties": {
+      "id": "ai-observability",
+      "perspective": "admin",
+      "section": "observe",
+      "name": "%plugin__openshift-ai-observability~AI Observability%",
+      "href": "/observe/ai-observability"
+    }
+  },
+  {
+    "type": "console.page/route",
+    "properties": {
+      "path": "/observe/ai-observability",
+      "component": {
+        "$codeRef": "AIObservabilityPage"
+      },
+      "exact": true
+    }
+  },
+  {
+    "type": "console.page/route",
+    "properties": {
+      "path": "/observe/ai-observability/vllm",
+      "component": {
+        "$codeRef": "VLLMMetricsPage"
+      },
+      "exact": true
+    }
+  },
+  {
+    "type": "console.page/route",
+    "properties": {
+      "path": "/observe/ai-observability/openshift",
+      "component": {
+        "$codeRef": "OpenShiftMetricsPage"
+      },
+      "exact": true
+    }
+  },
+  {
+    "type": "console.page/route",
+    "properties": {
+      "path": "/observe/ai-observability/chat",
+      "component": {
+        "$codeRef": "AIChatPage"
+      },
+      "exact": true
+    }
+  }
+]

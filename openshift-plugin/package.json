@@ -75,10 +75,10 @@
     "displayName": "AI Observability",
     "description": "Monitor and analyze AI/ML workloads with OpenShift AI Observability",
     "exposedModules": {
-      "AIObservabilityPage": "./pages/AIObservabilityPage",
-      "VLLMMetricsPage": "./pages/VLLMMetricsPage",
-      "OpenShiftMetricsPage": "./pages/OpenShiftMetricsPage",
-      "AIChatPage": "./pages/AIChatPage"
+      "AIObservabilityPage": "./core/pages/AIObservabilityPage",
+      "VLLMMetricsPage": "./core/pages/VLLMMetricsPage",
+      "OpenShiftMetricsPage": "./core/pages/OpenShiftMetricsPage",
+      "AIChatPage": "./core/pages/AIChatPage"
     },
     "dependencies": {
       "@console/pluginAPI": "*"
