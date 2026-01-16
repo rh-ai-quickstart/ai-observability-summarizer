@@ -1,0 +1,30 @@
+# Build stage
+FROM node:20 AS builder
+
+WORKDIR /app
+
+# Copy package files
+COPY package.json yarn.lock ./
+
+# Install dependencies
+RUN yarn install --frozen-lockfile
+
+# Copy source code
+COPY . .
+
+# Build React UI
+RUN yarn build:react-ui
+
+# Runtime stage
+FROM registry.access.redhat.com/ubi9/nginx-120:latest
+
+# Copy built assets
+COPY --from=builder /app/dist/react-ui /opt/app-root/src
+
+# Copy nginx configuration to nginx.default.d (adds to existing default server block)
+COPY nginx/default.conf /opt/app-root/etc/nginx.default.d/default.conf
+
+EXPOSE 8080
+
+# Start nginx (UBI nginx uses run-nginx.sh)
+CMD ["nginx", "-g", "daemon off;"]

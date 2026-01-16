@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.app.name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- toYaml .Values.labels | nindent 4 }}
+  annotations:
+    {{- if .Values.oauth.enabled }}
+    service.beta.openshift.io/serving-cert-secret-name: {{ .Values.app.name }}-proxy-tls
+    {{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+  {{- if .Values.oauth.enabled }}
+  - name: https
+    port: {{ .Values.oauth.port }}
+    targetPort: {{ .Values.oauth.port }}
+    protocol: TCP
+  {{- end }}
+  - name: http
+    port: {{ .Values.service.port }}
+    targetPort: {{ .Values.service.targetPort }}
+    protocol: TCP
+  selector:
+    app: {{ .Values.app.name }}

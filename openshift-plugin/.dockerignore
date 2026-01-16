@@ -1,0 +1,38 @@
+# Dependencies
+node_modules
+
+# Git
+.git
+.gitignore
+
+# Testing
+coverage
+*.log
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Misc
+.eslintrc*
+.prettierrc*
+jest.config.js
+
+# CI/CD
+.github
+
+# Development
+start-console.sh
+cypress
+cypress.json
+
+# Docker
+Dockerfile*
+.dockerignore

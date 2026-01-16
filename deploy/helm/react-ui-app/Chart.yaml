@@ -1,0 +1,15 @@
+apiVersion: v2
+name: openshift-ai-observability-react-ui
+description: OpenShift AI Observability - React UI Web Application
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - openshift
+  - ai
+  - observability
+  - vllm
+  - monitoring
+  - react
+maintainers:
+  - name: OpenShift AI Observability Team

@@ -1,0 +1,69 @@
+# Application configuration
+app:
+  name: "ai-observability-react-ui"
+  replicas: 2
+  image:
+    repository: "quay.io/ecosystem-appeng/aiobs-react-ui"
+    tag: "latest"
+    pullPolicy: Always
+
+  port: 8080
+
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 8080
+  targetPort: 8080
+
+# Route configuration (OpenShift)
+route:
+  enabled: true
+  host: ""  # Auto-generated if empty
+  path: "/"
+  tls:
+    enabled: true
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+
+# OAuth Proxy (for authentication)
+oauth:
+  enabled: true
+  image:
+    repository: "quay.io/openshift/origin-oauth-proxy"
+    tag: "4.14"
+    pullPolicy: IfNotPresent
+  port: 8443
+
+  # Cookie configuration
+  cookieSecret: ""  # Auto-generated if empty
+  cookieExpire: "24h"
+
+# MCP Server connection
+mcpServer:
+  serviceName: "mcp-server-svc"
+  port: 8085
+  namespace: ""  # If empty, uses the release namespace
+
+# Service Account
+serviceAccount:
+  create: true
+  name: ""  # If empty, uses app.name
+  annotations: {}  # OAuth redirect annotation is automatically added when oauth.enabled=true
+
+# Security Context (OpenShift will automatically assign UID/GID from allowed range)
+securityContext:
+  runAsNonRoot: true
+
+# Labels
+labels:
+  app: ai-observability-react-ui
+  component: react-ui
+  part-of: openshift-ai-observability

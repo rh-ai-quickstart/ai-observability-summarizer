@@ -1,7 +1,7 @@
 ---
 plugin:
   # Plugin name - should match consolePlugin.name in package.json
-  name: "openshift-ai-observability"
+  name: "ai-observability-console-plugin"
   description: "AI Observability Plugin"
   image:
     repository: quay.io/ecosystem-appeng/aiobs-console-plugin

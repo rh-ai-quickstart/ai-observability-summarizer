@@ -1,0 +1,30 @@
+{{- if .Values.route.enabled }}
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ .Values.app.name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- toYaml .Values.labels | nindent 4 }}
+spec:
+  {{- if .Values.route.host }}
+  host: {{ .Values.route.host }}
+  {{- end }}
+  path: {{ .Values.route.path }}
+  to:
+    kind: Service
+    name: {{ .Values.app.name }}
+    weight: 100
+  port:
+    targetPort: {{ if .Values.oauth.enabled }}https{{ else }}http{{ end }}
+  {{- if .Values.route.tls.enabled }}
+  tls:
+    {{- if .Values.oauth.enabled }}
+    termination: reencrypt
+    {{- else }}
+    termination: {{ .Values.route.tls.termination }}
+    {{- end }}
+    insecureEdgeTerminationPolicy: {{ .Values.route.tls.insecureEdgeTerminationPolicy }}
+  {{- end }}
+  wildcardPolicy: None
+{{- end }}
