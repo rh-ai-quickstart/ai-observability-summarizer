@@ -431,7 +431,8 @@ install-mcp-server: namespace
 install-console-plugin: namespace
 	@echo "Deploying OpenShift Console Plugin"
 	@cd deploy/helm && helm upgrade --install $(CONSOLE_PLUGIN_RELEASE_NAME) $(CONSOLE_PLUGIN_CHART_PATH) -n $(NAMESPACE) \
-		--set plugin.image=$(CONSOLE_PLUGIN_IMAGE):$(VERSION) \
+		--set plugin.image.repository=$(CONSOLE_PLUGIN_IMAGE) \
+		--set plugin.image.tag=$(VERSION) \
 		--set mcpServer.serviceName=$(MCP_SERVER_RELEASE_NAME)-svc \
 		$(if $(PLUGIN_AUTO_ENABLE),--set plugin.autoEnable=$(PLUGIN_AUTO_ENABLE),)
 	@echo "✅ Console plugin deployed"
@@ -447,8 +448,8 @@ install-console-plugin: namespace
 uninstall-console-plugin:
 	@echo "Uninstalling OpenShift Console Plugin"
 	@echo "→ Disabling plugin in OpenShift Console..."
-	-@if oc get console.operator.openshift.io cluster -o jsonpath='{.spec.plugins}' 2>/dev/null | grep -q "ai-observability-plugin"; then \
-		PLUGIN_INDEX=$$(oc get console.operator.openshift.io cluster -o json | jq '.spec.plugins | to_entries | .[] | select(.value=="ai-observability-plugin") | .key'); \
+	-@if oc get console.operator.openshift.io cluster -o jsonpath='{.spec.plugins}' 2>/dev/null | grep -q "openshift-ai-observability"; then \
+		PLUGIN_INDEX=$$(oc get console.operator.openshift.io cluster -o json | jq '.spec.plugins | to_entries | .[] | select(.value=="openshift-ai-observability") | .key'); \
 		if [ -n "$$PLUGIN_INDEX" ]; then \
 			oc patch console.operator.openshift.io cluster --type=json -p="[{\"op\": \"remove\", \"path\": \"/spec/plugins/$$PLUGIN_INDEX\"}]" 2>/dev/null; \
 			echo "  → Plugin disabled from console"; \
@@ -478,7 +479,7 @@ install-rag: namespace
 
 
 .PHONY: install
-install: namespace enable-user-workload-monitoring depend validate-llm install-operators install-observability-stack install-metric-ui install-mcp-server install-korrel8r delete-jobs
+install: namespace enable-user-workload-monitoring depend validate-llm install-operators install-observability-stack install-metric-ui install-mcp-server install-console-plugin install-korrel8r delete-jobs
 	@if [ "$(ENABLE_RAG)" != "false" ]; then \
 		echo "Installing RAG backend services (set ENABLE_RAG=false to skip)..."; \
 		$(MAKE) install-rag NAMESPACE=$(NAMESPACE); \
@@ -556,6 +557,8 @@ uninstall:
 	- @helm -n $(NAMESPACE) uninstall $(METRICS_UI_RELEASE_NAME) --ignore-not-found
 	@echo "Uninstalling $(MCP_SERVER_RELEASE_NAME) helm chart (if installed)"
 	- @helm -n $(NAMESPACE) uninstall $(MCP_SERVER_RELEASE_NAME) --ignore-not-found
+	@echo "Uninstalling console plugin (if installed)"
+	@$(MAKE) uninstall-console-plugin NAMESPACE=$(NAMESPACE) || true
 	@echo "Uninstalling Korrel8r helm-managed resources (if installed)"
 	@$(MAKE) uninstall-korrel8r || true
 

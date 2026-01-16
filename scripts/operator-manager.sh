@@ -347,7 +347,7 @@ uninstall_operator() {
         echo -e "${BLUE}       oc delete csv -n $namespace --all --ignore-not-found=true${NC}"
     fi
 
-    echo -e "${BLUE}  📋 Step 3: Deleting CRDs to prevent operator resurrection...${NC}"
+    echo -e "${BLUE}  📋 Step 3: Deleting CRD resources and CRDs to prevent operator resurrection...${NC}"
     # Get CRD patterns for this operator
     local crd_patterns=$(get_operator_crds "$operator_name")
     if [ -n "$crd_patterns" ]; then
@@ -355,6 +355,39 @@ uninstall_operator() {
             echo -e "${BLUE}     → Finding CRDs matching pattern: $pattern${NC}"
             local crds=$(oc get crd -o name | grep "$pattern" | cut -d'/' -f2)
             if [ -n "$crds" ]; then
+                # First, delete all resources of each CRD type
+                for crd in $crds; do
+                    echo -e "${BLUE}     → Deleting all resources of type: $crd${NC}"
+                    # Get the resource kind from CRD (plural name without domain)
+                    local resource_kind=$(echo "$crd" | cut -d'.' -f1)
+                    # Delete all resources of this type across all namespaces
+                    local resources=$(oc get "$resource_kind" --all-namespaces -o name 2>/dev/null || true)
+                    if [ -n "$resources" ]; then
+                        echo -e "${BLUE}        → Found resources: $resources${NC}"
+                        oc delete "$resource_kind" --all --all-namespaces --ignore-not-found=true --timeout=30s 2>/dev/null || true
+
+                        # Check if resources still exist (stuck with finalizers)
+                        local remaining=$(oc get "$resource_kind" --all-namespaces --no-headers 2>/dev/null | awk '{print $1 ":" $2}' || true)
+                        if [ -n "$remaining" ]; then
+                            echo -e "${YELLOW}        → Some resources still exist (likely stuck with finalizers)${NC}"
+                            echo -e "${BLUE}        → Removing finalizers to force deletion...${NC}"
+                            # Remove finalizers from remaining resources
+                            while IFS=: read -r ns name; do
+                                if [ "$ns" = "$name" ] || [ -z "$ns" ]; then
+                                    # Cluster-scoped resource (namespace column is same as name)
+                                    echo -e "${BLUE}           → Patching cluster-scoped: $name${NC}"
+                                    oc patch "$resource_kind" "$name" --type json -p='[{"op": "remove", "path": "/metadata/finalizers"}]' 2>/dev/null || true
+                                else
+                                    # Namespaced resource
+                                    echo -e "${BLUE}           → Patching $ns/$name${NC}"
+                                    oc patch "$resource_kind" "$name" -n "$ns" --type json -p='[{"op": "remove", "path": "/metadata/finalizers"}]' 2>/dev/null || true
+                                fi
+                            done <<< "$remaining"
+                        fi
+                    fi
+                done
+
+                # Now delete the CRDs after resources are removed
                 echo -e "${BLUE}     → Deleting CRDs: $crds${NC}"
                 echo "$crds" | xargs -r oc delete crd --ignore-not-found=true
             else
