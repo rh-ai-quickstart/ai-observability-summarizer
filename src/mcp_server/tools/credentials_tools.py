@@ -193,3 +193,128 @@ def save_api_key(
         return err.to_mcp_response()
 
 
+def check_provider_secret(provider: str) -> List[Dict[str, Any]]:
+    """
+    Check if a provider API key secret exists in the cluster.
+    Returns {exists: bool, secret_name: str, last_updated?: str}.
+    """
+    try:
+        if not provider:
+            raise MCPException(
+                message="provider is required",
+                error_code=MCPErrorCode.INVALID_INPUT,
+            )
+
+        provider_lower = provider.lower()
+        ns = os.getenv("NAMESPACE", "")
+        if not ns:
+            raise MCPException(
+                message="Server namespace not detected",
+                error_code=MCPErrorCode.INTERNAL_ERROR,
+            )
+
+        token = ""
+        with open(K8S_SA_TOKEN_PATH, "r") as f:
+            token = f.read().strip()
+        if not token:
+            raise MCPException(
+                message="ServiceAccount token unavailable",
+                error_code=MCPErrorCode.KUBERNETES_API_ERROR,
+            )
+
+        name = f"ai-{provider_lower}-credentials"
+        url = f"{K8S_API_URL}/api/v1/namespaces/{ns}/secrets/{name}"
+        headers = {"Authorization": f"Bearer {token}"}
+        verify = K8S_SA_CA_PATH if os.path.exists(K8S_SA_CA_PATH) else True
+
+        r = requests.get(url, headers=headers, timeout=5, verify=verify)
+
+        if r.status_code == 404:
+            result = {"exists": False, "secret_name": name}
+            return make_mcp_text_response(json.dumps(result))
+
+        if r.status_code != 200:
+            raise MCPException(
+                message=f"Failed to check secret {name}: {r.status_code} {r.text}",
+                error_code=MCPErrorCode.KUBERNETES_API_ERROR,
+            )
+
+        secret_data = r.json()
+        last_updated = secret_data.get("metadata", {}).get("annotations", {}).get("ai.observability/last-updated")
+
+        result = {
+            "exists": True,
+            "secret_name": name,
+            "last_updated": last_updated,
+            "is_valid": None  # Would need validation to determine
+        }
+        return make_mcp_text_response(json.dumps(result))
+
+    except MCPException as e:
+        return e.to_mcp_response()
+    except Exception as e:
+        err = MCPException(
+            message=f"Failed to check provider secret: {str(e)}",
+            error_code=MCPErrorCode.INTERNAL_ERROR,
+        )
+        return err.to_mcp_response()
+
+
+def delete_provider_secret(provider: str) -> List[Dict[str, Any]]:
+    """
+    Delete a provider API key secret from the cluster.
+    Returns {success: bool, secret_name: str, message: str}.
+    """
+    try:
+        if not provider:
+            raise MCPException(
+                message="provider is required",
+                error_code=MCPErrorCode.INVALID_INPUT,
+            )
+
+        provider_lower = provider.lower()
+        ns = os.getenv("NAMESPACE", "")
+        if not ns:
+            raise MCPException(
+                message="Server namespace not detected",
+                error_code=MCPErrorCode.INTERNAL_ERROR,
+            )
+
+        token = ""
+        with open(K8S_SA_TOKEN_PATH, "r") as f:
+            token = f.read().strip()
+        if not token:
+            raise MCPException(
+                message="ServiceAccount token unavailable",
+                error_code=MCPErrorCode.KUBERNETES_API_ERROR,
+            )
+
+        name = f"ai-{provider_lower}-credentials"
+        url = f"{K8S_API_URL}/api/v1/namespaces/{ns}/secrets/{name}"
+        headers = {"Authorization": f"Bearer {token}"}
+        verify = K8S_SA_CA_PATH if os.path.exists(K8S_SA_CA_PATH) else True
+
+        r = requests.delete(url, headers=headers, timeout=5, verify=verify)
+
+        # 404 is acceptable - secret already doesn't exist
+        if r.status_code == 404:
+            result = {"success": True, "secret_name": name, "message": "Secret already deleted"}
+            return make_mcp_text_response(json.dumps(result))
+
+        if r.status_code not in (200, 202):
+            raise MCPException(
+                message=f"Failed to delete secret {name}: {r.status_code} {r.text}",
+                error_code=MCPErrorCode.KUBERNETES_API_ERROR,
+            )
+
+        result = {"success": True, "secret_name": name, "message": "Secret deleted successfully"}
+        return make_mcp_text_response(json.dumps(result))
+
+    except MCPException as e:
+        return e.to_mcp_response()
+    except Exception as e:
+        err = MCPException(
+            message=f"Failed to delete provider secret: {str(e)}",
+            error_code=MCPErrorCode.INTERNAL_ERROR,
+        )
+        return err.to_mcp_response()

@@ -4,60 +4,11 @@ import { generateSecretName, getProviderTemplate, isValidApiKey } from './provid
 import { isDevMode, saveDevCredential, getDevCredential, hasDevCredential } from '../../../services/devCredentials';
 import { fetchRuntimeConfig } from '../../../services/runtimeConfig';
 
-interface K8sSecret {
-  apiVersion: string;
-  kind: string;
-  metadata: {
-    name: string;
-    namespace: string;
-    labels?: Record<string, string>;
-    annotations?: Record<string, string>;
-  };
-  type: string;
-  data: Record<string, string>;
-}
-
 class AISecretManager {
-  private cachedNamespace?: string;
-  private getCsrfToken(): string | undefined {
-    try {
-      const match = document.cookie.match(/(?:^|;\s*)csrf-token=([^;]+)/);
-      return match ? decodeURIComponent(match[1]) : undefined;
-    } catch {
-      return undefined;
-    }
-  }
-  private async getNamespace(): Promise<string> {
-    if (this.cachedNamespace) {
-      return this.cachedNamespace;
-    }
-    try {
-      // Read ConsolePlugin to discover the MCP proxy namespace (same ns we want to store secrets in)
-      const resp = await fetch('/api/kubernetes/apis/console.openshift.io/v1/consoleplugins/openshift-ai-observability', {
-        method: 'GET',
-        headers: { 'Accept': 'application/json' },
-      });
-      if (resp.ok) {
-        const cp = await resp.json();
-        const proxies: Array<any> = cp?.spec?.proxy ?? [];
-        const mcp = proxies.find((p) => p?.alias === 'mcp');
-        const ns = mcp?.endpoint?.service?.namespace;
-        if (typeof ns === 'string' && ns.length > 0) {
-          this.cachedNamespace = ns;
-          return ns;
-        }
-      }
-    } catch {
-      // ignore and fallback
-    }
-    // Fallback for legacy deployments
-    this.cachedNamespace = 'openshift-ai-observability';
-    return this.cachedNamespace;
-  }
-  
   /**
    * Check if secret exists for provider
-   * In dev mode, checks browser cache instead
+   * In dev mode, checks browser cache; in production, uses MCP tool
+   * Works in all deployment modes: console plugin, react-ui, and dev
    */
   async checkProviderSecret(provider: Provider): Promise<SecretStatus> {
     // Ensure runtime config is loaded before checking dev mode
@@ -75,37 +26,22 @@ class AISecretManager {
       };
     }
 
-    // PRODUCTION MODE: Original K8s Secret logic
+    // PRODUCTION MODE: Use MCP tool to check K8s Secret
     const secretName = generateSecretName(provider);
-    const namespace = await this.getNamespace();
 
     try {
-      // Use OpenShift Console's k8s API proxy
-      const response = await fetch(`/api/kubernetes/api/v1/namespaces/${namespace}/secrets/${secretName}`, {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-        },
-      });
-
-      if (response.status === 404) {
-        return {
-          exists: false,
-          secretName,
-        };
-      }
-
-      if (!response.ok) {
-        throw new Error(`Failed to check secret: ${response.status} ${response.statusText}`);
-      }
-
-      const secret: K8sSecret = await response.json();
+      const result = await callMcpTool<{
+        exists: boolean;
+        secret_name: string;
+        last_updated?: string;
+        is_valid?: boolean;
+      }>('check_provider_secret', { provider });
 
       return {
-        exists: true,
-        secretName,
-        lastUpdated: secret.metadata.annotations?.['ai.observability/last-updated'],
-        isValid: undefined, // Will be determined by connection test
+        exists: result.exists,
+        secretName: result.secret_name,
+        lastUpdated: result.last_updated,
+        isValid: result.is_valid,
       };
     } catch (error) {
       console.error('Error checking provider secret:', error);
@@ -119,7 +55,7 @@ class AISecretManager {
 
   /**
    * Create or update provider secret
-   * In dev mode, saves to browser cache instead
+   * In dev mode, saves to browser cache; in production, uses MCP tool to save to K8s Secret
    */
   async saveProviderSecret(config: SecretConfig): Promise<string> {
     // Ensure runtime config is loaded before checking dev mode
@@ -142,7 +78,7 @@ class AISecretManager {
       return `dev-${config.provider}-credentials`;
     }
 
-    // PRODUCTION MODE: Original MCP tool call to save to K8s Secret
+    // PRODUCTION MODE: Use MCP tool to save to K8s Secret
     const secretName = generateSecretName(config.provider, config.modelId);
 
     try {
@@ -160,75 +96,21 @@ class AISecretManager {
   }
 
   /**
-   * Get secret data (API key)
-   * In dev mode, retrieves from browser cache
-   */
-  async getProviderSecret(provider: Provider): Promise<string | null> {
-    // Ensure runtime config is loaded before checking dev mode
-    await fetchRuntimeConfig();
-
-    // DEV MODE: Get from browser cache
-    if (isDevMode()) {
-      const key = getDevCredential(provider);
-      console.log(`[SecretManager] getProviderSecret - devMode, provider: ${provider}, hasKey: ${!!key}`);
-      return key;
-    }
-
-    // PRODUCTION MODE: Original K8s Secret logic
-    const secretName = generateSecretName(provider);
-    const namespace = await this.getNamespace();
-
-    try {
-      const response = await fetch(`/api/kubernetes/api/v1/namespaces/${namespace}/secrets/${secretName}`, {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-        },
-      });
-
-      if (response.status === 404) {
-        return null;
-      }
-
-      if (!response.ok) {
-        throw new Error(`Failed to get secret: ${response.status} ${response.statusText}`);
-      }
-
-      const secret: K8sSecret = await response.json();
-      const apiKeyBase64 = secret.data['api-key'];
-
-      if (!apiKeyBase64) {
-        return null;
-      }
-
-      return atob(apiKeyBase64);
-    } catch (error) {
-      console.error('Error getting provider secret:', error);
-      return null;
-    }
-  }
-
-  /**
-   * Test API key validity by making a test connection
+   * Test API key validity by making a test connection using MCP tool
+   * Works in all deployment modes: console plugin, react-ui, and dev
    */
   async testConnection(provider: Provider, apiKey?: string): Promise<ConnectionTestResult> {
     const startTime = Date.now();
-    let keyToTest = apiKey;
-    
-    // If no API key provided, try to get from secret
-    if (!keyToTest) {
-      keyToTest = await this.getProviderSecret(provider);
-    }
-    
-    if (!keyToTest) {
+
+    if (!apiKey) {
       return {
         success: false,
-        error: 'No API key found',
+        error: 'API key is required for testing',
       };
     }
 
     const template = getProviderTemplate(provider);
-    
+
     try {
       // Test connection based on provider
       let testResult: boolean;
@@ -236,19 +118,19 @@ class AISecretManager {
 
       switch (provider) {
         case 'openai':
-          testResult = await this.testOpenAIConnection(keyToTest, details);
+          testResult = await this.testOpenAIConnection(apiKey, details);
           break;
         case 'anthropic':
-          testResult = await this.testAnthropicConnection(keyToTest, details);
+          testResult = await this.testAnthropicConnection(apiKey, details);
           break;
         case 'google':
-          testResult = await this.testGoogleConnection(keyToTest, details);
+          testResult = await this.testGoogleConnection(apiKey, details);
           break;
         case 'meta':
-          testResult = await this.testMetaConnection(keyToTest, details);
+          testResult = await this.testMetaConnection(apiKey, details);
           break;
         default:
-          testResult = await this.testGenericConnection(keyToTest, template.defaultEndpoint, details);
+          testResult = await this.testGenericConnection(apiKey, template.defaultEndpoint, details);
           break;
       }
 
@@ -324,39 +206,8 @@ class AISecretManager {
   }
 
   /**
-   * List all AI-related secrets
-   */
-  async listSecrets(): Promise<SecretStatus[]> {
-    try {
-      const namespace = await this.getNamespace();
-      const response = await fetch(`/api/kubernetes/api/v1/namespaces/${namespace}/secrets?labelSelector=app.kubernetes.io/component=ai-model-config`, {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to list secrets: ${response.status} ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      const secrets: K8sSecret[] = data.items || [];
-
-      return secrets.map(secret => ({
-        exists: true,
-        secretName: secret.metadata.name,
-        lastUpdated: secret.metadata.annotations?.['ai.observability/last-updated'],
-        isValid: undefined, // Would need individual testing
-      }));
-    } catch (error) {
-      console.error('Error listing secrets:', error);
-      return [];
-    }
-  }
-
-  /**
-   * Delete secret (production) or clear cached credential (dev mode)
+   * Delete secret using MCP tool (production) or clear cached credential (dev mode)
+   * Works in all deployment modes: console plugin, react-ui, and dev
    */
   async deleteSecret(secretName: string): Promise<void> {
     // Ensure runtime config is loaded before checking dev mode
@@ -378,19 +229,24 @@ class AISecretManager {
       return;
     }
 
-    // PRODUCTION MODE: Delete from Kubernetes
+    // PRODUCTION MODE: Use MCP tool to delete from Kubernetes
     try {
-      const namespace = await this.getNamespace();
-      const response = await fetch(`/api/kubernetes/api/v1/namespaces/${namespace}/secrets/${secretName}`, {
-        method: 'DELETE',
-        headers: {
-          'Accept': 'application/json',
-          ...(this.getCsrfToken() ? { 'X-CSRFToken': this.getCsrfToken() as string } : {}),
-        },
-      });
+      // Extract provider from secret name (format: ai-{provider}-credentials)
+      const match = secretName.match(/^ai-([^-]+)-credentials$/);
+      if (!match) {
+        throw new Error(`Invalid secret name format: ${secretName}`);
+      }
 
-      if (!response.ok && response.status !== 404) {
-        throw new Error(`Failed to delete secret: ${response.status} ${response.statusText}`);
+      const provider = match[1] as Provider;
+
+      const result = await callMcpTool<{
+        success: boolean;
+        secret_name: string;
+        message: string;
+      }>('delete_provider_secret', { provider });
+
+      if (!result.success) {
+        throw new Error(result.message || 'Failed to delete secret');
       }
     } catch (error) {
       console.error('Error deleting secret:', error);

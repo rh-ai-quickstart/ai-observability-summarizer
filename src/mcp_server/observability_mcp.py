@@ -63,7 +63,7 @@ class ObservabilityMCPServer:
             chat_tempo_tool
         )
         from .tools.chat_tool import chat
-        from .tools.credentials_tools import validate_api_key, save_api_key
+        from .tools.credentials_tools import validate_api_key, save_api_key, check_provider_secret, delete_provider_secret
         from .tools.model_config_tools import (
             list_provider_models,
             add_model_to_config,
@@ -120,6 +120,8 @@ class ObservabilityMCPServer:
         self.mcp.tool()(chat)
         self.mcp.tool()(validate_api_key)
         self.mcp.tool()(save_api_key)
+        self.mcp.tool()(check_provider_secret)
+        self.mcp.tool()(delete_provider_secret)
 
         # Register model config tools
         self.mcp.tool()(list_provider_models)
