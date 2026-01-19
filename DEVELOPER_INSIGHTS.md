@@ -133,9 +133,34 @@ Monitor GPU health across your entire OpenShift cluster:
 - **Prometheus/Thanos**: Metrics collection and long-term storage
 - **vLLM**: Model serving with /metrics endpoint
 - **DCGM**: GPU monitoring and telemetry
-- **Streamlit UI**: Multi-dashboard interface (vLLM, OpenShift, Chat)
+- **UI Options**: Console Plugin (integrated) or React UI (standalone)
 - **MCP Server**: Model Context Protocol server for metrics analysis, report generation, and AI assistant integration
 - **LLM Stack**: Llama models for AI-powered insights and summaries
+
+### **UI Deployment Options**
+
+The platform supports two deployment modes from a single codebase:
+
+| Mode | Description | Access | Use Case |
+|------|-------------|--------|----------|
+| **Console Plugin** | Integrated into OpenShift Console | OpenShift Console UI | Production (default) |
+| **React UI** | Standalone web application | Dedicated Route | Development/Standalone |
+
+Both share the same MCP server backend and provide identical monitoring capabilities.
+
+**Console Plugin** (default):
+```bash
+# Included in standard installation
+make install NAMESPACE=your-namespace
+```
+
+**React UI** (optional):
+```bash
+# Deploy standalone React UI
+make deploy-react-ui NAMESPACE=your-namespace
+```
+
+See [Build & Deploy](#build--deploy) section for image build commands.
 
 ### **Key Features**
 1. **vLLM Dashboard**: Monitor model performance, GPU usage, latency
@@ -277,21 +302,24 @@ The default configuration deploys:
 - **llm-service** - LLM inference
 - **llama-stack** - Backend API
 - **pgvector** - Vector database
-- **metric-ui** - Multi-dashboard Streamlit interface
+- **console-plugin** - OpenShift Console Plugin (integrated UI)
 - **mcp-server** - Model Context Protocol server for metrics analysis, report generation, and AI assistant integration
 - **OpenTelemetry Collector** - Distributed tracing collection
 - **Tempo** - Trace storage and analysis
 - **MinIO** - Object storage for traces
 
-Navigate to your **OpenShift Cluster → Networking → Routes** to find the application URL(s). You can also navigate to **Observe → Traces** in the OpenShift console to view traces.
+**Access Options:**
+- **Console Plugin** (default): Navigate to **OpenShift Console → OpenShift AI Observability** in the left navigation
+- **React UI** (if deployed): Find the Route at **Networking → Routes** or run `oc get route react-ui`
+- **Traces**: Navigate to **Observe → Traces** in the OpenShift console
 
-On terminal you can access the route with:
+To get the React UI route (if deployed):
 
 ```bash
-oc get route
+oc get route react-ui
 
-NAME              HOST/PORT                                                               PATH   SERVICES        PORT   TERMINATION     WILDCARD
-metric-ui-route   metric-ui-route-llama-1.apps.tsisodia-spark.2vn8.p1.openshiftapps.com          metric-ui-svc   8501   edge/Redirect   None
+NAME       HOST/PORT                                                        PATH   SERVICES    PORT   TERMINATION   WILDCARD
+react-ui   react-ui-your-namespace.apps.cluster.example.com                       react-ui    8080   edge          None
 ```
 
 ### OpenShift Summarizer Dashboard 
@@ -375,9 +403,11 @@ make build
 make build VERSION=v1.0.0
 
 # Build individual components
-make build-ui            # Streamlit UI  
-make build-alerting      # Alerting Service
-make build-mcp-server    # MCP Server
+make build-ui              # Streamlit UI
+make build-alerting        # Alerting Service
+make build-mcp-server      # MCP Server
+make build-console-plugin  # Console Plugin (OpenShift Console integration)
+make build-react-ui        # React UI (standalone application)
 ```
 
 #### **Push Images to Registry**
@@ -393,6 +423,8 @@ make push VERSION=v1.0.0
 make push-ui
 make push-alerting
 make push-mcp-server
+make push-console-plugin
+make push-react-ui
 ```
 
 #### **Complete Build and Push Workflow**
@@ -410,11 +442,14 @@ make build-and-push VERSION=v1.0.0 REGISTRY=your-registry.com/your-org
 #### **Basic Deployment**
 
 ```bash
-# Deploy to OpenShift namespace
+# Deploy to OpenShift namespace (includes Console Plugin)
 make deploy NAMESPACE=your-namespace
 
 # Deploy with alerting enabled
 make deploy-with-alerts NAMESPACE=your-namespace
+
+# Deploy standalone React UI (optional)
+make deploy-react-ui NAMESPACE=your-namespace
 ```
 
 #### **Complete Build, Push, and Deploy Workflow**
