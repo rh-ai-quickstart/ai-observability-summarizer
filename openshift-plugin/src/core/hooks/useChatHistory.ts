@@ -15,6 +15,7 @@ export interface Message {
   timestamp: Date;
   error?: boolean;
   progressLog?: ProgressEntry[];
+  originalUserMessage?: string; // Store original user message for retry functionality
 }
 
 const getInitialGreeting = (): Message => ({

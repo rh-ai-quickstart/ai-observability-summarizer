@@ -32,12 +32,18 @@ class AnthropicChatBot(BaseChatBot):
         tool_executor: ToolExecutor = None):
         super().__init__(model_name, api_key, tool_executor)
 
-        # Import Anthropic SDK
+        # Import Anthropic SDK and track SDK import status
+        self._sdk_import_failed = False
         try:
             import anthropic
-            self.client = anthropic.Anthropic(api_key=self.api_key)
+            # Only create client if API key is provided
+            if self.api_key:
+                self.client = anthropic.Anthropic(api_key=self.api_key)
+            else:
+                self.client = None
         except ImportError:
             logger.error("Anthropic SDK not installed. Install with: pip install anthropic")
+            self._sdk_import_failed = True
             self.client = None
 
     def _get_model_specific_instructions(self) -> str:
@@ -59,10 +65,10 @@ class AnthropicChatBot(BaseChatBot):
     def chat(self, user_question: str, namespace: Optional[str] = None, progress_callback: Optional[Callable] = None) -> str:
         """Chat with Anthropic Claude using tool calling."""
         if not self.client:
-            return "Error: Anthropic SDK not installed. Please install it with: pip install anthropic"
-
-        if not self.api_key:
-            return f"API key required for Anthropic model {self.model_name}. Please provide an API key."
+            if self._sdk_import_failed:
+                return "Error: Anthropic SDK not installed. Please install it with: pip install anthropic"
+            else:
+                return f"Error: API key required for Anthropic model {self.model_name}. Please configure an API key in Settings."
 
         try:
             # Create system prompt

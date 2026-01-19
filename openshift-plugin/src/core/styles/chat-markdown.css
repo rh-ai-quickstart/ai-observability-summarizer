@@ -166,3 +166,128 @@
 .chat-markdown input[type="checkbox"] {
   margin-right: 8px;
 }
+
+/* ============================================
+   ANIMATIONS & TRANSITIONS
+   ============================================ */
+
+/* Fade-in animation for new messages */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.message-fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* Smooth expand/collapse for progress logs */
+.progress-log-expanded {
+  max-height: 1000px;
+  opacity: 1;
+  transition: max-height 0.3s ease-in-out, opacity 0.2s ease-in-out;
+  overflow: hidden;
+}
+
+.progress-log-collapsed {
+  max-height: 0;
+  opacity: 0;
+  transition: max-height 0.3s ease-in-out, opacity 0.2s ease-in-out;
+  overflow: hidden;
+}
+
+/* Typing indicator animation */
+@keyframes typingDot {
+  0%, 60%, 100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+  30% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.typing-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.typing-indicator span {
+  width: 6px;
+  height: 6px;
+  background-color: currentColor;
+  border-radius: 50%;
+  display: inline-block;
+  animation: typingDot 1.4s infinite;
+}
+
+.typing-indicator span:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.typing-indicator span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.typing-indicator span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+/* Loading shimmer effect */
+@keyframes shimmer {
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: 1000px 0;
+  }
+}
+
+.loading-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.3) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  background-size: 1000px 100%;
+  animation: shimmer 2s infinite;
+}
+
+/* Button hover transitions */
+.chat-button-transition {
+  transition: all 0.2s ease-in-out;
+}
+
+.chat-button-transition:hover {
+  transform: scale(1.05);
+}
+
+/* Smooth scroll behavior */
+.chat-messages-container {
+  scroll-behavior: smooth;
+}
+
+/* Edit mode highlight */
+@keyframes pulseBlue {
+  0%, 100% {
+    border-color: #0066cc;
+    box-shadow: 0 0 0 0 rgba(0, 102, 204, 0.4);
+  }
+  50% {
+    border-color: #0066cc;
+    box-shadow: 0 0 0 4px rgba(0, 102, 204, 0.2);
+  }
+}
+
+.edit-mode-active {
+  animation: pulseBlue 2s ease-in-out infinite;
+}

@@ -87,9 +87,6 @@ class OpenAIChatBot(BaseChatBot):
             else:
                 return f"Error: API key required for OpenAI model {self.model_name}. Please configure an API key in Settings."
 
-        if not self.api_key:
-            return f"Error: API key required for OpenAI model {self.model_name}. Please configure an API key in Settings."
-
         logger.info(f"🎯 OpenAIChatBot.chat() - Using OpenAI API with model: {self.model_name}")
 
         try:
