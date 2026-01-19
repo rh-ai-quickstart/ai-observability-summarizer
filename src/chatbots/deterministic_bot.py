@@ -30,8 +30,15 @@ class DeterministicChatBot(BaseChatBot):
         """Local models don't require API keys."""
         return None
 
-    def chat(self, user_question: str, namespace: Optional[str] = None, progress_callback: Optional[Callable] = None) -> str:
+    def chat(
+        self,
+        user_question: str,
+        namespace: Optional[str] = None,
+        progress_callback: Optional[Callable] = None,
+        conversation_history: Optional[List[Dict[str, str]]] = None
+    ) -> str:
         """Chat using deterministic parsing approach."""
+        # Note: Deterministic bot doesn't use conversation history as it's rule-based
         if progress_callback:
             progress_callback("🔍 Analyzing your question...")
 

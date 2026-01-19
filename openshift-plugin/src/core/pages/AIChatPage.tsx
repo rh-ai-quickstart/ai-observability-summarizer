@@ -41,10 +41,10 @@ import '../styles/chat-markdown.css';
 
 const AIChatPage: React.FC = () => {
   const { messages, setMessages, clearHistory, exportToMarkdown } = useChatHistory();
+  const { progressMessage, startProgress, stopProgress } = useProgressIndicator();
   const [inputValue, setInputValue] = React.useState('');
   const [isLoading, setIsLoading] = React.useState(false);
   const [configError, setConfigError] = React.useState<string | null>(null);
-  const { progressMessage, startProgress, stopProgress } = useProgressIndicator();
   const [replayMessage, setReplayMessage] = React.useState<string>('');
   const [questionsExpanded, setQuestionsExpanded] = React.useState(true);
   const [expandedProgressLogs, setExpandedProgressLogs] = React.useState<Set<string>>(new Set());
@@ -54,6 +54,7 @@ const AIChatPage: React.FC = () => {
   const [editValue, setEditValue] = React.useState('');
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
+  const isMountedRef = React.useRef(true);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -62,6 +63,14 @@ const AIChatPage: React.FC = () => {
   React.useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Track component mounted state
+  React.useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   // Keyboard shortcuts
   React.useEffect(() => {
@@ -141,15 +150,27 @@ const AIChatPage: React.FC = () => {
     startProgress();
 
     try {
-      // Call real MCP chat endpoint
+      // Build conversation history from previous messages (exclude current and error messages)
+      const conversationHistory = messages
+        .filter(msg => !msg.error) // Exclude error messages
+        .map(msg => ({
+          role: msg.role,
+          content: msg.content,
+        }));
+
+      // Call real MCP chat endpoint with conversation history
       const { response, progressLog } = await chat(
         config.ai_model,
         userMessage.content,
         {
           scope: 'cluster_wide',
           apiKey: config.api_key,
+          conversationHistory,
         }
       );
+
+      // Only update state if component is still mounted
+      if (!isMountedRef.current) return;
 
       stopProgress();
 
@@ -158,14 +179,18 @@ const AIChatPage: React.FC = () => {
         console.log(`[Chat] Replaying ${progressLog.length} progress entries`);
 
         for (const entry of progressLog) {
+          if (!isMountedRef.current) return;
           setReplayMessage(entry.message);
           // Show each entry for 300ms to create replay effect
           await new Promise(resolve => setTimeout(resolve, 300));
         }
 
         // Clear replay message
+        if (!isMountedRef.current) return;
         setReplayMessage('');
       }
+
+      if (!isMountedRef.current) return;
 
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -180,6 +205,9 @@ const AIChatPage: React.FC = () => {
       // Auto-expand suggested questions after response for easy follow-up
       setQuestionsExpanded(true);
     } catch (error) {
+      // Only update state if component is still mounted
+      if (!isMountedRef.current) return;
+
       stopProgress();
 
       const errorMessage: Message = {
@@ -196,7 +224,9 @@ const AIChatPage: React.FC = () => {
       // Auto-expand suggested questions even on error
       setQuestionsExpanded(true);
     } finally {
-      setIsLoading(false);
+      if (isMountedRef.current) {
+        setIsLoading(false);
+      }
     }
   };
 

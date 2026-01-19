@@ -169,7 +169,13 @@ class GoogleChatBot(BaseChatBot):
 
         return sdk_tools
 
-    def chat(self, user_question: str, namespace: Optional[str] = None, progress_callback: Optional[Callable] = None) -> str:
+    def chat(
+        self,
+        user_question: str,
+        namespace: Optional[str] = None,
+        progress_callback: Optional[Callable] = None,
+        conversation_history: Optional[List[Dict[str, str]]] = None
+    ) -> str:
         """Chat with Google Gemini using tool calling."""
         if not self.configured:
             if self._sdk_import_failed:
@@ -196,8 +202,20 @@ class GoogleChatBot(BaseChatBot):
                 system_instruction=system_prompt
             )
 
-            # Start a chat session
-            chat = model.start_chat(enable_automatic_function_calling=False)
+            # Build history for chat session
+            gemini_history = []
+            if conversation_history:
+                logger.info(f"📜 Adding {len(conversation_history)} messages from conversation history")
+                for msg in conversation_history:
+                    # Convert to Gemini format
+                    gemini_role = "user" if msg["role"] == "user" else "model"
+                    gemini_history.append({
+                        "role": gemini_role,
+                        "parts": [msg["content"]]
+                    })
+
+            # Start a chat session with history
+            chat = model.start_chat(history=gemini_history, enable_automatic_function_calling=False)
 
             # Send initial message with just the user question
             initial_message = user_question

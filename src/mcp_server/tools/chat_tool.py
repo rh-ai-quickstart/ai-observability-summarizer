@@ -17,7 +17,8 @@ def chat(
     message: str,
     api_key: Optional[str] = None,
     namespace: Optional[str] = None,
-    scope: Optional[str] = None
+    scope: Optional[str] = None,
+    conversation_history: Optional[List[Dict[str, str]]] = None
 ) -> str:
     """
     Chat with AI models using observability tools.
@@ -32,6 +33,8 @@ def chat(
         api_key: Optional API key for external models (Anthropic, OpenAI, Google)
         namespace: Optional Kubernetes namespace filter
         scope: Optional scope (e.g., "cluster-wide")
+        conversation_history: Optional list of previous messages in format:
+                [{"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}]
 
     Returns:
         JSON string with response and progress_log
@@ -98,10 +101,15 @@ def chat(
         capture_progress(f"🤖 Starting chat with {model_name}")
 
         # Note: scope parameter is not yet supported by chatbots, only namespace
+        # Log conversation history if provided
+        if conversation_history:
+            logger.info(f"📜 Conversation history provided: {len(conversation_history)} messages")
+
         response = chatbot.chat(
             user_question=message,
             namespace=namespace,
-            progress_callback=capture_progress
+            progress_callback=capture_progress,
+            conversation_history=conversation_history
         )
 
         capture_progress("✅ Chat completed")

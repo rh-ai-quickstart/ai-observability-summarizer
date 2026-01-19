@@ -420,7 +420,13 @@ Begin by finding the perfect metric for the user's question, then provide compre
         return prompt
 
     @abstractmethod
-    def chat(self, user_question: str, namespace: Optional[str] = None, progress_callback: Optional[Callable] = None) -> str:
+    def chat(
+        self,
+        user_question: str,
+        namespace: Optional[str] = None,
+        progress_callback: Optional[Callable] = None,
+        conversation_history: Optional[List[Dict[str, str]]] = None
+    ) -> str:
         """
         Chat with the model. Must be implemented by subclasses.
 
@@ -428,6 +434,8 @@ Begin by finding the perfect metric for the user's question, then provide compre
             user_question: The user's question
             namespace: Optional namespace filter
             progress_callback: Optional callback for progress updates
+            conversation_history: Optional list of previous messages in format:
+                [{"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}]
 
         Returns:
             Model's response as a string

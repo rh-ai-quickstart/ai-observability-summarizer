@@ -169,6 +169,7 @@ describe('AIChatPage', () => {
           {
             scope: 'cluster_wide',
             apiKey: 'test-key',
+            conversationHistory: [],
           }
         );
       });
@@ -545,6 +546,350 @@ describe('AIChatPage', () => {
 
       await waitFor(() => {
         expect(mockStopProgress).toHaveBeenCalled();
+      });
+    });
+  });
+
+  describe('Conversation History', () => {
+    it('should send empty conversation history for first message', async () => {
+      mockChat.mockResolvedValue({
+        response: 'AI response',
+        progressLog: [],
+      });
+
+      // Start with no messages
+      (useChatHistoryModule.useChatHistory as jest.Mock).mockReturnValue({
+        messages: [],
+        setMessages: mockSetMessages,
+        clearHistory: mockClearHistory,
+        exportToMarkdown: mockExportToMarkdown,
+      });
+
+      render(<AIChatPage />);
+
+      const input = screen.getByPlaceholderText('Ask about your metrics...');
+      fireEvent.change(input, { target: { value: 'First message' } });
+      fireEvent.click(screen.getByRole('button', { name: '' }));
+
+      await waitFor(() => {
+        expect(mockChat).toHaveBeenCalledWith(
+          'test-model',
+          'First message',
+          {
+            scope: 'cluster_wide',
+            apiKey: 'test-key',
+            conversationHistory: [],
+          }
+        );
+      });
+    });
+
+    it('should include previous messages in conversation history', async () => {
+      mockChat.mockResolvedValue({
+        response: 'Third response',
+        progressLog: [],
+      });
+
+      const previousMessages = [
+        {
+          id: '1',
+          role: 'user' as const,
+          content: 'First question',
+          timestamp: new Date('2024-01-01T10:00:00'),
+        },
+        {
+          id: '2',
+          role: 'assistant' as const,
+          content: 'First answer',
+          timestamp: new Date('2024-01-01T10:00:01'),
+        },
+        {
+          id: '3',
+          role: 'user' as const,
+          content: 'Second question',
+          timestamp: new Date('2024-01-01T10:00:02'),
+        },
+        {
+          id: '4',
+          role: 'assistant' as const,
+          content: 'Second answer',
+          timestamp: new Date('2024-01-01T10:00:03'),
+        },
+      ];
+
+      (useChatHistoryModule.useChatHistory as jest.Mock).mockReturnValue({
+        messages: previousMessages,
+        setMessages: mockSetMessages,
+        clearHistory: mockClearHistory,
+        exportToMarkdown: mockExportToMarkdown,
+      });
+
+      render(<AIChatPage />);
+
+      const input = screen.getByPlaceholderText('Ask about your metrics...');
+      fireEvent.change(input, { target: { value: 'Third question' } });
+      fireEvent.click(screen.getByRole('button', { name: '' }));
+
+      await waitFor(() => {
+        expect(mockChat).toHaveBeenCalledWith(
+          'test-model',
+          'Third question',
+          {
+            scope: 'cluster_wide',
+            apiKey: 'test-key',
+            conversationHistory: [
+              { role: 'user', content: 'First question' },
+              { role: 'assistant', content: 'First answer' },
+              { role: 'user', content: 'Second question' },
+              { role: 'assistant', content: 'Second answer' },
+            ],
+          }
+        );
+      });
+    });
+
+    it('should filter out error messages from conversation history', async () => {
+      mockChat.mockResolvedValue({
+        response: 'Success response',
+        progressLog: [],
+      });
+
+      const messagesWithError = [
+        {
+          id: '1',
+          role: 'user' as const,
+          content: 'First question',
+          timestamp: new Date('2024-01-01T10:00:00'),
+        },
+        {
+          id: '2',
+          role: 'assistant' as const,
+          content: '❌ Error occurred',
+          timestamp: new Date('2024-01-01T10:00:01'),
+          error: true,
+        },
+        {
+          id: '3',
+          role: 'user' as const,
+          content: 'Second question',
+          timestamp: new Date('2024-01-01T10:00:02'),
+        },
+        {
+          id: '4',
+          role: 'assistant' as const,
+          content: 'Good answer',
+          timestamp: new Date('2024-01-01T10:00:03'),
+        },
+      ];
+
+      (useChatHistoryModule.useChatHistory as jest.Mock).mockReturnValue({
+        messages: messagesWithError,
+        setMessages: mockSetMessages,
+        clearHistory: mockClearHistory,
+        exportToMarkdown: mockExportToMarkdown,
+      });
+
+      render(<AIChatPage />);
+
+      const input = screen.getByPlaceholderText('Ask about your metrics...');
+      fireEvent.change(input, { target: { value: 'Third question' } });
+      fireEvent.click(screen.getByRole('button', { name: '' }));
+
+      await waitFor(() => {
+        expect(mockChat).toHaveBeenCalledWith(
+          'test-model',
+          'Third question',
+          {
+            scope: 'cluster_wide',
+            apiKey: 'test-key',
+            conversationHistory: [
+              { role: 'user', content: 'First question' },
+              // Error message excluded
+              { role: 'user', content: 'Second question' },
+              { role: 'assistant', content: 'Good answer' },
+            ],
+          }
+        );
+      });
+    });
+
+    it('should preserve conversation history when retrying failed message', async () => {
+      mockChat.mockResolvedValue({
+        response: 'Retry success',
+        progressLog: [],
+      });
+
+      const messagesBeforeRetry = [
+        {
+          id: '1',
+          role: 'user' as const,
+          content: 'First question',
+          timestamp: new Date('2024-01-01T10:00:00'),
+        },
+        {
+          id: '2',
+          role: 'assistant' as const,
+          content: 'First answer',
+          timestamp: new Date('2024-01-01T10:00:01'),
+        },
+        {
+          id: '3',
+          role: 'assistant' as const,
+          content: '❌ Error',
+          timestamp: new Date('2024-01-01T10:00:02'),
+          error: true,
+          originalUserMessage: 'Failed question',
+        },
+      ];
+
+      (useChatHistoryModule.useChatHistory as jest.Mock).mockReturnValue({
+        messages: messagesBeforeRetry,
+        setMessages: mockSetMessages,
+        clearHistory: mockClearHistory,
+        exportToMarkdown: mockExportToMarkdown,
+      });
+
+      render(<AIChatPage />);
+
+      const retryButton = screen.getByText('Retry');
+      fireEvent.click(retryButton);
+
+      await waitFor(() => {
+        expect(mockChat).toHaveBeenCalledWith(
+          'test-model',
+          'Failed question',
+          {
+            scope: 'cluster_wide',
+            apiKey: 'test-key',
+            conversationHistory: [
+              { role: 'user', content: 'First question' },
+              { role: 'assistant', content: 'First answer' },
+              // Error message excluded from history
+            ],
+          }
+        );
+      });
+    });
+
+    it('should send conversation history when editing and resending a message', async () => {
+      mockChat.mockResolvedValue({
+        response: 'Response to edited question',
+        progressLog: [],
+      });
+
+      const messagesBeforeEdit = [
+        {
+          id: '1',
+          role: 'user' as const,
+          content: 'First question',
+          timestamp: new Date('2024-01-01T10:00:00'),
+        },
+        {
+          id: '2',
+          role: 'assistant' as const,
+          content: 'First answer',
+          timestamp: new Date('2024-01-01T10:00:01'),
+        },
+        {
+          id: '3',
+          role: 'user' as const,
+          content: 'Question to edit',
+          timestamp: new Date('2024-01-01T10:00:02'),
+        },
+        {
+          id: '4',
+          role: 'assistant' as const,
+          content: 'Answer to be removed',
+          timestamp: new Date('2024-01-01T10:00:03'),
+        },
+      ];
+
+      (useChatHistoryModule.useChatHistory as jest.Mock).mockReturnValue({
+        messages: messagesBeforeEdit,
+        setMessages: mockSetMessages,
+        clearHistory: mockClearHistory,
+        exportToMarkdown: mockExportToMarkdown,
+      });
+
+      render(<AIChatPage />);
+
+      // Find and click the last edit button (for the last user message)
+      const editButtons = screen.getAllByTitle('Edit and resend');
+      fireEvent.click(editButtons[editButtons.length - 1]);
+
+      // Wait for edit mode
+      await waitFor(() => {
+        expect(screen.getByText('Save & Resend')).toBeInTheDocument();
+      });
+
+      // Change and save - get the textbox input specifically
+      const editInput = screen.getByRole('textbox', { name: 'Edit message' });
+      fireEvent.change(editInput, { target: { value: 'Edited question' } });
+      fireEvent.click(screen.getByText('Save & Resend'));
+
+      await waitFor(() => {
+        // Verify that conversation history is sent with the edited message
+        // Due to React batching, history includes all previous messages
+        expect(mockChat).toHaveBeenCalledWith(
+          'test-model',
+          'Edited question',
+          expect.objectContaining({
+            conversationHistory: expect.arrayContaining([
+              { role: 'user', content: 'First question' },
+              { role: 'assistant', content: 'First answer' },
+            ]),
+          })
+        );
+      });
+    });
+
+    it('should handle conversation history with only error messages', async () => {
+      mockChat.mockResolvedValue({
+        response: 'Success after errors',
+        progressLog: [],
+      });
+
+      const onlyErrorMessages = [
+        {
+          id: '1',
+          role: 'assistant' as const,
+          content: '❌ First error',
+          timestamp: new Date('2024-01-01T10:00:00'),
+          error: true,
+        },
+        {
+          id: '2',
+          role: 'assistant' as const,
+          content: '❌ Second error',
+          timestamp: new Date('2024-01-01T10:00:01'),
+          error: true,
+        },
+      ];
+
+      (useChatHistoryModule.useChatHistory as jest.Mock).mockReturnValue({
+        messages: onlyErrorMessages,
+        setMessages: mockSetMessages,
+        clearHistory: mockClearHistory,
+        exportToMarkdown: mockExportToMarkdown,
+      });
+
+      render(<AIChatPage />);
+
+      const input = screen.getByPlaceholderText('Ask about your metrics...');
+      fireEvent.change(input, { target: { value: 'New question' } });
+      fireEvent.click(screen.getByRole('button', { name: '' }));
+
+      await waitFor(() => {
+        // All previous messages were errors, so conversation history should be empty
+        expect(mockChat).toHaveBeenCalledWith(
+          'test-model',
+          'New question',
+          {
+            scope: 'cluster_wide',
+            apiKey: 'test-key',
+            conversationHistory: [],
+          }
+        );
       });
     });
   });

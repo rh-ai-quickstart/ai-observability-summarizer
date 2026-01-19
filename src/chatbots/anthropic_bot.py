@@ -5,7 +5,7 @@ This module provides Anthropic Claude-specific implementation using the official
 """
 
 import os
-from typing import Optional, Callable
+from typing import Optional, Callable, List, Dict
 
 from .base import BaseChatBot
 from chatbots.tool_executor import ToolExecutor
@@ -62,7 +62,13 @@ class AnthropicChatBot(BaseChatBot):
 - Provide detailed pod-level and namespace-level breakdowns
 - Use your tool calling reliability for multi-step analysis"""
 
-    def chat(self, user_question: str, namespace: Optional[str] = None, progress_callback: Optional[Callable] = None) -> str:
+    def chat(
+        self,
+        user_question: str,
+        namespace: Optional[str] = None,
+        progress_callback: Optional[Callable] = None,
+        conversation_history: Optional[List[Dict[str, str]]] = None
+    ) -> str:
         """Chat with Anthropic Claude using tool calling."""
         if not self.client:
             if self._sdk_import_failed:
@@ -82,8 +88,16 @@ class AnthropicChatBot(BaseChatBot):
             # MCP tools are already in Anthropic format
             claude_tools = self._get_mcp_tools()
 
-            # Initial message
-            messages = [{"role": "user", "content": user_question}]
+            # Build messages array with conversation history
+            messages = []
+
+            # Add conversation history if provided
+            if conversation_history:
+                logger.info(f"📜 Adding {len(conversation_history)} messages from conversation history")
+                messages.extend(conversation_history)
+
+            # Add current user question
+            messages.append({"role": "user", "content": user_question})
 
             # Iterative tool calling loop
             max_iterations = 30

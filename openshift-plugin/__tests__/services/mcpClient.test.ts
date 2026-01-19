@@ -345,6 +345,86 @@ describe('mcpClient', () => {
       expect(callBody.params.arguments.api_key).toBe('my-secret-key');
     });
 
+    it('should include conversation history when provided', async () => {
+      (global.fetch as jest.Mock).mockImplementation((url: string) => {
+        if (url.includes('/config')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              result: {
+                structuredContent: {
+                  result: JSON.stringify({}),
+                },
+              },
+            }),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            result: {
+              structuredContent: {
+                result: JSON.stringify({ response: 'Test response' }),
+              },
+            },
+          }),
+        });
+      });
+
+      const conversationHistory = [
+        { role: 'user', content: 'Previous question' },
+        { role: 'assistant', content: 'Previous answer' },
+      ];
+
+      await chat('test-model', 'New question', {
+        conversationHistory,
+      });
+
+      // Find the MCP call (skip config call)
+      const mcpCall = (global.fetch as jest.Mock).mock.calls.find(call =>
+        !call[0].includes('/config')
+      );
+      const callBody = JSON.parse(mcpCall[1].body);
+      expect(callBody.params.arguments.conversation_history).toEqual(conversationHistory);
+    });
+
+    it('should send empty array when conversation history is not provided', async () => {
+      (global.fetch as jest.Mock).mockImplementation((url: string) => {
+        if (url.includes('/config')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              result: {
+                structuredContent: {
+                  result: JSON.stringify({}),
+                },
+              },
+            }),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            result: {
+              structuredContent: {
+                result: JSON.stringify({ response: 'Test' }),
+              },
+            },
+          }),
+        });
+      });
+
+      await chat('test-model', 'Test question');
+
+      // Find the MCP call (skip config call)
+      const mcpCall = (global.fetch as jest.Mock).mock.calls.find(call =>
+        !call[0].includes('/config')
+      );
+      const callBody = JSON.parse(mcpCall[1].body);
+      // Should not include conversation_history or should be undefined/null
+      expect(callBody.params.arguments.conversation_history).toBeUndefined();
+    });
+
     it('should use correct MCP server URL for local dev', async () => {
       // Mock window.location for local dev
       Object.defineProperty(window, 'location', {
