@@ -451,15 +451,15 @@ def analyze_vllm(
     api_key: Optional[str] = None,
 ) -> str:
     """Analyze vLLM metrics and generate AI summary.
-    
+
     Fetches metrics, builds a prompt, and uses LLM to generate analysis.
-    
+
     Args:
         model_name: Model to analyze (e.g., "demo3 | meta-llama/Llama-3.2-3B-Instruct")
         summarize_model_id: LLM model to use for analysis
         time_range: Time range like "1h", "6h", "24h"
         api_key: Optional API key for external LLM
-        
+
     Returns:
         JSON string: {"model_name": "...", "summary": "...", "time_range": "..."}
     """
@@ -548,6 +548,20 @@ def analyze_vllm(
         return e.to_mcp_response()
     except LLMServiceError as e:
         return e.to_mcp_response()
+    except TimeoutError as e:
+        error = MCPException(
+            message=f"Analysis timed out: {str(e)}",
+            error_code=MCPErrorCode.TIMEOUT_ERROR,
+            recovery_suggestion="The AI analysis took too long. Try using a faster model or reducing the time range."
+        )
+        return error.to_mcp_response()
+    except ConnectionError as e:
+        error = MCPException(
+            message=f"Connection failed: {str(e)}",
+            error_code=MCPErrorCode.CONNECTION_ERROR,
+            recovery_suggestion="Failed to connect to the AI service. Check your network connection and API endpoint."
+        )
+        return error.to_mcp_response()
     except Exception as e:
         error = MCPException(
             message=f"Analysis failed: {str(e)}",

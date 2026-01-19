@@ -59,6 +59,8 @@ spec:
               value: "{{ .Values.env.KORREL8R_URL }}"
             - name: KORREL8R_TIMEOUT_SECONDS
               value: "{{ .Values.env.KORREL8R_TIMEOUT_SECONDS }}"
+            - name: LLM_TIMEOUT_SECONDS
+              value: "{{ .Values.env.LLM_TIMEOUT_SECONDS }}"
             - name: MAX_NUM_LOG_ROWS
               value: "{{ .Values.env.MAX_NUM_LOG_ROWS }}"
             - name: MAX_NUM_TRACE_SPANS
