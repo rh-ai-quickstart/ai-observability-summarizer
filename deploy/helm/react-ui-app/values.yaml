@@ -1,7 +1,7 @@
 # Application configuration
 app:
   name: "ai-observability-react-ui"
-  replicas: 2
+  replicas: 1
   image:
     repository: "quay.io/ecosystem-appeng/aiobs-react-ui"
     tag: "latest"

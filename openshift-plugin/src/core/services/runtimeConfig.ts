@@ -35,7 +35,7 @@ export async function fetchRuntimeConfig(): Promise<RuntimeConfig> {
 
       const configUrl = isLocalDev
         ? 'http://localhost:8085/config'
-        : '/api/proxy/plugin/openshift-ai-observability/mcp/config';
+        : '/api/proxy/plugin/ai-observability-console-plugin/mcp/config';
 
       console.log(`[RuntimeConfig] Fetching from MCP server: ${configUrl}`);
       const response = await fetch(configUrl, {
