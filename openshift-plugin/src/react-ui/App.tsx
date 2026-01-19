@@ -6,8 +6,16 @@ import AIObservabilityPage from '../core/pages/AIObservabilityPage';
 import VLLMMetricsPage from '../core/pages/VLLMMetricsPage';
 import { OpenShiftMetricsPage } from '../core/pages/OpenShiftMetricsPage';
 import { AIChatPage } from '../core/pages/AIChatPage';
+import { initializeRuntimeConfig } from '../core/services/runtimeConfig';
 
 const App: React.FC = () => {
+  // Initialize runtime config on mount (fetch DEV_MODE from MCP server)
+  React.useEffect(() => {
+    initializeRuntimeConfig().catch(error => {
+      console.error('[App] Failed to initialize runtime config:', error);
+    });
+  }, []);
+
   return (
     <Router>
       <Layout>

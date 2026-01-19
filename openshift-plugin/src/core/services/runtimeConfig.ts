@@ -1,7 +1,10 @@
 /**
  * Runtime Configuration
  * Fetched from MCP server's /config endpoint
+ * Works in all deployment modes: console plugin, react-ui, and local dev
  */
+
+import { getDeploymentMode } from '../../shared/config';
 
 export interface RuntimeConfig {
   devMode: boolean;
@@ -9,6 +12,29 @@ export interface RuntimeConfig {
 
 let cachedConfig: RuntimeConfig | null = null;
 let configPromise: Promise<RuntimeConfig> | null = null;
+
+/**
+ * Get config endpoint URL based on deployment mode
+ */
+function getConfigUrl(): string {
+  const isLocalDev = window.location.hostname === 'localhost' ||
+                     window.location.hostname === '127.0.0.1';
+
+  if (isLocalDev) {
+    // Local development: direct connection to MCP server
+    return 'http://localhost:8085/config';
+  }
+
+  const mode = getDeploymentMode();
+
+  if (mode === 'plugin') {
+    // Console plugin uses console proxy
+    return '/api/proxy/plugin/ai-observability-console-plugin/mcp/config';
+  } else {
+    // React UI uses nginx proxy
+    return '/api/config';
+  }
+}
 
 /**
  * Fetch runtime configuration from MCP server
@@ -29,15 +55,9 @@ export async function fetchRuntimeConfig(): Promise<RuntimeConfig> {
   // Create and cache the fetch promise
   configPromise = (async () => {
     try {
-      // Fetch config from MCP server
-      const isLocalDev = window.location.hostname === 'localhost' ||
-                         window.location.hostname === '127.0.0.1';
-
-      const configUrl = isLocalDev
-        ? 'http://localhost:8085/config'
-        : '/api/proxy/plugin/ai-observability-console-plugin/mcp/config';
-
+      const configUrl = getConfigUrl();
       console.log(`[RuntimeConfig] Fetching from MCP server: ${configUrl}`);
+
       const response = await fetch(configUrl, {
         method: 'GET',
         headers: { 'Accept': 'application/json' },
