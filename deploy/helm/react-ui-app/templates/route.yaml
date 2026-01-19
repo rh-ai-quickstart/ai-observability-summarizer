@@ -6,6 +6,8 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     {{- toYaml .Values.labels | nindent 4 }}
+  annotations:
+    haproxy.router.openshift.io/timeout: {{ .Values.route.timeout | default "240s" }}
 spec:
   {{- if .Values.route.host }}
   host: {{ .Values.route.host }}

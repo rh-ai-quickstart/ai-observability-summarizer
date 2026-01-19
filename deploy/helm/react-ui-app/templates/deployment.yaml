@@ -34,6 +34,7 @@ spec:
         - --provider=openshift
         - --openshift-service-account={{ include "react-ui-app.serviceAccountName" . }}
         - --upstream=http://localhost:{{ .Values.app.port }}
+        - --upstream-timeout={{ .Values.oauth.upstreamTimeout | default "240s" }}
         - --tls-cert=/etc/tls/private/tls.crt
         - --tls-key=/etc/tls/private/tls.key
         - --cookie-secret={{ .Values.oauth.cookieSecret | default (randAlphaNum 32 | b64enc) }}

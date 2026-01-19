@@ -53,6 +53,8 @@ def main() -> None:
             host=settings.MCP_HOST,
             port=settings.MCP_PORT,
             log_config=get_uvicorn_log_config(settings.PYTHON_LOG_LEVEL),
+            timeout_keep_alive=300,  # 5 minutes - allow long-running AI analysis requests
+            timeout_graceful_shutdown=30,  # 30 seconds for graceful shutdown
             **uvicorn_config,
         )
 

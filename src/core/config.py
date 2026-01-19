@@ -143,6 +143,7 @@ MAX_PER_SERVICE_LIMIT = 50  # Maximum traces to fetch per service in wildcard qu
 DEFAULT_CHAT_QUERY_LIMIT = 50  # Default limit for chat tool queries
 DEFAULT_QUERY_LIMIT = 20  # Default limit for regular queries
 REQUEST_TIMEOUT_SECONDS = 30.0  # HTTP request timeout
+LLM_TIMEOUT_SECONDS = float(os.getenv("LLM_TIMEOUT_SECONDS", "180.0"))  # LLM API request timeout
 
 # Load complex configurations
 # NOTE: MODEL_CONFIG is deprecated - use get_model_config() from model_config_manager
