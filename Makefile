@@ -201,7 +201,7 @@ help:
 	@echo "  push-alert-example  - Push alert-example test image"
 	@echo ""
 	@echo "Deployment:"
-	@echo "  install            - Deploy to OpenShift using Helm"
+	@echo "  install            - Deploy to OpenShift using Helm (DEV_MODE=false: Console Plugin only, DEV_MODE=true: React UI only)"
 	@echo "  install-with-alerts - Deploy with alerting enabled"
 	@echo "  install-local      - Set up local development environment"
 	@echo "  install-rag        - Install RAG backend services only"
@@ -285,6 +285,7 @@ help:
 	@echo "  PLATFORM           - Target platform (default: linux/amd64)"
 	@echo "  BUILD_TOOL         - Build tool: docker or podman (auto-detected)"
 	@echo "  NAMESPACE          - OpenShift namespace for deployment"
+	@echo "  DEV_MODE           - Set to 'true' to deploy React UI only, 'false' for Console Plugin only (default: false)"
 	@echo "  HF_TOKEN           - Hugging Face Token (will prompt if not provided and LLM_URL not set)"
 	@echo "  DEVICE             - Deploy models on cpu or gpu (default)"
 	@echo "  LLM                - Model id (eg. llama-3-1-8b-instruct)"
@@ -530,7 +531,16 @@ install-rag: namespace
 
 
 .PHONY: install
-install: namespace enable-user-workload-monitoring depend validate-llm install-operators install-observability-stack install-metric-ui install-mcp-server install-console-plugin install-korrel8r delete-jobs
+install: namespace enable-user-workload-monitoring depend validate-llm install-operators install-observability-stack install-metric-ui install-mcp-server delete-jobs
+	@echo "DEV_MODE is set to: $(DEV_MODE)"
+	@if [ "$(DEV_MODE)" = "true" ]; then \
+		echo "→ DEV_MODE=true: Installing React UI standalone application only"; \
+		$(MAKE) install-react-ui NAMESPACE=$(NAMESPACE); \
+	else \
+		echo "→ DEV_MODE=false: Installing OpenShift Console Plugin only"; \
+		$(MAKE) install-console-plugin NAMESPACE=$(NAMESPACE); \
+	fi
+	@$(MAKE) install-korrel8r
 	@if [ "$(ENABLE_RAG)" != "false" ]; then \
 		echo "Installing RAG backend services (set ENABLE_RAG=false to skip)..."; \
 		$(MAKE) install-rag NAMESPACE=$(NAMESPACE); \
@@ -608,8 +618,9 @@ uninstall:
 	- @helm -n $(NAMESPACE) uninstall $(METRICS_UI_RELEASE_NAME) --ignore-not-found
 	@echo "Uninstalling $(MCP_SERVER_RELEASE_NAME) helm chart (if installed)"
 	- @helm -n $(NAMESPACE) uninstall $(MCP_SERVER_RELEASE_NAME) --ignore-not-found
-	@echo "Uninstalling console plugin (if installed)"
+	@echo "Uninstalling UI components (both Console Plugin and React UI if they exist)"
 	@$(MAKE) uninstall-console-plugin NAMESPACE=$(NAMESPACE) || true
+	@$(MAKE) uninstall-react-ui NAMESPACE=$(NAMESPACE) || true
 	@echo "Uninstalling Korrel8r helm-managed resources (if installed)"
 	@$(MAKE) uninstall-korrel8r || true
 
