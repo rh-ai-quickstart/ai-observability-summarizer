@@ -27,7 +27,7 @@ const Navigation: React.FC = () => {
     },
     {
       id: 'openshift',
-      title: 'Cluster Metrics',
+      title: 'OpenShift',
       path: '/openshift',
       icon: <CubesIcon />,
     },
