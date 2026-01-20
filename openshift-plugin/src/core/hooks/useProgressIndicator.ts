@@ -2,13 +2,13 @@ import * as React from 'react';
 
 const PROGRESS_MESSAGES = [
   '🔍 Analyzing your request...',
-  '📊 Querying metrics data...',
+  '📡 Connecting to services...',
   '🤖 Processing with AI...',
-  '🔧 Analyzing patterns...',
-  '✨ Generating insights...',
+  '💭 Working on your request...',
+  '⏳ Preparing response...',
 ];
 
-const ROTATION_INTERVAL = 2000; // 2 seconds
+const ROTATION_INTERVAL = 5000; // 5 seconds
 
 /**
  * Custom hook for rotating progress messages during AI processing
