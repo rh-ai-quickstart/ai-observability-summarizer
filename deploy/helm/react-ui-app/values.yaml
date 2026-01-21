@@ -48,7 +48,7 @@ oauth:
 
 # MCP Server connection
 mcpServer:
-  serviceName: "mcp-server-svc"
+  serviceName: "aiobs-mcp-server-svc"
   port: 8085
   namespace: ""  # If empty, uses the release namespace
 

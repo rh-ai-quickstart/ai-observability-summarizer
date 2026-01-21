@@ -82,7 +82,7 @@ helm install ai-obs-react-ui . -f custom-values.yaml -n openshift-ai-observabili
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `mcpServer.serviceName` | MCP server service name | `mcp-server-svc` |
+| `mcpServer.serviceName` | MCP server service name | `aiobs-mcp-server-svc` |
 | `mcpServer.port` | MCP server port | `8085` |
 | `mcpServer.namespace` | MCP server namespace (uses release namespace if empty) | `""` |
 
@@ -119,7 +119,7 @@ helm install ai-obs-react-ui . -f custom-values.yaml -n openshift-ai-observabili
                ▼
 ┌─────────────────────────────────────────┐
 │  MCP Server                             │
-│  http://mcp-server-svc:8085/mcp         │
+│  http://aiobs-mcp-server-svc:8085/mcp   │
 └─────────────────────────────────────────┘
 ```
 
@@ -192,7 +192,7 @@ oc exec -n openshift-ai-observability deployment/aiobs-react-ui -c ui -- curl lo
 **Issue: Cannot connect to MCP Server**
 - Verify MCP Server service name and namespace
 - Check network policies
-- Test connectivity: `oc exec deployment/aiobs-react-ui -c ui -- curl http://mcp-server-svc:8085/mcp`
+- Test connectivity: `oc exec deployment/aiobs-react-ui -c ui -- curl http://aiobs-mcp-server-svc:8085/mcp`
 
 **Issue: 404 on page refresh**
 - Nginx configuration should serve index.html for all routes (already configured)

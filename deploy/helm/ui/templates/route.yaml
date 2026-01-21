@@ -5,7 +5,7 @@ metadata:
 spec:
   to:
     kind: Service
-    name: ui
+    name: {{ .Values.service.name | default "aiobs-ui" }}
     weight: 100
   port:
     targetPort: 8501

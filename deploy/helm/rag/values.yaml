@@ -73,7 +73,7 @@ llama-stack:
     TAVILY_SEARCH_API_KEY: "Paste-your-key-here"
   mcp-servers:
     observability-mcp:
-      uri: http://mcp-server-svc.{{ .Release.Namespace }}.svc.cluster.local:8085/mcp
+      uri: http://aiobs-mcp-server-svc.{{ .Release.Namespace }}.svc.cluster.local:8085/mcp
     #  mcp-weather:
     #   uri: http://rag-mcp-weather:8000/sse
 

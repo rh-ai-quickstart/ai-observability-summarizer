@@ -1,16 +1,16 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: ui
+  name: {{ .Values.deployment.name | default "aiobs-ui" }}
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: ui
+      app: {{ .Values.deployment.name | default "aiobs-ui" }}
   template:
     metadata:
       labels:
-        app: ui
+        app: {{ .Values.deployment.name | default "aiobs-ui" }}
     spec:
       containers:
         - name: ui

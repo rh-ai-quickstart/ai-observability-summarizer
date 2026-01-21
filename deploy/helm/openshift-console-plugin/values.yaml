@@ -61,7 +61,7 @@ plugin:
 mcpServer:
   enabled: true
   # The service name of the MCP server in the cluster
-  serviceName: "mcp-server-svc"
+  serviceName: "aiobs-mcp-server-svc"
   # The namespace where MCP server is deployed
   namespace: ""  # If empty, uses the release namespace
   # The port the MCP server listens on

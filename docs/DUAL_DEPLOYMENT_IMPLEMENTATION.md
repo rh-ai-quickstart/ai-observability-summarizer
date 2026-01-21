@@ -923,7 +923,7 @@ server {
 
     # Proxy MCP server requests
     location /api/mcp/ {
-        proxy_pass http://mcp-server-svc:8085/mcp/;
+        proxy_pass http://aiobs-mcp-server-svc:8085/mcp/;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -1080,7 +1080,7 @@ oauth:
 
 # MCP Server connection
 mcpServer:
-  serviceName: "mcp-server-svc"
+  serviceName: "aiobs-mcp-server-svc"
   port: 8085
   namespace: "openshift-ai-observability"
 
