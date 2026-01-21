@@ -47,6 +47,7 @@ const AIChatPage: React.FC = () => {
   const [configError, setConfigError] = React.useState<string | null>(null);
   const [replayMessage, setReplayMessage] = React.useState<string>('');
   const [questionsExpanded, setQuestionsExpanded] = React.useState(true);
+  const [collapsedMessages, setCollapsedMessages] = React.useState<Set<string>>(new Set());
   const [expandedProgressLogs, setExpandedProgressLogs] = React.useState<Set<string>>(new Set());
   const [copiedMessageId, setCopiedMessageId] = React.useState<string | null>(null);
   const [copySuccess, setCopySuccess] = React.useState(false);
@@ -71,6 +72,23 @@ const AIChatPage: React.FC = () => {
       isMountedRef.current = false;
     };
   }, []);
+
+  // Auto-collapse older assistant messages (keep last 3 expanded)
+  React.useEffect(() => {
+    const assistantMessages = messages.filter(msg => msg.role === 'assistant');
+
+    if (assistantMessages.length > 3) {
+      const messagesToCollapse = assistantMessages
+        .slice(0, assistantMessages.length - 3)
+        .map(msg => msg.id);
+
+      setCollapsedMessages(prev => {
+        const newSet = new Set(prev);
+        messagesToCollapse.forEach(id => newSet.add(id));
+        return newSet;
+      });
+    }
+  }, [messages]);
 
   // Keyboard shortcuts
   React.useEffect(() => {
@@ -317,6 +335,18 @@ const AIChatPage: React.FC = () => {
     handleSend(editValue);
   };
 
+  const toggleMessageCollapse = (messageId: string) => {
+    setCollapsedMessages(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(messageId)) {
+        newSet.delete(messageId);
+      } else {
+        newSet.add(messageId);
+      }
+      return newSet;
+    });
+  };
+
   // Get platform-specific modifier key name
   const getModKeyName = () => {
     return navigator.platform.toUpperCase().indexOf('MAC') >= 0 ? 'Cmd' : 'Ctrl';
@@ -478,11 +508,27 @@ const AIChatPage: React.FC = () => {
                       borderLeft: message.error ? '4px solid #c9190b' : 'none',
                     }}
                   >
+                    {/* Collapse/Expand button for assistant messages */}
+                    {message.role === 'assistant' && !message.error && (
+                      <div style={{ marginBottom: '8px', textAlign: 'right' }}>
+                        <Button
+                          variant="link"
+                          icon={collapsedMessages.has(message.id) ? <AngleDownIcon /> : <AngleUpIcon />}
+                          onClick={() => toggleMessageCollapse(message.id)}
+                          style={{ padding: '0', fontSize: '12px', color: '#6a6e73' }}
+                        >
+                          {collapsedMessages.has(message.id) ? 'Show more' : 'Show less'}
+                        </Button>
+                      </div>
+                    )}
+
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm]}
                       className="chat-markdown"
                     >
-                      {message.content}
+                      {message.role === 'assistant' && collapsedMessages.has(message.id)
+                        ? message.content.substring(0, 200) + (message.content.length > 200 ? '...' : '')
+                        : message.content}
                     </ReactMarkdown>
 
                     {/* Retry button for error messages */}
