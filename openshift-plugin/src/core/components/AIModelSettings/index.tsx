@@ -295,7 +295,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
         </div>
       )}
 
-      <div style={{ padding: '24px' }}>
+      <div style={{ padding: '24px', maxHeight: 'calc(90vh - 150px)', overflow: 'auto' }}>
         {/* Current Selection Status */}
         {hasSelectableModels(state) ? (
           state.selectedModel ? (
