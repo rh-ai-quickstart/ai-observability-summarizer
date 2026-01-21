@@ -137,13 +137,13 @@ helm install ai-obs-react-ui . -f custom-values.yaml -n openshift-ai-observabili
 ### Get Route URL
 
 ```bash
-oc get route ai-observability-react-ui -n openshift-ai-observability -o jsonpath='{.spec.host}'
+oc get route aiobs-react-ui -n openshift-ai-observability -o jsonpath='{.spec.host}'
 ```
 
 ### Access in Browser
 
 ```bash
-echo "https://$(oc get route ai-observability-react-ui -n openshift-ai-observability -o jsonpath='{.spec.host}')"
+echo "https://$(oc get route aiobs-react-ui -n openshift-ai-observability -o jsonpath='{.spec.host}')"
 ```
 
 ## Uninstallation
@@ -157,29 +157,29 @@ helm uninstall ai-obs-react-ui -n openshift-ai-observability
 ### Check Pod Status
 
 ```bash
-oc get pods -n openshift-ai-observability -l app=ai-observability-react-ui
+oc get pods -n openshift-ai-observability -l app=aiobs-react-ui
 ```
 
 ### View Logs
 
 ```bash
 # React UI logs
-oc logs -n openshift-ai-observability -l app=ai-observability-react-ui -c ui
+oc logs -n openshift-ai-observability -l app=aiobs-react-ui -c ui
 
 # OAuth Proxy logs
-oc logs -n openshift-ai-observability -l app=ai-observability-react-ui -c oauth-proxy
+oc logs -n openshift-ai-observability -l app=aiobs-react-ui -c oauth-proxy
 ```
 
 ### Check Route
 
 ```bash
-oc describe route ai-observability-react-ui -n openshift-ai-observability
+oc describe route aiobs-react-ui -n openshift-ai-observability
 ```
 
 ### Test Health Endpoint
 
 ```bash
-oc exec -n openshift-ai-observability deployment/ai-observability-react-ui -c ui -- curl localhost:8080/health
+oc exec -n openshift-ai-observability deployment/aiobs-react-ui -c ui -- curl localhost:8080/health
 ```
 
 ### Common Issues
@@ -192,7 +192,7 @@ oc exec -n openshift-ai-observability deployment/ai-observability-react-ui -c ui
 **Issue: Cannot connect to MCP Server**
 - Verify MCP Server service name and namespace
 - Check network policies
-- Test connectivity: `oc exec deployment/ai-observability-react-ui -c ui -- curl http://mcp-server-svc:8085/mcp`
+- Test connectivity: `oc exec deployment/aiobs-react-ui -c ui -- curl http://mcp-server-svc:8085/mcp`
 
 **Issue: 404 on page refresh**
 - Nginx configuration should serve index.html for all routes (already configured)

@@ -29,7 +29,7 @@ function getConfigUrl(): string {
 
   if (mode === 'plugin') {
     // Console plugin uses console proxy
-    return '/api/proxy/plugin/ai-observability-console-plugin/mcp/config';
+    return '/api/proxy/plugin/aiobs-console-plugin/mcp/config';
   } else {
     // React UI uses nginx proxy
     return '/api/config';

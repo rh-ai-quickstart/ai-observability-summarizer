@@ -78,7 +78,7 @@
     "remark-gfm": "^3.0.1"
   },
   "consolePlugin": {
-    "name": "ai-observability-console-plugin",
+    "name": "aiobs-console-plugin",
     "version": "1.0.0",
     "displayName": "AI Observability",
     "description": "Monitor and analyze AI/ML workloads with OpenShift AI Observability",

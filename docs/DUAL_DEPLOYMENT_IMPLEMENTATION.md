@@ -1009,7 +1009,7 @@ User → OpenShift Route → OAuth Proxy → Nginx (SPA) → MCP Server
 
 ```yaml
 apiVersion: v2
-name: openshift-ai-observability-react-ui
+name: openshift-aiobs-react-ui
 description: OpenShift AI Observability - React UI Web Application
 type: application
 version: 1.0.0

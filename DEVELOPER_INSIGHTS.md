@@ -320,16 +320,16 @@ The standard installation deploys:
 
 **Access Options:**
 - **Console Plugin** (DEV_MODE=false, default): Navigate to **OpenShift Console → OpenShift AI Observability** in the left navigation
-- **React UI** (DEV_MODE=true): Find the Route at **Networking → Routes** or run `oc get route ai-observability-react-ui`
+- **React UI** (DEV_MODE=true): Find the Route at **Networking → Routes** or run `oc get route aiobs-react-ui`
 - **Traces**: Navigate to **Observe → Traces** in the OpenShift console
 
 To get the React UI route (when deployed with DEV_MODE=true):
 
 ```bash
-oc get route ai-observability-react-ui
+oc get route aiobs-react-ui
 
 NAME                       HOST/PORT                                                        PATH   SERVICES    PORT   TERMINATION   WILDCARD
-ai-observability-react-ui  ai-observability-react-ui-your-namespace.apps.cluster.example.com       react-ui    8080   edge          None
+aiobs-react-ui  aiobs-react-ui-your-namespace.apps.cluster.example.com       react-ui    8080   edge          None
 ```
 
 ### OpenShift Summarizer Dashboard 

@@ -73,10 +73,10 @@ METRICS_UI_CHART_PATH ?= ui
 MCP_SERVER_RELEASE_NAME ?= mcp-server
 MCP_SERVER_CHART_PATH ?= mcp-server
 # Console plugin chart
-CONSOLE_PLUGIN_RELEASE_NAME ?= ai-obs-plugin
+CONSOLE_PLUGIN_RELEASE_NAME ?= aiobs-plugin
 CONSOLE_PLUGIN_CHART_PATH ?= openshift-console-plugin
 # React UI chart
-REACT_UI_RELEASE_NAME ?= ai-obs-react-ui
+REACT_UI_RELEASE_NAME ?= aiobs-react-ui
 REACT_UI_CHART_PATH ?= react-ui-app
 # Korrel8r chart
 KORREL8R_RELEASE_NAME ?= korrel8r-summarizer
@@ -499,7 +499,7 @@ install-react-ui: namespace
 		--set mcpServer.serviceName=$(MCP_SERVER_RELEASE_NAME)-svc
 	@echo "✅ React UI deployed"
 	@echo "→ Getting Route URL..."
-	-@ROUTE_HOST=$$(oc get route ai-observability-react-ui -n $(NAMESPACE) -o jsonpath='{.spec.host}' 2>/dev/null); \
+	-@ROUTE_HOST=$$(oc get route aiobs-react-ui -n $(NAMESPACE) -o jsonpath='{.spec.host}' 2>/dev/null); \
 	if [ -n "$$ROUTE_HOST" ]; then \
 		echo "  → React UI accessible at: https://$$ROUTE_HOST"; \
 	else \

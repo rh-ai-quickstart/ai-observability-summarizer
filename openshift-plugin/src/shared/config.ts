@@ -48,7 +48,7 @@ export const getMcpServerUrl = (): string => {
 
   if (mode === 'plugin') {
     // Console plugin uses console proxy
-    return '/api/proxy/plugin/ai-observability-console-plugin/mcp/mcp';
+    return '/api/proxy/plugin/aiobs-console-plugin/mcp/mcp';
   } else {
     // React UI uses nginx proxy or direct connection
     return '/api/mcp';

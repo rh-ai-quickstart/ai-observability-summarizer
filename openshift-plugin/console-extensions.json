@@ -5,7 +5,7 @@
       "id": "ai-observability",
       "perspective": "admin",
       "section": "observe",
-      "name": "%plugin__openshift-ai-observability~AI Observability%",
+      "name": "%plugin__aiobs-console-plugin~AI Observability%",
       "href": "/observe/ai-observability"
     }
   },

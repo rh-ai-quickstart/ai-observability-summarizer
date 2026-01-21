@@ -1,6 +1,6 @@
 # Application configuration
 app:
-  name: "ai-observability-react-ui"
+  name: "aiobs-react-ui"
   replicas: 1
   image:
     repository: "quay.io/ecosystem-appeng/aiobs-react-ui"
@@ -64,6 +64,6 @@ securityContext:
 
 # Labels
 labels:
-  app: ai-observability-react-ui
+  app: aiobs-react-ui
   component: react-ui
   part-of: openshift-ai-observability
