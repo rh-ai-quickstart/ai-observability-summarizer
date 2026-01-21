@@ -1,4 +1,4 @@
-import { chat, getSessionConfig, setSessionConfig, clearSessionConfig } from '../../src/services/mcpClient';
+import { chat, getSessionConfig, setSessionConfig, clearSessionConfig } from '../../src/core/services/mcpClient';
 
 // Mock fetch
 global.fetch = jest.fn();

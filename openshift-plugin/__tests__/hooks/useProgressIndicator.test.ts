@@ -1,6 +1,6 @@
 import { renderHook } from '@testing-library/react-hooks';
 import { act } from '@testing-library/react';
-import { useProgressIndicator } from '../../src/hooks/useProgressIndicator';
+import { useProgressIndicator } from '../../src/core/hooks/useProgressIndicator';
 
 describe('useProgressIndicator', () => {
   beforeEach(() => {

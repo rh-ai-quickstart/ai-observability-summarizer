@@ -1,15 +1,15 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import { AIChatPage } from '../../src/pages/AIChatPage';
-import * as mcpClient from '../../src/services/mcpClient';
-import * as useChatHistoryModule from '../../src/hooks/useChatHistory';
-import * as useProgressIndicatorModule from '../../src/hooks/useProgressIndicator';
+import { AIChatPage } from '../../src/core/pages/AIChatPage';
+import * as mcpClient from '../../src/core/services/mcpClient';
+import * as useChatHistoryModule from '../../src/core/hooks/useChatHistory';
+import * as useProgressIndicatorModule from '../../src/core/hooks/useProgressIndicator';
 
 // Mock the services and hooks
-jest.mock('../../src/services/mcpClient');
-jest.mock('../../src/hooks/useChatHistory');
-jest.mock('../../src/hooks/useProgressIndicator');
+jest.mock('../../src/core/services/mcpClient');
+jest.mock('../../src/core/hooks/useChatHistory');
+jest.mock('../../src/core/hooks/useProgressIndicator');
 
 // Mock ReactMarkdown and remark-gfm (ESM modules)
 jest.mock('react-markdown', () => ({
@@ -22,7 +22,7 @@ jest.mock('remark-gfm', () => ({
   default: jest.fn(),
 }));
 
-jest.mock('../../src/components/SuggestedQuestions', () => ({
+jest.mock('../../src/core/components/SuggestedQuestions', () => ({
   SuggestedQuestions: ({ onSelectQuestion, isExpanded, onToggle }: any) => (
     <div data-testid="suggested-questions">
       <button onClick={() => onToggle(!isExpanded)}>
