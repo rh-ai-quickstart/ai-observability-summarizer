@@ -14,7 +14,7 @@ MAKEFLAGS += --no-print-directory
 REGISTRY ?= quay.io
 ORG ?= ecosystem-appeng
 IMAGE_PREFIX ?= aiobs
-VERSION ?= 1.0.9-feature
+VERSION ?= 1.0.10-feature
 PLATFORM ?= linux/amd64
 DEV_MODE ?= false
 

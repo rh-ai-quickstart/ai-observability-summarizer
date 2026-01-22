@@ -48,16 +48,24 @@ jobs:
 
           - name: console-plugin
             context: openshift-plugin
-            dockerfile: openshift-plugin/Dockerfile
+            dockerfile: openshift-plugin/Dockerfile.plugin
             component: console-plugin
             needs_build: true
+            build_target: plugin
+
+          - name: react-ui
+            context: openshift-plugin
+            dockerfile: openshift-plugin/Dockerfile.react-ui
+            component: react-ui
+            needs_build: true
+            build_target: react-ui
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up Node.js for console-plugin
-        if: ${{ matrix.needs_build == true }}
+        if: ${{ matrix.needs_build == true && matrix.build_target == 'plugin' }}
         uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -65,11 +73,11 @@ jobs:
           cache-dependency-path: openshift-plugin/yarn.lock
 
       - name: Build console-plugin assets
-        if: ${{ matrix.needs_build == true }}
+        if: ${{ matrix.needs_build == true && matrix.build_target == 'plugin' }}
         run: |
           cd openshift-plugin
           yarn install --frozen-lockfile
-          yarn build
+          yarn build:plugin
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
