@@ -30,6 +30,8 @@ import {
   OutlinedQuestionCircleIcon,
   DownloadIcon,
   EditIcon,
+  AngleDownIcon,
+  AngleUpIcon,
 } from '@patternfly/react-icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
