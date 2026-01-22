@@ -18,6 +18,7 @@ KORREL8R_PORT=9443
 LLAMASTACK_PORT=8321
 LLAMA_MODEL_PORT=8080
 UI_PORT=8501
+REACT_UI_PORT=3000
 MCP_PORT=${MCP_PORT:-8085}
 PLUGIN_PORT=9001
 CONSOLE_PORT=9000
@@ -134,6 +135,7 @@ cleanup() {
     pkill -f "webpack serve" || true
     pkill -f "yarn.*start" || true
     pkill -f "yarn run start-console" || true
+    ensure_port_free "$REACT_UI_PORT"
 
     # Deactivate virtual environment if it was activated
     if [ -n "$VIRTUAL_ENV" ]; then
@@ -293,6 +295,10 @@ start_local_services() {
 
     # Set environment variables
     export LOCAL_DEV="true"  # Mark as local development
+
+    # Enable DEV_MODE for local development (saves API keys to browser localStorage instead of OCP secrets)
+    export DEV_MODE="${DEV_MODE:-true}"
+
     export PROMETHEUS_URL="http://localhost:$THANOS_PORT"
     export TEMPO_URL="https://localhost:$TEMPO_PORT"
     export TEMPO_TENANT_ID="dev"
@@ -373,10 +379,40 @@ start_local_services() {
     # Wait for UI to start
     sleep 5
 
+    # Start React-UI (OpenShift Console alternative UI) when DEV_MODE is true
+    if [ "$DEV_MODE" = "true" ]; then
+        echo -e "${BLUE}🌐 Starting React-UI...${NC}"
+        ensure_port_free "$REACT_UI_PORT"
+
+        if [ -d "openshift-plugin" ]; then
+            echo -e "${BLUE}  → Installing React-UI dependencies...${NC}"
+            (cd openshift-plugin && yarn install --frozen-lockfile > /tmp/summarizer-react-ui-install.log 2>&1)
+
+            echo -e "${BLUE}  → Starting React-UI dev server on port $REACT_UI_PORT...${NC}"
+            (cd openshift-plugin && yarn start:react-ui > /tmp/summarizer-react-ui.log 2>&1) &
+            REACT_UI_PID=$!
+
+            # Wait for React-UI to start
+            sleep 8
+
+            # Test React-UI health
+            if curl -s --connect-timeout 5 "http://localhost:$REACT_UI_PORT" | grep -q 'html'; then
+                echo -e "${GREEN}✅ React-UI started successfully${NC}"
+            else
+                echo -e "${YELLOW}⚠️  React-UI may still be starting. Check /tmp/summarizer-react-ui.log${NC}"
+            fi
+        else
+            echo -e "${YELLOW}⚠️  openshift-plugin directory not found. Skipping React-UI.${NC}"
+        fi
+    fi
+
     # Show log file locations for debugging
     echo -e "${GREEN}📋 Log files for debugging (all in /tmp):${NC}"
     echo -e "   🔧 MCP Server: /tmp/summarizer-mcp-server.log"
     echo -e "   🎨 Streamlit UI: /tmp/summarizer-ui.log"
+    if [ "$DEV_MODE" = "true" ]; then
+        echo -e "   🌐 React-UI: /tmp/summarizer-react-ui.log"
+    fi
     if [ "$START_PLUGIN" = "true" ]; then
         echo -e "   🔌 Plugin Dev Server: /tmp/summarizer-plugin.log"
     fi
@@ -488,6 +524,9 @@ main() {
     echo -e "\n${GREEN}🎉 Setup complete! All services are running.${NC}"
     echo -e "\n${BLUE}📋 Services Available:${NC}"
     echo -e "   ${YELLOW}🎨 Streamlit UI: http://localhost:$UI_PORT${NC}"
+    if [ "$DEV_MODE" = "true" ]; then
+        echo -e "   ${YELLOW}🌐 React-UI: http://localhost:$REACT_UI_PORT${NC}"
+    fi
     echo -e "   ${YELLOW}🧩 MCP Server (health): $MCP_URL/health${NC}"
     echo -e "   ${YELLOW}🧩 MCP HTTP Endpoint: $MCP_URL/mcp${NC}"
     echo -e "   ${YELLOW}📊 Prometheus: $PROMETHEUS_URL${NC}"
@@ -517,7 +556,11 @@ main() {
         echo -e "\n${GREEN}   Or use the -o flag to start everything together:${NC}"
         echo -e "   ${BLUE}$0 -n $DEFAULT_NAMESPACE -p -o${NC}"
     else
-        echo -e "\n${GREEN}🎯 Ready to use! Open your browser to http://localhost:$UI_PORT${NC}"
+        echo -e "\n${GREEN}🎯 Ready to use! Choose your UI:${NC}"
+        echo -e "   ${BLUE}Streamlit UI: http://localhost:$UI_PORT${NC}"
+        if [ "$DEV_MODE" = "true" ]; then
+            echo -e "   ${BLUE}React-UI: http://localhost:$REACT_UI_PORT${NC}"
+        fi
     fi
     
     echo -e "\n${YELLOW}📝 Note: Keep this terminal open to maintain all services${NC}"
