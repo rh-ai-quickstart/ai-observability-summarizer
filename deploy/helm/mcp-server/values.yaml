@@ -16,7 +16,7 @@ service:
 
 route:
   name: aiobs-mcp-server-route
-  enabled: false # Allows local testing with MCP server inspector
+  enabled: true # Allows local testing with MCP server inspector
   host: ""
   tls:
     termination: reencrypt
