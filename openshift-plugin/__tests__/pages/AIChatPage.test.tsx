@@ -5,11 +5,13 @@ import { AIChatPage } from '../../src/core/pages/AIChatPage';
 import * as mcpClient from '../../src/core/services/mcpClient';
 import * as useChatHistoryModule from '../../src/core/hooks/useChatHistory';
 import * as useProgressIndicatorModule from '../../src/core/hooks/useProgressIndicator';
+import * as useChatSettingsModule from '../../src/core/hooks/useChatSettings';
 
 // Mock the services and hooks
 jest.mock('../../src/core/services/mcpClient');
 jest.mock('../../src/core/hooks/useChatHistory');
 jest.mock('../../src/core/hooks/useProgressIndicator');
+jest.mock('../../src/core/hooks/useChatSettings');
 
 // Mock ReactMarkdown and remark-gfm (ESM modules)
 jest.mock('react-markdown', () => ({
@@ -30,6 +32,16 @@ jest.mock('../../src/core/components/SuggestedQuestions', () => ({
       </button>
       <button onClick={() => onSelectQuestion('What is GPU utilization?')}>
         GPU Question
+      </button>
+    </div>
+  ),
+}));
+
+jest.mock('../../src/core/components/SuggestedQuestionsPopover', () => ({
+  SuggestedQuestionsPopover: ({ onSelectQuestion }: any) => (
+    <div data-testid="suggested-questions-popover">
+      <button onClick={() => onSelectQuestion('What is GPU utilization?')}>
+        GPU Question Popover
       </button>
     </div>
   ),
@@ -62,6 +74,24 @@ describe('AIChatPage', () => {
       progressMessage: '',
       startProgress: mockStartProgress,
       stopProgress: mockStopProgress,
+    });
+
+    // Mock useChatSettings hook - use inline mode for tests to match existing test expectations
+    (useChatSettingsModule.useChatSettings as jest.Mock).mockReturnValue({
+      settings: {
+        autoCollapseEnabled: true,
+        messagesKeptExpanded: 3,
+        collapsedPreviewLength: 200,
+        suggestedQuestionsExpanded: true,
+        suggestedQuestionsLocation: 'inline', // Use inline for tests
+        conversationContextLimit: 10,
+        showProgressLogByDefault: false,
+        enableKeyboardShortcuts: true,
+        maxStoredMessages: 50,
+      },
+      updateSettings: jest.fn(),
+      resetSettings: jest.fn(),
+      isLoaded: true,
     });
 
     // Mock getSessionConfig to return valid config by default
@@ -106,7 +136,8 @@ describe('AIChatPage', () => {
       render(<AIChatPage />);
 
       expect(screen.getByText('Configuration Required')).toBeInTheDocument();
-      expect(screen.getByText(/Please click the settings icon/i)).toBeInTheDocument();
+      expect(screen.getByText(/Click "Open Settings"/i)).toBeInTheDocument();
+      expect(screen.getByText('Open Settings')).toBeInTheDocument();
     });
 
     it('should not show configuration error when model is configured', () => {

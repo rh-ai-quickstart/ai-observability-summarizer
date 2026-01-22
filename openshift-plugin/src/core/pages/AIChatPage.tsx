@@ -38,17 +38,20 @@ import remarkGfm from 'remark-gfm';
 import { chat, getSessionConfig } from '../services/mcpClient';
 import { useChatHistory, Message } from '../hooks/useChatHistory';
 import { useProgressIndicator } from '../hooks/useProgressIndicator';
+import { useChatSettings } from '../hooks/useChatSettings';
 import { SuggestedQuestions } from '../components/SuggestedQuestions';
+import { SuggestedQuestionsPopover } from '../components/SuggestedQuestionsPopover';
 import '../styles/chat-markdown.css';
 
 const AIChatPage: React.FC = () => {
   const { messages, setMessages, clearHistory, exportToMarkdown } = useChatHistory();
   const { progressMessage, startProgress, stopProgress } = useProgressIndicator();
+  const { settings: chatSettings } = useChatSettings();
   const [inputValue, setInputValue] = React.useState('');
   const [isLoading, setIsLoading] = React.useState(false);
   const [configError, setConfigError] = React.useState<string | null>(null);
   const [replayMessage, setReplayMessage] = React.useState<string>('');
-  const [questionsExpanded, setQuestionsExpanded] = React.useState(true);
+  const [questionsExpanded, setQuestionsExpanded] = React.useState(chatSettings.suggestedQuestionsExpanded);
   const [collapsedMessages, setCollapsedMessages] = React.useState<Set<string>>(new Set());
   const [expandedProgressLogs, setExpandedProgressLogs] = React.useState<Set<string>>(new Set());
   const [copiedMessageId, setCopiedMessageId] = React.useState<string | null>(null);
@@ -75,13 +78,15 @@ const AIChatPage: React.FC = () => {
     };
   }, []);
 
-  // Auto-collapse older assistant messages (keep last 3 expanded)
+  // Auto-collapse older assistant messages based on settings
   React.useEffect(() => {
+    if (!chatSettings.autoCollapseEnabled) return;
+
     const assistantMessages = messages.filter(msg => msg.role === 'assistant');
 
-    if (assistantMessages.length > 3) {
+    if (assistantMessages.length > chatSettings.messagesKeptExpanded) {
       const messagesToCollapse = assistantMessages
-        .slice(0, assistantMessages.length - 3)
+        .slice(0, assistantMessages.length - chatSettings.messagesKeptExpanded)
         .map(msg => msg.id);
 
       setCollapsedMessages(prev => {
@@ -90,10 +95,12 @@ const AIChatPage: React.FC = () => {
         return newSet;
       });
     }
-  }, [messages]);
+  }, [messages, chatSettings.autoCollapseEnabled, chatSettings.messagesKeptExpanded]);
 
-  // Keyboard shortcuts
+  // Keyboard shortcuts (conditionally enabled based on settings)
   React.useEffect(() => {
+    if (!chatSettings.enableKeyboardShortcuts) return;
+
     const handleKeyDown = (event: KeyboardEvent) => {
       const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
       const modKey = isMac ? event.metaKey : event.ctrlKey;
@@ -124,16 +131,32 @@ const AIChatPage: React.FC = () => {
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isLoading]);
+  }, [isLoading, chatSettings.enableKeyboardShortcuts]);
 
-  // Check configuration on mount
+  // Check configuration on mount and when settings are closed
   React.useEffect(() => {
-    const config = getSessionConfig();
-    if (!config.ai_model) {
-      setConfigError('No AI model configured');
-    } else {
-      setConfigError(null);
-    }
+    const checkConfig = () => {
+      const config = getSessionConfig();
+      if (!config.ai_model) {
+        setConfigError('No AI model configured');
+      } else {
+        setConfigError(null);
+      }
+    };
+
+    // Check immediately
+    checkConfig();
+
+    // Listen for settings-closed event to re-check configuration
+    const handleSettingsClosed = () => {
+      checkConfig();
+    };
+
+    window.addEventListener('settings-closed', handleSettingsClosed);
+
+    return () => {
+      window.removeEventListener('settings-closed', handleSettingsClosed);
+    };
   }, []);
 
   const handleSend = async (messageText?: string) => {
@@ -147,8 +170,8 @@ const AIChatPage: React.FC = () => {
       return;
     }
 
-    // Collapse suggested questions when a question is sent
-    if (messageText) {
+    // Collapse suggested questions when a question is sent (inline mode only)
+    if (messageText && chatSettings.suggestedQuestionsLocation === 'inline') {
       // This is from suggested questions - collapse immediately
       setQuestionsExpanded(false);
     }
@@ -171,8 +194,10 @@ const AIChatPage: React.FC = () => {
 
     try {
       // Build conversation history from previous messages (exclude current and error messages)
+      // Limit to last N messages based on settings
       const conversationHistory = messages
         .filter(msg => !msg.error) // Exclude error messages
+        .slice(-chatSettings.conversationContextLimit) // Apply context limit from settings
         .map(msg => ({
           role: msg.role,
           content: msg.content,
@@ -222,8 +247,15 @@ const AIChatPage: React.FC = () => {
 
       setMessages(prev => [...prev, assistantMessage]);
 
-      // Auto-expand suggested questions after response for easy follow-up
-      setQuestionsExpanded(true);
+      // Auto-expand progress log if enabled in settings
+      if (chatSettings.showProgressLogByDefault && progressLog && progressLog.length > 0) {
+        setExpandedProgressLogs(prev => new Set([...prev, assistantMessage.id]));
+      }
+
+      // Auto-expand suggested questions after response for easy follow-up (inline mode only)
+      if (chatSettings.suggestedQuestionsLocation === 'inline') {
+        setQuestionsExpanded(true);
+      }
     } catch (error) {
       // Only update state if component is still mounted
       if (!isMountedRef.current) return;
@@ -241,8 +273,10 @@ const AIChatPage: React.FC = () => {
 
       setMessages(prev => [...prev, errorMessage]);
 
-      // Auto-expand suggested questions even on error
-      setQuestionsExpanded(true);
+      // Auto-expand suggested questions even on error (inline mode only)
+      if (chatSettings.suggestedQuestionsLocation === 'inline') {
+        setQuestionsExpanded(true);
+      }
     } finally {
       if (isMountedRef.current) {
         setIsLoading(false);
@@ -260,6 +294,11 @@ const AIChatPage: React.FC = () => {
 
   const handleClear = () => {
     clearHistory();
+  };
+
+  const handleOpenSettings = () => {
+    // Dispatch event to open settings modal
+    window.dispatchEvent(new CustomEvent('open-settings'));
   };
 
   const toggleProgressLog = (messageId: string) => {
@@ -386,6 +425,9 @@ const AIChatPage: React.FC = () => {
             </TextContent>
           </FlexItem>
           <FlexItem>
+            {chatSettings.suggestedQuestionsLocation === 'header' && (
+              <SuggestedQuestionsPopover onSelectQuestion={(question) => handleSend(question)} />
+            )}
             <Button variant="plain" onClick={handleExportConversation} title="Export conversation" style={{ marginRight: '8px' }}>
               <DownloadIcon /> Export
             </Button>
@@ -404,12 +446,17 @@ const AIChatPage: React.FC = () => {
           isInline
           style={{ marginBottom: '16px' }}
           actionLinks={
-            <AlertActionLink onClick={() => setConfigError(null)}>
-              Dismiss
-            </AlertActionLink>
+            <>
+              <AlertActionLink onClick={handleOpenSettings}>
+                Open Settings
+              </AlertActionLink>
+              <AlertActionLink onClick={() => setConfigError(null)}>
+                Dismiss
+              </AlertActionLink>
+            </>
           }
         >
-          {configError}. Please click the settings icon in the header to configure your AI model.
+          {configError}. Click "Open Settings" to configure your AI model.
         </Alert>
       )}
 
@@ -529,7 +576,7 @@ const AIChatPage: React.FC = () => {
                       className="chat-markdown"
                     >
                       {message.role === 'assistant' && collapsedMessages.has(message.id)
-                        ? message.content.substring(0, 200) + (message.content.length > 200 ? '...' : '')
+                        ? message.content.substring(0, chatSettings.collapsedPreviewLength) + (message.content.length > chatSettings.collapsedPreviewLength ? '...' : '')
                         : message.content}
                     </ReactMarkdown>
 
@@ -665,14 +712,16 @@ const AIChatPage: React.FC = () => {
             </div>
           ))}
 
-          {/* Suggested Questions - always available, collapsible */}
-          <div style={{ marginTop: messages.length > 1 ? '16px' : '24px', marginBottom: '16px' }}>
-            <SuggestedQuestions
-              onSelectQuestion={(question) => handleSend(question)}
-              isExpanded={questionsExpanded}
-              onToggle={(expanded) => setQuestionsExpanded(expanded)}
-            />
-          </div>
+          {/* Suggested Questions - inline mode only */}
+          {chatSettings.suggestedQuestionsLocation === 'inline' && (
+            <div style={{ marginTop: messages.length > 1 ? '16px' : '24px', marginBottom: '16px' }}>
+              <SuggestedQuestions
+                onSelectQuestion={(question) => handleSend(question)}
+                isExpanded={questionsExpanded}
+                onToggle={(expanded) => setQuestionsExpanded(expanded)}
+              />
+            </div>
+          )}
 
           {isLoading && (
             <div className="message-fade-in" style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
