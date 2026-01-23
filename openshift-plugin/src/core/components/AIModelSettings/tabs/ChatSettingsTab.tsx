@@ -2,6 +2,9 @@ import * as React from 'react';
 import {
   Form,
   FormGroup,
+  FormHelperText,
+  HelperText,
+  HelperTextItem,
   Switch,
   TextInput,
   Button,
@@ -70,7 +73,6 @@ export const ChatSettingsTab: React.FC<ChatSettingsTabProps> = ({
             <FormGroup
               label="Messages kept expanded"
               fieldId="messages-kept-expanded"
-              helperText="Number of most recent assistant messages to keep expanded (1-10)"
             >
               <TextInput
                 id="messages-kept-expanded"
@@ -86,12 +88,16 @@ export const ChatSettingsTab: React.FC<ChatSettingsTabProps> = ({
                 max={10}
                 style={{ width: '100px' }}
               />
+              <FormHelperText>
+                <HelperText>
+                  <HelperTextItem>Number of most recent assistant messages to keep expanded (1-10)</HelperTextItem>
+                </HelperText>
+              </FormHelperText>
             </FormGroup>
 
             <FormGroup
               label="Collapsed message preview length"
               fieldId="collapsed-preview-length"
-              helperText="Number of characters to show in collapsed messages (100-500)"
             >
               <TextInput
                 id="collapsed-preview-length"
@@ -107,6 +113,11 @@ export const ChatSettingsTab: React.FC<ChatSettingsTabProps> = ({
                 max={500}
                 style={{ width: '100px' }}
               />
+              <FormHelperText>
+                <HelperText>
+                  <HelperTextItem>Number of characters to show in collapsed messages (100-500)</HelperTextItem>
+                </HelperText>
+              </FormHelperText>
             </FormGroup>
           </>
         )}
@@ -169,7 +180,6 @@ export const ChatSettingsTab: React.FC<ChatSettingsTabProps> = ({
         <FormGroup
           label="Context history limit"
           fieldId="conversation-context-limit"
-          helperText="Number of previous messages to send for context (0-20). Higher values provide more context but use more tokens."
         >
           <TextInput
             id="conversation-context-limit"
@@ -185,6 +195,11 @@ export const ChatSettingsTab: React.FC<ChatSettingsTabProps> = ({
             max={20}
             style={{ width: '100px' }}
           />
+          <FormHelperText>
+            <HelperText>
+              <HelperTextItem>Number of previous messages to send for context (0-20). Higher values provide more context but use more tokens.</HelperTextItem>
+            </HelperText>
+          </FormHelperText>
           <Text component={TextVariants.small} style={{ display: 'block', marginTop: '8px', color: 'var(--pf-v5-global--Color--200)' }}>
             Set to 0 to disable context (each message is independent).
           </Text>
@@ -239,7 +254,6 @@ export const ChatSettingsTab: React.FC<ChatSettingsTabProps> = ({
         <FormGroup
           label="Maximum stored messages"
           fieldId="max-stored-messages"
-          helperText="Maximum messages to keep in browser storage (10-100)"
         >
           <TextInput
             id="max-stored-messages"
@@ -255,6 +269,11 @@ export const ChatSettingsTab: React.FC<ChatSettingsTabProps> = ({
             max={100}
             style={{ width: '100px' }}
           />
+          <FormHelperText>
+            <HelperText>
+              <HelperTextItem>Maximum messages to keep in browser storage (10-100)</HelperTextItem>
+            </HelperText>
+          </FormHelperText>
           <Text component={TextVariants.small} style={{ display: 'block', marginTop: '8px', color: 'var(--pf-v5-global--Color--200)' }}>
             Older messages are removed to prevent storage issues.
           </Text>
