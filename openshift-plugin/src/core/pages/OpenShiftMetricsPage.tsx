@@ -30,18 +30,21 @@ import {
   ToolbarContent,
   ToolbarItem,
 } from '@patternfly/react-core';
-import { 
-  SyncIcon, 
-  OutlinedLightbulbIcon, 
-  ClusterIcon, 
+import {
+  SyncIcon,
+  OutlinedLightbulbIcon,
+  ClusterIcon,
   CubeIcon,
   ServerIcon,
   NetworkIcon,
   DatabaseIcon,
   CubesIcon,
   RunningIcon,
+  ChartLineIcon,
+  DownloadIcon,
 } from '@patternfly/react-icons';
 import { AlertList } from '../components/AlertList';
+import { MetricChartModal } from '../components/MetricChartModal';
 import {
   fetchOpenShiftMetrics,
   listOpenShiftNamespaces,
@@ -231,9 +234,11 @@ interface MetricCardProps {
   unit?: string;
   description?: string;
   timeSeries?: TimeSeriesPoint[];
+  metricKey: string;
+  onViewChart?: (metricKey: string) => void;
 }
 
-const MetricCard: React.FC<MetricCardProps> = ({ label, value, unit, description, timeSeries }) => {
+const MetricCard: React.FC<MetricCardProps> = ({ label, value, unit, description, timeSeries, metricKey, onViewChart }) => {
   const formatValue = (val: number | null): string => {
     if (val === null || val === undefined || isNaN(val)) return '—';
     if (val >= 1000000000) return `${(val / 1000000000).toFixed(2)}B`;
@@ -299,44 +304,60 @@ const MetricCard: React.FC<MetricCardProps> = ({ label, value, unit, description
   return (
     <Card isCompact style={{ height: '100%' }}>
       <CardBody style={{ padding: '12px' }}>
-        <TextContent>
-          <Text component={TextVariants.small} style={{ color: 'var(--pf-v5-global--Color--200)', marginBottom: '4px' }}>
-            {label}
-          </Text>
-        </TextContent>
-        <Flex alignItems={{ default: 'alignItemsCenter' }}>
-          <FlexItem>
-            <Text 
-              component={TextVariants.h2} 
-              style={{ 
-                color: isNull ? 'var(--pf-v5-global--Color--200)' : isZero ? 'var(--pf-v5-global--success-color--100)' : 'inherit',
-                marginBottom: '2px',
-                fontSize: '1.5rem',
-              }}
-            >
-              {displayValue}{unit && value !== null ? ` ${unit}` : ''}
-            </Text>
+        <Flex justifyContent={{ default: 'justifyContentSpaceBetween' }} alignItems={{ default: 'alignItemsFlexStart' }}>
+          <FlexItem flex={{ default: 'flex_1' }}>
+            <TextContent>
+              <Text component={TextVariants.small} style={{ color: 'var(--pf-v5-global--Color--200)', marginBottom: '4px' }}>
+                {label}
+              </Text>
+            </TextContent>
+            <Flex alignItems={{ default: 'alignItemsCenter' }}>
+              <FlexItem>
+                <Text
+                  component={TextVariants.h2}
+                  style={{
+                    color: isNull ? 'var(--pf-v5-global--Color--200)' : isZero ? 'var(--pf-v5-global--success-color--100)' : 'inherit',
+                    marginBottom: '2px',
+                    fontSize: '1.5rem',
+                  }}
+                >
+                  {displayValue}{unit && value !== null ? ` ${unit}` : ''}
+                </Text>
+              </FlexItem>
+              <FlexItem>
+                {renderSparkline()}
+              </FlexItem>
+              {trend && trend.direction !== 'flat' && (
+                <FlexItem>
+                  <span style={{
+                    fontSize: '0.7rem',
+                    color: trend.direction === 'up' ? '#3e8635' : '#c9190b',
+                    marginLeft: '4px',
+                  }}>
+                    {trend.direction === 'up' ? '↑' : '↓'} {trend.percent.toFixed(0)}%
+                  </span>
+                </FlexItem>
+              )}
+            </Flex>
+            {description && (
+              <Text component={TextVariants.small} style={{ color: 'var(--pf-v5-global--Color--200)', fontSize: '0.75rem' }}>
+                {description}
+              </Text>
+            )}
           </FlexItem>
-          <FlexItem>
-            {renderSparkline()}
-          </FlexItem>
-          {trend && trend.direction !== 'flat' && (
+          {timeSeries && timeSeries.length > 0 && onViewChart && (
             <FlexItem>
-              <span style={{ 
-                fontSize: '0.7rem', 
-                color: trend.direction === 'up' ? '#3e8635' : '#c9190b',
-                marginLeft: '4px',
-              }}>
-                {trend.direction === 'up' ? '↑' : '↓'} {trend.percent.toFixed(0)}%
-              </span>
+              <Button
+                variant="plain"
+                aria-label="View full chart"
+                onClick={() => onViewChart(metricKey)}
+                style={{ padding: '4px', minWidth: '30px' }}
+              >
+                <ChartLineIcon style={{ color: 'var(--pf-v5-global--primary-color--100)' }} />
+              </Button>
             </FlexItem>
           )}
         </Flex>
-        {description && (
-          <Text component={TextVariants.small} style={{ color: 'var(--pf-v5-global--Color--200)', fontSize: '0.75rem' }}>
-            {description}
-          </Text>
-        )}
       </CardBody>
     </Card>
   );
@@ -357,11 +378,12 @@ interface CategorySectionProps {
     metrics: Array<{ key: string; label: string; unit?: string; description?: string }>;
   };
   metricsData: Record<string, MetricDataValue>;
+  onViewChart?: (metricKey: string) => void;
 }
 
-const CategorySection: React.FC<CategorySectionProps> = ({ categoryKey, categoryDef, metricsData }) => {
+const CategorySection: React.FC<CategorySectionProps> = ({ categoryKey, categoryDef, metricsData, onViewChart }) => {
   const IconComponent = categoryDef.icon;
-  
+
   return (
     <Card style={{ marginBottom: '16px' }}>
       <CardTitle>
@@ -391,6 +413,8 @@ const CategorySection: React.FC<CategorySectionProps> = ({ categoryKey, category
                   unit={metric.unit}
                   description={metric.description}
                   timeSeries={metricData?.time_series}
+                  metricKey={metric.key}
+                  onViewChart={onViewChart}
                 />
               </GridItem>
             );
@@ -410,17 +434,20 @@ export const OpenShiftMetricsPage: React.FC = () => {
   const [selectedNamespace, setSelectedNamespace] = React.useState<string>('');
   const [selectedCategory, setSelectedCategory] = React.useState<string>('Fleet Overview');
   const [timeRange, setTimeRange] = React.useState<string>('1h');
-  
+
   // Data
   const [metricsData, setMetricsData] = React.useState<Record<string, MetricDataValue>>({});
   const [alerts, setAlerts] = React.useState<AlertInfo[]>([]);
   const [analysis, setAnalysis] = React.useState<OpenShiftAnalysisResult | null>(null);
-  
+
+  // Chart modal state
+  const [selectedMetricForChart, setSelectedMetricForChart] = React.useState<string | null>(null);
+
   // Loading states
   const [loadingNamespaces, setLoadingNamespaces] = React.useState(true);
   const [loadingMetrics, setLoadingMetrics] = React.useState(false);
   const [loadingAnalysis, setLoadingAnalysis] = React.useState(false);
-  
+
   const [error, setError] = React.useState<string | null>(null);
 
   // Get categories based on scope
@@ -539,6 +566,110 @@ export const OpenShiftMetricsPage: React.FC = () => {
     setScope(newScope);
     setAnalysis(null);
     setMetricsData({});
+  };
+
+  const handleViewChart = (metricKey: string) => {
+    setSelectedMetricForChart(metricKey);
+  };
+
+  const handleCloseChart = () => {
+    setSelectedMetricForChart(null);
+  };
+
+  // Prepare metric data for chart modal
+  const selectedMetricData = selectedMetricForChart ? (() => {
+    const categories = scope === 'cluster_wide' ? CLUSTER_WIDE_CATEGORIES : NAMESPACE_SCOPED_CATEGORIES;
+    let metricDef = null;
+
+    for (const [, categoryDef] of Object.entries(categories)) {
+      const found = categoryDef.metrics.find(m => m.key === selectedMetricForChart);
+      if (found) {
+        metricDef = found;
+        break;
+      }
+    }
+
+    const metricData = metricsData[selectedMetricForChart];
+
+    if (metricDef && metricData) {
+      return {
+        key: selectedMetricForChart,
+        label: metricDef.label,
+        unit: metricDef.unit,
+        description: metricDef.description,
+        timeSeries: metricData.time_series || [],
+      };
+    }
+    return null;
+  })() : null;
+
+  const downloadMarkdown = () => {
+    const timestamp = new Date().toISOString();
+    const timeRangeLabel = TIME_RANGE_OPTIONS.find(o => o.value === timeRange)?.label || timeRange;
+
+    const content = `# OpenShift Metrics Report
+
+**Category**: ${selectedCategory}
+**Scope**: ${scope === 'cluster_wide' ? 'Cluster-wide' : selectedNamespace}
+**Time Range**: ${timeRangeLabel}
+**Generated**: ${timestamp}
+
+## Metrics Summary
+
+${Object.entries(metricsData).map(([key, val]) => {
+  const categoryDef = categories[selectedCategory as keyof typeof categories];
+  const metricDef = categoryDef?.metrics.find(m => m.key === key);
+  const unit = metricDef?.unit || '';
+  return `- **${key}**: ${val.latest_value !== null ? `${val.latest_value}${unit ? ` ${unit}` : ''}` : 'N/A'}`;
+}).join('\n')}
+
+## AI Analysis
+
+${analysis?.summary || 'No analysis available. Click "Analyze with AI" to generate insights.'}
+
+---
+*Generated by OpenShift AI Observability Plugin*
+`;
+
+    const blob = new Blob([content], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `openshift-metrics-${selectedCategory.replace(/\s+/g, '_')}-${Date.now()}.md`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadCSV = () => {
+    const categoryDef = categories[selectedCategory as keyof typeof categories];
+    const headers = ['Metric', 'Latest Value', 'Unit', 'Description'];
+    const rows = categoryDef?.metrics.map((metricDef) => {
+      const metricData = metricsData[metricDef.key];
+      return [
+        metricDef.key,
+        metricData?.latest_value?.toString() || 'N/A',
+        metricDef.unit || '',
+        metricDef.description || ''
+      ];
+    }) || [];
+
+    const csv = [headers, ...rows].map(row => row.map(cell => {
+      // Escape double quotes and wrap in quotes if contains comma
+      const escaped = cell.replace(/"/g, '""');
+      return escaped.includes(',') ? `"${escaped}"` : escaped;
+    }).join(',')).join('\n');
+
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `openshift-metrics-${selectedCategory.replace(/\s+/g, '_')}-${Date.now()}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   if (loadingNamespaces) {
@@ -682,6 +813,26 @@ export const OpenShiftMetricsPage: React.FC = () => {
                 </FlexItem>
                 <FlexItem style={{ marginLeft: '8px' }}>
                   <Button
+                    variant="secondary"
+                    icon={<DownloadIcon />}
+                    onClick={downloadMarkdown}
+                    isDisabled={Object.keys(metricsData).length === 0}
+                  >
+                    Download Report
+                  </Button>
+                </FlexItem>
+                <FlexItem style={{ marginLeft: '8px' }}>
+                  <Button
+                    variant="secondary"
+                    icon={<DownloadIcon />}
+                    onClick={downloadCSV}
+                    isDisabled={Object.keys(metricsData).length === 0}
+                  >
+                    Download CSV
+                  </Button>
+                </FlexItem>
+                <FlexItem style={{ marginLeft: '8px' }}>
+                  <Button
                     variant="primary"
                     icon={<OutlinedLightbulbIcon />}
                     onClick={handleAnalyze}
@@ -806,6 +957,7 @@ export const OpenShiftMetricsPage: React.FC = () => {
             categoryKey={selectedCategory}
             categoryDef={currentCategoryDef}
             metricsData={metricsData}
+            onViewChart={handleViewChart}
           />
         )}
 
@@ -816,6 +968,13 @@ export const OpenShiftMetricsPage: React.FC = () => {
           </Alert>
         )}
       </PageSection>
+
+      {/* Metric Chart Modal */}
+      <MetricChartModal
+        metric={selectedMetricData}
+        isOpen={selectedMetricForChart !== null}
+        onClose={handleCloseChart}
+      />
     </>
   );
 };

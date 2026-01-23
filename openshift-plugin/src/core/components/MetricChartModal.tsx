@@ -1,0 +1,253 @@
+import * as React from 'react';
+import {
+  Modal,
+  ModalVariant,
+  Button,
+  Flex,
+  FlexItem,
+  Text,
+  TextVariants,
+  Spinner,
+  Bullseye,
+  Toolbar,
+  ToolbarContent,
+  ToolbarItem,
+} from '@patternfly/react-core';
+import {
+  Chart,
+  ChartAxis,
+  ChartGroup,
+  ChartLine,
+  ChartThemeColor,
+  ChartVoronoiContainer,
+} from '@patternfly/react-charts';
+import { DownloadIcon, TimesIcon } from '@patternfly/react-icons';
+
+interface TimeSeriesPoint {
+  timestamp: string;
+  value: number;
+}
+
+export interface MetricChartModalProps {
+  metric: {
+    key: string;
+    label: string;
+    unit?: string;
+    timeSeries: TimeSeriesPoint[];
+    description?: string;
+  } | null;
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+export const MetricChartModal: React.FC<MetricChartModalProps> = ({ metric, isOpen, onClose }) => {
+  const chartRef = React.useRef<HTMLDivElement>(null);
+
+  if (!metric) {
+    return null;
+  }
+
+  const formatTimestamp = (timestamp: string): string => {
+    try {
+      const date = new Date(timestamp);
+      return date.toLocaleTimeString(undefined, {
+        hour: '2-digit',
+        minute: '2-digit',
+        month: 'short',
+        day: 'numeric',
+      });
+    } catch {
+      return timestamp;
+    }
+  };
+
+  const formatValue = (val: number): string => {
+    if (val === null || val === undefined || isNaN(val)) return '—';
+    if (val >= 1000000000) return `${(val / 1000000000).toFixed(2)}B`;
+    if (val >= 1000000) return `${(val / 1000000).toFixed(2)}M`;
+    if (val >= 1000) return `${(val / 1000).toFixed(1)}K`;
+    if (val < 0.01 && val > 0) return val.toExponential(2);
+    if (Number.isInteger(val)) return val.toString();
+    return val.toFixed(2);
+  };
+
+  // Prepare data for Victory.js
+  const chartData = metric.timeSeries.map((point) => ({
+    x: new Date(point.timestamp).getTime(),
+    y: point.value,
+    name: formatTimestamp(point.timestamp),
+  }));
+
+  // Calculate statistics
+  const values = metric.timeSeries.map(p => p.value);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const avg = values.reduce((sum, v) => sum + v, 0) / values.length;
+  const latest = values[values.length - 1];
+
+  // Calculate Y-axis domain with padding
+  const yMin = min - (max - min) * 0.1;
+  const yMax = max + (max - min) * 0.1;
+
+  const handleDownloadChart = () => {
+    // Create CSV content
+    const csvContent = [
+      ['Timestamp', 'Value'].join(','),
+      ...metric.timeSeries.map(point =>
+        `${point.timestamp},${point.value}`
+      )
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${metric.key.replace(/\s+/g, '_')}-${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <Modal
+      variant={ModalVariant.large}
+      title={
+        <Flex direction={{ default: 'column' }}>
+          <FlexItem>
+            <Text component={TextVariants.h2}>{metric.label}</Text>
+          </FlexItem>
+          {metric.description && (
+            <FlexItem>
+              <Text component={TextVariants.small} style={{ color: 'var(--pf-v5-global--Color--200)' }}>
+                {metric.description}
+              </Text>
+            </FlexItem>
+          )}
+        </Flex>
+      }
+      isOpen={isOpen}
+      onClose={onClose}
+      actions={[
+        <Button key="download" variant="secondary" icon={<DownloadIcon />} onClick={handleDownloadChart}>
+          Download CSV
+        </Button>,
+        <Button key="close" variant="primary" onClick={onClose}>
+          Close
+        </Button>,
+      ]}
+    >
+      {metric.timeSeries.length === 0 ? (
+        <Bullseye style={{ minHeight: '400px' }}>
+          <div style={{ textAlign: 'center' }}>
+            <Text component={TextVariants.p} style={{ color: 'var(--pf-v5-global--Color--200)' }}>
+              No time series data available for this metric
+            </Text>
+          </div>
+        </Bullseye>
+      ) : (
+        <>
+          {/* Statistics Summary */}
+          <Toolbar style={{ paddingBottom: '16px' }}>
+            <ToolbarContent>
+              <ToolbarItem>
+                <div style={{ textAlign: 'center', padding: '8px 16px', background: '#f0f0f0', borderRadius: '4px' }}>
+                  <Text component={TextVariants.small} style={{ color: '#666', display: 'block' }}>Latest</Text>
+                  <Text component={TextVariants.h4} style={{ fontWeight: 600 }}>
+                    {formatValue(latest)}{metric.unit ? ` ${metric.unit}` : ''}
+                  </Text>
+                </div>
+              </ToolbarItem>
+              <ToolbarItem>
+                <div style={{ textAlign: 'center', padding: '8px 16px', background: '#f0f0f0', borderRadius: '4px' }}>
+                  <Text component={TextVariants.small} style={{ color: '#666', display: 'block' }}>Average</Text>
+                  <Text component={TextVariants.h4} style={{ fontWeight: 600 }}>
+                    {formatValue(avg)}{metric.unit ? ` ${metric.unit}` : ''}
+                  </Text>
+                </div>
+              </ToolbarItem>
+              <ToolbarItem>
+                <div style={{ textAlign: 'center', padding: '8px 16px', background: '#f0f0f0', borderRadius: '4px' }}>
+                  <Text component={TextVariants.small} style={{ color: '#666', display: 'block' }}>Min</Text>
+                  <Text component={TextVariants.h4} style={{ fontWeight: 600 }}>
+                    {formatValue(min)}{metric.unit ? ` ${metric.unit}` : ''}
+                  </Text>
+                </div>
+              </ToolbarItem>
+              <ToolbarItem>
+                <div style={{ textAlign: 'center', padding: '8px 16px', background: '#f0f0f0', borderRadius: '4px' }}>
+                  <Text component={TextVariants.small} style={{ color: '#666', display: 'block' }}>Max</Text>
+                  <Text component={TextVariants.h4} style={{ fontWeight: 600 }}>
+                    {formatValue(max)}{metric.unit ? ` ${metric.unit}` : ''}
+                  </Text>
+                </div>
+              </ToolbarItem>
+            </ToolbarContent>
+          </Toolbar>
+
+          {/* Chart */}
+          <div ref={chartRef} style={{ height: '500px' }}>
+            <Chart
+              ariaDesc={`Time series chart for ${metric.label}`}
+              ariaTitle={metric.label}
+              containerComponent={
+                <ChartVoronoiContainer
+                  labels={({ datum }) => `${datum.name}\n${formatValue(datum.y)}${metric.unit ? ` ${metric.unit}` : ''}`}
+                  constrainToVisibleArea
+                />
+              }
+              height={500}
+              padding={{
+                bottom: 75,
+                left: 80,
+                right: 50,
+                top: 50,
+              }}
+              themeColor={ChartThemeColor.blue}
+              domain={{ y: [yMin, yMax] }}
+            >
+              <ChartAxis
+                tickFormat={(t) => {
+                  const date = new Date(t);
+                  return date.toLocaleTimeString(undefined, {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  });
+                }}
+                style={{
+                  tickLabels: { angle: -45, fontSize: 10, padding: 10 }
+                }}
+              />
+              <ChartAxis
+                dependentAxis
+                showGrid
+                tickFormat={(t) => formatValue(t)}
+                label={metric.unit || 'Value'}
+                style={{
+                  axisLabel: { fontSize: 12, padding: 50 }
+                }}
+              />
+              <ChartGroup>
+                <ChartLine
+                  data={chartData}
+                  style={{
+                    data: { stroke: '#06c', strokeWidth: 2 }
+                  }}
+                />
+              </ChartGroup>
+            </Chart>
+          </div>
+
+          {/* Data points info */}
+          <div style={{ marginTop: '16px', padding: '12px', background: '#f5f5f5', borderRadius: '4px' }}>
+            <Text component={TextVariants.small} style={{ color: '#666' }}>
+              Displaying {metric.timeSeries.length} data points from {formatTimestamp(metric.timeSeries[0].timestamp)} to {formatTimestamp(metric.timeSeries[metric.timeSeries.length - 1].timestamp)}
+            </Text>
+          </div>
+        </>
+      )}
+    </Modal>
+  );
+};
+
+export default MetricChartModal;
