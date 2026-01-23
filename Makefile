@@ -727,6 +727,11 @@ test-python:
 test-react:
 	@echo "🧪 Running React tests..."
 	@cd openshift-plugin && yarn install
+	@echo "🏗️  Building console plugin (validates TypeScript)..."
+	@cd openshift-plugin && yarn build:plugin
+	@echo "🏗️  Building React UI (validates TypeScript)..."
+	@cd openshift-plugin && yarn build:react-ui
+	@echo "🧪 Running Jest tests..."
 	@cd openshift-plugin && yarn test --ci
 
 # Convenience targets for common workflows

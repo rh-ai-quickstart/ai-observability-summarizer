@@ -20,6 +20,7 @@
     "webpack": "node -r ts-node/register ./node_modules/.bin/webpack",
     "ts-node": "ts-node",
     "lint": "eslint src --ext .ts,.tsx",
+    "typecheck": "tsc --noEmit",
     "i18n": "i18next 'src/**/*.{js,jsx,ts,tsx}' [-oc] -c i18next-parser.config.js",
     "test": "jest",
     "test:watch": "jest --watch",
