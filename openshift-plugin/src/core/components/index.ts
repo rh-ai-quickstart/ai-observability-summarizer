@@ -9,3 +9,9 @@ export type { MetricCategoryViewProps } from './MetricCategoryView';
 
 export { AlertList } from './AlertList';
 export type { AlertListProps } from './AlertList';
+
+export { StatusSummarySection } from './StatusSummarySection';
+
+export { ModelInsightsSection } from './ModelInsightsSection';
+
+export { QuickActionsSection } from './QuickActionsSection';
