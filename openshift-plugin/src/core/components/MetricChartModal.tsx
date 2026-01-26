@@ -89,6 +89,11 @@ export const MetricChartModal: React.FC<MetricChartModalProps> = ({ metric, isOp
   const yMin = min - (max - min) * 0.1;
   const yMax = max + (max - min) * 0.1;
 
+  // Calculate X-axis domain from actual timestamps
+  const timestamps = metric.timeSeries.map(p => new Date(p.timestamp).getTime());
+  const xMin = Math.min(...timestamps);
+  const xMax = Math.max(...timestamps);
+
   const handleDownloadChart = () => {
     // Create CSV content
     const csvContent = [
@@ -204,15 +209,31 @@ export const MetricChartModal: React.FC<MetricChartModalProps> = ({ metric, isOp
                 top: 50,
               }}
               themeColor={ChartThemeColor.blue}
-              domain={{ y: [yMin, yMax] }}
+              domain={{ x: [xMin, xMax], y: [yMin, yMax] }}
             >
               <ChartAxis
                 tickFormat={(t) => {
                   const date = new Date(t);
-                  return date.toLocaleTimeString(undefined, {
-                    hour: '2-digit',
-                    minute: '2-digit'
-                  });
+                  // Show date and time for better context
+                  const timeSpan = xMax - xMin;
+                  const oneDay = 24 * 60 * 60 * 1000;
+
+                  if (timeSpan > oneDay) {
+                    // For ranges > 1 day, show date + time
+                    return date.toLocaleDateString(undefined, {
+                      month: 'short',
+                      day: 'numeric'
+                    }) + '\n' + date.toLocaleTimeString(undefined, {
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    });
+                  } else {
+                    // For ranges <= 1 day, show just time
+                    return date.toLocaleTimeString(undefined, {
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    });
+                  }
                 }}
                 style={{
                   tickLabels: { angle: -45, fontSize: 10, padding: 10 }

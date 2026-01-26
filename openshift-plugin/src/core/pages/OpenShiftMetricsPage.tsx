@@ -61,83 +61,83 @@ const CLUSTER_WIDE_CATEGORIES = {
     icon: ClusterIcon,
     description: 'Cluster-wide pod, deployment, and service metrics',
     metrics: [
-      { key: 'Total Pods Running', label: 'Pods Running', unit: '', description: 'Running pods' },
-      { key: 'Total Pods Failed', label: 'Pods Failed', unit: '', description: 'Failed pods' },
-      { key: 'Pods Pending', label: 'Pods Pending', unit: '', description: 'Pending pods' },
-      { key: 'Total Deployments', label: 'Deployments', unit: '', description: 'Ready deployments' },
-      { key: 'Cluster CPU Usage (%)', label: 'CPU %', unit: '%', description: 'Cluster CPU usage' },
-      { key: 'Cluster Memory Usage (%)', label: 'Memory %', unit: '%', description: 'Cluster memory usage' },
-      { key: 'Total Services', label: 'Services', unit: '', description: 'Total services' },
-      { key: 'Total Nodes', label: 'Nodes', unit: '', description: 'Total nodes' },
-      { key: 'Total Namespaces', label: 'Namespaces', unit: '', description: 'Active namespaces' },
+      { key: 'Total Pods Running', label: 'Pods Running', unit: '', description: 'Currently running across cluster' },
+      { key: 'Total Pods Failed', label: 'Pods Failed', unit: '', description: 'Pods requiring attention' },
+      { key: 'Pods Pending', label: 'Pods Pending', unit: '', description: 'Waiting for scheduling' },
+      { key: 'Total Deployments', label: 'Deployments', unit: '', description: 'Active across all namespaces' },
+      { key: 'Cluster CPU Usage (%)', label: 'CPU %', unit: '%', description: 'Current cluster utilization' },
+      { key: 'Cluster Memory Usage (%)', label: 'Memory %', unit: '%', description: 'Current cluster utilization' },
+      { key: 'Total Services', label: 'Services', unit: '', description: 'LoadBalancer and ClusterIP' },
+      { key: 'Total Nodes', label: 'Nodes', unit: '', description: 'Available cluster nodes' },
+      { key: 'Total Namespaces', label: 'Namespaces', unit: '', description: 'Active project namespaces' },
     ]
   },
   'Jobs & Workloads': {
     icon: RunningIcon,
     description: 'Job execution and workload status',
     metrics: [
-      { key: 'Jobs Running', label: 'Jobs Active', unit: '', description: 'Currently running jobs' },
-      { key: 'Jobs Completed', label: 'Jobs Done', unit: '', description: 'Completed jobs' },
-      { key: 'Jobs Failed', label: 'Jobs Failed', unit: '', description: 'Failed jobs' },
-      { key: 'CronJobs', label: 'CronJobs', unit: '', description: 'CronJob count' },
-      { key: 'DaemonSets Ready', label: 'DaemonSets', unit: '', description: 'Ready daemon sets' },
-      { key: 'StatefulSets Ready', label: 'StatefulSets', unit: '', description: 'Ready stateful sets' },
-      { key: 'ReplicaSets Ready', label: 'ReplicaSets', unit: '', description: 'Ready replica sets' },
+      { key: 'Jobs Running', label: 'Jobs Active', unit: '', description: 'Currently executing' },
+      { key: 'Jobs Completed', label: 'Jobs Done', unit: '', description: 'Successfully finished' },
+      { key: 'Jobs Failed', label: 'Jobs Failed', unit: '', description: 'Require investigation' },
+      { key: 'CronJobs', label: 'CronJobs', unit: '', description: 'Scheduled job definitions' },
+      { key: 'DaemonSets Ready', label: 'DaemonSets', unit: '', description: 'Running on all nodes' },
+      { key: 'StatefulSets Ready', label: 'StatefulSets', unit: '', description: 'Persistent workloads ready' },
+      { key: 'ReplicaSets Ready', label: 'ReplicaSets', unit: '', description: 'Scalable workloads ready' },
     ]
   },
   'Storage & Config': {
     icon: DatabaseIcon,
     description: 'Storage volumes and configuration resources',
     metrics: [
-      { key: 'Persistent Volumes', label: 'PVs', unit: '', description: 'Persistent volumes' },
-      { key: 'PV Claims', label: 'PVCs', unit: '', description: 'Persistent volume claims' },
-      { key: 'PVC Bound', label: 'PVC Bound', unit: '', description: 'Bound PVCs' },
-      { key: 'PVC Pending', label: 'PVC Pending', unit: '', description: 'Pending PVCs' },
-      { key: 'ConfigMaps', label: 'ConfigMaps', unit: '', description: 'Configuration maps' },
-      { key: 'Secrets', label: 'Secrets', unit: '', description: 'Secret objects' },
-      { key: 'Storage Classes', label: 'StorageClasses', unit: '', description: 'Storage class count' },
+      { key: 'Persistent Volumes', label: 'PVs', unit: '', description: 'Available storage volumes' },
+      { key: 'PV Claims', label: 'PVCs', unit: '', description: 'Storage requests by pods' },
+      { key: 'PVC Bound', label: 'PVC Bound', unit: '', description: 'Successfully attached' },
+      { key: 'PVC Pending', label: 'PVC Pending', unit: '', description: 'Waiting for provisioning' },
+      { key: 'ConfigMaps', label: 'ConfigMaps', unit: '', description: 'Non-secret configuration' },
+      { key: 'Secrets', label: 'Secrets', unit: '', description: 'Encrypted configuration' },
+      { key: 'Storage Classes', label: 'StorageClasses', unit: '', description: 'Storage tier definitions' },
     ]
   },
   'Node Metrics': {
     icon: ServerIcon,
     description: 'Node-level resource and health metrics',
     metrics: [
-      { key: 'Node CPU Usage (%)', label: 'CPU %', unit: '%', description: 'Node CPU usage' },
-      { key: 'Node Memory Available (GB)', label: 'Mem Avail', unit: 'GB', description: 'Available memory' },
-      { key: 'Node Memory Total (GB)', label: 'Mem Total', unit: 'GB', description: 'Total memory' },
-      { key: 'Node Disk Reads', label: 'Disk Reads', unit: '/s', description: 'Disk read IOPS' },
-      { key: 'Node Disk Writes', label: 'Disk Writes', unit: '/s', description: 'Disk write IOPS' },
-      { key: 'Nodes Ready', label: 'Ready', unit: '', description: 'Nodes in Ready state' },
-      { key: 'Nodes Not Ready', label: 'Not Ready', unit: '', description: 'Nodes not ready' },
-      { key: 'Memory Pressure', label: 'MemPressure', unit: '', description: 'Nodes with memory pressure' },
-      { key: 'Disk Pressure', label: 'DiskPressure', unit: '', description: 'Nodes with disk pressure' },
-      { key: 'PID Pressure', label: 'PIDPressure', unit: '', description: 'Nodes with PID pressure' },
+      { key: 'Node CPU Usage (%)', label: 'CPU %', unit: '%', description: 'Average across all nodes' },
+      { key: 'Node Memory Available (GB)', label: 'Mem Avail', unit: 'GB', description: 'Free memory across nodes' },
+      { key: 'Node Memory Total (GB)', label: 'Mem Total', unit: 'GB', description: 'Cluster memory capacity' },
+      { key: 'Node Disk Reads', label: 'Disk Reads', unit: '/s', description: 'Read operations per second' },
+      { key: 'Node Disk Writes', label: 'Disk Writes', unit: '/s', description: 'Write operations per second' },
+      { key: 'Nodes Ready', label: 'Ready', unit: '', description: 'Available for workloads' },
+      { key: 'Nodes Not Ready', label: 'Not Ready', unit: '', description: 'Require investigation' },
+      { key: 'Memory Pressure', label: 'MemPressure', unit: '', description: 'Low memory warnings' },
+      { key: 'Disk Pressure', label: 'DiskPressure', unit: '', description: 'Low disk space warnings' },
+      { key: 'PID Pressure', label: 'PIDPressure', unit: '', description: 'Process limit warnings' },
     ]
   },
   'GPU & Accelerators': {
     icon: CubesIcon,
     description: 'GPU and accelerator metrics (NVIDIA/Intel Gaudi)',
     metrics: [
-      { key: 'GPU Temperature (°C)', label: 'Temp', unit: '°C', description: 'GPU temperature' },
-      { key: 'GPU Power Usage (W)', label: 'Power', unit: 'W', description: 'GPU power usage' },
-      { key: 'GPU Utilization (%)', label: 'Util %', unit: '%', description: 'GPU utilization' },
-      { key: 'GPU Memory Used (GB)', label: 'Mem Used', unit: 'GB', description: 'GPU memory used' },
-      { key: 'GPU Count', label: 'GPU Count', unit: '', description: 'Total GPUs' },
-      { key: 'GPU Memory Temp (°C)', label: 'Mem Temp', unit: '°C', description: 'GPU memory temperature' },
+      { key: 'GPU Temperature (°C)', label: 'Temp', unit: '°C', description: 'Average GPU core temp' },
+      { key: 'GPU Power Usage (W)', label: 'Power', unit: 'W', description: 'Current power consumption' },
+      { key: 'GPU Utilization (%)', label: 'Util %', unit: '%', description: 'Compute utilization' },
+      { key: 'GPU Memory Used (GB)', label: 'Mem Used', unit: 'GB', description: 'VRAM currently allocated' },
+      { key: 'GPU Count', label: 'GPU Count', unit: '', description: 'Available accelerators' },
+      { key: 'GPU Memory Temp (°C)', label: 'Mem Temp', unit: '°C', description: 'VRAM temperature' },
     ]
   },
   'Autoscaling & Scheduling': {
     icon: NetworkIcon,
     description: 'Autoscaling and pod scheduling metrics',
     metrics: [
-      { key: 'Pending Pods', label: 'Pending', unit: '', description: 'Pods waiting to schedule' },
-      { key: 'Scheduler Latency (s)', label: 'Sched Latency', unit: 's', description: 'P99 scheduling latency' },
-      { key: 'CPU Requests Total', label: 'CPU Req', unit: 'cores', description: 'Total CPU requested' },
-      { key: 'CPU Limits Total', label: 'CPU Lim', unit: 'cores', description: 'Total CPU limits' },
-      { key: 'Memory Requests (GB)', label: 'Mem Req', unit: 'GB', description: 'Total memory requested' },
-      { key: 'Memory Limits (GB)', label: 'Mem Lim', unit: 'GB', description: 'Total memory limits' },
-      { key: 'HPA Active', label: 'HPA Current', unit: '', description: 'HPA current replicas' },
-      { key: 'HPA Desired', label: 'HPA Desired', unit: '', description: 'HPA desired replicas' },
+      { key: 'Pending Pods', label: 'Pending', unit: '', description: 'Awaiting node placement' },
+      { key: 'Scheduler Latency (s)', label: 'Sched Latency', unit: 's', description: '99th percentile delay' },
+      { key: 'CPU Requests Total', label: 'CPU Req', unit: 'cores', description: 'Reserved CPU across pods' },
+      { key: 'CPU Limits Total', label: 'CPU Lim', unit: 'cores', description: 'Maximum CPU allowed' },
+      { key: 'Memory Requests (GB)', label: 'Mem Req', unit: 'GB', description: 'Reserved memory across pods' },
+      { key: 'Memory Limits (GB)', label: 'Mem Lim', unit: 'GB', description: 'Maximum memory allowed' },
+      { key: 'HPA Active', label: 'HPA Current', unit: '', description: 'Auto-scaled replicas' },
+      { key: 'HPA Desired', label: 'HPA Desired', unit: '', description: 'Target replica count' },
     ]
   },
 };
@@ -147,54 +147,54 @@ const NAMESPACE_SCOPED_CATEGORIES = {
     icon: CubesIcon,
     description: 'Pod and container resource usage',
     metrics: [
-      { key: 'Pod CPU Usage (cores)', label: 'CPU', unit: 'cores', description: 'CPU usage' },
-      { key: 'CPU Throttled (%)', label: 'Throttled', unit: '%', description: 'CPU throttling' },
-      { key: 'Pod Memory (GB)', label: 'Memory', unit: 'GB', description: 'Working set memory' },
-      { key: 'RSS Memory (GB)', label: 'RSS', unit: 'GB', description: 'Resident memory' },
-      { key: 'Container Restarts', label: 'Restarts', unit: '', description: 'Total restarts' },
-      { key: 'Pods Ready', label: 'Ready', unit: '', description: 'Ready pods' },
-      { key: 'Pods Not Ready', label: 'Not Ready', unit: '', description: 'Not ready pods' },
-      { key: 'Container OOM Killed', label: 'OOM Killed', unit: '', description: 'OOM killed containers' },
+      { key: 'Pod CPU Usage (cores)', label: 'CPU', unit: 'cores', description: 'Current namespace usage' },
+      { key: 'CPU Throttled (%)', label: 'Throttled', unit: '%', description: 'Containers hitting limits' },
+      { key: 'Pod Memory (GB)', label: 'Memory', unit: 'GB', description: 'Active memory usage' },
+      { key: 'RSS Memory (GB)', label: 'RSS', unit: 'GB', description: 'Physical memory used' },
+      { key: 'Container Restarts', label: 'Restarts', unit: '', description: 'Container restart count' },
+      { key: 'Pods Ready', label: 'Ready', unit: '', description: 'Running in namespace' },
+      { key: 'Pods Not Ready', label: 'Not Ready', unit: '', description: 'Need investigation' },
+      { key: 'Container OOM Killed', label: 'OOM Killed', unit: '', description: 'Memory limit exceeded' },
     ]
   },
   'Network Metrics': {
     icon: NetworkIcon,
     description: 'Pod network I/O metrics',
     metrics: [
-      { key: 'Network RX (MB/s)', label: 'RX', unit: 'MB/s', description: 'Network receive rate' },
-      { key: 'Network TX (MB/s)', label: 'TX', unit: 'MB/s', description: 'Network transmit rate' },
-      { key: 'Network RX Packets', label: 'RX Pkts', unit: '/s', description: 'Packets received' },
-      { key: 'Network TX Packets', label: 'TX Pkts', unit: '/s', description: 'Packets transmitted' },
-      { key: 'Network RX Errors', label: 'RX Errors', unit: '/s', description: 'Receive errors' },
-      { key: 'Network TX Errors', label: 'TX Errors', unit: '/s', description: 'Transmit errors' },
-      { key: 'Network RX Dropped', label: 'RX Dropped', unit: '/s', description: 'Packets dropped (RX)' },
-      { key: 'Network TX Dropped', label: 'TX Dropped', unit: '/s', description: 'Packets dropped (TX)' },
+      { key: 'Network RX (MB/s)', label: 'RX', unit: 'MB/s', description: 'Incoming data rate' },
+      { key: 'Network TX (MB/s)', label: 'TX', unit: 'MB/s', description: 'Outgoing data rate' },
+      { key: 'Network RX Packets', label: 'RX Pkts', unit: '/s', description: 'Incoming packets per sec' },
+      { key: 'Network TX Packets', label: 'TX Pkts', unit: '/s', description: 'Outgoing packets per sec' },
+      { key: 'Network RX Errors', label: 'RX Errors', unit: '/s', description: 'Incoming error rate' },
+      { key: 'Network TX Errors', label: 'TX Errors', unit: '/s', description: 'Outgoing error rate' },
+      { key: 'Network RX Dropped', label: 'RX Dropped', unit: '/s', description: 'Incoming packets dropped' },
+      { key: 'Network TX Dropped', label: 'TX Dropped', unit: '/s', description: 'Outgoing packets dropped' },
     ]
   },
   'Storage I/O': {
     icon: DatabaseIcon,
     description: 'Storage and filesystem metrics',
     metrics: [
-      { key: 'Disk Read (MB/s)', label: 'Read', unit: 'MB/s', description: 'Disk read rate' },
-      { key: 'Disk Write (MB/s)', label: 'Write', unit: 'MB/s', description: 'Disk write rate' },
-      { key: 'Disk Read IOPS', label: 'Read IOPS', unit: '/s', description: 'Read operations' },
-      { key: 'Disk Write IOPS', label: 'Write IOPS', unit: '/s', description: 'Write operations' },
-      { key: 'Filesystem Usage (GB)', label: 'FS Used', unit: 'GB', description: 'Filesystem used' },
-      { key: 'Filesystem Limit (GB)', label: 'FS Limit', unit: 'GB', description: 'Filesystem limit' },
-      { key: 'PVC Used (GB)', label: 'PVC Used', unit: 'GB', description: 'PVC space used' },
-      { key: 'PVC Capacity (GB)', label: 'PVC Cap', unit: 'GB', description: 'PVC capacity' },
+      { key: 'Disk Read (MB/s)', label: 'Read', unit: 'MB/s', description: 'Storage read throughput' },
+      { key: 'Disk Write (MB/s)', label: 'Write', unit: 'MB/s', description: 'Storage write throughput' },
+      { key: 'Disk Read IOPS', label: 'Read IOPS', unit: '/s', description: 'Read operations per sec' },
+      { key: 'Disk Write IOPS', label: 'Write IOPS', unit: '/s', description: 'Write operations per sec' },
+      { key: 'Filesystem Usage (GB)', label: 'FS Used', unit: 'GB', description: 'Container filesystem used' },
+      { key: 'Filesystem Limit (GB)', label: 'FS Limit', unit: 'GB', description: 'Container filesystem cap' },
+      { key: 'PVC Used (GB)', label: 'PVC Used', unit: 'GB', description: 'Persistent storage used' },
+      { key: 'PVC Capacity (GB)', label: 'PVC Cap', unit: 'GB', description: 'Persistent storage limit' },
     ]
   },
   'Services & Networking': {
     icon: ServerIcon,
     description: 'Services and ingress metrics',
     metrics: [
-      { key: 'Services Running', label: 'Services', unit: '', description: 'Running services' },
-      { key: 'Service Endpoints', label: 'Endpoints', unit: '', description: 'Service endpoints' },
-      { key: 'Ingress Rules', label: 'Ingresses', unit: '', description: 'Ingress rules' },
-      { key: 'Network Policies', label: 'NetPolicies', unit: '', description: 'Network policies' },
-      { key: 'Load Balancer Services', label: 'LB Svcs', unit: '', description: 'LoadBalancer services' },
-      { key: 'ClusterIP Services', label: 'ClusterIP', unit: '', description: 'ClusterIP services' },
+      { key: 'Services Running', label: 'Services', unit: '', description: 'Active in namespace' },
+      { key: 'Service Endpoints', label: 'Endpoints', unit: '', description: 'Backend pod targets' },
+      { key: 'Ingress Rules', label: 'Ingresses', unit: '', description: 'HTTP routing rules' },
+      { key: 'Network Policies', label: 'NetPolicies', unit: '', description: 'Traffic access controls' },
+      { key: 'Load Balancer Services', label: 'LB Svcs', unit: '', description: 'External load balancers' },
+      { key: 'ClusterIP Services', label: 'ClusterIP', unit: '', description: 'Internal cluster services' },
     ]
   },
   'Application Services': {
@@ -297,7 +297,15 @@ const MetricCard: React.FC<MetricCardProps> = ({ label, value, unit, description
     );
   };
 
+  // Calculate average from time series data
+  const calculateAverage = (timeSeries?: TimeSeriesPoint[]): number | null => {
+    if (!timeSeries || timeSeries.length === 0) return null;
+    const sum = timeSeries.reduce((acc, pt) => acc + pt.value, 0);
+    return sum / timeSeries.length;
+  };
+
   const displayValue = formatValue(value);
+  const avgValue = calculateAverage(timeSeries);
   const isZero = value === 0;
   const isNull = value === null;
 
@@ -313,16 +321,31 @@ const MetricCard: React.FC<MetricCardProps> = ({ label, value, unit, description
             </TextContent>
             <Flex alignItems={{ default: 'alignItemsCenter' }}>
               <FlexItem>
-                <Text
-                  component={TextVariants.h2}
-                  style={{
-                    color: isNull ? 'var(--pf-v5-global--Color--200)' : isZero ? 'var(--pf-v5-global--success-color--100)' : 'inherit',
-                    marginBottom: '2px',
-                    fontSize: '1.5rem',
-                  }}
-                >
-                  {displayValue}{unit && value !== null ? ` ${unit}` : ''}
-                </Text>
+                <div>
+                  <Text
+                    component={TextVariants.h2}
+                    style={{
+                      color: isNull ? 'var(--pf-v5-global--Color--200)' : isZero ? 'var(--pf-v5-global--success-color--100)' : 'inherit',
+                      marginBottom: '2px',
+                      fontSize: '1.5rem',
+                    }}
+                  >
+                    {displayValue}{unit && value !== null ? ` ${unit}` : ''}
+                  </Text>
+                  {avgValue !== null && (
+                    <Text
+                      component={TextVariants.small}
+                      style={{
+                        color: '#666',
+                        fontSize: '0.85rem',
+                        display: 'block',
+                        marginTop: '2px'
+                      }}
+                    >
+                      Avg: {formatValue(avgValue)}{unit ? ` ${unit}` : ''}
+                    </Text>
+                  )}
+                </div>
               </FlexItem>
               <FlexItem>
                 {renderSparkline()}
@@ -348,12 +371,12 @@ const MetricCard: React.FC<MetricCardProps> = ({ label, value, unit, description
           {timeSeries && timeSeries.length > 0 && onViewChart && (
             <FlexItem>
               <Button
-                variant="plain"
+                variant="secondary"
+                size="sm"
                 aria-label="View full chart"
                 onClick={() => onViewChart(metricKey)}
-                style={{ padding: '4px', minWidth: '30px' }}
               >
-                <ChartLineIcon style={{ color: 'var(--pf-v5-global--primary-color--100)' }} />
+                <ChartLineIcon />
               </Button>
             </FlexItem>
           )}
