@@ -18,6 +18,7 @@ import {
   CubeIcon,
   KeyIcon,
   PlusCircleIcon,
+  CogIcon,
 } from '@patternfly/react-icons';
 
 import { AIModelState } from './types/models';
@@ -26,7 +27,9 @@ import { secretManager } from './services/secretManager';
 import { ModelsTab } from './tabs/ModelsTab';
 import { APIKeysTab } from './tabs/APIKeysTab';
 import { AddModelTab } from './tabs/AddModelTab';
+import { ChatSettingsTab } from './tabs/ChatSettingsTab';
 import { isDevMode } from '../../services/devCredentials';
+import { useChatSettings } from '../../hooks/useChatSettings';
 
 interface AIModelSettingsProps {
   isOpen: boolean;
@@ -40,6 +43,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
   onSave,
 }) => {
   const [state, setState] = React.useState<AIModelState>(modelService.getInitialState());
+  const { settings: chatSettings, updateSettings: updateChatSettings, resetSettings: resetChatSettings } = useChatSettings();
 
   // Load initial data when modal opens
   React.useEffect(() => {
@@ -252,6 +256,14 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
             onSuccess={() => setState(prev => ({ ...prev, activeTab: 'models' }))}
           />
         );
+      case 'chatsettings':
+        return (
+          <ChatSettingsTab
+            settings={chatSettings}
+            onUpdateSettings={updateChatSettings}
+            onResetSettings={resetChatSettings}
+          />
+        );
       default:
         return null;
     }
@@ -264,8 +276,8 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
       variant={ModalVariant.large}
       title={
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <CubeIcon />
-          <span>AI Model Configuration</span>
+          <CogIcon />
+          <span>Settings</span>
         </div>
       }
       isOpen={isOpen}
@@ -295,7 +307,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
         </div>
       )}
 
-      <div style={{ padding: '24px' }}>
+      <div style={{ padding: '24px', maxHeight: 'calc(90vh - 150px)', overflow: 'auto' }}>
         {/* Current Selection Status */}
         {hasSelectableModels(state) ? (
           state.selectedModel ? (
@@ -426,6 +438,19 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
             aria-label="Add Custom Model"
           >
             {state.activeTab === 'addmodel' && renderTabContent()}
+          </Tab>
+
+          <Tab
+            eventKey="chatsettings"
+            title={
+              <TabTitleText>
+                <CogIcon style={{ marginRight: '8px' }} />
+                Chat Settings
+              </TabTitleText>
+            }
+            aria-label="Chat Settings"
+          >
+            {state.activeTab === 'chatsettings' && renderTabContent()}
           </Tab>
         </Tabs>
       </div>

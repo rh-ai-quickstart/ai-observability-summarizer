@@ -1,4 +1,4 @@
-import { chat, getSessionConfig, setSessionConfig, clearSessionConfig } from '../../src/services/mcpClient';
+import { chat, getSessionConfig, setSessionConfig, clearSessionConfig } from '../../src/core/services/mcpClient';
 
 // Mock fetch
 global.fetch = jest.fn();
@@ -7,6 +7,27 @@ describe('mcpClient', () => {
   beforeEach(() => {
     (global.fetch as jest.Mock).mockClear();
     localStorage.clear();
+
+    // Default mock for config endpoint (will be called by RuntimeConfig)
+    (global.fetch as jest.Mock).mockImplementation((url: string) => {
+      if (url.includes('/config')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            result: {
+              structuredContent: {
+                result: JSON.stringify({}),
+              },
+            },
+          }),
+        });
+      }
+      // Default fallback
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({}),
+      });
+    });
   });
 
   describe('SessionConfig', () => {
@@ -52,15 +73,30 @@ describe('mcpClient', () => {
         ],
       };
 
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          result: {
-            structuredContent: {
-              result: JSON.stringify(mockResponse),
+      (global.fetch as jest.Mock).mockImplementation((url: string) => {
+        if (url.includes('/config')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              result: {
+                structuredContent: {
+                  result: JSON.stringify({}),
+                },
+              },
+            }),
+          });
+        }
+        // MCP chat endpoint
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            result: {
+              structuredContent: {
+                result: JSON.stringify(mockResponse),
+              },
             },
-          },
-        }),
+          }),
+        });
       });
 
       const result = await chat('test-model', 'Test question', {
@@ -86,17 +122,31 @@ describe('mcpClient', () => {
     });
 
     it('should handle response without progress log', async () => {
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          result: {
-            structuredContent: {
-              result: JSON.stringify({
-                response: 'Simple response',
-              }),
+      (global.fetch as jest.Mock).mockImplementation((url: string) => {
+        if (url.includes('/config')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              result: {
+                structuredContent: {
+                  result: JSON.stringify({}),
+                },
+              },
+            }),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            result: {
+              structuredContent: {
+                result: JSON.stringify({
+                  response: 'Simple response',
+                }),
+              },
             },
-          },
-        }),
+          }),
+        });
       });
 
       const result = await chat('test-model', 'Test question');
@@ -106,15 +156,29 @@ describe('mcpClient', () => {
     });
 
     it('should handle plain text response (non-JSON)', async () => {
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          result: {
-            structuredContent: {
-              result: 'Plain text response',
+      (global.fetch as jest.Mock).mockImplementation((url: string) => {
+        if (url.includes('/config')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              result: {
+                structuredContent: {
+                  result: JSON.stringify({}),
+                },
+              },
+            }),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            result: {
+              structuredContent: {
+                result: 'Plain text response',
+              },
             },
-          },
-        }),
+          }),
+        });
       });
 
       const result = await chat('test-model', 'Test question');
@@ -124,10 +188,24 @@ describe('mcpClient', () => {
     });
 
     it('should handle HTTP errors', async () => {
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
-        ok: false,
-        status: 500,
-        text: async () => 'Server error',
+      (global.fetch as jest.Mock).mockImplementation((url: string) => {
+        if (url.includes('/config')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              result: {
+                structuredContent: {
+                  result: JSON.stringify({}),
+                },
+              },
+            }),
+          });
+        }
+        return Promise.resolve({
+          ok: false,
+          status: 500,
+          text: async () => 'Server error',
+        });
       });
 
       await expect(chat('test-model', 'Test question')).rejects.toThrow(
@@ -136,13 +214,27 @@ describe('mcpClient', () => {
     });
 
     it('should handle MCP error responses', async () => {
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          error: {
-            message: 'MCP error occurred',
-          },
-        }),
+      (global.fetch as jest.Mock).mockImplementation((url: string) => {
+        if (url.includes('/config')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              result: {
+                structuredContent: {
+                  result: JSON.stringify({}),
+                },
+              },
+            }),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            error: {
+              message: 'MCP error occurred',
+            },
+          }),
+        });
       });
 
       await expect(chat('test-model', 'Test question')).rejects.toThrow(
@@ -151,9 +243,23 @@ describe('mcpClient', () => {
     });
 
     it('should handle empty response', async () => {
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({}),
+      (global.fetch as jest.Mock).mockImplementation((url: string) => {
+        if (url.includes('/config')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              result: {
+                structuredContent: {
+                  result: JSON.stringify({}),
+                },
+              },
+            }),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({}),
+        });
       });
 
       await expect(chat('test-model', 'Test question')).rejects.toThrow(
@@ -162,15 +268,29 @@ describe('mcpClient', () => {
     });
 
     it('should send namespace and scope if provided', async () => {
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          result: {
-            structuredContent: {
-              result: JSON.stringify({ response: 'Test' }),
+      (global.fetch as jest.Mock).mockImplementation((url: string) => {
+        if (url.includes('/config')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              result: {
+                structuredContent: {
+                  result: JSON.stringify({}),
+                },
+              },
+            }),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            result: {
+              structuredContent: {
+                result: JSON.stringify({ response: 'Test' }),
+              },
             },
-          },
-        }),
+          }),
+        });
       });
 
       await chat('test-model', 'Test question', {
@@ -178,29 +298,131 @@ describe('mcpClient', () => {
         scope: 'namespace_scoped',
       });
 
-      const callBody = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
+      // Find the MCP call (skip config call)
+      const mcpCall = (global.fetch as jest.Mock).mock.calls.find(call =>
+        !call[0].includes('/config')
+      );
+      const callBody = JSON.parse(mcpCall[1].body);
       expect(callBody.params.arguments.namespace).toBe('test-namespace');
       expect(callBody.params.arguments.scope).toBe('namespace_scoped');
     });
 
     it('should include API key when provided', async () => {
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          result: {
-            structuredContent: {
-              result: JSON.stringify({ response: 'Test' }),
+      (global.fetch as jest.Mock).mockImplementation((url: string) => {
+        if (url.includes('/config')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              result: {
+                structuredContent: {
+                  result: JSON.stringify({}),
+                },
+              },
+            }),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            result: {
+              structuredContent: {
+                result: JSON.stringify({ response: 'Test' }),
+              },
             },
-          },
-        }),
+          }),
+        });
       });
 
       await chat('test-model', 'Test question', {
         apiKey: 'my-secret-key',
       });
 
-      const callBody = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
+      // Find the MCP call (skip config call)
+      const mcpCall = (global.fetch as jest.Mock).mock.calls.find(call =>
+        !call[0].includes('/config')
+      );
+      const callBody = JSON.parse(mcpCall[1].body);
       expect(callBody.params.arguments.api_key).toBe('my-secret-key');
+    });
+
+    it('should include conversation history when provided', async () => {
+      (global.fetch as jest.Mock).mockImplementation((url: string) => {
+        if (url.includes('/config')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              result: {
+                structuredContent: {
+                  result: JSON.stringify({}),
+                },
+              },
+            }),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            result: {
+              structuredContent: {
+                result: JSON.stringify({ response: 'Test response' }),
+              },
+            },
+          }),
+        });
+      });
+
+      const conversationHistory = [
+        { role: 'user', content: 'Previous question' },
+        { role: 'assistant', content: 'Previous answer' },
+      ];
+
+      await chat('test-model', 'New question', {
+        conversationHistory,
+      });
+
+      // Find the MCP call (skip config call)
+      const mcpCall = (global.fetch as jest.Mock).mock.calls.find(call =>
+        !call[0].includes('/config')
+      );
+      const callBody = JSON.parse(mcpCall[1].body);
+      expect(callBody.params.arguments.conversation_history).toEqual(conversationHistory);
+    });
+
+    it('should send empty array when conversation history is not provided', async () => {
+      (global.fetch as jest.Mock).mockImplementation((url: string) => {
+        if (url.includes('/config')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              result: {
+                structuredContent: {
+                  result: JSON.stringify({}),
+                },
+              },
+            }),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            result: {
+              structuredContent: {
+                result: JSON.stringify({ response: 'Test' }),
+              },
+            },
+          }),
+        });
+      });
+
+      await chat('test-model', 'Test question');
+
+      // Find the MCP call (skip config call)
+      const mcpCall = (global.fetch as jest.Mock).mock.calls.find(call =>
+        !call[0].includes('/config')
+      );
+      const callBody = JSON.parse(mcpCall[1].body);
+      // Should not include conversation_history or should be undefined/null
+      expect(callBody.params.arguments.conversation_history).toBeUndefined();
     });
 
     it('should use correct MCP server URL for local dev', async () => {
@@ -210,15 +432,29 @@ describe('mcpClient', () => {
         writable: true,
       });
 
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          result: {
-            structuredContent: {
-              result: JSON.stringify({ response: 'Test' }),
+      (global.fetch as jest.Mock).mockImplementation((url: string) => {
+        if (url.includes('/config')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              result: {
+                structuredContent: {
+                  result: JSON.stringify({}),
+                },
+              },
+            }),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            result: {
+              structuredContent: {
+                result: JSON.stringify({ response: 'Test' }),
+              },
             },
-          },
-        }),
+          }),
+        });
       });
 
       await chat('test-model', 'Test question');
@@ -230,22 +466,36 @@ describe('mcpClient', () => {
     });
 
     it('should handle array response format', async () => {
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          result: {
-            structuredContent: {
-              result: [
-                {
-                  text: JSON.stringify({
-                    response: 'Array format response',
-                    progress_log: [],
-                  }),
+      (global.fetch as jest.Mock).mockImplementation((url: string) => {
+        if (url.includes('/config')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              result: {
+                structuredContent: {
+                  result: JSON.stringify({}),
                 },
-              ],
+              },
+            }),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            result: {
+              structuredContent: {
+                result: [
+                  {
+                    text: JSON.stringify({
+                      response: 'Array format response',
+                      progress_log: [],
+                    }),
+                  },
+                ],
+              },
             },
-          },
-        }),
+          }),
+        });
       });
 
       const result = await chat('test-model', 'Test question');
@@ -254,18 +504,32 @@ describe('mcpClient', () => {
     });
 
     it('should handle object response format', async () => {
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          result: {
-            structuredContent: {
+      (global.fetch as jest.Mock).mockImplementation((url: string) => {
+        if (url.includes('/config')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
               result: {
-                response: 'Object format response',
-                progress_log: [{ timestamp: '10:00:00', message: 'Test' }],
+                structuredContent: {
+                  result: JSON.stringify({}),
+                },
+              },
+            }),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            result: {
+              structuredContent: {
+                result: {
+                  response: 'Object format response',
+                  progress_log: [{ timestamp: '10:00:00', message: 'Test' }],
+                },
               },
             },
-          },
-        }),
+          }),
+        });
       });
 
       const result = await chat('test-model', 'Test question');

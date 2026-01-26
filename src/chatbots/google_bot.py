@@ -33,13 +33,20 @@ class GoogleChatBot(BaseChatBot):
         super().__init__(model_name, api_key, tool_executor)
 
         # Import Google SDK and configure
+        # Track SDK import status separately from configuration
+        self._sdk_import_failed = False
         try:
             import google.generativeai as genai
-            genai.configure(api_key=self.api_key)
             self.genai = genai
-            self.configured = True
+            # Only configure if API key is provided
+            if self.api_key:
+                genai.configure(api_key=self.api_key)
+                self.configured = True
+            else:
+                self.configured = False
         except ImportError:
             logger.error("Google Generative AI SDK not installed. Install with: pip install google-generativeai")
+            self._sdk_import_failed = True
             self.genai = None
             self.configured = False
 
@@ -162,13 +169,19 @@ class GoogleChatBot(BaseChatBot):
 
         return sdk_tools
 
-    def chat(self, user_question: str, namespace: Optional[str] = None, progress_callback: Optional[Callable] = None) -> str:
+    def chat(
+        self,
+        user_question: str,
+        namespace: Optional[str] = None,
+        progress_callback: Optional[Callable] = None,
+        conversation_history: Optional[List[Dict[str, str]]] = None
+    ) -> str:
         """Chat with Google Gemini using tool calling."""
         if not self.configured:
-            return "Error: Google Generative AI SDK not installed. Please install it with: pip install google-generativeai"
-
-        if not self.api_key:
-            return f"API key required for Google model {self.model_name}. Please provide an API key."
+            if self._sdk_import_failed:
+                return "Error: Google Generative AI SDK not installed. Please install it with: pip install google-generativeai"
+            else:
+                return f"Error: API key required for Google model {self.model_name}. Please configure an API key in Settings."
 
         try:
             # Create system prompt
@@ -189,8 +202,20 @@ class GoogleChatBot(BaseChatBot):
                 system_instruction=system_prompt
             )
 
-            # Start a chat session
-            chat = model.start_chat(enable_automatic_function_calling=False)
+            # Build history for chat session
+            gemini_history = []
+            if conversation_history:
+                logger.info(f"📜 Adding {len(conversation_history)} messages from conversation history")
+                for msg in conversation_history:
+                    # Convert to Gemini format
+                    gemini_role = "user" if msg["role"] == "user" else "model"
+                    gemini_history.append({
+                        "role": gemini_role,
+                        "parts": [msg["content"]]
+                    })
+
+            # Start a chat session with history
+            chat = model.start_chat(history=gemini_history, enable_automatic_function_calling=False)
 
             # Send initial message with just the user question
             initial_message = user_question

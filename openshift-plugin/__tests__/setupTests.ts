@@ -75,8 +75,8 @@ beforeAll(() => {
 
   console.log = (...args: any[]) => {
     const message = args[0]?.toString() || '';
-    // Suppress debug logs from chat function
-    if (message.includes('[Chat]')) {
+    // Suppress debug logs from chat function and RuntimeConfig
+    if (message.includes('[Chat]') || message.includes('[RuntimeConfig]')) {
       return;
     }
     originalLog.call(console, ...args);

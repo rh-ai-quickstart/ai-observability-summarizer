@@ -1,12 +1,12 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .Values.deployment.name | default "mcp-server" }}
+  name: {{ .Values.deployment.name | default "aiobs-mcp-server" }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      app: {{ .Values.deployment.name | default "mcp-server" }}
+      app: {{ .Values.deployment.name | default "aiobs-mcp-server" }}
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -15,7 +15,7 @@ spec:
   template:
     metadata:
       labels:
-        app: {{ .Values.deployment.name | default "mcp-server" }}
+        app: {{ .Values.deployment.name | default "aiobs-mcp-server" }}
     spec:
       serviceAccountName: mcp-analyzer
       restartPolicy: Always
@@ -147,7 +147,7 @@ spec:
         {{- if .Values.trustedCA.enabled }}
         - name: trusted-ca
           configMap:
-            name: {{ .Values.trustedCA.configMapName | default "mcp-server-trusted-ca-bundle" }}
+            name: {{ .Values.trustedCA.configMapName | default "aiobs-mcp-server-trusted-ca-bundle" }}
             items:
               - key: service-ca.crt
                 path: ca-bundle.crt

@@ -79,16 +79,19 @@ class OpenAIChatBot(BaseChatBot):
             })
         return openai_tools
 
-    def chat(self, user_question: str, namespace: Optional[str] = None, progress_callback: Optional[Callable] = None) -> str:
+    def chat(
+        self,
+        user_question: str,
+        namespace: Optional[str] = None,
+        progress_callback: Optional[Callable] = None,
+        conversation_history: Optional[List[Dict[str, str]]] = None
+    ) -> str:
         """Chat with OpenAI GPT using tool calling."""
         if not self.client:
             if self._sdk_import_failed:
                 return "Error: OpenAI SDK not installed. Please install it with: pip install openai"
             else:
                 return f"Error: API key required for OpenAI model {self.model_name}. Please configure an API key in Settings."
-
-        if not self.api_key:
-            return f"Error: API key required for OpenAI model {self.model_name}. Please configure an API key in Settings."
 
         logger.info(f"🎯 OpenAIChatBot.chat() - Using OpenAI API with model: {self.model_name}")
 
@@ -99,11 +102,16 @@ class OpenAIChatBot(BaseChatBot):
             # Get model name suitable for OpenAI API
             model_name = self._extract_model_name()
 
-            # Prepare messages
-            messages = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_question}
-            ]
+            # Prepare messages - start with system prompt
+            messages = [{"role": "system", "content": system_prompt}]
+
+            # Add conversation history if provided
+            if conversation_history:
+                logger.info(f"📜 Adding {len(conversation_history)} messages from conversation history")
+                messages.extend(conversation_history)
+
+            # Add current user question
+            messages.append({"role": "user", "content": user_question})
 
             # Convert tools to OpenAI format
             openai_tools = self._convert_tools_to_openai_format()

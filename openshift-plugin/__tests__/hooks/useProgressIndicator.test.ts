@@ -1,6 +1,6 @@
 import { renderHook } from '@testing-library/react-hooks';
 import { act } from '@testing-library/react';
-import { useProgressIndicator } from '../../src/hooks/useProgressIndicator';
+import { useProgressIndicator } from '../../src/core/hooks/useProgressIndicator';
 
 describe('useProgressIndicator', () => {
   beforeEach(() => {
@@ -30,9 +30,9 @@ describe('useProgressIndicator', () => {
     expect(result.current.progressMessage).toBeTruthy();
     const firstMessage = result.current.progressMessage;
 
-    // Advance by 2 seconds (message rotation interval)
+    // Advance by 5 seconds (message rotation interval)
     act(() => {
-      jest.advanceTimersByTime(2000);
+      jest.advanceTimersByTime(5000);
     });
 
     // Should have rotated to next message
@@ -48,25 +48,26 @@ describe('useProgressIndicator', () => {
       result.current.startProgress();
     });
 
-    // Collect messages over 10 seconds (5 rotations)
+    // Collect messages over 25 seconds (5 rotations at 5 second intervals)
     for (let i = 0; i < 5; i++) {
       observedMessages.add(result.current.progressMessage);
       act(() => {
-        jest.advanceTimersByTime(2000);
+        jest.advanceTimersByTime(5000);
       });
     }
 
     // Should have seen multiple different messages
     expect(observedMessages.size).toBeGreaterThan(1);
 
-    // Check for expected message patterns
+    // Check for expected message patterns (updated for new messages)
     const messagesArray = Array.from(observedMessages);
     const hasExpectedPatterns = messagesArray.some(
       (msg) =>
         msg.includes('Analyzing') ||
-        msg.includes('Querying') ||
+        msg.includes('Connecting') ||
         msg.includes('Processing') ||
-        msg.includes('Generating')
+        msg.includes('Working') ||
+        msg.includes('Preparing')
     );
     expect(hasExpectedPatterns).toBe(true);
   });

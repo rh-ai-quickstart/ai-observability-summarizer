@@ -1,7 +1,22 @@
 import * as React from 'react';
 
 const STORAGE_KEY = 'openshift_ai_chat_history';
-const MAX_MESSAGES = 50;
+const SETTINGS_KEY = 'openshift_ai_chat_settings';
+const DEFAULT_MAX_MESSAGES = 50;
+
+// Helper to get max messages from settings
+const getMaxMessages = (): number => {
+  try {
+    const settingsJson = localStorage.getItem(SETTINGS_KEY);
+    if (settingsJson) {
+      const settings = JSON.parse(settingsJson);
+      return settings.maxStoredMessages || DEFAULT_MAX_MESSAGES;
+    }
+  } catch (error) {
+    console.error('Error reading maxStoredMessages from settings:', error);
+  }
+  return DEFAULT_MAX_MESSAGES;
+};
 
 export interface ProgressEntry {
   timestamp: string;
@@ -15,6 +30,7 @@ export interface Message {
   timestamp: Date;
   error?: boolean;
   progressLog?: ProgressEntry[];
+  originalUserMessage?: string; // Store original user message for retry functionality
 }
 
 const getInitialGreeting = (): Message => ({
@@ -65,8 +81,9 @@ export function useChatHistory() {
 
     const timer = setTimeout(() => {
       try {
-        // Limit to most recent MAX_MESSAGES
-        const messagesToSave = messages.slice(-MAX_MESSAGES);
+        // Limit to most recent messages based on settings
+        const maxMessages = getMaxMessages();
+        const messagesToSave = messages.slice(-maxMessages);
         localStorage.setItem(STORAGE_KEY, JSON.stringify(messagesToSave));
       } catch (error) {
         console.error('Error saving chat history to localStorage:', error);

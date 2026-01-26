@@ -175,7 +175,7 @@ plugin:
     - alias: mcp
       endpoint:
         service:
-          name: mcp-server-svc
+          name: aiobs-mcp-server-svc
           namespace: "{{ .Release.Namespace }}"
           port: 8085
         type: Service

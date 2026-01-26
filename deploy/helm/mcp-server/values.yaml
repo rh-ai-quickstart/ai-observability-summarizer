@@ -1,21 +1,21 @@
 replicaCount: 1
 
 deployment:
-  name: mcp-server  # Fixed name for consistent service selector
+  name: aiobs-mcp-server  # Fixed name for consistent service selector
 
 image:
   repository: quay.io/ecosystem-appeng/aiobs-mcp-server
-  tag: 1.0.10-feature
+  tag: 1.0.13-feature
   pullPolicy: IfNotPresent
 
 service:
-  name: mcp-server-svc  # Fixed name for console plugin proxy
+  name: aiobs-mcp-server-svc  # Fixed name for console plugin proxy
   type: ClusterIP
   port: 8085
   annotations: {}
 
 route:
-  name: mcp-server-route
+  name: aiobs-mcp-server-route
   enabled: true # Allows local testing with MCP server inspector
   host: ""
   tls:
@@ -44,7 +44,7 @@ LLM_PREDICTOR: "llama-3-1-8b-instruct-predictor"
 tls:
   # If tls is enabled, the Route termination must be set to "reencrypt" or "passthrough".
   enabled: true
-  secretName: mcp-server-tls
+  secretName: aiobs-mcp-server-tls
   serviceCertAnnotation: service.beta.openshift.io/serving-cert-secret-name
 
 # JSON map of model configs exposed to tools (converted to env MODEL_CONFIG)
@@ -60,7 +60,7 @@ llm:
 # Mount OpenShift service CA to enable HTTPS verification for in-cluster services
 trustedCA:
   enabled: true
-  configMapName: "mcp-server-trusted-ca-bundle"  # Fixed name
+  configMapName: "aiobs-mcp-server-trusted-ca-bundle"  # Fixed name
 
 # RBAC setup similar to metrics-api
 rbac:

@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import { SuggestedQuestions } from '../../src/components/SuggestedQuestions';
+import { SuggestedQuestions } from '../../src/core/components/SuggestedQuestions';
 
 describe('SuggestedQuestions', () => {
   const mockOnSelectQuestion = jest.fn();

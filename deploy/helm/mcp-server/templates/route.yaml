@@ -9,7 +9,7 @@ spec:
   {{- end }}
   to:
     kind: Service
-    name: {{ .Values.service.name | default "mcp-server-svc" }}
+    name: {{ .Values.service.name | default "aiobs-mcp-server-svc" }}
   port:
     targetPort: http
   tls:

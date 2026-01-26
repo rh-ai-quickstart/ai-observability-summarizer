@@ -300,6 +300,17 @@ const AIObservabilityPage: React.FC = () => {
 
     const config = getSessionConfig();
     setConfiguredModel(config.ai_model || '');
+
+    // Listen for open-settings event from child components
+    const handleOpenSettings = () => {
+      setIsSettingsOpen(true);
+    };
+
+    window.addEventListener('open-settings', handleOpenSettings);
+
+    return () => {
+      window.removeEventListener('open-settings', handleOpenSettings);
+    };
   }, []);
 
   const handleTabClick = (
@@ -321,6 +332,12 @@ const AIObservabilityPage: React.FC = () => {
   const handleSettingsSave = () => {
     const config = getSessionConfig();
     setConfiguredModel(config.ai_model || '');
+  };
+
+  const handleSettingsClose = () => {
+    setIsSettingsOpen(false);
+    // Dispatch custom event to notify AIChatPage that settings were closed
+    window.dispatchEvent(new CustomEvent('settings-closed'));
   };
 
   return (
@@ -354,7 +371,7 @@ const AIObservabilityPage: React.FC = () => {
 
       <SettingsModal
         isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
+        onClose={handleSettingsClose}
         onSave={handleSettingsSave}
       />
 

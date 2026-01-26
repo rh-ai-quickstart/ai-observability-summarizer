@@ -14,7 +14,7 @@ MAKEFLAGS += --no-print-directory
 REGISTRY ?= quay.io
 ORG ?= ecosystem-appeng
 IMAGE_PREFIX ?= aiobs
-VERSION ?= 1.0.10-feature
+VERSION ?= 1.0.13-feature
 PLATFORM ?= linux/amd64
 DEV_MODE ?= false
 
@@ -462,7 +462,7 @@ install-console-plugin: namespace
 	@cd deploy/helm && helm upgrade --install $(CONSOLE_PLUGIN_RELEASE_NAME) $(CONSOLE_PLUGIN_CHART_PATH) -n $(NAMESPACE) \
 		--set plugin.image.repository=$(CONSOLE_PLUGIN_IMAGE) \
 		--set plugin.image.tag=$(VERSION) \
-		--set mcpServer.serviceName=$(MCP_SERVER_RELEASE_NAME)-svc \
+		--set mcpServer.serviceName=aiobs-mcp-server-svc \
 		$(if $(PLUGIN_AUTO_ENABLE),--set plugin.autoEnable=$(PLUGIN_AUTO_ENABLE),)
 	@echo "✅ Console plugin deployed"
 	@echo "→ Enabling plugin in OpenShift Console..."
@@ -496,7 +496,7 @@ install-react-ui: namespace
 	@cd deploy/helm && helm upgrade --install $(REACT_UI_RELEASE_NAME) $(REACT_UI_CHART_PATH) -n $(NAMESPACE) \
 		--set app.image.repository=$(REACT_UI_IMAGE) \
 		--set app.image.tag=$(VERSION) \
-		--set mcpServer.serviceName=$(MCP_SERVER_RELEASE_NAME)-svc
+		--set mcpServer.serviceName=aiobs-mcp-server-svc
 	@echo "✅ React UI deployed"
 	@echo "→ Getting Route URL..."
 	-@ROUTE_HOST=$$(oc get route aiobs-react-ui -n $(NAMESPACE) -o jsonpath='{.spec.host}' 2>/dev/null); \
@@ -727,6 +727,11 @@ test-python:
 test-react:
 	@echo "🧪 Running React tests..."
 	@cd openshift-plugin && yarn install
+	@echo "🏗️  Building console plugin (validates TypeScript)..."
+	@cd openshift-plugin && yarn build:plugin
+	@echo "🏗️  Building React UI (validates TypeScript)..."
+	@cd openshift-plugin && yarn build:react-ui
+	@echo "🧪 Running Jest tests..."
 	@cd openshift-plugin && yarn test --ci
 
 # Convenience targets for common workflows

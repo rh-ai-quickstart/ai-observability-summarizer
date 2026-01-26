@@ -605,6 +605,7 @@ export async function chat(
     namespace?: string;
     scope?: string;
     apiKey?: string;
+    conversationHistory?: Array<{ role: string; content: string }>;
   }
 ): Promise<{ response: string; progressLog: Array<{ timestamp: string; message: string }> }> {
   try {
@@ -614,6 +615,7 @@ export async function chat(
       namespace: options?.namespace,
       scope: options?.scope,
       api_key: options?.apiKey,
+      conversation_history: options?.conversationHistory,
     });
 
     // The backend returns a JSON response with {response, progress_log, model, iterations}
