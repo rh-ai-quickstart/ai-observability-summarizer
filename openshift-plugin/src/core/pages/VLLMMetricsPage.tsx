@@ -36,8 +36,20 @@ import {
   TachometerAltIcon,
   MemoryIcon,
   CogIcon,
+  AngleDownIcon,
+  AngleRightIcon,
 } from '@patternfly/react-icons';
 import { listModels, listNamespaces, ModelInfo, NamespaceInfo, fetchVLLMMetrics, analyzeVLLM, getSessionConfig, AnalysisResult } from '../services/mcpClient';
+
+// Key Metrics - Priority metrics from Streamlit (displayed prominently at top)
+const KEY_METRICS_CONFIG = [
+  { key: 'GPU Temperature (°C)', label: 'GPU Temperature', unit: '°C', priority: 1 },
+  { key: 'GPU Power Usage (Watts)', label: 'GPU Power Usage', unit: 'W', priority: 2 },
+  { key: 'P95 Latency (s)', label: 'P95 Latency', unit: 's', priority: 3 },
+  { key: 'GPU Usage (%)', label: 'GPU Usage', unit: '%', priority: 4 },
+  { key: 'Output Tokens Created', label: 'Output Tokens', unit: '', priority: 5 },
+  { key: 'Prompt Tokens Created', label: 'Prompt Tokens', unit: '', priority: 6 },
+];
 
 // Comprehensive vLLM metric categories based on actual Prometheus metrics
 const METRIC_CATEGORIES = {
@@ -46,10 +58,9 @@ const METRIC_CATEGORIES = {
     priority: 1,
     description: 'Token processing performance and rates',
     metrics: [
+      // Prompt Tokens Created and Output Tokens Created removed - shown in Key Metrics
       { key: 'Prompt Tokens Total', label: 'Prompt Tokens', unit: '', description: 'Total prompt tokens processed' },
       { key: 'Generation Tokens Total', label: 'Gen Tokens', unit: '', description: 'Total generated tokens' },
-      { key: 'Prompt Tokens Created', label: 'Prompt Rate', unit: '/s', description: 'Prompt token rate' },
-      { key: 'Generation Tokens Created', label: 'Gen Rate', unit: '/s', description: 'Generation token rate' },
       { key: 'Request Prompt Tokens Sum', label: 'Avg Prompt', unit: '', description: 'Average prompt tokens per request' },
       { key: 'Request Generation Tokens Sum', label: 'Avg Gen', unit: '', description: 'Average generated tokens per request' },
     ]
@@ -59,7 +70,7 @@ const METRIC_CATEGORIES = {
     priority: 2,
     description: 'Response time breakdown and analysis',
     metrics: [
-      { key: 'P95 Latency (s)', label: 'P95 Latency', unit: 's', description: '95th percentile end-to-end latency' },
+      // P95 Latency removed - shown in Key Metrics
       { key: 'Inference Time (s)', label: 'Avg Inference', unit: 's', description: 'Average inference time' },
       { key: 'Time To First Token Seconds Sum', label: 'TTFT Sum', unit: 's', description: 'Time to first token (total)' },
       { key: 'Time Per Output Token Seconds Sum', label: 'TPOT Sum', unit: 's', description: 'Time per output token (total)' },
@@ -89,8 +100,7 @@ const METRIC_CATEGORIES = {
     priority: 4,
     description: 'GPU hardware monitoring and resource usage',
     metrics: [
-      { key: 'GPU Temperature (°C)', label: 'Temperature', unit: '°C', description: 'GPU core temperature' },
-      { key: 'GPU Power Usage (Watts)', label: 'Power', unit: 'W', description: 'GPU power consumption' },
+      // GPU Temperature, GPU Power Usage, GPU Usage removed - shown in Key Metrics
       { key: 'GPU Energy Consumption (Joules)', label: 'Energy', unit: 'J', description: 'Total energy consumed' },
       { key: 'GPU Utilization (%)', label: 'Utilization', unit: '%', description: 'GPU compute utilization' },
       { key: 'GPU Memory Usage (GB)', label: 'Memory', unit: 'GB', description: 'GPU memory used' },
@@ -132,6 +142,8 @@ interface MetricCardProps {
 const MetricCard: React.FC<MetricCardProps> = ({ label, value, unit = '', description, loading, timeSeries }) => {
   const formatValue = (val: number | string): string => {
     if (typeof val === 'string') return val;
+    // Check for invalid values (NaN, null, undefined, infinite)
+    if (typeof val === 'number' && (!isFinite(val) || isNaN(val))) return 'N/A';
     if (val === 0) return '0';
     if (val >= 1000000000) return `${(val / 1000000000).toFixed(1)}B`;
     if (val >= 1000000) return `${(val / 1000000).toFixed(1)}M`;
@@ -140,27 +152,34 @@ const MetricCard: React.FC<MetricCardProps> = ({ label, value, unit = '', descri
     return val.toLocaleString(undefined, { maximumFractionDigits: 1 });
   };
 
-  // Enhanced trend calculation with better thresholds
+  // Enhanced trend calculation with better thresholds and NaN filtering
   const getTrend = (): { direction: 'up' | 'down' | 'flat'; percent: number } | null => {
     if (!timeSeries || timeSeries.length < 3) return null;
-    
-    // Use first and last values, but also consider recent trend
-    const first = timeSeries[0].value;
-    const last = timeSeries[timeSeries.length - 1].value;
-    
+
+    // Filter out NaN/invalid values from time series
+    const validValues = timeSeries
+      .map(p => p.value)
+      .filter(v => v !== null && v !== undefined && !isNaN(v) && isFinite(v));
+
+    if (validValues.length < 2) return null;
+
+    // Use first and last valid values
+    const first = validValues[0];
+    const last = validValues[validValues.length - 1];
+
     // If both are 0, no trend to show
     if (first === 0 && last === 0) return null;
-    
+
     // Handle case where first is 0 but last has value
     if (first === 0 && last > 0) {
       return { direction: 'up', percent: 100 };
     }
-    
-    // Handle case where first has value but last is 0  
+
+    // Handle case where first has value but last is 0
     if (first > 0 && last === 0) {
       return { direction: 'down', percent: 100 };
     }
-    
+
     // Normal percentage calculation
     const percent = ((last - first) / Math.abs(first)) * 100;
     return {
@@ -171,24 +190,33 @@ const MetricCard: React.FC<MetricCardProps> = ({ label, value, unit = '', descri
 
   const trend = getTrend();
 
-  // Simple SVG sparkline (copied from OpenShift Metrics page)
+  // Simple SVG sparkline with NaN filtering
   const renderSparkline = () => {
     if (!timeSeries || timeSeries.length < 2) {
       console.log(`${label}: No sparkline - ${!timeSeries ? 'no timeSeries' : `only ${timeSeries.length} points`}`);
       return null;
     }
-    
-    console.log(`${label}: Rendering sparkline with ${timeSeries.length} points`);
-    
-    const values = timeSeries.map(p => p.value);
-    const min = Math.min(...values);
-    const max = Math.max(...values);
+
+    // Filter out NaN/invalid values for sparkline rendering
+    const validValues = timeSeries
+      .map(p => p.value)
+      .filter(v => v !== null && v !== undefined && !isNaN(v) && isFinite(v));
+
+    if (validValues.length < 2) {
+      console.log(`${label}: No sparkline - only ${validValues.length} valid values after filtering`);
+      return null;
+    }
+
+    console.log(`${label}: Rendering sparkline with ${validValues.length} valid points`);
+
+    const min = Math.min(...validValues);
+    const max = Math.max(...validValues);
     const range = max - min || 1;
-    
+
     const width = 60;
     const height = 20;
-    const points = values.map((v, i) => {
-      const x = (i / (values.length - 1)) * width;
+    const points = validValues.map((v, i) => {
+      const x = (i / (validValues.length - 1)) * width;
       const y = height - ((v - min) / range) * height;
       return `${x},${y}`;
     }).join(' ');
@@ -274,6 +302,271 @@ const MetricCard: React.FC<MetricCardProps> = ({ label, value, unit = '', descri
   );
 };
 
+// Key Metric Card Component - Shows Average + Max values (Streamlit-style)
+interface KeyMetricCardProps {
+  label: string;
+  avgValue: number | null;
+  maxValue: number | null;
+  unit?: string;
+  loading?: boolean;
+  timeSeries?: TimeSeriesPoint[];
+}
+
+const KeyMetricCard: React.FC<KeyMetricCardProps> = ({ label, avgValue, maxValue, unit = '', loading, timeSeries }) => {
+  // Smart value formatting with M/K suffixes
+  const formatValue = (val: number | null): string => {
+    if (val === null) return 'N/A';
+    if (val === 0) return '0';
+
+    // Special formatting for tokens
+    if (label.includes('Tokens')) {
+      if (val >= 1000000) return `${(val / 1000000).toFixed(1)}M`;
+      if (val >= 1000) return `${(val / 1000).toFixed(1)}K`;
+      return val.toFixed(0);
+    }
+
+    // Special formatting for latency/time
+    if (label.includes('Latency') || label.includes('Time')) {
+      if (val >= 1) return val.toFixed(2);
+      return (val * 1000).toFixed(0); // Convert to ms
+    }
+
+    // Temperature, power, usage - show 1 decimal
+    if (unit === '°C' || unit === 'W' || unit === '%') {
+      return val.toFixed(1);
+    }
+
+    // Default formatting
+    if (val < 1 && val > 0) return val.toFixed(2);
+    return val.toLocaleString(undefined, { maximumFractionDigits: 1 });
+  };
+
+  // Trend calculation with NaN filtering
+  const getTrend = (): { direction: 'up' | 'down' | 'flat'; percent: number } | null => {
+    if (!timeSeries || timeSeries.length < 3) return null;
+
+    // Filter out NaN/invalid values
+    const validValues = timeSeries
+      .map(p => p.value)
+      .filter(v => v !== null && v !== undefined && !isNaN(v) && isFinite(v));
+
+    if (validValues.length < 2) return null;
+
+    const first = validValues[0];
+    const last = validValues[validValues.length - 1];
+
+    if (first === 0 && last === 0) return null;
+    if (first === 0 && last > 0) return { direction: 'up', percent: 100 };
+    if (first > 0 && last === 0) return { direction: 'down', percent: 100 };
+
+    const percent = ((last - first) / Math.abs(first)) * 100;
+    return {
+      direction: percent > 0.5 ? 'up' : percent < -0.5 ? 'down' : 'flat',
+      percent: Math.abs(percent),
+    };
+  };
+
+  const trend = getTrend();
+
+  // Sparkline rendering with NaN filtering
+  const renderSparkline = () => {
+    if (!timeSeries || timeSeries.length < 2) return null;
+
+    // Filter out NaN/invalid values
+    const validValues = timeSeries
+      .map(p => p.value)
+      .filter(v => v !== null && v !== undefined && !isNaN(v) && isFinite(v));
+
+    if (validValues.length < 2) return null;
+
+    const min = Math.min(...validValues);
+    const max = Math.max(...validValues);
+    const range = max - min || 1;
+
+    const width = 80;
+    const height = 30;
+    const points = validValues.map((v, i) => {
+      const x = (i / (validValues.length - 1)) * width;
+      const y = height - ((v - min) / range) * height;
+      return `${x},${y}`;
+    }).join(' ');
+
+    const trendColor = trend?.direction === 'up' ? '#3e8635' : trend?.direction === 'down' ? '#c9190b' : '#06c';
+
+    return (
+      <svg width={width} height={height} style={{ marginTop: '8px' }}>
+        <polyline
+          points={points}
+          fill="none"
+          stroke={trendColor}
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    );
+  };
+
+  const displayAvg = formatValue(avgValue);
+  const displayMax = formatValue(maxValue);
+  const displayUnit = unit && avgValue !== null ? ` ${unit}` : '';
+
+  return (
+    <Card
+      isCompact
+      style={{
+        height: '100%',
+        background: 'linear-gradient(135deg, #ffffff 0%, #f5f5f5 100%)',
+        border: '1px solid #d2d2d2',
+        transition: 'all 0.3s ease',
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.transform = 'translateY(-3px)';
+        e.currentTarget.style.boxShadow = '0 6px 16px rgba(0,0,0,0.15)';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.transform = 'translateY(0)';
+        e.currentTarget.style.boxShadow = '';
+      }}
+    >
+      <CardBody style={{ padding: '16px' }}>
+        <TextContent>
+          <Text component={TextVariants.small} style={{ color: 'var(--pf-v5-global--Color--200)', marginBottom: '8px', fontWeight: 600 }}>
+            {label}
+          </Text>
+        </TextContent>
+        <Flex direction={{ default: 'column' }}>
+          <FlexItem>
+            <Text
+              component={TextVariants.h1}
+              style={{
+                color: avgValue === null ? 'var(--pf-v5-global--Color--200)' : avgValue === 0 ? 'var(--pf-v5-global--success-color--100)' : 'inherit',
+                marginBottom: '4px',
+                fontSize: '2rem',
+                fontWeight: 700,
+              }}
+            >
+              {displayAvg}{displayUnit}
+            </Text>
+          </FlexItem>
+          <FlexItem>
+            <Text component={TextVariants.small} style={{ color: 'var(--pf-v5-global--Color--200)', fontSize: '0.85rem' }}>
+              Max: {displayMax}{displayUnit}
+            </Text>
+          </FlexItem>
+          <FlexItem>
+            <Flex alignItems={{ default: 'alignItemsCenter' }}>
+              <FlexItem>
+                {renderSparkline()}
+              </FlexItem>
+              {trend && trend.direction !== 'flat' && (
+                <FlexItem>
+                  <span style={{
+                    fontSize: '0.75rem',
+                    color: trend.direction === 'up' ? '#3e8635' : '#c9190b',
+                    marginLeft: '8px',
+                    fontWeight: 600,
+                  }}>
+                    {trend.direction === 'up' ? '↑' : '↓'} {trend.percent.toFixed(0)}%
+                  </span>
+                </FlexItem>
+              )}
+            </Flex>
+          </FlexItem>
+        </Flex>
+      </CardBody>
+    </Card>
+  );
+};
+
+// Key Metrics Section Component
+interface KeyMetricsSectionProps {
+  data: Record<string, MetricDataValue>;
+  loading: boolean;
+}
+
+const KeyMetricsSection: React.FC<KeyMetricsSectionProps> = ({ data, loading }) => {
+  // Calculate avg and max from time series data (with NaN filtering like Streamlit)
+  const getAvgAndMax = (key: string): { avg: number | null; max: number | null } => {
+    const metricData = data[key];
+
+    // If no time series data, check if latest_value is valid
+    if (!metricData || !metricData.time_series || metricData.time_series.length === 0) {
+      const latestValue = metricData?.latest_value;
+
+      // Filter out NaN, null, and infinite values (matches Streamlit behavior)
+      if (latestValue === null || latestValue === undefined ||
+          isNaN(latestValue) || !isFinite(latestValue)) {
+        return { avg: null, max: null };
+      }
+
+      return { avg: latestValue, max: latestValue };
+    }
+
+    // Filter out NaN, null, and infinite values from time series
+    // This matches the Streamlit UI's behavior in mcp_client_helper.py:720
+    const validValues = metricData.time_series
+      .map(p => p.value)
+      .filter(v => v !== null && v !== undefined && !isNaN(v) && isFinite(v));
+
+    // If no valid values, return null (will display as "N/A")
+    if (validValues.length === 0) {
+      return { avg: null, max: null };
+    }
+
+    const avg = validValues.reduce((sum, v) => sum + v, 0) / validValues.length;
+    const max = Math.max(...validValues);
+
+    return { avg, max };
+  };
+
+  return (
+    <Card style={{
+      marginBottom: '24px',
+      background: 'linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%)',
+      border: '2px solid #c4b5fd',
+    }}>
+      <CardTitle>
+        <Flex alignItems={{ default: 'alignItemsCenter' }}>
+          <FlexItem>
+            <TachometerAltIcon style={{ marginRight: '8px', color: '#7c3aed' }} />
+          </FlexItem>
+          <FlexItem>
+            <Text component={TextVariants.h2} style={{ color: '#7c3aed', fontWeight: 700 }}>
+              Key Metrics
+            </Text>
+          </FlexItem>
+          <FlexItem>
+            <Text component={TextVariants.small} style={{ color: '#6b21a8', marginLeft: '12px' }}>
+              Critical performance indicators at a glance
+            </Text>
+          </FlexItem>
+        </Flex>
+      </CardTitle>
+      <CardBody>
+        <Grid hasGutter sm={12} md={6} lg={4}>
+          {KEY_METRICS_CONFIG.map((metric) => {
+            const { avg, max } = getAvgAndMax(metric.key);
+            const metricData = data[metric.key];
+            return (
+              <GridItem key={metric.key}>
+                <KeyMetricCard
+                  label={metric.label}
+                  avgValue={avg}
+                  maxValue={max}
+                  unit={metric.unit}
+                  loading={loading}
+                  timeSeries={metricData?.time_series}
+                />
+              </GridItem>
+            );
+          })}
+        </Grid>
+      </CardBody>
+    </Card>
+  );
+};
+
 // Category Section Component
 interface MetricDataValue {
   latest_value: number;
@@ -290,12 +583,20 @@ interface CategorySectionProps {
 }
 
 const CategorySection: React.FC<CategorySectionProps> = ({ title, icon: Icon, description, metrics, data, loading }) => {
+  const [isExpanded, setIsExpanded] = React.useState(false);
+
   return (
     <Card style={{ marginBottom: '16px' }}>
-      <CardTitle>
+      <CardTitle
+        style={{ cursor: 'pointer', userSelect: 'none' }}
+        onClick={() => setIsExpanded(!isExpanded)}
+      >
         <Flex alignItems={{ default: 'alignItemsCenter' }} justifyContent={{ default: 'justifyContentSpaceBetween' }}>
           <FlexItem>
             <Flex alignItems={{ default: 'alignItemsCenter' }}>
+              <FlexItem>
+                {isExpanded ? <AngleDownIcon style={{ marginRight: '8px' }} /> : <AngleRightIcon style={{ marginRight: '8px' }} />}
+              </FlexItem>
               <FlexItem>
                 <Icon style={{ marginRight: '8px', color: 'var(--pf-v5-global--primary-color--100)' }} />
               </FlexItem>
@@ -311,25 +612,27 @@ const CategorySection: React.FC<CategorySectionProps> = ({ title, icon: Icon, de
           </FlexItem>
         </Flex>
       </CardTitle>
-      <CardBody>
-        <Grid hasGutter md={4} lg={3} xl={2}>
-          {metrics.map((metric) => {
-            const metricData = data[metric.key];
-            return (
-              <GridItem key={metric.key}>
-                <MetricCard
-                  label={metric.label}
-                  value={metricData?.latest_value ?? 0}
-                  unit={metric.unit}
-                  description={metric.description}
-                  loading={loading}
-                  timeSeries={metricData?.time_series}
-                />
-              </GridItem>
-            );
-          })}
-        </Grid>
-      </CardBody>
+      {isExpanded && (
+        <CardBody>
+          <Grid hasGutter md={4} lg={3} xl={2}>
+            {metrics.map((metric) => {
+              const metricData = data[metric.key];
+              return (
+                <GridItem key={metric.key}>
+                  <MetricCard
+                    label={metric.label}
+                    value={metricData?.latest_value ?? 0}
+                    unit={metric.unit}
+                    description={metric.description}
+                    loading={loading}
+                    timeSeries={metricData?.time_series}
+                  />
+                </GridItem>
+              );
+            })}
+          </Grid>
+        </CardBody>
+      )}
     </Card>
   );
 };
@@ -747,6 +1050,10 @@ const VLLMMetricsPage: React.FC = () => {
           </EmptyState>
         ) : !metricsLoading && (
           <>
+            {/* Key Metrics Section - Priority metrics at the top */}
+            <KeyMetricsSection data={metricsData} loading={metricsLoading} />
+
+            {/* Detailed Category Sections - Collapsible */}
             {Object.entries(METRIC_CATEGORIES)
               .sort(([, a], [, b]) => (a.priority || 999) - (b.priority || 999))
               .map(([categoryName, category]) => (
