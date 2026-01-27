@@ -39,6 +39,7 @@ import { chat, getSessionConfig } from '../services/mcpClient';
 import { useChatHistory, Message } from '../hooks/useChatHistory';
 import { useProgressIndicator } from '../hooks/useProgressIndicator';
 import { useChatSettings } from '../hooks/useChatSettings';
+import { useSettings } from '../hooks/useSettings';
 import { SuggestedQuestions } from '../components/SuggestedQuestions';
 import { SuggestedQuestionsPopover } from '../components/SuggestedQuestionsPopover';
 import '../styles/chat-markdown.css';
@@ -47,6 +48,7 @@ const AIChatPage: React.FC = () => {
   const { messages, setMessages, clearHistory, exportToMarkdown } = useChatHistory();
   const { progressMessage, startProgress, stopProgress } = useProgressIndicator();
   const { settings: chatSettings } = useChatSettings();
+  const { handleOpenSettings, useConfigurationErrorDismissal } = useSettings();
   const [inputValue, setInputValue] = React.useState('');
   const [isLoading, setIsLoading] = React.useState(false);
   const [configError, setConfigError] = React.useState<string | null>(null);
@@ -133,30 +135,23 @@ const AIChatPage: React.FC = () => {
     };
   }, [isLoading, chatSettings.enableKeyboardShortcuts]);
 
-  // Check configuration on mount and when settings are closed
+  // Auto-dismiss configuration errors when settings are updated
+  useConfigurationErrorDismissal(configError, setConfigError);
+
+  // Initial configuration check on mount
   React.useEffect(() => {
-    const checkConfig = () => {
-      const config = getSessionConfig();
-      if (!config.ai_model) {
-        setConfigError('No AI model configured');
-      } else {
-        setConfigError(null);
-      }
-    };
-
-    // Check immediately
-    checkConfig();
-
-    // Listen for settings-closed event to re-check configuration
-    const handleSettingsClosed = () => {
-      checkConfig();
-    };
-
-    window.addEventListener('settings-closed', handleSettingsClosed);
-
-    return () => {
-      window.removeEventListener('settings-closed', handleSettingsClosed);
-    };
+    const config = getSessionConfig();
+    console.log('[AIChatPage] Mount config check - ai_model:', config.ai_model);
+    console.log('[AIChatPage] Full config object:', config);
+    console.log('[AIChatPage] sessionStorage content:', sessionStorage.getItem('openshift_ai_observability_config'));
+    console.log('[AIChatPage] localStorage content:', localStorage.getItem('openshift_ai_observability_config'));
+    
+    if (!config.ai_model) {
+      setConfigError('Please configure an AI model in Settings first');
+    } else {
+      // Clear any existing error if model is configured
+      setConfigError(null);
+    }
   }, []);
 
   const handleSend = async (messageText?: string) => {
@@ -166,7 +161,7 @@ const AIChatPage: React.FC = () => {
     // Check configuration
     const config = getSessionConfig();
     if (!config.ai_model) {
-      setConfigError('Please configure an AI model in settings');
+      setConfigError('Please configure an AI model in Settings first');
       return;
     }
 
@@ -294,11 +289,6 @@ const AIChatPage: React.FC = () => {
 
   const handleClear = () => {
     clearHistory();
-  };
-
-  const handleOpenSettings = () => {
-    // Dispatch event to open settings modal
-    window.dispatchEvent(new CustomEvent('open-settings'));
   };
 
   const toggleProgressLog = (messageId: string) => {

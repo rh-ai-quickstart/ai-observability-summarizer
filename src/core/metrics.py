@@ -1015,6 +1015,9 @@ def discover_openshift_metrics():
             "Total Services": "sum(kube_service_info)",
             "Total Nodes": "sum(kube_node_info)",
             "Total Namespaces": "count(kube_namespace_labels)",
+            # GPU metrics (only available if GPUs are present)
+            "GPU Count": "count(DCGM_FI_DEV_GPU_TEMP) or sum(habana_hpu_count)",
+            "GPU Utilization (%)": "avg(DCGM_FI_DEV_GPU_UTIL) or avg(habanalabs_utilization)",
         },
         "Jobs & Workloads": {
             # Jobs, cronjobs, and other workload types

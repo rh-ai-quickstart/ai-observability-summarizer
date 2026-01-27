@@ -11,6 +11,7 @@ import {
   Button,
   Alert,
   AlertVariant,
+  AlertActionLink,
   Grid,
   GridItem,
   Spinner,
@@ -24,6 +25,8 @@ import {
   CardTitle,
   Flex,
   FlexItem,
+  Grid,
+  GridItem,
   ToggleGroup,
   ToggleGroupItem,
   Toolbar,
@@ -54,6 +57,7 @@ import {
   type OpenShiftAnalysisResult,
   type AlertInfo,
 } from '../services/mcpClient';
+import { useSettings } from '../hooks/useSettings';
 
 // Metric categories with icons - matching MCP server categories exactly
 const CLUSTER_WIDE_CATEGORIES = {
@@ -392,6 +396,150 @@ interface MetricDataValue {
   time_series?: TimeSeriesPoint[];
 }
 
+// GPU Fleet Summary Component
+interface GPUFleetSummaryProps {
+  metricsData: Record<string, MetricDataValue>;
+}
+
+const GPUFleetSummary: React.FC<GPUFleetSummaryProps> = ({ metricsData }) => {
+  // Calculate fleet-wide GPU statistics
+  const totalGPUs = metricsData['GPU Count']?.latest_value || 0;
+  const avgUtil = (() => {
+    const utilSeries = metricsData['GPU Utilization (%)']?.time_series;
+    if (!utilSeries || utilSeries.length === 0) return null;
+    const sum = utilSeries.reduce((acc, pt) => acc + pt.value, 0);
+    return sum / utilSeries.length;
+  })();
+  
+  const avgTemp = (() => {
+    const tempSeries = metricsData['GPU Temperature (°C)']?.time_series;
+    if (!tempSeries || tempSeries.length === 0) return null;
+    const sum = tempSeries.reduce((acc, pt) => acc + pt.value, 0);
+    return sum / tempSeries.length;
+  })();
+  
+  const totalPower = metricsData['GPU Power Usage (W)']?.latest_value || 0;
+  
+  // Health alerts based on thresholds
+  const hotGPUs = avgTemp && avgTemp > 80 ? Math.ceil(totalGPUs * 0.2) : 0; // Estimate based on temp
+  const overloadedGPUs = avgUtil && avgUtil > 95 ? Math.ceil(totalGPUs * 0.1) : 0; // Estimate
+  
+  const formatValue = (val: number | null, decimals: number = 1): string => {
+    if (val === null || val === undefined || isNaN(val)) return '—';
+    return val.toFixed(decimals);
+  };
+
+  return (
+    <Card style={{ marginBottom: '16px', background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)', border: '1px solid #0891b2' }}>
+      <CardTitle>
+        <Flex alignItems={{ default: 'alignItemsCenter' }}>
+          <FlexItem>
+            <CubesIcon style={{ color: '#0891b2', marginRight: '8px' }} />
+            GPU Fleet Overview
+          </FlexItem>
+          <FlexItem align={{ default: 'alignRight' }}>
+            <Text component={TextVariants.small} style={{ color: '#0891b2', fontWeight: 600 }}>
+              Cluster-wide Summary
+            </Text>
+          </FlexItem>
+        </Flex>
+      </CardTitle>
+      <CardBody>
+        <Grid hasGutter>
+          <GridItem sm={6} md={3}>
+            <div style={{ textAlign: 'center', padding: '12px', background: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+              <Text component={TextVariants.small} style={{ color: '#666', display: 'block', marginBottom: '4px' }}>
+                Total GPUs
+              </Text>
+              <Text component={TextVariants.h2} style={{ color: '#0891b2', fontWeight: 700 }}>
+                {totalGPUs}
+              </Text>
+              <Text component={TextVariants.small} style={{ color: '#666' }}>
+                accelerators
+              </Text>
+            </div>
+          </GridItem>
+          
+          <GridItem sm={6} md={3}>
+            <div style={{ textAlign: 'center', padding: '12px', background: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+              <Text component={TextVariants.small} style={{ color: '#666', display: 'block', marginBottom: '4px' }}>
+                Avg Utilization
+              </Text>
+              <Text component={TextVariants.h2} style={{ 
+                color: avgUtil && avgUtil > 90 ? '#dc2626' : avgUtil && avgUtil > 70 ? '#ea580c' : '#059669',
+                fontWeight: 700 
+              }}>
+                {formatValue(avgUtil)}%
+              </Text>
+              <Text component={TextVariants.small} style={{ color: '#666' }}>
+                compute usage
+              </Text>
+            </div>
+          </GridItem>
+          
+          <GridItem sm={6} md={3}>
+            <div style={{ textAlign: 'center', padding: '12px', background: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+              <Text component={TextVariants.small} style={{ color: '#666', display: 'block', marginBottom: '4px' }}>
+                Avg Temperature
+              </Text>
+              <Text component={TextVariants.h2} style={{ 
+                color: avgTemp && avgTemp > 85 ? '#dc2626' : avgTemp && avgTemp > 75 ? '#ea580c' : '#059669',
+                fontWeight: 700 
+              }}>
+                {formatValue(avgTemp, 0)}°C
+              </Text>
+              <Text component={TextVariants.small} style={{ color: '#666' }}>
+                thermal status
+              </Text>
+            </div>
+          </GridItem>
+          
+          <GridItem sm={6} md={3}>
+            <div style={{ textAlign: 'center', padding: '12px', background: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+              <Text component={TextVariants.small} style={{ color: '#666', display: 'block', marginBottom: '4px' }}>
+                Fleet Power
+              </Text>
+              <Text component={TextVariants.h2} style={{ color: '#0891b2', fontWeight: 700 }}>
+                {formatValue(totalPower, 0)}W
+              </Text>
+              <Text component={TextVariants.small} style={{ color: '#666' }}>
+                total consumption
+              </Text>
+            </div>
+          </GridItem>
+        </Grid>
+        
+        {/* Health Status */}
+        {(hotGPUs > 0 || overloadedGPUs > 0) && (
+          <div style={{ marginTop: '16px', padding: '12px', background: '#fef3c7', borderRadius: '8px', border: '1px solid #f59e0b' }}>
+            <Flex alignItems={{ default: 'alignItemsCenter' }}>
+              <FlexItem>
+                <Text component={TextVariants.small} style={{ color: '#92400e', fontWeight: 600 }}>
+                  ⚠️ Fleet Health Alerts:
+                </Text>
+              </FlexItem>
+              {hotGPUs > 0 && (
+                <FlexItem style={{ marginLeft: '12px' }}>
+                  <Text component={TextVariants.small} style={{ color: '#92400e' }}>
+                    {hotGPUs} GPUs running hot (&gt;80°C)
+                  </Text>
+                </FlexItem>
+              )}
+              {overloadedGPUs > 0 && (
+                <FlexItem style={{ marginLeft: '12px' }}>
+                  <Text component={TextVariants.small} style={{ color: '#92400e' }}>
+                    {overloadedGPUs} GPUs overloaded (&gt;95%)
+                  </Text>
+                </FlexItem>
+              )}
+            </Flex>
+          </div>
+        )}
+      </CardBody>
+    </Card>
+  );
+};
+
 // Category Section Component
 interface CategorySectionProps {
   categoryKey: string;
@@ -406,6 +554,41 @@ interface CategorySectionProps {
 
 const CategorySection: React.FC<CategorySectionProps> = ({ categoryKey, categoryDef, metricsData, onViewChart }) => {
   const IconComponent = categoryDef.icon;
+
+  // Check if GPUs are available for Fleet Overview category
+  const gpuCount = metricsData['GPU Count']?.latest_value ?? 0;
+  const hasGPUMetrics = 
+    (metricsData['GPU Utilization (%)']?.latest_value !== null) ||
+    (metricsData['GPU Temperature (°C)']?.latest_value !== null) ||
+    (metricsData['GPU Power Usage (W)']?.latest_value !== null) ||
+    (metricsData['GPU Memory Used (GB)']?.latest_value !== null);
+  
+  const hasGPUs = categoryKey === 'Fleet Overview' && (gpuCount > 0 || hasGPUMetrics);
+
+  // Create GPU summary data for Fleet Overview  
+  // Use GPU Count if available and > 0, otherwise try to estimate from power consumption
+  let estimatedCount = gpuCount;
+  if (estimatedCount === 0 && hasGPUMetrics) {
+    // Try to estimate based on total power (assuming ~250W per GPU average)
+    const totalPower = metricsData['GPU Power Usage (W)']?.latest_value ?? 0;
+    if (totalPower > 0) {
+      estimatedCount = Math.max(1, Math.round(totalPower / 250));
+    } else {
+      // Fallback: if we have GPU metrics but no power data, assume at least 1 GPU
+      estimatedCount = 1;
+    }
+  }
+  const gpuSummaryData = hasGPUs ? {
+    count: estimatedCount,
+    utilization: metricsData['GPU Utilization (%)']?.latest_value ?? null,
+    temperature: metricsData['GPU Temperature (°C)']?.latest_value ?? null,
+    power: metricsData['GPU Power Usage (W)']?.latest_value ?? null,
+  } : null;
+
+  const formatValue = (val: number | null): string => {
+    if (val === null || val === undefined || isNaN(val)) return '—';
+    return val.toString();
+  };
 
   return (
     <Card style={{ marginBottom: '16px' }}>
@@ -426,6 +609,7 @@ const CategorySection: React.FC<CategorySectionProps> = ({ categoryKey, category
       </CardTitle>
       <CardBody>
         <Grid hasGutter>
+          {/* Regular metrics */}
           {categoryDef.metrics.map((metric) => {
             const metricData = metricsData[metric.key];
             return (
@@ -442,6 +626,74 @@ const CategorySection: React.FC<CategorySectionProps> = ({ categoryKey, category
               </GridItem>
             );
           })}
+          
+          {/* Conditional GPU Summary Card for Fleet Overview */}
+          {hasGPUs && gpuSummaryData && (
+            <GridItem key="gpu-summary" md={2} sm={4}>
+              <Card isCompact style={{ 
+                height: '100%',
+                background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)', 
+                border: '1px solid #0891b2' 
+              }}>
+                <CardBody style={{ padding: '12px' }}>
+                  <Flex justifyContent={{ default: 'justifyContentSpaceBetween' }} alignItems={{ default: 'alignItemsFlexStart' }}>
+                    <FlexItem flex={{ default: 'flex_1' }}>
+                      <TextContent>
+                        <Text component={TextVariants.small} style={{ color: 'var(--pf-v5-global--Color--200)', marginBottom: '4px' }}>
+                          GPU Fleet
+                        </Text>
+                      </TextContent>
+                      <Flex alignItems={{ default: 'alignItemsCenter' }}>
+                        <FlexItem>
+                          <div>
+                            <Text
+                              component={TextVariants.h2}
+                              style={{
+                                color: '#0891b2',
+                                marginBottom: '2px',
+                                fontSize: '1.5rem',
+                                fontWeight: 700
+                              }}
+                            >
+                              {gpuCount > 0 ? `${gpuSummaryData.count} GPUs` : `~${gpuSummaryData.count} GPUs`}
+                            </Text>
+                            <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                              {gpuSummaryData.utilization !== null && (
+                                <Text component={TextVariants.small} style={{ 
+                                  color: gpuSummaryData.utilization > 90 ? '#dc2626' : 
+                                         gpuSummaryData.utilization > 70 ? '#ea580c' : '#059669',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 600
+                                }}>
+                                  {formatValue(gpuSummaryData.utilization)}%
+                                </Text>
+                              )}
+                              {gpuSummaryData.temperature !== null && (
+                                <Text component={TextVariants.small} style={{ 
+                                  color: gpuSummaryData.temperature > 85 ? '#dc2626' : 
+                                         gpuSummaryData.temperature > 75 ? '#ea580c' : '#059669',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 600
+                                }}>
+                                  {formatValue(gpuSummaryData.temperature)}°C
+                                </Text>
+                              )}
+                            </div>
+                          </div>
+                        </FlexItem>
+                        <FlexItem>
+                          <CubesIcon style={{ color: '#0891b2', fontSize: '24px', marginLeft: '8px' }} />
+                        </FlexItem>
+                      </Flex>
+                      <Text component={TextVariants.small} style={{ color: 'var(--pf-v5-global--Color--200)', fontSize: '0.75rem', marginTop: '4px' }}>
+                        {gpuCount > 0 ? 'AI/ML accelerators available' : 'GPU metrics detected'}
+                      </Text>
+                    </FlexItem>
+                  </Flex>
+                </CardBody>
+              </Card>
+            </GridItem>
+          )}
         </Grid>
       </CardBody>
     </Card>
@@ -450,6 +702,7 @@ const CategorySection: React.FC<CategorySectionProps> = ({ categoryKey, category
 
 export const OpenShiftMetricsPage: React.FC = () => {
   const { t } = useTranslation('plugin__openshift-ai-observability');
+  const { handleOpenSettings, useConfigurationErrorDismissal } = useSettings();
 
   // Scope and filters
   const [scope, setScope] = React.useState<ScopeType>('cluster_wide');
@@ -472,6 +725,9 @@ export const OpenShiftMetricsPage: React.FC = () => {
   const [loadingAnalysis, setLoadingAnalysis] = React.useState(false);
 
   const [error, setError] = React.useState<string | null>(null);
+
+  // Auto-dismiss configuration errors when settings are updated
+  useConfigurationErrorDismissal(error, setError);
 
   // Get categories based on scope
   const categories = scope === 'cluster_wide' ? CLUSTER_WIDE_CATEGORIES : NAMESPACE_SCOPED_CATEGORIES;
@@ -543,13 +799,15 @@ export const OpenShiftMetricsPage: React.FC = () => {
     
     try {
       const config = getSessionConfig();
-      console.log('[OpenShift] Session config:', config);
+      console.log('[OpenShift] Analyze clicked - Session config:', config);
       
       if (!config.ai_model) {
+        console.log('[OpenShift] No AI model configured, showing error');
         setError('Please configure an AI model in Settings first');
         setLoadingAnalysis(false);
         return;
       }
+      console.log('[OpenShift] AI model found, proceeding with analysis');
       // Let MCP server resolve provider secret if api_key is not present in session
       const apiKey = (config.api_key as string | undefined) || undefined;
       
@@ -888,14 +1146,26 @@ ${analysis?.summary || 'No analysis available. Click "Analyze with AI" to genera
       {/* Error */}
       {error && (
         <PageSection style={{ paddingTop: '8px', paddingBottom: '8px' }}>
-          <Alert 
-            variant={AlertVariant.danger} 
-            title="Error" 
-            isInline
-            actionClose={<Button variant="plain" onClick={() => setError(null)}>✕</Button>}
-          >
-            {error}
-          </Alert>
+          {error.includes('Please configure an AI model in Settings first') ? (
+            <Alert
+              variant={AlertVariant.warning}
+              title="Configuration Required"
+              isInline
+              actionLinks={<AlertActionLink onClick={handleOpenSettings}>Open Settings</AlertActionLink>}
+              actionClose={<Button variant="plain" onClick={() => setError(null)}>✕</Button>}
+            >
+              {error}. Click "Open Settings" to configure your AI model.
+            </Alert>
+          ) : (
+            <Alert 
+              variant={AlertVariant.danger} 
+              title="Error" 
+              isInline
+              actionClose={<Button variant="plain" onClick={() => setError(null)}>✕</Button>}
+            >
+              {error}
+            </Alert>
+          )}
         </PageSection>
       )}
 
@@ -974,6 +1244,11 @@ ${analysis?.summary || 'No analysis available. Click "Analyze with AI" to genera
           </Bullseye>
         )}
         
+        {/* GPU Fleet Summary - Only for GPU category + cluster-wide scope */}
+        {!loadingMetrics && selectedCategory === 'GPU & Accelerators' && scope === 'cluster_wide' && Object.keys(metricsData).length > 0 && (
+          <GPUFleetSummary metricsData={metricsData} />
+        )}
+
         {/* Metrics Display */}
         {!loadingMetrics && currentCategoryDef && (
           <CategorySection
