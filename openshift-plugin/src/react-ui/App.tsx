@@ -16,26 +16,6 @@ const App: React.FC = () => {
     });
   }, []);
 
-  // Clear session config on app initialization in dev mode (simulates sessionStorage behavior)
-  React.useEffect(() => {
-    const clearSessionConfigInDev = async () => {
-      // Wait for runtime config to load first
-      await initializeRuntimeConfig();
-      
-      // Import these functions after runtime config is loaded
-      const { isDevMode } = await import('../core/services/runtimeConfig');
-      const { clearSessionConfig } = await import('../core/services/mcpClient');
-      
-      if (isDevMode()) {
-        console.log('[App] Dev mode detected - clearing session config on app load');
-        clearSessionConfig();
-      }
-    };
-
-    clearSessionConfigInDev().catch(error => {
-      console.error('[App] Failed to clear session config:', error);
-    });
-  }, []);
 
   return (
     <Router>

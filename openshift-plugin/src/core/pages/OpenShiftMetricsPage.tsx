@@ -25,8 +25,6 @@ import {
   CardTitle,
   Flex,
   FlexItem,
-  Grid,
-  GridItem,
   ToggleGroup,
   ToggleGroupItem,
   Toolbar,
@@ -702,7 +700,8 @@ const CategorySection: React.FC<CategorySectionProps> = ({ categoryKey, category
 
 export const OpenShiftMetricsPage: React.FC = () => {
   const { t } = useTranslation('plugin__openshift-ai-observability');
-  const { handleOpenSettings, useConfigurationErrorDismissal } = useSettings();
+  const { handleOpenSettings, useConfigurationCheck } = useSettings();
+  const isAIConfigured = useConfigurationCheck();
 
   // Scope and filters
   const [scope, setScope] = React.useState<ScopeType>('cluster_wide');
@@ -726,8 +725,12 @@ export const OpenShiftMetricsPage: React.FC = () => {
 
   const [error, setError] = React.useState<string | null>(null);
 
-  // Auto-dismiss configuration errors when settings are updated
-  useConfigurationErrorDismissal(error, setError);
+  // Auto-clear configuration errors when AI model becomes configured
+  React.useEffect(() => {
+    if (isAIConfigured && error?.includes('Please configure an AI model in Settings first')) {
+      setError(null);
+    }
+  }, [isAIConfigured, error]);
 
   // Get categories based on scope
   const categories = scope === 'cluster_wide' ? CLUSTER_WIDE_CATEGORIES : NAMESPACE_SCOPED_CATEGORIES;
@@ -798,16 +801,15 @@ export const OpenShiftMetricsPage: React.FC = () => {
     setError(null);
     
     try {
-      const config = getSessionConfig();
-      console.log('[OpenShift] Analyze clicked - Session config:', config);
-      
-      if (!config.ai_model) {
+      if (!isAIConfigured) {
         console.log('[OpenShift] No AI model configured, showing error');
         setError('Please configure an AI model in Settings first');
         setLoadingAnalysis(false);
         return;
       }
-      console.log('[OpenShift] AI model found, proceeding with analysis');
+      
+      const config = getSessionConfig();
+      console.log('[OpenShift] AI model configured, proceeding with analysis');
       // Let MCP server resolve provider secret if api_key is not present in session
       const apiKey = (config.api_key as string | undefined) || undefined;
       

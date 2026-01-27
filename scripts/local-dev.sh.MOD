@@ -1,0 +1,574 @@
+#!/bin/bash
+
+# AI Observability Metric Summarizer - Local Development Script
+
+# Source common utilities
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/common.sh"
+
+# Configuration
+PROMETHEUS_NAMESPACE="openshift-monitoring"
+OBSERVABILITY_NAMESPACE="observability-hub"
+LOKI_NAMESPACE="openshift-logging"
+KORREL8R_NAMESPACE="openshift-cluster-observability-operator"
+THANOS_PORT=9090
+TEMPO_PORT=8082
+LOKI_PORT=3100
+KORREL8R_PORT=9443
+LLAMASTACK_PORT=8321
+LLAMA_MODEL_PORT=8080
+UI_PORT=8501
+REACT_UI_PORT=3000
+MCP_PORT=${MCP_PORT:-8085}
+PLUGIN_PORT=9001
+CONSOLE_PORT=9000
+
+echo -e "${BLUE}🚀 AI Observability Metric Summarizer - Local Development Setup${NC}"
+echo "=============================================================="
+
+# Function to display usage
+usage() {
+    echo "Usage: $0 [OPTIONS]"
+    echo ""
+    echo "Options:"
+    echo "  -n/-N NAMESPACE              Default namespace for pods (required)"
+    echo "  -m/-M NAMESPACE              Llama Model namespace (optional, use if model is in different namespace)"
+    echo "  -c/-C CONFIG                 Model config source: 'local' or 'cluster' (default: local)"
+    echo "  -l/-L LLM_MODEL              LLM model to generate config for (default: llama-3.2-3b-instruct, only used with -c local)"
+    echo "  -p/-P                        Start OpenShift Console Plugin dev server (optional)"
+    echo "  -o/-O                        Start OpenShift Console with plugin (requires -p, starts full local console)"
+    echo ""
+    echo "Examples:"
+    echo "  $0 -n default-ns                       # Use local config with default LLM (llama-3.2-3b-instruct)"
+    echo "  $0 -N default-ns                       # Same as above (uppercase option)"
+    echo "  $0 -n default-ns -m model-ns           # Model in different namespace, use default LLM"
+    echo "  $0 -n default-ns -c cluster            # Use cluster model config instead of local"
+    echo "  $0 -n default-ns -l llama-3.2-1b-instruct  # Generate config for llama-3.2-1b-instruct"
+    echo "  $0 -n default-ns -l llama-3.1-8b-instruct  # Generate config for llama-3.1-8b-instruct"
+    echo "  $0 -n default-ns -p                    # Start with OpenShift Console Plugin dev server"
+    echo "  $0 -n default-ns -p -o                 # Full local testing: MCP + Plugin + OpenShift Console"
+}
+
+# Function to parse command line arguments
+parse_args() {
+    # Check if no arguments provided
+    if [ $# -eq 0 ]; then
+        usage
+        exit 2
+    fi
+
+    DEFAULT_NAMESPACE=""
+    LLAMA_MODEL_NAMESPACE=""
+    MODEL_CONFIG_SOURCE="local"  # Default to local
+    LLM_MODEL=$(get_default_model)  # Optional LLM model for config generation
+    START_PLUGIN="false"  # Whether to start the OpenShift Console Plugin dev server
+    START_CONSOLE="false"  # Whether to start the OpenShift Console container
+
+    # Parse standard arguments using getopts
+    while getopts "n:N:m:M:c:C:l:L:pPoOh" opt; do
+        case $opt in
+            n|N) DEFAULT_NAMESPACE="$OPTARG"
+                 ;;
+            m|M) LLAMA_MODEL_NAMESPACE="$OPTARG"
+                 ;;
+            c|C) MODEL_CONFIG_SOURCE="$OPTARG"
+                 ;;
+            l|L) LLM_MODEL="$OPTARG"
+                 ;;
+            p|P) START_PLUGIN="true"
+                 ;;
+            o|O) START_CONSOLE="true"
+                 ;;
+            h) usage
+               exit 0
+               ;;
+            *) echo -e "${RED}❌ INVALID option: [$OPTARG]${NC}"
+               usage
+               exit 1
+               ;;
+        esac
+    done
+
+    # Validate arguments
+    if [ -z "$DEFAULT_NAMESPACE" ]; then
+        echo -e "${RED}❌ Default namespace is required. Please specify using -n or -N${NC}"
+        usage
+        exit 1
+    fi
+
+    # Validate model config source
+    if [[ "$MODEL_CONFIG_SOURCE" != "local" && "$MODEL_CONFIG_SOURCE" != "cluster" ]]; then
+        echo -e "${RED}❌ Invalid model config source: $MODEL_CONFIG_SOURCE${NC}"
+        echo -e "${YELLOW}   Valid options: 'local' or 'cluster'${NC}"
+        usage
+        exit 1
+    fi
+
+    # If console is requested, plugin must also be started
+    if [ "$START_CONSOLE" = "true" ] && [ "$START_PLUGIN" = "false" ]; then
+        echo -e "${YELLOW}⚠️  Console (-o) requires plugin (-p). Enabling plugin automatically.${NC}"
+        START_PLUGIN="true"
+    fi
+
+    # Set llama model namespace to default if not provided
+    if [ -z "$LLAMA_MODEL_NAMESPACE" ]; then
+        LLAMA_MODEL_NAMESPACE="$DEFAULT_NAMESPACE"
+    fi
+}
+
+# Function to cleanup on exit
+cleanup() {
+    # Prevent multiple cleanup calls
+    if [ "$CLEANUP_DONE" = "true" ]; then
+        return
+    fi
+    CLEANUP_DONE=true
+
+    echo -e "\n${YELLOW}🧹 Cleaning up services and port-forwards...${NC}"
+    ensure_port_free "$MCP_PORT"
+    ensure_port_free "$TEMPO_PORT"
+    ensure_port_free "$PLUGIN_PORT"
+    ensure_port_free "$CONSOLE_PORT"
+    pkill -f "oc port-forward" || true
+    pkill -f "mcp_server.main" || true
+    pkill -f "streamlit run ui.py" || true
+    pkill -f "webpack serve" || true
+    pkill -f "yarn.*start" || true
+    pkill -f "yarn run start-console" || true
+    ensure_port_free "$REACT_UI_PORT"
+
+    # Deactivate virtual environment if it was activated
+    if [ -n "$VIRTUAL_ENV" ]; then
+        echo -e "${BLUE}🐍 Deactivating virtual environment...${NC}"
+        deactivate
+    fi
+
+    echo -e "${GREEN}✅ Cleanup complete${NC}"
+}
+
+# Function to check prerequisites and activate virtual environment
+check_prerequisites() {
+    echo -e "${BLUE}🔍 Checking prerequisites...${NC}"
+
+    # Check for virtual environment and activate it
+    if [ -f ".venv/bin/activate" ]; then
+        echo -e "${BLUE}🐍 Activating Python virtual environment...${NC}"
+        source .venv/bin/activate
+        echo -e "${GREEN}✅ Virtual environment activated${NC}"
+    else
+        echo -e "${YELLOW}⚠️  Virtual environment (.venv) not found${NC}"
+        echo -e "${YELLOW}   Please create virtual environment by following README or DEV_GUIDE${NC}"
+        exit 1
+    fi
+
+    check_tool_exists "oc"
+    check_openshift_login
+
+    echo -e "${GREEN}✅ Prerequisites check passed${NC}"
+}
+
+# Helper function to create port-forward command
+create_port_forward() {
+    local resource_name="$1"
+    local local_port="$2"
+    local remote_port="$3"
+    local namespace="$4"
+    local description="$5"
+    local emoji="$6"
+    local optional="${7:-false}"  # Default to false (required resource)
+
+    # Check if resource name is found
+    if [ -z "$resource_name" ]; then
+        if [ "$optional" = "true" ]; then
+            echo -e "${YELLOW}⚠️  $description resource NOT found in $namespace namespace (optional - skipping)${NC}"
+            return 0
+        else
+            echo -e "${RED}❌️  $description resource NOT found in $namespace namespace. Exiting...${NC}"
+            exit 1
+        fi
+    fi
+
+    # Create port-forward
+    oc port-forward "$resource_name" "$local_port:$remote_port" -n "$namespace" >/dev/null 2>&1 &
+    echo -e "${GREEN}✅ Found $description: $emoji (resource: $resource_name, namespace: $namespace) available at: http://localhost:$local_port${NC}"
+}
+
+# Function to find and start port forwards
+start_port_forwards() {
+    echo -e "${BLUE}🔍 Finding pods and starting port-forwards...${NC}"
+
+    local THANOS_POD_LABEL='app.kubernetes.io/component=query-layer,app.kubernetes.io/instance=thanos-querier'
+    local LLAMASTACK_SERVICE_LABEL='app.kubernetes.io/instance=rag, app.kubernetes.io/name=llamastack'
+    local LLAMA_MODEL_SERVICE_LABEL="serving.kserve.io/inferenceservice=$LLM_MODEL, component=predictor"
+    local TEMPO_SERVICE_LABEL='app.kubernetes.io/name=tempo,app.kubernetes.io/component=gateway'
+    local KORREL8R_SERVICE_LABEL='app.kubernetes.io/name=korrel8r'
+
+    THANOS_POD=$(oc get pods -n "$PROMETHEUS_NAMESPACE" -o name -l "$THANOS_POD_LABEL" | head -1)
+    create_port_forward "$THANOS_POD" "$THANOS_PORT" "9090" "$PROMETHEUS_NAMESPACE" "Thanos" "📊"
+
+    # Find LlamaStack pod
+    LLAMASTACK_SERVICE=$(oc get services -n "$LLAMA_MODEL_NAMESPACE" -o name -l "$LLAMASTACK_SERVICE_LABEL")
+    create_port_forward "$LLAMASTACK_SERVICE" "$LLAMASTACK_PORT" "8321" "$LLAMA_MODEL_NAMESPACE" "LlamaStack" "🦙"
+
+    # Find Llama Model service
+    LLAMA_MODEL_SERVICE=$(oc get services -n "$LLAMA_MODEL_NAMESPACE" -o name -l "$LLAMA_MODEL_SERVICE_LABEL")
+    create_port_forward "$LLAMA_MODEL_SERVICE" "$LLAMA_MODEL_PORT" "8080" "$LLAMA_MODEL_NAMESPACE" "Llama Model" "🤖"
+
+    # Find Tempo gateway service
+    TEMPO_SERVICE=$(oc get services -n "$OBSERVABILITY_NAMESPACE" -o name -l "$TEMPO_SERVICE_LABEL")
+    create_port_forward "$TEMPO_SERVICE" "$TEMPO_PORT" "8080" "$OBSERVABILITY_NAMESPACE" "Tempo" "🔍"
+
+    # Find Loki gateway service (optional - only if LokiStack is installed)
+    LOKI_SERVICE=$(oc get services -n "$LOKI_NAMESPACE" -o name -l 'app.kubernetes.io/name=lokistack,app.kubernetes.io/component=lokistack-gateway' 2>/dev/null)
+    if [ -n "$LOKI_SERVICE" ]; then
+        create_port_forward "$LOKI_SERVICE" "$LOKI_PORT" "8080" "$LOKI_NAMESPACE" "Loki" "📋"
+    else
+        echo -e "${YELLOW}⚠️  Loki gateway service NOT found in $LOKI_NAMESPACE namespace (optional - skipping)${NC}"
+    fi
+
+    # Find Korrel8r service (optional - may not be deployed)
+    KORREL8R_SERVICE=$(oc get services -n "$KORREL8R_NAMESPACE" -o name -l "$KORREL8R_SERVICE_LABEL" 2>/dev/null | head -1)
+    create_port_forward "$KORREL8R_SERVICE" "$KORREL8R_PORT" "9443" "$KORREL8R_NAMESPACE" "Korrel8r" "🔗" "true"
+
+    sleep 3  # Give port-forwards time to establish
+}
+
+# Ensure a TCP port is free by terminating any process listening on it
+ensure_port_free() {
+    local port=$1
+    if lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
+        echo -e "${YELLOW}⚠️  Port $port is in use. Attempting to free it...${NC}"
+        # Try graceful termination first
+        lsof -nP -iTCP:"$port" -sTCP:LISTEN -t | xargs -r kill || true
+        sleep 1
+        # Force kill if still listening
+        if lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
+            lsof -nP -iTCP:"$port" -sTCP:LISTEN -t | xargs -r kill -9 || true
+        fi
+        if lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
+            echo -e "${RED}❌ Could not free port $port. Please free it and retry.${NC}"
+            exit 1
+        fi
+        echo -e "${GREEN}✅ Port $port is now free${NC}"
+    fi
+}
+
+# This function sets "MODEL_CONFIG" environment variable from cluster deployment or dynamically generated config
+set_model_config() {
+    if [ "$MODEL_CONFIG_SOURCE" = "local" ]; then
+        # Generate model config dynamically (LLM_MODEL is optional, will use default if not specified)
+        # Script is already sourced in main(), just call the function
+        if generate_model_config "$LLM_MODEL"; then
+            return 0
+        else
+            echo -e "${RED}❌ Failed to generate MODEL_CONFIG${NC}"
+            exit 1
+        fi
+    else
+        # Use cluster config
+        echo -e "${BLUE}🔧 Setting up MODEL_CONFIG from cluster...${NC}"
+        local MCP_SERVER_APP="mcp-server-app"
+        MCP_SERVER_APP_DEPLOYMENT=$(oc get deploy $MCP_SERVER_APP -n "$DEFAULT_NAMESPACE" 2>/dev/null)
+        if [ -n "$MCP_SERVER_APP_DEPLOYMENT" ]; then
+            echo -e "${YELLOW}✅ Found [$MCP_SERVER_APP] deployment:\n$MCP_SERVER_APP_DEPLOYMENT${NC}"
+            export $(oc set env deployment/$MCP_SERVER_APP --list  -n "$DEFAULT_NAMESPACE" | grep MODEL_CONFIG)
+            if [ -n "$MODEL_CONFIG" ]; then
+              echo -e "${GREEN}✅ CLUSTER MODEL_CONFIG set successfully${NC}"
+              echo -e "${BLUE}   Available models: $(echo "$MODEL_CONFIG" | jq -r 'keys | join(", ")')${NC}"
+            else
+              echo -e "${RED}❌ Unable to set MODEL_CONFIG environment variable. It is required to run the UI locally.${NC}"
+              exit 1
+            fi
+        else
+            echo -e "${RED}❌ $MCP_SERVER_APP deployment not found. It is required to set MODEL_CONFIG.${NC}"
+            exit 1
+        fi
+    fi
+}
+
+# Function to start local services
+start_local_services() {
+    echo -e "${BLUE}🏃 Starting local services...${NC}"
+
+    # Get service account token
+    TOKEN=$(oc whoami -t)
+
+    # Set environment variables
+    export LOCAL_DEV="true"  # Mark as local development
+
+    # Enable DEV_MODE for local development (saves API keys to browser localStorage instead of OCP secrets)
+    export DEV_MODE="${DEV_MODE:-true}"
+
+    export PROMETHEUS_URL="http://localhost:$THANOS_PORT"
+    export TEMPO_URL="https://localhost:$TEMPO_PORT"
+    export TEMPO_TENANT_ID="dev"
+    export TEMPO_TOKEN="$TOKEN"
+    export LOKI_URL="https://localhost:$LOKI_PORT"
+    export LOKI_TOKEN="$TOKEN"
+    export LLAMA_STACK_URL="http://localhost:$LLAMASTACK_PORT/v1/openai/v1"
+    export THANOS_TOKEN="$TOKEN"
+    export MCP_URL="http://localhost:$MCP_PORT"
+    export PROM_URL="$PROMETHEUS_URL"
+    # Set log level (override with PYTHON_LOG_LEVEL=DEBUG for more verbose logging)
+    export PYTHON_LOG_LEVEL="${PYTHON_LOG_LEVEL:-INFO}"
+
+    # SSL verification settings for Tempo HTTPS
+    export VERIFY_SSL=false
+    export PYTHONHTTPSVERIFY=0
+
+    # macOS weasyprint support
+    export DYLD_FALLBACK_LIBRARY_PATH="/opt/homebrew/lib:$DYLD_FALLBACK_LIBRARY_PATH"
+
+    set_model_config
+
+    # Start MCP server (HTTP transport)
+    echo -e "${BLUE}🧩 Starting MCP Server (HTTP)...${NC}"
+    ensure_port_free "$MCP_PORT"
+    (cd src && \
+      PYTHONPATH="$(pwd)/.." \
+      MCP_TRANSPORT_PROTOCOL=http \
+      MODEL_CONFIG="$MODEL_CONFIG" \
+      PROMETHEUS_URL="$PROMETHEUS_URL" \
+      TEMPO_URL="$TEMPO_URL" \
+      TEMPO_TENANT_ID="$TEMPO_TENANT_ID" \
+      TEMPO_TOKEN="$TEMPO_TOKEN" \
+      LOKI_URL="$LOKI_URL" \
+      LOKI_TOKEN="$LOKI_TOKEN" \
+      LLAMA_STACK_URL="$LLAMA_STACK_URL" \
+      KORREL8R_URL="https://localhost:$KORREL8R_PORT" \
+      THANOS_TOKEN="$THANOS_TOKEN" \
+      VERIFY_SSL="$VERIFY_SSL" \
+      PYTHON_LOG_LEVEL="$PYTHON_LOG_LEVEL" \
+      CORS_ORIGINS='["http://localhost:5173","http://localhost:3000","http://localhost:9000","http://localhost:9001","http://127.0.0.1:5173"]' \
+      python3 -m mcp_server.main > /tmp/summarizer-mcp-server.log 2>&1) &
+    MCP_SRV_PID=$!
+
+    # Wait for MCP server to start
+    echo "Waiting for MCP server to start..."
+    sleep 5
+    
+    # Test MCP server health with retry logic
+    echo "Testing MCP server health on port $MCP_PORT..."
+    HEALTH_CHECK_RETRIES=5
+    for i in $(seq 1 $HEALTH_CHECK_RETRIES); do
+        echo "Health check attempt $i/$HEALTH_CHECK_RETRIES..."
+        if curl -s --connect-timeout 5 "http://localhost:$MCP_PORT/health" | grep -q '"healthy"'; then
+            echo -e "${GREEN}✅ MCP Server started successfully on port $MCP_PORT${NC}"
+            break
+        else
+            if [ $i -eq $HEALTH_CHECK_RETRIES ]; then
+                echo -e "${RED}❌ MCP Server failed to start after $HEALTH_CHECK_RETRIES attempts${NC}"
+                echo "Server log output:"
+                cat /tmp/summarizer-mcp-server.log
+                exit 1
+            else
+                echo "Health check failed, waiting 2 seconds before retry..."
+                sleep 2
+            fi
+        fi
+    done
+
+    # Start Streamlit UI
+    echo -e "${BLUE}🎨 Starting Streamlit UI...${NC}"
+    (cd src/ui && \
+      MCP_SERVER_URL="http://localhost:$MCP_PORT" \
+      PYTHON_LOG_LEVEL="$PYTHON_LOG_LEVEL" \
+      streamlit run ui.py --server.port $UI_PORT --server.address 0.0.0.0 --server.headless true > /tmp/summarizer-ui.log 2>&1) &
+    UI_PID=$!
+
+    # Wait for UI to start
+    sleep 5
+
+    # Start React-UI (OpenShift Console alternative UI) when DEV_MODE is true
+    if [ "$DEV_MODE" = "true" ]; then
+        echo -e "${BLUE}🌐 Starting React-UI...${NC}"
+        ensure_port_free "$REACT_UI_PORT"
+
+        if [ -d "openshift-plugin" ]; then
+            echo -e "${BLUE}  → Installing React-UI dependencies...${NC}"
+            (cd openshift-plugin && yarn install --frozen-lockfile > /tmp/summarizer-react-ui-install.log 2>&1)
+
+            echo -e "${BLUE}  → Starting React-UI dev server on port $REACT_UI_PORT...${NC}"
+            (cd openshift-plugin && yarn start:react-ui > /tmp/summarizer-react-ui.log 2>&1) &
+            REACT_UI_PID=$!
+
+            # Wait for React-UI to start
+            sleep 8
+
+            # Test React-UI health
+            if curl -s --connect-timeout 5 "http://localhost:$REACT_UI_PORT" | grep -q 'html'; then
+                echo -e "${GREEN}✅ React-UI started successfully${NC}"
+            else
+                echo -e "${YELLOW}⚠️  React-UI may still be starting. Check /tmp/summarizer-react-ui.log${NC}"
+            fi
+        else
+            echo -e "${YELLOW}⚠️  openshift-plugin directory not found. Skipping React-UI.${NC}"
+        fi
+    fi
+
+    # Show log file locations for debugging
+    echo -e "${GREEN}📋 Log files for debugging (all in /tmp):${NC}"
+    echo -e "   🔧 MCP Server: /tmp/summarizer-mcp-server.log"
+    echo -e "   🎨 Streamlit UI: /tmp/summarizer-ui.log"
+    if [ "$DEV_MODE" = "true" ]; then
+        echo -e "   🌐 React-UI: /tmp/summarizer-react-ui.log"
+    fi
+    if [ "$START_PLUGIN" = "true" ]; then
+        echo -e "   🔌 Plugin Dev Server: /tmp/summarizer-plugin.log"
+    fi
+    if [ "$START_CONSOLE" = "true" ]; then
+        echo -e "   🖥️  OpenShift Console: /tmp/summarizer-console.log"
+    fi
+    echo -e "   💡 To see live logs: tail -f /tmp/summarizer-*.log"
+
+    # Start OpenShift Console Plugin dev server if requested
+    if [ "$START_PLUGIN" = "true" ]; then
+        echo -e "${BLUE}🔌 Starting OpenShift Console Plugin dev server...${NC}"
+        ensure_port_free "$PLUGIN_PORT"
+        
+        # Check if plugin directory exists
+        if [ -d "openshift-plugin" ]; then
+            echo -e "${BLUE}  → Installing plugin dependencies...${NC}"
+            (cd openshift-plugin && yarn install --frozen-lockfile)
+            
+            echo -e "${BLUE}  → Starting plugin dev server...${NC}"
+            (cd openshift-plugin && yarn start > /tmp/summarizer-plugin.log 2>&1) &
+            PLUGIN_PID=$!
+            
+            # Wait for plugin to start
+            sleep 8
+            
+            # Test plugin health
+            if curl -s --connect-timeout 5 "http://localhost:$PLUGIN_PORT/plugin-manifest.json" | grep -q '"name"'; then
+                echo -e "${GREEN}✅ Plugin dev server started successfully on port $PLUGIN_PORT${NC}"
+            else
+                echo -e "${YELLOW}⚠️  Plugin dev server may still be starting. Check /tmp/summarizer-plugin.log${NC}"
+            fi
+        else
+            echo -e "${RED}❌ openshift-plugin directory not found. Skipping plugin dev server.${NC}"
+            START_CONSOLE="false"  # Can't start console without plugin
+        fi
+    fi
+
+    # Start OpenShift Console using yarn script if requested
+    if [ "$START_CONSOLE" = "true" ]; then
+        echo -e "${BLUE}🖥️  Starting OpenShift Console...${NC}"
+        ensure_port_free "$CONSOLE_PORT"
+        
+        # Check if plugin directory exists and yarn is available
+        if [ -d "openshift-plugin" ]; then
+            echo -e "${BLUE}  → Checking Podman connection...${NC}"
+            # Ensure Podman connection is working
+            if ! podman system connection default podman-machine-default 2>/dev/null; then
+                echo -e "${YELLOW}⚠️  Setting Podman default connection...${NC}"
+            fi
+            
+            # Test Podman connection and restart machine if needed
+            if ! podman ps >/dev/null 2>&1; then
+                echo -e "${YELLOW}⚠️  Podman connection failed, restarting machine...${NC}"
+                podman machine stop >/dev/null 2>&1 || true
+                podman machine start >/dev/null 2>&1
+                echo -e "${GREEN}✅ Podman machine restarted${NC}"
+            fi
+            
+            echo -e "${BLUE}  → Starting console with plugin integration...${NC}"
+            echo -e "${YELLOW}⚠️  Security: Console bound to localhost only (127.0.0.1:$CONSOLE_PORT)${NC}"
+            
+            # Start console using yarn script in background
+            (cd openshift-plugin && yarn run start-console > /tmp/summarizer-console.log 2>&1) &
+            CONSOLE_PID=$!
+            
+            # Wait for console to start
+            sleep 8
+            
+            # Test console health
+            if curl -s --connect-timeout 5 "http://localhost:$CONSOLE_PORT" | grep -q 'html'; then
+                echo -e "${GREEN}✅ OpenShift Console started successfully on port $CONSOLE_PORT${NC}"
+            else
+                echo -e "${YELLOW}⚠️  Console may still be starting. Check /tmp/summarizer-console.log${NC}"
+            fi
+        else
+            echo -e "${RED}❌ openshift-plugin directory not found. Cannot start console.${NC}"
+            START_CONSOLE="false"
+        fi
+    fi
+
+    echo -e "${GREEN}✅ All services started successfully!${NC}"
+}
+
+# Main execution
+main() {
+    # Source the shared script once (for model config generation and default model)
+    source scripts/generate-model-config.sh
+
+    parse_args "$@"
+    check_prerequisites
+
+    # Set cleanup trap only after successful prerequisite checks
+    trap cleanup EXIT INT TERM
+
+    echo ""
+    echo -e "${BLUE}--------------------------------${NC}"
+    echo -e "${BLUE}Configuration being used for setup:${NC}"
+    echo -e "${BLUE}  DEFAULT_NAMESPACE: $DEFAULT_NAMESPACE${NC}"
+    echo -e "${BLUE}  LLAMA_MODEL_NAMESPACE: $LLAMA_MODEL_NAMESPACE${NC}"
+    echo -e "${BLUE}  MODEL_CONFIG_SOURCE: $MODEL_CONFIG_SOURCE${NC}"
+    echo -e "${BLUE}  LLM_MODEL: $LLM_MODEL${NC}"
+    echo -e "${BLUE}  START_PLUGIN: $START_PLUGIN${NC}"
+    echo -e "${BLUE}  START_CONSOLE: $START_CONSOLE${NC}"
+    echo -e "${BLUE}--------------------------------${NC}\n"
+
+    start_port_forwards
+    start_local_services
+
+    echo -e "\n${GREEN}🎉 Setup complete! All services are running.${NC}"
+    echo -e "\n${BLUE}📋 Services Available:${NC}"
+    echo -e "   ${YELLOW}🎨 Streamlit UI: http://localhost:$UI_PORT${NC}"
+    if [ "$DEV_MODE" = "true" ]; then
+        echo -e "   ${YELLOW}🌐 React-UI: http://localhost:$REACT_UI_PORT${NC}"
+    fi
+    echo -e "   ${YELLOW}🧩 MCP Server (health): $MCP_URL/health${NC}"
+    echo -e "   ${YELLOW}🧩 MCP HTTP Endpoint: $MCP_URL/mcp${NC}"
+    echo -e "   ${YELLOW}📊 Prometheus: $PROMETHEUS_URL${NC}"
+    echo -e "   ${YELLOW}🔍 TempoStack: $TEMPO_URL${NC}"
+    if [ -n "$LOKI_SERVICE" ]; then
+        echo -e "   ${YELLOW}📋 LokiStack: $LOKI_URL${NC}"
+    fi
+    echo -e "   ${YELLOW}🦙 LlamaStack: $LLAMA_STACK_URL${NC}"
+    echo -e "   ${YELLOW}🤖 Llama Model: http://localhost:$LLAMA_MODEL_PORT${NC}"
+    if [ "$START_PLUGIN" = "true" ]; then
+        echo -e "   ${YELLOW}🔌 Plugin Dev Server: http://localhost:$PLUGIN_PORT${NC}"
+        echo -e "   ${YELLOW}📄 Plugin Manifest: http://localhost:$PLUGIN_PORT/plugin-manifest.json${NC}"
+    fi
+    if [ "$START_CONSOLE" = "true" ]; then
+        echo -e "   ${YELLOW}🖥️  OpenShift Console: http://localhost:$CONSOLE_PORT${NC}"
+    fi
+    
+    # Show instructions based on what's running
+    if [ "$START_CONSOLE" = "true" ]; then
+        echo -e "\n${GREEN}🎯 OpenShift Console Plugin ready!${NC}"
+        echo -e "   ${BLUE}Open: http://localhost:$CONSOLE_PORT${NC}"
+        echo -e "   ${BLUE}Navigate to: Observe → AI Observability${NC}"
+    elif [ "$START_PLUGIN" = "true" ]; then
+        echo -e "\n${GREEN}💡 To test with OpenShift Console, run in a new terminal:${NC}"
+        echo -e "   ${BLUE}cd openshift-plugin && yarn run start-console${NC}"
+        echo -e "   ${BLUE}Then open: http://localhost:$CONSOLE_PORT${NC}"
+        echo -e "\n${GREEN}   Or use the -o flag to start everything together:${NC}"
+        echo -e "   ${BLUE}$0 -n $DEFAULT_NAMESPACE -p -o${NC}"
+    else
+        echo -e "\n${GREEN}🎯 Ready to use! Choose your UI:${NC}"
+        echo -e "   ${BLUE}Streamlit UI: http://localhost:$UI_PORT${NC}"
+        if [ "$DEV_MODE" = "true" ]; then
+            echo -e "   ${BLUE}React-UI: http://localhost:$REACT_UI_PORT${NC}"
+        fi
+    fi
+    
+    echo -e "\n${YELLOW}📝 Note: Keep this terminal open to maintain all services${NC}"
+    echo -e "${YELLOW}Press Ctrl+C to stop all services and cleanup${NC}"
+
+    # Keep script running
+    wait
+}
+
+# Run main function
+main "$@"

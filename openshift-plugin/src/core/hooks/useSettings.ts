@@ -10,31 +10,38 @@ export const useSettings = () => {
   };
 
   /**
-   * Hook to automatically dismiss configuration errors when settings are closed
+   * Simple hook to check if AI model is configured
+   * Returns true if model is configured, false otherwise
    */
-  const useConfigurationErrorDismissal = (
-    configError: string | null,
-    setConfigError: (error: string | null) => void
-  ) => {
+  const useConfigurationCheck = () => {
+    const [isConfigured, setIsConfigured] = React.useState<boolean>(false);
+
     React.useEffect(() => {
-      const handleSettingsClosed = () => {
+      const checkConfiguration = () => {
         const config = getSessionConfig();
-        // If model is now configured and we have a config-related error, dismiss it
-        if (config.ai_model && configError?.includes('Please configure an AI model in Settings first')) {
-          setConfigError(null);
-        }
+        setIsConfigured(!!config.ai_model);
       };
 
-      window.addEventListener('settings-closed', handleSettingsClosed);
+      // Check immediately
+      checkConfiguration();
+
+      // Check periodically (every 2 seconds) to catch Settings changes
+      const interval = setInterval(checkConfiguration, 2000);
+
+      // Check when window gains focus (user might have changed settings in another tab)
+      window.addEventListener('focus', checkConfiguration);
 
       return () => {
-        window.removeEventListener('settings-closed', handleSettingsClosed);
+        clearInterval(interval);
+        window.removeEventListener('focus', checkConfiguration);
       };
-    }, [configError, setConfigError]);
+    }, []);
+
+    return isConfigured;
   };
 
   return {
     handleOpenSettings,
-    useConfigurationErrorDismissal,
+    useConfigurationCheck,
   };
 };
