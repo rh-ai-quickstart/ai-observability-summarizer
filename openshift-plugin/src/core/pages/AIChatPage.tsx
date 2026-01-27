@@ -135,12 +135,16 @@ const AIChatPage: React.FC = () => {
     };
   }, [isLoading, chatSettings.enableKeyboardShortcuts]);
 
-  // Check configuration on mount
+  // Check configuration on mount and after browser refresh
   React.useEffect(() => {
     const config = getSessionConfig();
+    console.log('[AIChatPage] Mount/Refresh - checking modelStorage:', config);
+    
     if (!config.ai_model) {
+      console.log('[AIChatPage] No AI model in modelStorage, showing warning');
       setConfigError('Please configure an AI model in Settings first');
     } else {
+      console.log('[AIChatPage] AI model found in modelStorage, clearing any error');
       setConfigError(null);
     }
   }, []);
