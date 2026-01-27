@@ -700,8 +700,7 @@ const CategorySection: React.FC<CategorySectionProps> = ({ categoryKey, category
 
 export const OpenShiftMetricsPage: React.FC = () => {
   const { t } = useTranslation('plugin__openshift-ai-observability');
-  const { handleOpenSettings, useConfigurationCheck } = useSettings();
-  const isAIConfigured = useConfigurationCheck();
+  const { handleOpenSettings } = useSettings();
 
   // Scope and filters
   const [scope, setScope] = React.useState<ScopeType>('cluster_wide');
@@ -724,13 +723,6 @@ export const OpenShiftMetricsPage: React.FC = () => {
   const [loadingAnalysis, setLoadingAnalysis] = React.useState(false);
 
   const [error, setError] = React.useState<string | null>(null);
-
-  // Auto-clear configuration errors when AI model becomes configured
-  React.useEffect(() => {
-    if (isAIConfigured && error?.includes('Please configure an AI model in Settings first')) {
-      setError(null);
-    }
-  }, [isAIConfigured, error]);
 
   // Get categories based on scope
   const categories = scope === 'cluster_wide' ? CLUSTER_WIDE_CATEGORIES : NAMESPACE_SCOPED_CATEGORIES;
@@ -801,14 +793,17 @@ export const OpenShiftMetricsPage: React.FC = () => {
     setError(null);
     
     try {
-      if (!isAIConfigured) {
+      // Check configuration at the moment of click
+      const config = getSessionConfig();
+      console.log('[OpenShift] Analyze clicked - checking current config:', config);
+      
+      if (!config.ai_model) {
         console.log('[OpenShift] No AI model configured, showing error');
         setError('Please configure an AI model in Settings first');
         setLoadingAnalysis(false);
         return;
       }
       
-      const config = getSessionConfig();
       console.log('[OpenShift] AI model configured, proceeding with analysis');
       // Let MCP server resolve provider secret if api_key is not present in session
       const apiKey = (config.api_key as string | undefined) || undefined;

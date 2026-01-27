@@ -48,8 +48,7 @@ const AIChatPage: React.FC = () => {
   const { messages, setMessages, clearHistory, exportToMarkdown } = useChatHistory();
   const { progressMessage, startProgress, stopProgress } = useProgressIndicator();
   const { settings: chatSettings } = useChatSettings();
-  const { handleOpenSettings, useConfigurationCheck } = useSettings();
-  const isAIConfigured = useConfigurationCheck();
+  const { handleOpenSettings } = useSettings();
   const [inputValue, setInputValue] = React.useState('');
   const [isLoading, setIsLoading] = React.useState(false);
   const [configError, setConfigError] = React.useState<string | null>(null);
@@ -136,34 +135,31 @@ const AIChatPage: React.FC = () => {
     };
   }, [isLoading, chatSettings.enableKeyboardShortcuts]);
 
-  // Auto-clear configuration errors when AI model becomes configured
+  // Check configuration on mount
   React.useEffect(() => {
-    if (isAIConfigured && configError?.includes('Please configure an AI model in Settings first')) {
-      setConfigError(null);
-    }
-  }, [isAIConfigured, configError]);
-
-  // Initial configuration check on mount
-  React.useEffect(() => {
-    if (!isAIConfigured) {
+    const config = getSessionConfig();
+    if (!config.ai_model) {
       setConfigError('Please configure an AI model in Settings first');
     } else {
-      // Clear any existing error if model is configured
       setConfigError(null);
     }
-  }, [isAIConfigured]);
+  }, []);
 
   const handleSend = async (messageText?: string) => {
     const textToSend = messageText || inputValue.trim();
     if (!textToSend || isLoading) return;
 
-    // Check configuration
-    if (!isAIConfigured) {
+    // Check configuration at the moment of sending
+    const config = getSessionConfig();
+    console.log('[AIChatPage] Send clicked - checking current config:', config);
+    
+    if (!config.ai_model) {
+      console.log('[AIChatPage] No AI model configured, showing error');
       setConfigError('Please configure an AI model in Settings first');
       return;
     }
-
-    const config = getSessionConfig();
+    
+    console.log('[AIChatPage] AI model configured, proceeding with chat');
 
     // Collapse suggested questions when a question is sent (inline mode only)
     if (messageText && chatSettings.suggestedQuestionsLocation === 'inline') {
