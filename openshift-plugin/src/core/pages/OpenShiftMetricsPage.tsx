@@ -700,7 +700,7 @@ const CategorySection: React.FC<CategorySectionProps> = ({ categoryKey, category
 
 export const OpenShiftMetricsPage: React.FC = () => {
   const { t } = useTranslation('plugin__openshift-ai-observability');
-  const { handleOpenSettings } = useSettings();
+  const { handleOpenSettings, useAIConfigWarningDismissal, AI_CONFIG_WARNING } = useSettings();
 
   // Scope and filters
   const [scope, setScope] = React.useState<ScopeType>('cluster_wide');
@@ -723,6 +723,15 @@ export const OpenShiftMetricsPage: React.FC = () => {
   const [loadingAnalysis, setLoadingAnalysis] = React.useState(false);
 
   const [error, setError] = React.useState<string | null>(null);
+  const [errorType, setErrorType] = React.useState<string | null>(null);
+
+  // Auto-dismiss AI configuration warnings when settings are closed
+  useAIConfigWarningDismissal(errorType, (warning) => {
+    if (warning === null && errorType === AI_CONFIG_WARNING) {
+      setError(null);
+      setErrorType(null);
+    }
+  });
 
   // Get categories based on scope
   const categories = scope === 'cluster_wide' ? CLUSTER_WIDE_CATEGORIES : NAMESPACE_SCOPED_CATEGORIES;
@@ -738,7 +747,7 @@ export const OpenShiftMetricsPage: React.FC = () => {
           setSelectedNamespace(data[0]);
         }
       } catch (err) {
-        console.error('[OpenShift] Failed to load namespaces:', err);
+        console.error('Failed to load namespaces:', err);
         setError(err instanceof Error ? err.message : 'Failed to load namespaces');
       } finally {
         setLoadingNamespaces(false);
@@ -779,7 +788,7 @@ export const OpenShiftMetricsPage: React.FC = () => {
       }
       setAlerts(alertsData);
     } catch (err) {
-      console.error('[OpenShift] Failed to load metrics:', err);
+      console.error('Failed to load metrics:', err);
       setError(err instanceof Error ? err.message : 'Failed to load metrics');
       setMetricsData({});
     } finally {
@@ -791,30 +800,20 @@ export const OpenShiftMetricsPage: React.FC = () => {
     setLoadingAnalysis(true);
     setAnalysis(null);
     setError(null);
+    setErrorType(null);
     
     try {
       // Check configuration at the moment of click
       const config = getSessionConfig();
-      console.log('[OpenShift] Analyze clicked - checking current config:', config);
       
       if (!config.ai_model) {
-        console.log('[OpenShift] No AI model configured, showing error');
         setError('Please configure an AI model in Settings first');
+        setErrorType(AI_CONFIG_WARNING);
         setLoadingAnalysis(false);
         return;
       }
-      
-      console.log('[OpenShift] AI model configured, proceeding with analysis');
       // Let MCP server resolve provider secret if api_key is not present in session
       const apiKey = (config.api_key as string | undefined) || undefined;
-      
-      console.log('[OpenShift] Calling analyzeOpenShift:', { 
-        category: selectedCategory, 
-        scope, 
-        namespace: selectedNamespace,
-        aiModel: config.ai_model,
-        timeRange 
-      });
       
       const result = await analyzeOpenShift(
         selectedCategory,
@@ -825,15 +824,13 @@ export const OpenShiftMetricsPage: React.FC = () => {
         timeRange
       );
       
-      console.log('[OpenShift] Analysis result:', result);
-      
       if (result && result.summary) {
         setAnalysis(result);
       } else {
         setError('Analysis returned empty response. Check browser console for details.');
       }
     } catch (err) {
-      console.error('[OpenShift] Analysis failed:', err);
+      console.error('Analysis failed:', err);
       setError(`Analysis failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setLoadingAnalysis(false);

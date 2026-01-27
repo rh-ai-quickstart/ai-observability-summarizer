@@ -112,7 +112,6 @@ async function injectDevCredentials(toolName: string, args: Record<string, unkno
 
   // Inject the key if provider detected and key available
   if (provider && devCreds[provider]?.apiKey) {
-    console.log(`[DevMode] Auto-injecting API key for ${provider}`);
     return {
       ...args,
       api_key: devCreds[provider].apiKey,
@@ -440,7 +439,6 @@ export async function fetchOpenShiftMetrics(
   namespace?: string
 ): Promise<OpenShiftMetricsDataResponse | null> {
   try {
-    console.log('[OpenShift] Fetching metrics:', { category, scope, timeRange, namespace });
     const text = await callMcpToolText('fetch_openshift_metrics_data', {
       metric_category: category,
       scope,
@@ -449,10 +447,9 @@ export async function fetchOpenShiftMetrics(
     });
 
     const data = JSON.parse(text) as OpenShiftMetricsDataResponse;
-    console.log('[OpenShift] Metrics received:', Object.keys(data.metrics || {}).length, 'metrics');
     return data;
   } catch (error) {
-    console.error('[OpenShift] Failed to fetch metrics:', error);
+    console.error('Failed to fetch OpenShift metrics:', error);
     return null;
   }
 }
@@ -463,7 +460,6 @@ export async function fetchOpenShiftMetrics(
  */
 export async function getAlerts(_namespace?: string): Promise<AlertInfo[]> {
   // TODO: Implement get_alerts MCP tool to fetch from Prometheus AlertManager
-  console.log('[Alerts] get_alerts tool not yet implemented, returning empty');
   return [];
 }
 
@@ -512,7 +508,6 @@ export async function analyzeOpenShift(
   timeRange?: string
 ): Promise<OpenShiftAnalysisResult> {
   try {
-    console.log('[OpenShift] Analyzing:', { category, scope, namespace, summarizeModelId });
     const text = await callMcpToolText('analyze_openshift', {
       metric_category: category,
       scope,
@@ -521,8 +516,6 @@ export async function analyzeOpenShift(
       api_key: apiKey || undefined,
       time_range: timeRange || '1h',
     });
-
-    console.log('[OpenShift] Analysis response length:', text.length);
 
     // The response might contain STRUCTURED_DATA at the end, extract just the summary
     let summary = text;
@@ -621,10 +614,6 @@ export async function chat(
     // The backend returns a JSON response with {response, progress_log, model, iterations}
     try {
       const parsed = JSON.parse(text);
-      console.log('[Chat] Parsed response:', {
-        hasResponse: !!parsed?.response,
-        progressLogEntries: parsed?.progress_log?.length || 0
-      });
 
       if (parsed && typeof parsed.response === 'string') {
         return {

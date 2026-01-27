@@ -201,6 +201,9 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
       // Notify parent component
       onSave?.(modelName);
 
+      // Dispatch event that pages can listen for
+      window.dispatchEvent(new CustomEvent('settings-closed'));
+
       // Keep modal open; user can close manually
     } catch (error) {
       setState(prev => ({

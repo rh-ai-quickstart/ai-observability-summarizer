@@ -17,7 +17,6 @@ class AISecretManager {
     // DEV MODE: Check browser cache
     if (isDevMode()) {
       const hasKey = hasDevCredential(provider);
-      console.log(`[SecretManager] checkProviderSecret - devMode, provider: ${provider}, hasKey: ${hasKey}`);
       return {
         exists: hasKey,
         secretName: `dev-${provider}-credentials`,
@@ -70,10 +69,8 @@ class AISecretManager {
 
     // DEV MODE: Save to browser cache
     const devMode = isDevMode();
-    console.log(`[SecretManager] saveProviderSecret - devMode: ${devMode}`);
 
     if (devMode) {
-      console.log(`[SecretManager] Saving ${config.provider} API key to browser session`);
       saveDevCredential(config.provider, config.apiKey, config.modelId);
       return `dev-${config.provider}-credentials`;
     }
@@ -215,8 +212,6 @@ class AISecretManager {
 
     // DEV MODE: Clear from browser cache
     if (isDevMode()) {
-      console.log(`[SecretManager] Clearing cached credential: ${secretName}`);
-
       // Parse provider from secret name (e.g., "dev-openai-credentials" -> "openai")
       const match = secretName.match(/dev-(\w+)-credentials/);
       if (match) {
@@ -224,7 +219,6 @@ class AISecretManager {
         const creds = JSON.parse(sessionStorage.getItem('ai_observability_dev_credentials') || '{}');
         delete creds[provider];
         sessionStorage.setItem('ai_observability_dev_credentials', JSON.stringify(creds));
-        console.log(`[SecretManager] Cleared ${provider} from browser cache`);
       }
       return;
     }

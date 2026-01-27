@@ -56,7 +56,6 @@ export async function fetchRuntimeConfig(): Promise<RuntimeConfig> {
   configPromise = (async () => {
     try {
       const configUrl = getConfigUrl();
-      console.log(`[RuntimeConfig] Fetching from MCP server: ${configUrl}`);
 
       const response = await fetch(configUrl, {
         method: 'GET',
@@ -66,17 +65,13 @@ export async function fetchRuntimeConfig(): Promise<RuntimeConfig> {
 
       if (response.ok) {
         const config: RuntimeConfig = await response.json();
-        console.log(`[RuntimeConfig] Successfully loaded from MCP server:`, config);
         return config;
-      } else {
-        console.warn(`[RuntimeConfig] Failed to fetch from MCP server: ${response.status}`);
       }
 
       // Fallback to defaults if fetch failed
-      console.warn('[RuntimeConfig] Could not fetch config, using defaults');
       return { devMode: false };
     } catch (error) {
-      console.error('[RuntimeConfig] Error fetching config:', error);
+      console.error('Error fetching config:', error);
       return { devMode: false };
     }
   })();
@@ -111,12 +106,4 @@ export function isDevMode(): boolean {
  */
 export async function initializeRuntimeConfig(): Promise<void> {
   await fetchRuntimeConfig();
-
-  const config = getRuntimeConfig();
-  if (config.devMode) {
-    console.log('[DevMode] ENABLED - API keys will be cached in browser session');
-    console.log('[DevMode] Keys will not be saved to Kubernetes secrets');
-  } else {
-    console.log('[DevMode] DISABLED - API keys will be saved to Kubernetes secrets');
-  }
 }

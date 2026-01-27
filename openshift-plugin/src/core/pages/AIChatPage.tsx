@@ -48,10 +48,11 @@ const AIChatPage: React.FC = () => {
   const { messages, setMessages, clearHistory, exportToMarkdown } = useChatHistory();
   const { progressMessage, startProgress, stopProgress } = useProgressIndicator();
   const { settings: chatSettings } = useChatSettings();
-  const { handleOpenSettings } = useSettings();
+  const { handleOpenSettings, useAIConfigWarningDismissal, AI_CONFIG_WARNING } = useSettings();
   const [inputValue, setInputValue] = React.useState('');
   const [isLoading, setIsLoading] = React.useState(false);
   const [configError, setConfigError] = React.useState<string | null>(null);
+  const [configErrorType, setConfigErrorType] = React.useState<string | null>(null);
   const [replayMessage, setReplayMessage] = React.useState<string>('');
   const [questionsExpanded, setQuestionsExpanded] = React.useState(chatSettings.suggestedQuestionsExpanded);
   const [collapsedMessages, setCollapsedMessages] = React.useState<Set<string>>(new Set());
@@ -135,17 +136,23 @@ const AIChatPage: React.FC = () => {
     };
   }, [isLoading, chatSettings.enableKeyboardShortcuts]);
 
+  // Auto-dismiss AI configuration warnings when settings are closed
+  useAIConfigWarningDismissal(configErrorType, (warning) => {
+    if (warning === null && configErrorType === AI_CONFIG_WARNING) {
+      setConfigError(null);
+      setConfigErrorType(null);
+    }
+  });
+
   // Check configuration on mount and after browser refresh
   React.useEffect(() => {
     const config = getSessionConfig();
-    console.log('[AIChatPage] Mount/Refresh - checking modelStorage:', config);
-    
     if (!config.ai_model) {
-      console.log('[AIChatPage] No AI model in modelStorage, showing warning');
       setConfigError('Please configure an AI model in Settings first');
+      setConfigErrorType(AI_CONFIG_WARNING);
     } else {
-      console.log('[AIChatPage] AI model found in modelStorage, clearing any error');
       setConfigError(null);
+      setConfigErrorType(null);
     }
   }, []);
 
@@ -155,15 +162,12 @@ const AIChatPage: React.FC = () => {
 
     // Check configuration at the moment of sending
     const config = getSessionConfig();
-    console.log('[AIChatPage] Send clicked - checking current config:', config);
     
     if (!config.ai_model) {
-      console.log('[AIChatPage] No AI model configured, showing error');
       setConfigError('Please configure an AI model in Settings first');
+      setConfigErrorType(AI_CONFIG_WARNING);
       return;
     }
-    
-    console.log('[AIChatPage] AI model configured, proceeding with chat');
 
     // Collapse suggested questions when a question is sent (inline mode only)
     if (messageText && chatSettings.suggestedQuestionsLocation === 'inline') {
@@ -216,8 +220,6 @@ const AIChatPage: React.FC = () => {
 
       // Replay progress log entries (show what the chatbot actually did)
       if (progressLog && progressLog.length > 0) {
-        console.log(`[Chat] Replaying ${progressLog.length} progress entries`);
-
         for (const entry of progressLog) {
           if (!isMountedRef.current) return;
           setReplayMessage(entry.message);

@@ -39,7 +39,6 @@ export function saveDevCredential(provider: string, apiKey: string, modelId?: st
   };
 
   sessionStorage.setItem(DEV_CREDENTIALS_KEY, JSON.stringify(creds));
-  console.log(`[DevMode] Cached ${provider} API key in browser session`);
 }
 
 /**
@@ -83,7 +82,6 @@ export function hasDevCredential(provider: string): boolean {
  */
 export function clearDevCredentials(): void {
   sessionStorage.removeItem(DEV_CREDENTIALS_KEY);
-  console.log('[DevMode] Cleared all cached credentials');
 }
 
 /**
