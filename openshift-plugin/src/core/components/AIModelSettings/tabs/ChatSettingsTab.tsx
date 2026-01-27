@@ -193,12 +193,9 @@ export const ChatSettingsTab: React.FC<ChatSettingsTabProps> = ({
           />
           <FormHelperText>
             <HelperText>
-              <HelperTextItem>Number of previous messages to send for context (0-20). Higher values provide more context but use more tokens.</HelperTextItem>
+              <HelperTextItem>Number of previous messages to send for context (0-20). Higher values provide more context but use more tokens. Set to 0 to disable context (each message is independent).</HelperTextItem>
             </HelperText>
           </FormHelperText>
-          <Text component={TextVariants.small} style={{ display: 'block', marginTop: '8px', color: 'var(--pf-v5-global--Color--200)' }}>
-            Number of previous messages to send for context (0-20). Higher values provide more context but use more tokens. Set to 0 to disable context (each message is independent).
-          </Text>
         </FormGroup>
 
         <Divider style={{ margin: '24px 0' }} />
@@ -267,12 +264,9 @@ export const ChatSettingsTab: React.FC<ChatSettingsTabProps> = ({
           />
           <FormHelperText>
             <HelperText>
-              <HelperTextItem>Maximum messages to keep in browser storage (10-100)</HelperTextItem>
+              <HelperTextItem>Maximum messages to keep in browser storage (10-100). Older messages are removed to prevent storage issues.</HelperTextItem>
             </HelperText>
           </FormHelperText>
-          <Text component={TextVariants.small} style={{ display: 'block', marginTop: '8px', color: 'var(--pf-v5-global--Color--200)' }}>
-            Maximum messages to keep in browser storage (10-100). Older messages are removed to prevent storage issues.
-          </Text>
         </FormGroup>
 
         <Divider style={{ margin: '24px 0' }} />
