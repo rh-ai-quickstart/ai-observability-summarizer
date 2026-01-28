@@ -44,6 +44,8 @@ import {
   ChartLineIcon,
   DownloadIcon,
 } from '@patternfly/react-icons';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { AlertList } from '../components/AlertList';
 import { MetricChartModal } from '../components/MetricChartModal';
 import {
@@ -142,26 +144,23 @@ const CLUSTER_WIDE_CATEGORIES = {
       { key: 'HPA Desired', label: 'HPA Desired', unit: '', description: 'Target replica count' },
     ]
   },
-};
-
-const NAMESPACE_SCOPED_CATEGORIES = {
   'Pod & Container Metrics': {
     icon: CubesIcon,
     description: 'Pod and container resource usage',
     metrics: [
-      { key: 'Pod CPU Usage (cores)', label: 'CPU', unit: 'cores', description: 'Current namespace usage' },
+      { key: 'Pod CPU Usage (cores)', label: 'CPU', unit: 'cores', description: 'Current CPU usage' },
       { key: 'CPU Throttled (%)', label: 'Throttled', unit: '%', description: 'Containers hitting limits' },
       { key: 'Pod Memory (GB)', label: 'Memory', unit: 'GB', description: 'Active memory usage' },
       { key: 'RSS Memory (GB)', label: 'RSS', unit: 'GB', description: 'Physical memory used' },
       { key: 'Container Restarts', label: 'Restarts', unit: '', description: 'Container restart count' },
-      { key: 'Pods Ready', label: 'Ready', unit: '', description: 'Running in namespace' },
+      { key: 'Pods Ready', label: 'Ready', unit: '', description: 'Running pods' },
       { key: 'Pods Not Ready', label: 'Not Ready', unit: '', description: 'Need investigation' },
       { key: 'Container OOM Killed', label: 'OOM Killed', unit: '', description: 'Memory limit exceeded' },
     ]
   },
   'Network Metrics': {
     icon: NetworkIcon,
-    description: 'Pod network I/O metrics',
+    description: 'Network I/O metrics',
     metrics: [
       { key: 'Network RX (MB/s)', label: 'RX', unit: 'MB/s', description: 'Incoming data rate' },
       { key: 'Network TX (MB/s)', label: 'TX', unit: 'MB/s', description: 'Outgoing data rate' },
@@ -191,7 +190,7 @@ const NAMESPACE_SCOPED_CATEGORIES = {
     icon: ServerIcon,
     description: 'Services and ingress metrics',
     metrics: [
-      { key: 'Services Running', label: 'Services', unit: '', description: 'Active in namespace' },
+      { key: 'Services Running', label: 'Services', unit: '', description: 'Active services' },
       { key: 'Service Endpoints', label: 'Endpoints', unit: '', description: 'Backend pod targets' },
       { key: 'Ingress Rules', label: 'Ingresses', unit: '', description: 'HTTP routing rules' },
       { key: 'Network Policies', label: 'NetPolicies', unit: '', description: 'Traffic access controls' },
@@ -212,6 +211,9 @@ const NAMESPACE_SCOPED_CATEGORIES = {
     ]
   },
 };
+
+// All categories are now available for both cluster-wide and namespace-scoped views
+// The scope only affects data aggregation, not which categories are shown
 
 const TIME_RANGE_OPTIONS = [
   { value: '15m', label: '15 minutes' },
@@ -717,6 +719,9 @@ export const OpenShiftMetricsPage: React.FC = () => {
   const [loadingNamespaces, setLoadingNamespaces] = React.useState(true);
   const [loadingMetrics, setLoadingMetrics] = React.useState(false);
   const [loadingAnalysis, setLoadingAnalysis] = React.useState(false);
+  
+  // Analysis cancellation
+  const [analysisController, setAnalysisController] = React.useState<AbortController | null>(null);
 
   const [error, setError] = React.useState<string | null>(null);
   const [errorType, setErrorType] = React.useState<string | null>(null);
@@ -724,8 +729,8 @@ export const OpenShiftMetricsPage: React.FC = () => {
   // Auto-dismiss AI configuration warnings when settings are closed
   useAIConfigWarningDismissal(errorType, setError, setErrorType);
 
-  // Get categories based on scope
-  const categories = scope === 'cluster_wide' ? CLUSTER_WIDE_CATEGORIES : NAMESPACE_SCOPED_CATEGORIES;
+  // All categories are now available for both scopes
+  const categories = CLUSTER_WIDE_CATEGORIES;
   const categoryNames = Object.keys(categories);
 
   React.useEffect(() => {
@@ -747,13 +752,13 @@ export const OpenShiftMetricsPage: React.FC = () => {
     loadNamespaces();
   }, []);
 
-  // Update category when scope changes
+  // Ensure selected category is valid (categories no longer change with scope)
   React.useEffect(() => {
-    const newCategories = Object.keys(scope === 'cluster_wide' ? CLUSTER_WIDE_CATEGORIES : NAMESPACE_SCOPED_CATEGORIES);
-    if (!newCategories.includes(selectedCategory)) {
-      setSelectedCategory(newCategories[0]);
+    const categoryNames = Object.keys(CLUSTER_WIDE_CATEGORIES);
+    if (!categoryNames.includes(selectedCategory)) {
+      setSelectedCategory(categoryNames[0]);
     }
-  }, [scope, selectedCategory]);
+  }, [selectedCategory]);
 
   const loadMetrics = React.useCallback(async () => {
     setLoadingMetrics(true);
@@ -788,6 +793,15 @@ export const OpenShiftMetricsPage: React.FC = () => {
   }, [scope, selectedNamespace, loadMetrics]);
 
   const handleAnalyze = async () => {
+    // Cancel any existing analysis
+    if (analysisController) {
+      analysisController.abort();
+    }
+    
+    // Create new abort controller
+    const controller = new AbortController();
+    setAnalysisController(controller);
+    
     setLoadingAnalysis(true);
     setAnalysis(null);
     setError(null);
@@ -801,6 +815,7 @@ export const OpenShiftMetricsPage: React.FC = () => {
         setError('Please configure an AI model in Settings first');
         setErrorType(AI_CONFIG_WARNING);
         setLoadingAnalysis(false);
+        setAnalysisController(null);
         return;
       }
       // Let MCP server resolve provider secret if api_key is not present in session
@@ -815,17 +830,56 @@ export const OpenShiftMetricsPage: React.FC = () => {
         timeRange
       );
       
+      // Check if request was cancelled
+      if (controller.signal.aborted) {
+        return;
+      }
+      
       if (result && result.summary) {
+        // Count questions in the analysis
+        const questionMatches = result.summary.match(/^\d+\.\s/gm) || [];
+        const questionCount = questionMatches.length;
+        
+        console.log('[OpenShift] AI Analysis result:', {
+          category: result.category,
+          scope: result.scope,
+          namespace: result.namespace,
+          summaryLength: result.summary?.length,
+          questionCount: questionCount,
+          questions: questionMatches,
+          summaryPreview: result.summary?.substring(0, 200) + '...'
+        });
+        
+        // Also log the full summary for debugging
+        console.log('[OpenShift] Full analysis summary:', result.summary);
         setAnalysis(result);
       } else {
+        console.error('[OpenShift] Analysis returned empty or invalid response:', result);
         setError('Analysis returned empty response. Check browser console for details.');
       }
     } catch (err) {
+      // Don't show error if request was cancelled
+      if (err instanceof Error && err.name === 'AbortError') {
+        return;
+      }
+      
       console.error('[OpenShift] Analysis failed:', err);
       setError(`Analysis failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
-      setLoadingAnalysis(false);
+      if (!controller.signal.aborted) {
+        setLoadingAnalysis(false);
+        setAnalysisController(null);
+      }
     }
+  };
+
+  const handleCancelAnalysis = () => {
+    if (analysisController) {
+      analysisController.abort();
+      setAnalysisController(null);
+    }
+    setLoadingAnalysis(false);
+    setAnalysis(null);
   };
 
   const handleScopeChange = (newScope: ScopeType) => {
@@ -846,7 +900,7 @@ export const OpenShiftMetricsPage: React.FC = () => {
   const selectedMetricData = React.useMemo(() => {
     if (!selectedMetricForChart) return null;
     
-    const categories = scope === 'cluster_wide' ? CLUSTER_WIDE_CATEGORIES : NAMESPACE_SCOPED_CATEGORIES;
+    const categories = CLUSTER_WIDE_CATEGORIES;
     let metricDef = null;
 
     for (const [, categoryDef] of Object.entries(categories)) {
@@ -1176,6 +1230,15 @@ ${analysis?.summary || 'No analysis available. Click "Analyze with AI" to genera
                 <FlexItem>
                   <OutlinedLightbulbIcon style={{ color: '#7c3aed', marginRight: '8px' }} />
                   AI Analysis
+                  {analysis && (
+                    <Text component={TextVariants.small} style={{ 
+                      color: '#7c3aed', 
+                      marginLeft: '8px',
+                      fontWeight: 'normal'
+                    }}>
+                      • {analysis.category} ({analysis.scope === 'cluster_wide' ? 'Cluster-wide' : analysis.namespace || 'Namespace'})
+                    </Text>
+                  )}
                 </FlexItem>
                 <FlexItem align={{ default: 'alignRight' }}>
                   <Button variant="plain" onClick={() => setAnalysis(null)}>✕</Button>
@@ -1190,11 +1253,28 @@ ${analysis?.summary || 'No analysis available. Click "Analyze with AI" to genera
                     <Text component={TextVariants.p} style={{ marginTop: '12px', color: 'var(--pf-v5-global--Color--200)' }}>
                       Analyzing {selectedCategory}...
                     </Text>
+                    <Button 
+                      variant="link" 
+                      onClick={handleCancelAnalysis}
+                      style={{ marginTop: '16px', color: 'var(--pf-v5-global--danger-color--100)' }}
+                    >
+                      Cancel Analysis
+                    </Button>
                   </div>
                 </Bullseye>
               ) : analysis ? (
-                <div style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', margin: 0, lineHeight: 1.6 }}>
-                  {analysis.summary}
+                <div style={{ fontFamily: 'inherit', margin: 0, lineHeight: 1.6 }}>
+                  <ReactMarkdown 
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                      p: ({ children }) => <p style={{ marginBottom: '16px' }}>{children}</p>,
+                      h1: ({ children }) => <h1 style={{ marginBottom: '12px', marginTop: '24px' }}>{children}</h1>,
+                      h2: ({ children }) => <h2 style={{ marginBottom: '12px', marginTop: '24px' }}>{children}</h2>,
+                      h3: ({ children }) => <h3 style={{ marginBottom: '8px', marginTop: '20px' }}>{children}</h3>,
+                    }}
+                  >
+                    {analysis.summary}
+                  </ReactMarkdown>
                 </div>
               ) : null}
             </CardBody>
