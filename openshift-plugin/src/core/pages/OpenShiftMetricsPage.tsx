@@ -238,9 +238,10 @@ interface MetricCardProps {
   timeSeries?: TimeSeriesPoint[];
   metricKey: string;
   onViewChart?: (metricKey: string) => void;
+  icon?: React.ComponentType;
 }
 
-const MetricCard: React.FC<MetricCardProps> = ({ label, value, unit, description, timeSeries, metricKey, onViewChart }) => {
+const MetricCard: React.FC<MetricCardProps> = ({ label, value, unit, description, timeSeries, metricKey, onViewChart, icon }) => {
   const formatValue = (val: number | null): string => {
     if (val === null || val === undefined || isNaN(val)) return '—';
     if (val >= 1000000000) return `${(val / 1000000000).toFixed(2)}B`;
@@ -352,6 +353,17 @@ const MetricCard: React.FC<MetricCardProps> = ({ label, value, unit, description
               <FlexItem>
                 {renderSparkline()}
               </FlexItem>
+              {icon && (
+                <FlexItem>
+                  {React.createElement(icon, { 
+                    style: { 
+                      color: 'var(--pf-v5-global--primary-color--100)', 
+                      fontSize: '20px', 
+                      marginLeft: '8px' 
+                    } 
+                  })}
+                </FlexItem>
+              )}
               {trend && trend.direction !== 'flat' && (
                 <FlexItem>
                   <span style={{
@@ -628,68 +640,14 @@ const CategorySection: React.FC<CategorySectionProps> = ({ categoryKey, category
           {/* Conditional GPU Summary Card for Fleet Overview */}
           {hasGPUs && gpuSummaryData && (
             <GridItem key="gpu-summary" md={2} sm={4}>
-              <Card isCompact style={{ 
-                height: '100%',
-                background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)', 
-                border: '1px solid #0891b2' 
-              }}>
-                <CardBody style={{ padding: '12px' }}>
-                  <Flex justifyContent={{ default: 'justifyContentSpaceBetween' }} alignItems={{ default: 'alignItemsFlexStart' }}>
-                    <FlexItem flex={{ default: 'flex_1' }}>
-                      <TextContent>
-                        <Text component={TextVariants.small} style={{ color: 'var(--pf-v5-global--Color--200)', marginBottom: '4px' }}>
-                          GPU Fleet
-                        </Text>
-                      </TextContent>
-                      <Flex alignItems={{ default: 'alignItemsCenter' }}>
-                        <FlexItem>
-                          <div>
-                            <Text
-                              component={TextVariants.h2}
-                              style={{
-                                color: '#0891b2',
-                                marginBottom: '2px',
-                                fontSize: '1.5rem',
-                                fontWeight: 700
-                              }}
-                            >
-                              {gpuCount > 0 ? `${gpuSummaryData.count} GPUs` : `~${gpuSummaryData.count} GPUs`}
-                            </Text>
-                            <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
-                              {gpuSummaryData.utilization !== null && (
-                                <Text component={TextVariants.small} style={{ 
-                                  color: gpuSummaryData.utilization > 90 ? '#dc2626' : 
-                                         gpuSummaryData.utilization > 70 ? '#ea580c' : '#059669',
-                                  fontSize: '0.75rem',
-                                  fontWeight: 600
-                                }}>
-                                  {formatValue(gpuSummaryData.utilization)}%
-                                </Text>
-                              )}
-                              {gpuSummaryData.temperature !== null && (
-                                <Text component={TextVariants.small} style={{ 
-                                  color: gpuSummaryData.temperature > 85 ? '#dc2626' : 
-                                         gpuSummaryData.temperature > 75 ? '#ea580c' : '#059669',
-                                  fontSize: '0.75rem',
-                                  fontWeight: 600
-                                }}>
-                                  {formatValue(gpuSummaryData.temperature)}°C
-                                </Text>
-                              )}
-                            </div>
-                          </div>
-                        </FlexItem>
-                        <FlexItem>
-                          <CubesIcon style={{ color: '#0891b2', fontSize: '24px', marginLeft: '8px' }} />
-                        </FlexItem>
-                      </Flex>
-                      <Text component={TextVariants.small} style={{ color: 'var(--pf-v5-global--Color--200)', fontSize: '0.75rem', marginTop: '4px' }}>
-                        {gpuCount > 0 ? 'AI/ML accelerators available' : 'GPU metrics detected'}
-                      </Text>
-                    </FlexItem>
-                  </Flex>
-                </CardBody>
-              </Card>
+              <MetricCard
+                label="GPU Fleet"
+                value={gpuSummaryData.count}
+                unit="GPUs"
+                description={gpuCount > 0 ? 'AI/ML accelerators available' : 'GPU metrics detected'}
+                metricKey="gpu-fleet-summary"
+                icon={CubesIcon}
+              />
             </GridItem>
           )}
         </Grid>
@@ -726,12 +684,7 @@ export const OpenShiftMetricsPage: React.FC = () => {
   const [errorType, setErrorType] = React.useState<string | null>(null);
 
   // Auto-dismiss AI configuration warnings when settings are closed
-  useAIConfigWarningDismissal(errorType, (warning) => {
-    if (warning === null && errorType === AI_CONFIG_WARNING) {
-      setError(null);
-      setErrorType(null);
-    }
-  });
+  useAIConfigWarningDismissal(errorType, setError, setErrorType);
 
   // Get categories based on scope
   const categories = scope === 'cluster_wide' ? CLUSTER_WIDE_CATEGORIES : NAMESPACE_SCOPED_CATEGORIES;
@@ -764,13 +717,7 @@ export const OpenShiftMetricsPage: React.FC = () => {
     }
   }, [scope, selectedCategory]);
 
-  // Load metrics when filters change
-  React.useEffect(() => {
-    if (scope === 'namespace_scoped' && !selectedNamespace) return;
-    loadMetrics();
-  }, [scope, selectedNamespace, selectedCategory, timeRange]);
-
-  const loadMetrics = async () => {
+  const loadMetrics = React.useCallback(async () => {
     setLoadingMetrics(true);
     setError(null);
     try {
@@ -794,7 +741,13 @@ export const OpenShiftMetricsPage: React.FC = () => {
     } finally {
       setLoadingMetrics(false);
     }
-  };
+  }, [scope, selectedNamespace, selectedCategory, timeRange]);
+
+  // Load metrics when filters change
+  React.useEffect(() => {
+    if (scope === 'namespace_scoped' && !selectedNamespace) return;
+    loadMetrics();
+  }, [scope, selectedNamespace, loadMetrics]);
 
   const handleAnalyze = async () => {
     setLoadingAnalysis(true);
@@ -852,7 +805,9 @@ export const OpenShiftMetricsPage: React.FC = () => {
   };
 
   // Prepare metric data for chart modal
-  const selectedMetricData = selectedMetricForChart ? (() => {
+  const selectedMetricData = React.useMemo(() => {
+    if (!selectedMetricForChart) return null;
+    
     const categories = scope === 'cluster_wide' ? CLUSTER_WIDE_CATEGORIES : NAMESPACE_SCOPED_CATEGORIES;
     let metricDef = null;
 
@@ -876,13 +831,14 @@ export const OpenShiftMetricsPage: React.FC = () => {
       };
     }
     return null;
-  })() : null;
+  }, [selectedMetricForChart, metricsData, scope]);
 
   const downloadMarkdown = () => {
-    const timestamp = new Date().toISOString();
-    const timeRangeLabel = TIME_RANGE_OPTIONS.find(o => o.value === timeRange)?.label || timeRange;
+    try {
+      const timestamp = new Date().toISOString();
+      const timeRangeLabel = TIME_RANGE_OPTIONS.find(o => o.value === timeRange)?.label || timeRange;
 
-    const content = `# OpenShift Metrics Report
+      const content = `# OpenShift Metrics Report
 
 **Category**: ${selectedCategory}
 **Scope**: ${scope === 'cluster_wide' ? 'Cluster-wide' : selectedNamespace}
@@ -906,45 +862,54 @@ ${analysis?.summary || 'No analysis available. Click "Analyze with AI" to genera
 *Generated by OpenShift AI Observability Plugin*
 `;
 
-    const blob = new Blob([content], { type: 'text/markdown' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `openshift-metrics-${selectedCategory.replace(/\s+/g, '_')}-${Date.now()}.md`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+      const blob = new Blob([content], { type: 'text/markdown' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `openshift-metrics-${selectedCategory.replace(/\s+/g, '_')}-${Date.now()}.md`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Failed to download markdown report:', error);
+      setError('Failed to download report. Please try again.');
+    }
   };
 
   const downloadCSV = () => {
-    const categoryDef = categories[selectedCategory as keyof typeof categories];
-    const headers = ['Metric', 'Latest Value', 'Unit', 'Description'];
-    const rows = categoryDef?.metrics.map((metricDef) => {
-      const metricData = metricsData[metricDef.key];
-      return [
-        metricDef.key,
-        metricData?.latest_value?.toString() || 'N/A',
-        metricDef.unit || '',
-        metricDef.description || ''
-      ];
-    }) || [];
+    try {
+      const categoryDef = categories[selectedCategory as keyof typeof categories];
+      const headers = ['Metric', 'Latest Value', 'Unit', 'Description'];
+      const rows = categoryDef?.metrics.map((metricDef) => {
+        const metricData = metricsData[metricDef.key];
+        return [
+          metricDef.key,
+          metricData?.latest_value?.toString() || 'N/A',
+          metricDef.unit || '',
+          metricDef.description || ''
+        ];
+      }) || [];
 
-    const csv = [headers, ...rows].map(row => row.map(cell => {
-      // Escape double quotes and wrap in quotes if contains comma
-      const escaped = cell.replace(/"/g, '""');
-      return escaped.includes(',') ? `"${escaped}"` : escaped;
-    }).join(',')).join('\n');
+      const csv = [headers, ...rows].map(row => row.map(cell => {
+        // Escape double quotes and wrap in quotes if contains comma
+        const escaped = cell.replace(/"/g, '""');
+        return escaped.includes(',') ? `"${escaped}"` : escaped;
+      }).join(',')).join('\n');
 
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `openshift-metrics-${selectedCategory.replace(/\s+/g, '_')}-${Date.now()}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `openshift-metrics-${selectedCategory.replace(/\s+/g, '_')}-${Date.now()}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Failed to download CSV:', error);
+      setError('Failed to download CSV. Please try again.');
+    }
   };
 
   if (loadingNamespaces) {

@@ -137,12 +137,7 @@ const AIChatPage: React.FC = () => {
   }, [isLoading, chatSettings.enableKeyboardShortcuts]);
 
   // Auto-dismiss AI configuration warnings when settings are closed
-  useAIConfigWarningDismissal(configErrorType, (warning) => {
-    if (warning === null && configErrorType === AI_CONFIG_WARNING) {
-      setConfigError(null);
-      setConfigErrorType(null);
-    }
-  });
+  useAIConfigWarningDismissal(configErrorType, setConfigError, setConfigErrorType);
 
   // Check configuration on mount and after browser refresh
   React.useEffect(() => {

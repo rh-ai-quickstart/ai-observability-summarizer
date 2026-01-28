@@ -41,8 +41,6 @@ export interface MetricChartModalProps {
 }
 
 export const MetricChartModal: React.FC<MetricChartModalProps> = ({ metric, isOpen, onClose }) => {
-  const chartRef = React.useRef<HTMLDivElement>(null);
-
   if (!metric) {
     return null;
   }
@@ -86,32 +84,48 @@ export const MetricChartModal: React.FC<MetricChartModalProps> = ({ metric, isOp
   const latest = values[values.length - 1];
 
   // Calculate Y-axis domain with padding
-  const yMin = min - (max - min) * 0.1;
-  const yMax = max + (max - min) * 0.1;
+  // Handle edge case where all values are the same
+  const padding = max === min ? Math.abs(max) * 0.1 || 1 : (max - min) * 0.1;
+  const yMin = min - padding;
+  const yMax = max + padding;
 
   // Calculate X-axis domain from actual timestamps
   const timestamps = metric.timeSeries.map(p => new Date(p.timestamp).getTime());
   const xMin = Math.min(...timestamps);
   const xMax = Math.max(...timestamps);
 
-  const handleDownloadChart = () => {
-    // Create CSV content
-    const csvContent = [
-      ['Timestamp', 'Value'].join(','),
-      ...metric.timeSeries.map(point =>
-        `${point.timestamp},${point.value}`
-      )
-    ].join('\n');
+  const escapeCsvValue = (val: string | number): string => {
+    const str = String(val);
+    const escaped = str.replace(/"/g, '""');
+    // Wrap in quotes if contains comma, quote, or newline
+    return str.includes(',') || str.includes('"') || str.includes('\n') 
+      ? `"${escaped}"` 
+      : str;
+  };
 
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${metric.key.replace(/\s+/g, '_')}-${new Date().toISOString().split('T')[0]}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+  const handleDownloadChart = () => {
+    try {
+      // Create CSV content with proper escaping
+      const csvContent = [
+        ['Timestamp', 'Value'].map(escapeCsvValue).join(','),
+        ...metric.timeSeries.map(point =>
+          [point.timestamp, point.value].map(escapeCsvValue).join(',')
+        )
+      ].join('\n');
+
+      const blob = new Blob([csvContent], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${metric.key.replace(/\s+/g, '_')}-${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Failed to download chart data:', error);
+      // Could show a toast notification here if available
+    }
   };
 
   return (
@@ -191,7 +205,7 @@ export const MetricChartModal: React.FC<MetricChartModalProps> = ({ metric, isOp
           </Toolbar>
 
           {/* Chart */}
-          <div ref={chartRef} style={{ height: '500px' }}>
+          <div style={{ height: '500px' }}>
             <Chart
               ariaDesc={`Time series chart for ${metric.label}`}
               ariaTitle={metric.label}

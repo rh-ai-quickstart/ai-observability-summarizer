@@ -18,7 +18,8 @@ export const useSettings = () => {
    */
   const useAIConfigWarningDismissal = (
     warningType: string | null,
-    setWarning: (warning: string | null) => void
+    setWarning: (warning: string | null) => void,
+    setWarningType?: (type: string | null) => void
   ) => {
     React.useEffect(() => {
       const handleSettingsClosed = () => {
@@ -27,13 +28,14 @@ export const useSettings = () => {
           const config = getSessionConfig();
           if (config.ai_model) {
             setWarning(null);
+            setWarningType?.(null);
           }
         }
       };
 
       window.addEventListener('settings-closed', handleSettingsClosed);
       return () => window.removeEventListener('settings-closed', handleSettingsClosed);
-    }, [warningType, setWarning]);
+    }, [warningType, setWarning, setWarningType]);
   };
 
   return {
