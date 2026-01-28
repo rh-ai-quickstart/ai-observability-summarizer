@@ -738,7 +738,7 @@ export const OpenShiftMetricsPage: React.FC = () => {
           setSelectedNamespace(data[0]);
         }
       } catch (err) {
-        console.error('Failed to load namespaces:', err);
+        console.error('[OpenShift] Failed to load namespaces:', err);
         setError(err instanceof Error ? err.message : 'Failed to load namespaces');
       } finally {
         setLoadingNamespaces(false);
@@ -773,7 +773,7 @@ export const OpenShiftMetricsPage: React.FC = () => {
       }
       setAlerts(alertsData);
     } catch (err) {
-      console.error('Failed to load metrics:', err);
+      console.error('[OpenShift] Failed to load metrics:', err);
       setError(err instanceof Error ? err.message : 'Failed to load metrics');
       setMetricsData({});
     } finally {
@@ -821,7 +821,7 @@ export const OpenShiftMetricsPage: React.FC = () => {
         setError('Analysis returned empty response. Check browser console for details.');
       }
     } catch (err) {
-      console.error('Analysis failed:', err);
+      console.error('[OpenShift] Analysis failed:', err);
       setError(`Analysis failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setLoadingAnalysis(false);

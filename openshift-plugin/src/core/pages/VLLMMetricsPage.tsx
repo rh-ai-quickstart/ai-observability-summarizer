@@ -429,22 +429,25 @@ const VLLMMetricsPage: React.FC = () => {
     setError(null);
     try {
       const config = getSessionConfig();
+      console.log('[Analyze] Session config:', config);
       
       if (!config.ai_model) {
         setError('Please configure an AI model in Settings first');
         return;
       }
       
+      console.log('[Analyze] Calling analyzeVLLM with:', { model, aiModel: config.ai_model, timeRange });
       const result = await analyzeVLLM(model, config.ai_model, timeRange, config.api_key);
+      console.log('[Analyze] Result received:', result);
       
       if (result && result.summary) {
         setAnalysisResult(result);
       } else {
-        console.error('Invalid analysis result format:', result);
+        console.error('[Analyze] Invalid result format:', result);
         setError('Analysis returned invalid format. Check browser console for details.');
       }
     } catch (err) {
-      console.error('Analysis failed:', err);
+      console.error('[Analyze] Failed:', err);
       setError(`Failed to analyze metrics: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setAnalysisLoading(false);

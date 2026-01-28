@@ -186,6 +186,7 @@ class ModelService {
     
     // Optionally clean up associated secrets
     // Note: This is conservative - we don't auto-delete secrets in case they're shared
+    console.log(`Custom model ${modelToRemove.name} removed. Associated secrets (if any) were not automatically deleted.`);
   }
 
   /**
@@ -287,6 +288,7 @@ class ModelService {
         { provider, api_key: apiKey }
       );
 
+      console.log('Raw MCP response:', response);
 
       // Handle different response formats
       let data: any;
@@ -343,6 +345,7 @@ class ModelService {
         }
       );
 
+      console.log('Add model response:', response);
 
       // Handle MCP text response format
       let data: any;
