@@ -490,9 +490,24 @@ const KeyMetricsSection: React.FC<KeyMetricsSectionProps> = ({ data, loading }) 
   const getAvgAndMax = (key: string): { avg: number | null; max: number | null } => {
     const metricData = data[key];
 
+    // Debug logging for P95 Latency
+    if (key === 'P95 Latency (s)') {
+      console.log('[P95 Debug] metricData:', metricData);
+      console.log('[P95 Debug] time_series length:', metricData?.time_series?.length || 0);
+      if (metricData?.time_series) {
+        console.log('[P95 Debug] First 5 time_series values:',
+          metricData.time_series.slice(0, 5).map(p => p.value)
+        );
+      }
+    }
+
     // If no time series data, check if latest_value is valid
     if (!metricData || !metricData.time_series || metricData.time_series.length === 0) {
       const latestValue = metricData?.latest_value;
+
+      if (key === 'P95 Latency (s)') {
+        console.log('[P95 Debug] No time series, using latest_value:', latestValue);
+      }
 
       // Filter out NaN, null, and infinite values (matches Streamlit behavior)
       if (latestValue === null || latestValue === undefined ||
@@ -509,6 +524,11 @@ const KeyMetricsSection: React.FC<KeyMetricsSectionProps> = ({ data, loading }) 
       .map(p => p.value)
       .filter(v => v !== null && v !== undefined && !isNaN(v) && isFinite(v));
 
+    if (key === 'P95 Latency (s)') {
+      console.log('[P95 Debug] Valid values:', validValues);
+      console.log('[P95 Debug] Valid values count:', validValues.length);
+    }
+
     // If no valid values, return null (will display as "N/A")
     if (validValues.length === 0) {
       return { avg: null, max: null };
@@ -516,6 +536,10 @@ const KeyMetricsSection: React.FC<KeyMetricsSectionProps> = ({ data, loading }) 
 
     const avg = validValues.reduce((sum, v) => sum + v, 0) / validValues.length;
     const max = Math.max(...validValues);
+
+    if (key === 'P95 Latency (s)') {
+      console.log('[P95 Debug] Calculated avg:', avg, 'max:', max);
+    }
 
     return { avg, max };
   };
@@ -651,6 +675,7 @@ const VLLMMetricsPage: React.FC = () => {
   const [analysisLoading, setAnalysisLoading] = React.useState(false);
   const [analysisResult, setAnalysisResult] = React.useState<AnalysisResult | null>(null);
   const [metricsData, setMetricsData] = React.useState<Record<string, MetricDataValue>>({});
+  const [actualTimeRange, setActualTimeRange] = React.useState<{ start_ts: number; end_ts: number } | null>(null);
 
   React.useEffect(() => {
     loadData();
@@ -693,28 +718,39 @@ const VLLMMetricsPage: React.FC = () => {
 
   const fetchMetrics = async () => {
     if (model === 'all') return;
-    
+
     setMetricsLoading(true);
     setError(null);
     try {
       const metricsResponse = await fetchVLLMMetrics(model, timeRange, namespace !== 'all' ? namespace : undefined);
-      
+
+      console.log('[VLLMMetrics] Response received:', {
+        model_name: metricsResponse?.model_name,
+        start_ts: metricsResponse?.start_ts,
+        end_ts: metricsResponse?.end_ts,
+        metrics_count: metricsResponse?.metrics ? Object.keys(metricsResponse.metrics).length : 0
+      });
+
+      // Debug: Check time range being returned
+      if (metricsResponse?.start_ts && metricsResponse?.end_ts) {
+        const durationHours = (metricsResponse.end_ts - metricsResponse.start_ts) / 3600;
+        console.log('[VLLMMetrics] Backend returned duration:', durationHours.toFixed(2), 'hours');
+
+        // Store the actual time range for display
+        setActualTimeRange({
+          start_ts: metricsResponse.start_ts,
+          end_ts: metricsResponse.end_ts
+        });
+      }
+
       if (!metricsResponse || !metricsResponse.metrics) {
         setError('No metrics data available for this model');
         setMetricsData({});
+        setActualTimeRange(null);
         return;
       }
 
       // Use only real data from MCP server - no mock data
-      console.log('Received metrics data:', Object.keys(metricsResponse.metrics).length, 'metrics');
-      
-      // Debug: Check which metrics have time series
-      const metricsWithTimeSeries = Object.entries(metricsResponse.metrics)
-        .filter(([, data]) => data.time_series && data.time_series.length > 0)
-        .map(([key, data]) => ({ key, points: data.time_series?.length || 0 }));
-      
-      console.log('Metrics with time series:', metricsWithTimeSeries);
-      
       setMetricsData(metricsResponse.metrics);
     } catch (err) {
       console.error('Failed to fetch metrics:', err);
@@ -926,7 +962,9 @@ const VLLMMetricsPage: React.FC = () => {
                 <FormSelect
                   id="time-range-select"
                   value={timeRange}
-                  onChange={(_e, val) => setTimeRange(val)}
+                  onChange={(_e, val) => {
+                    setTimeRange(val);
+                  }}
                   style={{ minWidth: '120px' }}
                 >
                   <FormSelectOption value="15m" label="15 minutes" />
@@ -937,6 +975,26 @@ const VLLMMetricsPage: React.FC = () => {
                 </FormSelect>
               </FormGroup>
             </ToolbarItem>
+            {actualTimeRange && (
+              <ToolbarItem>
+                <div style={{
+                  fontSize: '0.875rem',
+                  color: '#6a6e73',
+                  padding: '4px 8px',
+                  backgroundColor: '#f5f5f5',
+                  borderRadius: '4px',
+                  border: '1px solid #d2d2d2'
+                }}>
+                  <div style={{ fontWeight: 600, marginBottom: '2px' }}>Queried Time Range:</div>
+                  <div style={{ fontSize: '0.8rem' }}>
+                    <strong>UTC:</strong> {new Date(actualTimeRange.start_ts * 1000).toUTCString().slice(0, -4)} - {new Date(actualTimeRange.end_ts * 1000).toUTCString().slice(17, -4)}
+                  </div>
+                  <div style={{ fontSize: '0.8rem' }}>
+                    <strong>Local:</strong> {new Date(actualTimeRange.start_ts * 1000).toLocaleString()} - {new Date(actualTimeRange.end_ts * 1000).toLocaleTimeString()}
+                  </div>
+                </div>
+              </ToolbarItem>
+            )}
             <ToolbarItem align={{ default: 'alignRight' }}>
               <Button
                 variant="secondary"

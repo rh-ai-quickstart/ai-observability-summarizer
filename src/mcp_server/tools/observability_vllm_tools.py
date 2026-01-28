@@ -292,6 +292,30 @@ def get_vllm_metrics_tool() -> List[Dict[str, Any]]:
         return error.to_mcp_response()
 
 
+def _calculate_optimal_lookback(duration_hours: float) -> str:
+    """Calculate optimal lookback window for rate() queries based on total time range.
+
+    This prevents sparse data in histogram_quantile queries by using a lookback window
+    proportional to the total time range.
+
+    Args:
+        duration_hours: Total time range duration in hours
+
+    Returns:
+        Lookback window string (e.g., "5m", "30m", "2h")
+    """
+    if duration_hours <= 1:
+        return "5m"  # 1 hour or less -> 5 minute lookback
+    elif duration_hours <= 3:
+        return "15m"  # 1-3 hours -> 15 minute lookback
+    elif duration_hours <= 12:
+        return "1h"  # 3-12 hours -> 1 hour lookback
+    elif duration_hours <= 48:
+        return "4h"  # 12-48 hours -> 4 hour lookback
+    else:
+        return "12h"  # >48 hours -> 12 hour lookback
+
+
 def _inject_labels_into_query(query: str, label_clause: str) -> str:
     """Inject labels into a Prometheus query at the correct position.
     
@@ -398,9 +422,26 @@ def fetch_vllm_metrics_data(
             # Add namespace filter if specified separately
             if namespace and namespace.lower() != "all" and "namespace=" not in final_query:
                 final_query = _inject_labels_into_query(final_query, f'namespace="{namespace}"')
-            
+
             prepared_queries[label] = final_query
-        
+
+        # Adjust rate() lookback windows based on the total time range
+        # This prevents sparse data with histogram_quantile queries
+        duration_hours = (resolved_end - resolved_start) / 3600
+        lookback_window = _calculate_optimal_lookback(duration_hours)
+
+        # Replace hardcoded [5m] with dynamic lookback in queries
+        adjusted_queries = {}
+        for label, query in prepared_queries.items():
+            # Replace [5m] with calculated lookback for rate() and histogram_quantile queries
+            adjusted_query = query.replace('[5m]', f'[{lookback_window}]')
+            adjusted_queries[label] = adjusted_query
+
+            if '[5m]' in query and query != adjusted_query:
+                logger.debug(f"Adjusted lookback for '{label}': [5m] -> [{lookback_window}]")
+
+        prepared_queries = adjusted_queries
+
         # Execute instant queries for current values (fast!)
         values = execute_instant_queries_parallel(prepared_queries, max_workers=10)
         
