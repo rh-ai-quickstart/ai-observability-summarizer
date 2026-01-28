@@ -239,9 +239,10 @@ interface MetricCardProps {
   metricKey: string;
   onViewChart?: (metricKey: string) => void;
   icon?: React.ComponentType;
+  secondaryInfo?: React.ReactNode; // For custom secondary metrics (e.g., GPU utilization/temperature)
 }
 
-const MetricCard: React.FC<MetricCardProps> = ({ label, value, unit, description, timeSeries, metricKey, onViewChart, icon }) => {
+const MetricCard: React.FC<MetricCardProps> = ({ label, value, unit, description, timeSeries, metricKey, onViewChart, icon, secondaryInfo }) => {
   const formatValue = (val: number | null): string => {
     if (val === null || val === undefined || isNaN(val)) return '—';
     if (val >= 1000000000) return `${(val / 1000000000).toFixed(2)}B`;
@@ -348,10 +349,15 @@ const MetricCard: React.FC<MetricCardProps> = ({ label, value, unit, description
                       Avg: {formatValue(avgValue)}{unit ? ` ${unit}` : ''}
                     </Text>
                   )}
+                  {secondaryInfo && avgValue === null && (
+                    <div style={{ marginTop: '2px' }}>
+                      {secondaryInfo}
+                    </div>
+                  )}
                 </div>
               </FlexItem>
               <FlexItem>
-                {renderSparkline()}
+                {renderSparkline() || <div style={{ width: '60px', height: '20px' }} />}
               </FlexItem>
               {icon && (
                 <FlexItem>
@@ -647,6 +653,38 @@ const CategorySection: React.FC<CategorySectionProps> = ({ categoryKey, category
                 description={gpuCount > 0 ? 'AI/ML accelerators available' : 'GPU metrics detected'}
                 metricKey="gpu-fleet-summary"
                 icon={CubesIcon}
+                secondaryInfo={
+                  <>
+                    {gpuSummaryData.utilization !== null && (
+                      <Text
+                        component={TextVariants.small}
+                        style={{
+                          color: gpuSummaryData.utilization > 90 ? '#dc2626' :
+                                 gpuSummaryData.utilization > 70 ? '#ea580c' : '#666',
+                          fontSize: '0.85rem',
+                          display: 'block',
+                          marginTop: '2px'
+                        }}
+                      >
+                        Util: {formatValue(gpuSummaryData.utilization)}%
+                      </Text>
+                    )}
+                    {gpuSummaryData.temperature !== null && (
+                      <Text
+                        component={TextVariants.small}
+                        style={{
+                          color: gpuSummaryData.temperature > 85 ? '#dc2626' :
+                                 gpuSummaryData.temperature > 75 ? '#ea580c' : '#666',
+                          fontSize: '0.85rem',
+                          display: 'block',
+                          marginTop: '2px'
+                        }}
+                      >
+                        Temp: {formatValue(gpuSummaryData.temperature)}°C
+                      </Text>
+                    )}
+                  </>
+                }
               />
             </GridItem>
           )}
