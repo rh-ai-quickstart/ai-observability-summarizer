@@ -361,13 +361,13 @@ const MetricCard: React.FC<MetricCardProps> = ({ label, value, unit, description
               </FlexItem>
               {icon && (
                 <FlexItem>
-                  {React.createElement(icon, { 
-                    style: { 
-                      color: 'var(--pf-v5-global--primary-color--100)', 
-                      fontSize: '20px', 
-                      marginLeft: '8px' 
-                    } 
-                  })}
+                  <div style={{
+                    color: 'var(--pf-v5-global--primary-color--100)',
+                    fontSize: '20px',
+                    marginLeft: '8px'
+                  }}>
+                    {React.createElement(icon, {})}
+                  </div>
                 </FlexItem>
               )}
               {trend && trend.direction !== 'flat' && (
@@ -886,8 +886,8 @@ export const OpenShiftMetricsPage: React.FC = () => {
 ## Metrics Summary
 
 ${Object.entries(metricsData).map(([key, val]) => {
-  const categoryDef = categories[selectedCategory as keyof typeof categories];
-  const metricDef = categoryDef?.metrics.find(m => m.key === key);
+  const categoryDef = categories[selectedCategory as keyof typeof categories] as any;
+  const metricDef = categoryDef?.metrics?.find((m: any) => m.key === key);
   const unit = metricDef?.unit || '';
   return `- **${key}**: ${val.latest_value !== null ? `${val.latest_value}${unit ? ` ${unit}` : ''}` : 'N/A'}`;
 }).join('\n')}
@@ -919,7 +919,8 @@ ${analysis?.summary || 'No analysis available. Click "Analyze with AI" to genera
     try {
       const categoryDef = categories[selectedCategory as keyof typeof categories];
       const headers = ['Metric', 'Latest Value', 'Unit', 'Description'];
-      const rows = categoryDef?.metrics.map((metricDef) => {
+      const categoryDefTyped = categoryDef as any;
+      const rows = categoryDefTyped?.metrics?.map((metricDef: any) => {
         const metricData = metricsData[metricDef.key];
         return [
           metricDef.key,

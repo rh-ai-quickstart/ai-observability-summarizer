@@ -7,7 +7,6 @@ import {
   FlexItem,
   Text,
   TextVariants,
-  Spinner,
   Bullseye,
   Toolbar,
   ToolbarContent,
@@ -21,7 +20,7 @@ import {
   ChartThemeColor,
   ChartVoronoiContainer,
 } from '@patternfly/react-charts';
-import { DownloadIcon, TimesIcon } from '@patternfly/react-icons';
+import { DownloadIcon } from '@patternfly/react-icons';
 
 interface TimeSeriesPoint {
   timestamp: string;

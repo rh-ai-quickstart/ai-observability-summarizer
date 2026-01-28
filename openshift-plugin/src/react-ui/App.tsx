@@ -18,7 +18,7 @@ const App: React.FC = () => {
         await initializeRuntimeConfig();
         setConfigLoaded(true);
       } catch (error) {
-        console.error('Failed to initialize runtime config:', error);
+        console.error('[App] Failed to initialize runtime config:', error);
         // Still render the app even if config fails
         setConfigLoaded(true);
       }
