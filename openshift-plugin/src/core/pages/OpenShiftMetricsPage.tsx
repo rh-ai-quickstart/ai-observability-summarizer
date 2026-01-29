@@ -43,11 +43,14 @@ import {
   RunningIcon,
   ChartLineIcon,
   DownloadIcon,
+  RobotIcon,
+  TimesIcon,
 } from '@patternfly/react-icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { AlertList } from '../components/AlertList';
 import { MetricChartModal } from '../components/MetricChartModal';
+import { MetricsChatPanel } from '../components/MetricsChatPanel';
 import {
   fetchOpenShiftMetrics,
   listOpenShiftNamespaces,
@@ -128,6 +131,8 @@ const CLUSTER_WIDE_CATEGORIES = {
       { key: 'GPU Memory Used (GB)', label: 'Mem Used', unit: 'GB', description: 'VRAM currently allocated' },
       { key: 'GPU Count', label: 'GPU Count', unit: '', description: 'Available accelerators' },
       { key: 'GPU Memory Temp (°C)', label: 'Mem Temp', unit: '°C', description: 'VRAM temperature' },
+      { key: 'GPU Clock Speed', label: 'Clock', unit: 'MHz', description: 'Core clock frequency' },
+      { key: 'GPU Energy Usage', label: 'Energy', unit: 'J', description: 'Cumulative energy consumed' },
     ]
   },
   'Autoscaling & Scheduling': {
@@ -245,14 +250,59 @@ interface MetricCardProps {
 }
 
 const MetricCard: React.FC<MetricCardProps> = ({ label, value, unit, description, timeSeries, metricKey, onViewChart, icon, secondaryInfo }) => {
-  const formatValue = (val: number | null): string => {
-    if (val === null || val === undefined || isNaN(val)) return '—';
-    if (val >= 1000000000) return `${(val / 1000000000).toFixed(2)}B`;
-    if (val >= 1000000) return `${(val / 1000000).toFixed(2)}M`;
-    if (val >= 1000) return `${(val / 1000).toFixed(1)}K`;
-    if (val < 0.01 && val > 0) return val.toExponential(2);
-    if (Number.isInteger(val)) return val.toString();
-    return val.toFixed(2);
+  const formatValue = (val: number | null, unitType?: string): { value: string; unit: string } => {
+    if (val === null || val === undefined || isNaN(val)) {
+      return { value: '—', unit: unitType || '' };
+    }
+
+    // Handle energy units: Joules → kJ → MJ → GJ
+    if (unitType === 'J') {
+      if (val >= 1000000000) return { value: (val / 1000000000).toFixed(2), unit: 'GJ' };
+      if (val >= 1000000) return { value: (val / 1000000).toFixed(2), unit: 'MJ' };
+      if (val >= 1000) return { value: (val / 1000).toFixed(2), unit: 'kJ' };
+      return { value: val.toFixed(2), unit: 'J' };
+    }
+
+    // Handle frequency units: Hz → kHz → MHz → GHz
+    if (unitType === 'Hz') {
+      if (val >= 1000000000) return { value: (val / 1000000000).toFixed(2), unit: 'GHz' };
+      if (val >= 1000000) return { value: (val / 1000000).toFixed(2), unit: 'MHz' };
+      if (val >= 1000) return { value: (val / 1000).toFixed(2), unit: 'kHz' };
+      return { value: val.toFixed(0), unit: 'Hz' };
+    }
+
+    // Handle MHz → GHz conversion
+    if (unitType === 'MHz') {
+      if (val >= 1000) return { value: (val / 1000).toFixed(2), unit: 'GHz' };
+      return { value: val.toFixed(0), unit: 'MHz' };
+    }
+
+    // Handle power units: W → kW → MW
+    if (unitType === 'W') {
+      if (val >= 1000000) return { value: (val / 1000000).toFixed(2), unit: 'MW' };
+      if (val >= 1000) return { value: (val / 1000).toFixed(2), unit: 'kW' };
+      return { value: val.toFixed(1), unit: 'W' };
+    }
+
+    // Handle bytes: B → KB → MB → GB → TB
+    if (unitType === 'B') {
+      if (val >= 1099511627776) return { value: (val / 1099511627776).toFixed(2), unit: 'TB' };
+      if (val >= 1073741824) return { value: (val / 1073741824).toFixed(2), unit: 'GB' };
+      if (val >= 1048576) return { value: (val / 1048576).toFixed(2), unit: 'MB' };
+      if (val >= 1024) return { value: (val / 1024).toFixed(2), unit: 'KB' };
+      return { value: val.toFixed(0), unit: 'B' };
+    }
+
+    // Generic number formatting for other units (%, cores, /s, etc.)
+    let formattedValue: string;
+    if (val >= 1000000000) formattedValue = `${(val / 1000000000).toFixed(2)}B`;
+    else if (val >= 1000000) formattedValue = `${(val / 1000000).toFixed(2)}M`;
+    else if (val >= 1000) formattedValue = `${(val / 1000).toFixed(1)}K`;
+    else if (val < 0.01 && val > 0) formattedValue = val.toExponential(2);
+    else if (Number.isInteger(val)) formattedValue = val.toString();
+    else formattedValue = val.toFixed(2);
+
+    return { value: formattedValue, unit: unitType || '' };
   };
 
   // Calculate trend from time series
@@ -310,8 +360,9 @@ const MetricCard: React.FC<MetricCardProps> = ({ label, value, unit, description
     return sum / timeSeries.length;
   };
 
-  const displayValue = formatValue(value);
+  const { value: displayValue, unit: displayUnit } = formatValue(value, unit);
   const avgValue = calculateAverage(timeSeries);
+  const avgFormatted = avgValue !== null ? formatValue(avgValue, unit) : null;
   const isZero = value === 0;
   const isNull = value === null;
 
@@ -336,9 +387,9 @@ const MetricCard: React.FC<MetricCardProps> = ({ label, value, unit, description
                       fontSize: '1.5rem',
                     }}
                   >
-                    {displayValue}{unit && value !== null ? ` ${unit}` : ''}
+                    {displayValue}{displayUnit && value !== null ? ` ${displayUnit}` : ''}
                   </Text>
-                  {avgValue !== null && (
+                  {avgFormatted && (
                     <Text
                       component={TextVariants.small}
                       style={{
@@ -348,7 +399,7 @@ const MetricCard: React.FC<MetricCardProps> = ({ label, value, unit, description
                         marginTop: '2px'
                       }}
                     >
-                      Avg: {formatValue(avgValue)}{unit ? ` ${unit}` : ''}
+                      Avg: {avgFormatted.value}{avgFormatted.unit ? ` ${avgFormatted.unit}` : ''}
                     </Text>
                   )}
                   {secondaryInfo && avgValue === null && (
@@ -442,9 +493,20 @@ const GPUFleetSummary: React.FC<GPUFleetSummaryProps> = ({ metricsData }) => {
   const hotGPUs = avgTemp && avgTemp > 80 ? Math.ceil(totalGPUs * 0.2) : 0; // Estimate based on temp
   const overloadedGPUs = avgUtil && avgUtil > 95 ? Math.ceil(totalGPUs * 0.1) : 0; // Estimate
   
-  const formatValue = (val: number | null, decimals: number = 1): string => {
-    if (val === null || val === undefined || isNaN(val)) return '—';
-    return val.toFixed(decimals);
+  const formatValue = (val: number | null, unitType?: string, decimals: number = 1): { value: string; unit: string } => {
+    if (val === null || val === undefined || isNaN(val)) {
+      return { value: '—', unit: unitType || '' };
+    }
+
+    // Handle power units for GPU fleet
+    if (unitType === 'W') {
+      if (val >= 1000000) return { value: (val / 1000000).toFixed(2), unit: 'MW' };
+      if (val >= 1000) return { value: (val / 1000).toFixed(2), unit: 'kW' };
+      return { value: val.toFixed(decimals), unit: 'W' };
+    }
+
+    // Default formatting
+    return { value: val.toFixed(decimals), unit: unitType || '' };
   };
 
   return (
@@ -487,7 +549,7 @@ const GPUFleetSummary: React.FC<GPUFleetSummaryProps> = ({ metricsData }) => {
                 color: avgUtil && avgUtil > 90 ? '#dc2626' : avgUtil && avgUtil > 70 ? '#ea580c' : '#059669',
                 fontWeight: 700 
               }}>
-                {formatValue(avgUtil)}%
+                {formatValue(avgUtil, '%').value}%
               </Text>
               <Text component={TextVariants.small} style={{ color: '#666' }}>
                 compute usage
@@ -504,7 +566,7 @@ const GPUFleetSummary: React.FC<GPUFleetSummaryProps> = ({ metricsData }) => {
                 color: avgTemp && avgTemp > 85 ? '#dc2626' : avgTemp && avgTemp > 75 ? '#ea580c' : '#059669',
                 fontWeight: 700 
               }}>
-                {formatValue(avgTemp, 0)}°C
+                {formatValue(avgTemp, '°C', 0).value}°C
               </Text>
               <Text component={TextVariants.small} style={{ color: '#666' }}>
                 thermal status
@@ -518,7 +580,10 @@ const GPUFleetSummary: React.FC<GPUFleetSummaryProps> = ({ metricsData }) => {
                 Fleet Power
               </Text>
               <Text component={TextVariants.h2} style={{ color: '#0891b2', fontWeight: 700 }}>
-                {formatValue(totalPower, 0)}W
+                {(() => {
+                  const formatted = formatValue(totalPower, 'W', 0);
+                  return `${formatted.value}${formatted.unit}`;
+                })()}
               </Text>
               <Text component={TextVariants.small} style={{ color: '#666' }}>
                 total consumption
@@ -714,6 +779,9 @@ export const OpenShiftMetricsPage: React.FC = () => {
 
   // Chart modal state
   const [selectedMetricForChart, setSelectedMetricForChart] = React.useState<string | null>(null);
+
+  // Chat panel state
+  const [chatPanelOpen, setChatPanelOpen] = React.useState(false);
 
   // Loading states
   const [loadingNamespaces, setLoadingNamespaces] = React.useState(true);
@@ -1179,6 +1247,19 @@ ${analysis?.summary || 'No analysis available. Click "Analyze with AI" to genera
                     Analyze with AI
                   </Button>
                 </FlexItem>
+                <FlexItem style={{ marginLeft: '8px' }}>
+                  <Button
+                    variant={chatPanelOpen ? 'primary' : 'secondary'}
+                    icon={chatPanelOpen ? <TimesIcon /> : <RobotIcon />}
+                    onClick={() => setChatPanelOpen(!chatPanelOpen)}
+                    style={chatPanelOpen ? {
+                      background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+                      border: 'none',
+                    } : {}}
+                  >
+                    {chatPanelOpen ? 'Close Chat' : 'AI Chat'}
+                  </Button>
+                </FlexItem>
               </Flex>
             </ToolbarItem>
           </ToolbarContent>
@@ -1283,8 +1364,16 @@ ${analysis?.summary || 'No analysis available. Click "Analyze with AI" to genera
       )}
 
       {/* Main Content */}
-      <PageSection>
-        {/* Current Selection Labels */}
+      <PageSection style={{ paddingLeft: 0, paddingRight: 0 }}>
+        <div style={{ display: 'flex', height: 'calc(100vh - 400px)' }}>
+          {/* Metrics Panel */}
+          <div style={{ 
+            flex: chatPanelOpen ? '70%' : '100%', 
+            paddingLeft: 'var(--pf-v5-global--spacer--lg)', 
+            paddingRight: chatPanelOpen ? '8px' : 'var(--pf-v5-global--spacer--lg)',
+            overflowY: 'auto'
+          }}>
+            {/* Current Selection Labels */}
         <Flex style={{ marginBottom: '16px' }}>
           <FlexItem>
             <Label color="blue" icon={scope === 'cluster_wide' ? <ClusterIcon /> : <CubeIcon />}>
@@ -1337,12 +1426,33 @@ ${analysis?.summary || 'No analysis available. Click "Analyze with AI" to genera
           />
         )}
 
-        {/* No data message */}
-        {!loadingMetrics && Object.keys(metricsData).length === 0 && (
-          <Alert variant={AlertVariant.warning} title="No metrics data" isInline>
-            No metrics data available for {selectedCategory}. This may be expected if there are no resources in this category.
-          </Alert>
-        )}
+            {/* No data message */}
+            {!loadingMetrics && Object.keys(metricsData).length === 0 && (
+              <Alert variant={AlertVariant.warning} title="No metrics data" isInline>
+                No metrics data available for {selectedCategory}. This may be expected if there are no resources in this category.
+              </Alert>
+            )}
+          </div>
+
+          {/* Chat Panel */}
+          {chatPanelOpen && (
+            <div style={{ 
+              flex: '30%', 
+              paddingLeft: '8px', 
+              paddingRight: 'var(--pf-v5-global--spacer--lg)',
+              borderLeft: '1px solid var(--pf-v5-global--BorderColor--100)'
+            }}>
+              <MetricsChatPanel
+                scope={scope}
+                namespace={scope === 'namespace_scoped' ? selectedNamespace : undefined}
+                category={selectedCategory}
+                timeRange={timeRange}
+                isOpen={chatPanelOpen}
+                onClose={() => setChatPanelOpen(false)}
+              />
+            </div>
+          )}
+        </div>
       </PageSection>
 
       {/* Metric Chart Modal */}
