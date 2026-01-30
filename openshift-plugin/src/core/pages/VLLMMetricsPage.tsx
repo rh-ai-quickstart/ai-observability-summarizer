@@ -733,7 +733,6 @@ const VLLMMetricsPage: React.FC = () => {
   const [analysisLoading, setAnalysisLoading] = React.useState(false);
   const [analysisResult, setAnalysisResult] = React.useState<AnalysisResult | null>(null);
   const [metricsData, setMetricsData] = React.useState<Record<string, MetricDataValue>>({});
-  const [actualTimeRange, setActualTimeRange] = React.useState<{ start_ts: number; end_ts: number } | null>(null);
 
   React.useEffect(() => {
     loadData();
@@ -793,18 +792,11 @@ const VLLMMetricsPage: React.FC = () => {
       if (metricsResponse?.start_ts && metricsResponse?.end_ts) {
         const durationHours = (metricsResponse.end_ts - metricsResponse.start_ts) / 3600;
         console.log('[VLLMMetrics] Backend returned duration:', durationHours.toFixed(2), 'hours');
-
-        // Store the actual time range for display
-        setActualTimeRange({
-          start_ts: metricsResponse.start_ts,
-          end_ts: metricsResponse.end_ts
-        });
       }
 
       if (!metricsResponse || !metricsResponse.metrics) {
         setError('No metrics data available for this model');
         setMetricsData({});
-        setActualTimeRange(null);
         return;
       }
 
@@ -1019,26 +1011,6 @@ const VLLMMetricsPage: React.FC = () => {
                 </FormSelect>
               </FormGroup>
             </ToolbarItem>
-            {actualTimeRange && (
-              <ToolbarItem>
-                <div style={{
-                  fontSize: '0.875rem',
-                  color: '#6a6e73',
-                  padding: '4px 8px',
-                  backgroundColor: '#f5f5f5',
-                  borderRadius: '4px',
-                  border: '1px solid #d2d2d2'
-                }}>
-                  <div style={{ fontWeight: 600, marginBottom: '2px' }}>Queried Time Range:</div>
-                  <div style={{ fontSize: '0.8rem' }}>
-                    <strong>UTC:</strong> {new Date(actualTimeRange.start_ts * 1000).toUTCString().slice(0, -4)} - {new Date(actualTimeRange.end_ts * 1000).toUTCString().slice(17, -4)}
-                  </div>
-                  <div style={{ fontSize: '0.8rem' }}>
-                    <strong>Local:</strong> {new Date(actualTimeRange.start_ts * 1000).toLocaleString()} - {new Date(actualTimeRange.end_ts * 1000).toLocaleTimeString()}
-                  </div>
-                </div>
-              </ToolbarItem>
-            )}
             <ToolbarItem align={{ default: 'alignRight' }}>
               <Button
                 variant="secondary"
