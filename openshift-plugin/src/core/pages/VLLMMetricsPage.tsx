@@ -460,7 +460,7 @@ const KeyMetricCard: React.FC<KeyMetricCardProps> = ({ label, avgValue, maxValue
           </FlexItem>
           <FlexItem>
             <Text component={TextVariants.small} style={{ color: 'var(--pf-v5-global--Color--200)', fontSize: '0.85rem' }}>
-              {label.includes('Tokens') ? 'Peak:' : 'Max:'} {displayMax}
+              {label.includes('Tokens') ? 'Peak:' : 'Max:'} {displayMax}{label.includes('Tokens') ? '' : displayUnit}
             </Text>
           </FlexItem>
           <FlexItem>
