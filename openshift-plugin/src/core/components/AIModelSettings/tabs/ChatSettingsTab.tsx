@@ -2,6 +2,9 @@ import * as React from 'react';
 import {
   Form,
   FormGroup,
+  FormHelperText,
+  HelperText,
+  HelperTextItem,
   Switch,
   TextInput,
   Button,
@@ -188,9 +191,11 @@ export const ChatSettingsTab: React.FC<ChatSettingsTabProps> = ({
             max={20}
             style={{ width: '100px' }}
           />
-          <Text component={TextVariants.small} style={{ display: 'block', marginTop: '8px', color: 'var(--pf-v5-global--Color--200)' }}>
-            Number of previous messages to send for context (0-20). Higher values provide more context but use more tokens. Set to 0 to disable context (each message is independent).
-          </Text>
+          <FormHelperText>
+            <HelperText>
+              <HelperTextItem>Number of previous messages to send for context (0-20). Higher values provide more context but use more tokens. Set to 0 to disable context (each message is independent).</HelperTextItem>
+            </HelperText>
+          </FormHelperText>
         </FormGroup>
 
         <Divider style={{ margin: '24px 0' }} />
@@ -257,9 +262,11 @@ export const ChatSettingsTab: React.FC<ChatSettingsTabProps> = ({
             max={100}
             style={{ width: '100px' }}
           />
-          <Text component={TextVariants.small} style={{ display: 'block', marginTop: '8px', color: 'var(--pf-v5-global--Color--200)' }}>
-            Maximum messages to keep in browser storage (10-100). Older messages are removed to prevent storage issues.
-          </Text>
+          <FormHelperText>
+            <HelperText>
+              <HelperTextItem>Maximum messages to keep in browser storage (10-100). Older messages are removed to prevent storage issues.</HelperTextItem>
+            </HelperText>
+          </FormHelperText>
         </FormGroup>
 
         <Divider style={{ margin: '24px 0' }} />
