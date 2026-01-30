@@ -45,12 +45,14 @@ import {
   DownloadIcon,
   RobotIcon,
   TimesIcon,
+  CalendarAltIcon,
 } from '@patternfly/react-icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { AlertList } from '../components/AlertList';
 import { MetricChartModal } from '../components/MetricChartModal';
 import { MetricsChatPanel } from '../components/MetricsChatPanel';
+import { CustomRangePickerModal } from '../components/CustomRangePickerModal';
 import {
   fetchOpenShiftMetrics,
   listOpenShiftNamespaces,
@@ -226,6 +228,7 @@ const TIME_RANGE_OPTIONS = [
   { value: '6h', label: '6 hours' },
   { value: '24h', label: '24 hours' },
   { value: '7d', label: '7 days' },
+  { value: 'custom', label: 'Custom Range...' },
 ];
 
 type ScopeType = 'cluster_wide' | 'namespace_scoped';
@@ -783,6 +786,12 @@ export const OpenShiftMetricsPage: React.FC = () => {
   // Chat panel state
   const [chatPanelOpen, setChatPanelOpen] = React.useState(false);
 
+  // Custom date range state
+  const [showCustomRangePicker, setShowCustomRangePicker] = React.useState(false);
+  const [customRangeStart, setCustomRangeStart] = React.useState<Date | null>(null);
+  const [customRangeEnd, setCustomRangeEnd] = React.useState<Date | null>(null);
+  const [customRangeLabel, setCustomRangeLabel] = React.useState<string>('');
+
   // Loading states
   const [loadingNamespaces, setLoadingNamespaces] = React.useState(true);
   const [loadingMetrics, setLoadingMetrics] = React.useState(false);
@@ -828,14 +837,28 @@ export const OpenShiftMetricsPage: React.FC = () => {
     }
   }, [selectedCategory]);
 
+  // Convert custom date range to the format expected by MCP server
+  const getTimeRangeForAPI = React.useCallback(() => {
+    if (timeRange === 'custom' && customRangeStart && customRangeEnd) {
+      // Convert to a custom format that the MCP server can understand
+      // Format: "custom:START_ISO:END_ISO"
+      const startISO = customRangeStart.toISOString();
+      const endISO = customRangeEnd.toISOString();
+      return `custom:${startISO}:${endISO}`;
+    }
+    // Return the preset time range string
+    return timeRange;
+  }, [timeRange, customRangeStart, customRangeEnd]);
+
   const loadMetrics = React.useCallback(async () => {
     setLoadingMetrics(true);
     setError(null);
     try {
       const namespace = scope === 'namespace_scoped' ? selectedNamespace : undefined;
       
+      const apiTimeRange = getTimeRangeForAPI();
       const [metricsResponse, alertsData] = await Promise.all([
-        fetchOpenShiftMetrics(selectedCategory, scope, timeRange, namespace),
+        fetchOpenShiftMetrics(selectedCategory, scope, apiTimeRange, namespace),
         getAlerts(namespace),
       ]);
       
@@ -852,13 +875,13 @@ export const OpenShiftMetricsPage: React.FC = () => {
     } finally {
       setLoadingMetrics(false);
     }
-  }, [scope, selectedNamespace, selectedCategory, timeRange]);
+  }, [scope, selectedNamespace, selectedCategory, getTimeRangeForAPI]);
 
   // Load metrics when filters change
   React.useEffect(() => {
     if (scope === 'namespace_scoped' && !selectedNamespace) return;
     loadMetrics();
-  }, [scope, selectedNamespace, loadMetrics]);
+  }, [scope, selectedNamespace, selectedCategory, loadMetrics]);
 
   const handleAnalyze = async () => {
     // Cancel any existing analysis
@@ -889,13 +912,14 @@ export const OpenShiftMetricsPage: React.FC = () => {
       // Let MCP server resolve provider secret if api_key is not present in session
       const apiKey = (config.api_key as string | undefined) || undefined;
       
+      const apiTimeRange = getTimeRangeForAPI();
       const result = await analyzeOpenShift(
         selectedCategory,
         scope,
         scope === 'namespace_scoped' ? selectedNamespace : undefined,
         config.ai_model,
         apiKey,
-        timeRange
+        apiTimeRange
       );
       
       // Check if request was cancelled
@@ -962,6 +986,57 @@ export const OpenShiftMetricsPage: React.FC = () => {
 
   const handleCloseChart = () => {
     setSelectedMetricForChart(null);
+  };
+
+  // Custom date range handlers - implementing clean algorithm
+  const handleTimeRangeChange = (_event: any, value: string) => {
+    // Step 7: User selected predefined value → use it directly  
+    setTimeRange(value);
+    setCustomRangeStart(null);
+    setCustomRangeEnd(null);
+    setCustomRangeLabel('');
+  };
+
+  const handleCustomRangeApply = React.useCallback((startDate: Date, endDate: Date) => {
+    // Step 4: User closed picker accepting values → apply them
+    const formatDate = (date: Date) => {
+      return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    };
+    
+    const label = `${formatDate(startDate)} - ${formatDate(endDate)}`;
+    
+    // Set custom range state - useEffect will handle metrics refresh
+    setCustomRangeStart(startDate);
+    setCustomRangeEnd(endDate);
+    setCustomRangeLabel(label);
+    setShowCustomRangePicker(false);
+    
+    // Note: timeRange is already 'custom' from handleTimeRangeChange
+  }, []);
+
+  const handleCustomRangeClose = () => {
+    setShowCustomRangePicker(false);
+    
+    // Step 4: If timeRange is 'custom' (user clicked Custom Range...) but no custom dates set,
+    // apply the picker's default values (1 hour ago to now)
+    if (timeRange === 'custom' && (!customRangeStart || !customRangeEnd)) {
+      const now = new Date();
+      const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+      
+      const formatDate = (date: Date) => {
+        return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      };
+      
+      const label = `${formatDate(oneHourAgo)} - ${formatDate(now)}`;
+      
+      // Apply the default picker values as the custom range
+      setCustomRangeStart(oneHourAgo);
+      setCustomRangeEnd(now);
+      setCustomRangeLabel(label);
+      
+      // timeRange stays 'custom' - this will trigger metrics refresh via useEffect
+    }
+    // If timeRange is not 'custom', or we already have custom dates, do nothing
   };
 
   // Prepare metric data for chart modal
@@ -1184,55 +1259,58 @@ ${analysis?.summary || 'No analysis available. Click "Analyze with AI" to genera
             {/* Time Range Selector */}
             <ToolbarItem>
               <FormGroup label="Time Range" fieldId="time-range-select">
-                <FormSelect
-                  id="time-range-select"
-                  value={timeRange}
-                  onChange={(_event, value) => setTimeRange(value)}
-                  aria-label="Select time range"
-                  style={{ minWidth: '120px' }}
-                >
-                  {TIME_RANGE_OPTIONS.map((opt) => (
-                    <FormSelectOption key={opt.value} value={opt.value} label={opt.label} />
-                  ))}
-                </FormSelect>
+                <Flex alignItems={{ default: 'alignItemsCenter' }}>
+                  <FlexItem>
+                    <FormSelect
+                      id="time-range-select"
+                      value={timeRange === 'custom' ? '1h' : timeRange}
+                      onChange={handleTimeRangeChange}
+                      aria-label="Select time range"
+                      style={{ minWidth: '120px' }}
+                    >
+                      {TIME_RANGE_OPTIONS.filter(opt => opt.value !== 'custom').map((opt) => (
+                        <FormSelectOption 
+                          key={opt.value} 
+                          value={opt.value} 
+                          label={opt.label} 
+                        />
+                      ))}
+                    </FormSelect>
+                  </FlexItem>
+                  <FlexItem style={{ marginLeft: '4px' }}>
+                    <Button
+                      variant={timeRange === 'custom' ? 'primary' : 'secondary'}
+                      size="sm"
+                      onClick={() => {
+                        setTimeRange('custom');
+                        setShowCustomRangePicker(true);
+                      }}
+                      aria-label="Select custom date range"
+                      title="Custom date range"
+                    >
+                      <CalendarAltIcon />
+                    </Button>
+                  </FlexItem>
+                </Flex>
               </FormGroup>
             </ToolbarItem>
 
             {/* Action Buttons */}
             <ToolbarItem align={{ default: 'alignRight' }}>
-              <Flex>
+              <Flex spaceItems={{ default: 'spaceItemsXs' }}>
                 <FlexItem>
                   <Button
                     variant="secondary"
-                    icon={<SyncIcon />}
                     onClick={loadMetrics}
                     isDisabled={loadingMetrics}
                     isLoading={loadingMetrics}
+                    aria-label="Refresh metrics"
+                    title="Refresh metrics"
                   >
-                    Refresh
+                    <SyncIcon />
                   </Button>
                 </FlexItem>
-                <FlexItem style={{ marginLeft: '8px' }}>
-                  <Button
-                    variant="secondary"
-                    icon={<DownloadIcon />}
-                    onClick={downloadMarkdown}
-                    isDisabled={Object.keys(metricsData).length === 0}
-                  >
-                    Download Report
-                  </Button>
-                </FlexItem>
-                <FlexItem style={{ marginLeft: '8px' }}>
-                  <Button
-                    variant="secondary"
-                    icon={<DownloadIcon />}
-                    onClick={downloadCSV}
-                    isDisabled={Object.keys(metricsData).length === 0}
-                  >
-                    Download CSV
-                  </Button>
-                </FlexItem>
-                <FlexItem style={{ marginLeft: '8px' }}>
+                <FlexItem>
                   <Button
                     variant="primary"
                     icon={<OutlinedLightbulbIcon />}
@@ -1244,10 +1322,10 @@ ${analysis?.summary || 'No analysis available. Click "Analyze with AI" to genera
                       border: 'none',
                     }}
                   >
-                    Analyze with AI
+                    AI Analysis
                   </Button>
                 </FlexItem>
-                <FlexItem style={{ marginLeft: '8px' }}>
+                <FlexItem>
                   <Button
                     variant={chatPanelOpen ? 'primary' : 'secondary'}
                     icon={chatPanelOpen ? <TimesIcon /> : <RobotIcon />}
@@ -1258,6 +1336,26 @@ ${analysis?.summary || 'No analysis available. Click "Analyze with AI" to genera
                     } : {}}
                   >
                     {chatPanelOpen ? 'Close Chat' : 'AI Chat'}
+                  </Button>
+                </FlexItem>
+                <FlexItem>
+                  <Button
+                    variant="secondary"
+                    icon={<DownloadIcon />}
+                    onClick={downloadMarkdown}
+                    isDisabled={Object.keys(metricsData).length === 0}
+                  >
+                    Report
+                  </Button>
+                </FlexItem>
+                <FlexItem>
+                  <Button
+                    variant="secondary"
+                    icon={<DownloadIcon />}
+                    onClick={downloadCSV}
+                    isDisabled={Object.keys(metricsData).length === 0}
+                  >
+                    CSV
                   </Button>
                 </FlexItem>
               </Flex>
@@ -1317,7 +1415,10 @@ ${analysis?.summary || 'No analysis available. Click "Analyze with AI" to genera
                       marginLeft: '8px',
                       fontWeight: 'normal'
                     }}>
-                      • {analysis.category} ({analysis.scope === 'cluster_wide' ? 'Cluster-wide' : analysis.namespace || 'Namespace'})
+                      • {analysis.category} ({analysis.scope === 'cluster_wide' ? 'Cluster-wide' : analysis.namespace || 'Namespace'}) 
+                      • {timeRange === 'custom' && customRangeLabel 
+                          ? customRangeLabel 
+                          : TIME_RANGE_OPTIONS.find(o => o.value === timeRange)?.label}
                     </Text>
                   )}
                 </FlexItem>
@@ -1387,7 +1488,9 @@ ${analysis?.summary || 'No analysis available. Click "Analyze with AI" to genera
           </FlexItem>
           <FlexItem>
             <Label color="grey">
-              Last {TIME_RANGE_OPTIONS.find(o => o.value === timeRange)?.label}
+              {timeRange === 'custom' && customRangeLabel 
+                ? customRangeLabel 
+                : `Last ${TIME_RANGE_OPTIONS.find(o => o.value === timeRange)?.label}`}
             </Label>
           </FlexItem>
         </Flex>
@@ -1446,7 +1549,7 @@ ${analysis?.summary || 'No analysis available. Click "Analyze with AI" to genera
                 scope={scope}
                 namespace={scope === 'namespace_scoped' ? selectedNamespace : undefined}
                 category={selectedCategory}
-                timeRange={timeRange}
+                timeRange={timeRange === 'custom' && customRangeLabel ? customRangeLabel : timeRange}
                 isOpen={chatPanelOpen}
                 onClose={() => setChatPanelOpen(false)}
               />
@@ -1460,6 +1563,13 @@ ${analysis?.summary || 'No analysis available. Click "Analyze with AI" to genera
         metric={selectedMetricData}
         isOpen={selectedMetricForChart !== null}
         onClose={handleCloseChart}
+      />
+
+      {/* Custom Date Range Picker Modal */}
+      <CustomRangePickerModal
+        isOpen={showCustomRangePicker}
+        onClose={handleCustomRangeClose}
+        onApply={handleCustomRangeApply}
       />
     </>
   );
