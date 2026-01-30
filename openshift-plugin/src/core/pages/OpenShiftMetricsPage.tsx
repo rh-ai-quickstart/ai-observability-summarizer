@@ -53,6 +53,7 @@ import { AlertList } from '../components/AlertList';
 import { MetricChartModal } from '../components/MetricChartModal';
 import { MetricsChatPanel } from '../components/MetricsChatPanel';
 import { CustomRangePickerModal } from '../components/CustomRangePickerModal';
+import { formatValue, GPU_THRESHOLDS } from '../utils/formatValue';
 import {
   fetchOpenShiftMetrics,
   listOpenShiftNamespaces,
@@ -253,60 +254,6 @@ interface MetricCardProps {
 }
 
 const MetricCard: React.FC<MetricCardProps> = ({ label, value, unit, description, timeSeries, metricKey, onViewChart, icon, secondaryInfo }) => {
-  const formatValue = (val: number | null, unitType?: string): { value: string; unit: string } => {
-    if (val === null || val === undefined || isNaN(val)) {
-      return { value: '—', unit: unitType || '' };
-    }
-
-    // Handle energy units: Joules → kJ → MJ → GJ
-    if (unitType === 'J') {
-      if (val >= 1000000000) return { value: (val / 1000000000).toFixed(2), unit: 'GJ' };
-      if (val >= 1000000) return { value: (val / 1000000).toFixed(2), unit: 'MJ' };
-      if (val >= 1000) return { value: (val / 1000).toFixed(2), unit: 'kJ' };
-      return { value: val.toFixed(2), unit: 'J' };
-    }
-
-    // Handle frequency units: Hz → kHz → MHz → GHz
-    if (unitType === 'Hz') {
-      if (val >= 1000000000) return { value: (val / 1000000000).toFixed(2), unit: 'GHz' };
-      if (val >= 1000000) return { value: (val / 1000000).toFixed(2), unit: 'MHz' };
-      if (val >= 1000) return { value: (val / 1000).toFixed(2), unit: 'kHz' };
-      return { value: val.toFixed(0), unit: 'Hz' };
-    }
-
-    // Handle MHz → GHz conversion
-    if (unitType === 'MHz') {
-      if (val >= 1000) return { value: (val / 1000).toFixed(2), unit: 'GHz' };
-      return { value: val.toFixed(0), unit: 'MHz' };
-    }
-
-    // Handle power units: W → kW → MW
-    if (unitType === 'W') {
-      if (val >= 1000000) return { value: (val / 1000000).toFixed(2), unit: 'MW' };
-      if (val >= 1000) return { value: (val / 1000).toFixed(2), unit: 'kW' };
-      return { value: val.toFixed(1), unit: 'W' };
-    }
-
-    // Handle bytes: B → KB → MB → GB → TB
-    if (unitType === 'B') {
-      if (val >= 1099511627776) return { value: (val / 1099511627776).toFixed(2), unit: 'TB' };
-      if (val >= 1073741824) return { value: (val / 1073741824).toFixed(2), unit: 'GB' };
-      if (val >= 1048576) return { value: (val / 1048576).toFixed(2), unit: 'MB' };
-      if (val >= 1024) return { value: (val / 1024).toFixed(2), unit: 'KB' };
-      return { value: val.toFixed(0), unit: 'B' };
-    }
-
-    // Generic number formatting for other units (%, cores, /s, etc.)
-    let formattedValue: string;
-    if (val >= 1000000000) formattedValue = `${(val / 1000000000).toFixed(2)}B`;
-    else if (val >= 1000000) formattedValue = `${(val / 1000000).toFixed(2)}M`;
-    else if (val >= 1000) formattedValue = `${(val / 1000).toFixed(1)}K`;
-    else if (val < 0.01 && val > 0) formattedValue = val.toExponential(2);
-    else if (Number.isInteger(val)) formattedValue = val.toString();
-    else formattedValue = val.toFixed(2);
-
-    return { value: formattedValue, unit: unitType || '' };
-  };
 
   // Calculate trend from time series
   const getTrend = (): { direction: 'up' | 'down' | 'flat'; percent: number } | null => {
@@ -493,24 +440,9 @@ const GPUFleetSummary: React.FC<GPUFleetSummaryProps> = ({ metricsData }) => {
   const totalPower = metricsData['GPU Power Usage (W)']?.latest_value || 0;
   
   // Health alerts based on thresholds
-  const hotGPUs = avgTemp && avgTemp > 80 ? Math.ceil(totalGPUs * 0.2) : 0; // Estimate based on temp
-  const overloadedGPUs = avgUtil && avgUtil > 95 ? Math.ceil(totalGPUs * 0.1) : 0; // Estimate
+  const hotGPUs = avgTemp && avgTemp > GPU_THRESHOLDS.TEMPERATURE_CRITICAL ? Math.ceil(totalGPUs * 0.2) : 0; // Estimate based on temp
+  const overloadedGPUs = avgUtil && avgUtil > GPU_THRESHOLDS.UTILIZATION_CRITICAL ? Math.ceil(totalGPUs * 0.1) : 0; // Estimate
   
-  const formatValue = (val: number | null, unitType?: string, decimals: number = 1): { value: string; unit: string } => {
-    if (val === null || val === undefined || isNaN(val)) {
-      return { value: '—', unit: unitType || '' };
-    }
-
-    // Handle power units for GPU fleet
-    if (unitType === 'W') {
-      if (val >= 1000000) return { value: (val / 1000000).toFixed(2), unit: 'MW' };
-      if (val >= 1000) return { value: (val / 1000).toFixed(2), unit: 'kW' };
-      return { value: val.toFixed(decimals), unit: 'W' };
-    }
-
-    // Default formatting
-    return { value: val.toFixed(decimals), unit: unitType || '' };
-  };
 
   return (
     <Card style={{ marginBottom: '16px', background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)', border: '1px solid #0891b2' }}>
@@ -549,7 +481,7 @@ const GPUFleetSummary: React.FC<GPUFleetSummaryProps> = ({ metricsData }) => {
                 Avg Utilization
               </Text>
               <Text component={TextVariants.h2} style={{ 
-                color: avgUtil && avgUtil > 90 ? '#dc2626' : avgUtil && avgUtil > 70 ? '#ea580c' : '#059669',
+                color: avgUtil && avgUtil > GPU_THRESHOLDS.UTILIZATION_WARNING ? '#dc2626' : avgUtil && avgUtil > GPU_THRESHOLDS.UTILIZATION_HIGH ? '#ea580c' : '#059669',
                 fontWeight: 700 
               }}>
                 {formatValue(avgUtil, '%').value}%
@@ -566,10 +498,10 @@ const GPUFleetSummary: React.FC<GPUFleetSummaryProps> = ({ metricsData }) => {
                 Avg Temperature
               </Text>
               <Text component={TextVariants.h2} style={{ 
-                color: avgTemp && avgTemp > 85 ? '#dc2626' : avgTemp && avgTemp > 75 ? '#ea580c' : '#059669',
+                color: avgTemp && avgTemp > GPU_THRESHOLDS.TEMPERATURE_DANGER ? '#dc2626' : avgTemp && avgTemp > GPU_THRESHOLDS.TEMPERATURE_WARNING ? '#ea580c' : '#059669',
                 fontWeight: 700 
               }}>
-                {formatValue(avgTemp, '°C', 0).value}°C
+                {avgTemp !== null ? Math.round(avgTemp) : '—'}°C
               </Text>
               <Text component={TextVariants.small} style={{ color: '#666' }}>
                 thermal status
@@ -584,7 +516,7 @@ const GPUFleetSummary: React.FC<GPUFleetSummaryProps> = ({ metricsData }) => {
               </Text>
               <Text component={TextVariants.h2} style={{ color: '#0891b2', fontWeight: 700 }}>
                 {(() => {
-                  const formatted = formatValue(totalPower, 'W', 0);
+                  const formatted = formatValue(totalPower, 'W');
                   return `${formatted.value}${formatted.unit}`;
                 })()}
               </Text>
@@ -607,14 +539,14 @@ const GPUFleetSummary: React.FC<GPUFleetSummaryProps> = ({ metricsData }) => {
               {hotGPUs > 0 && (
                 <FlexItem style={{ marginLeft: '12px' }}>
                   <Text component={TextVariants.small} style={{ color: '#92400e' }}>
-                    {hotGPUs} GPUs running hot (&gt;80°C)
+                    {hotGPUs} GPUs running hot (&gt;{GPU_THRESHOLDS.TEMPERATURE_CRITICAL}°C)
                   </Text>
                 </FlexItem>
               )}
               {overloadedGPUs > 0 && (
                 <FlexItem style={{ marginLeft: '12px' }}>
                   <Text component={TextVariants.small} style={{ color: '#92400e' }}>
-                    {overloadedGPUs} GPUs overloaded (&gt;95%)
+                    {overloadedGPUs} GPUs overloaded (&gt;{GPU_THRESHOLDS.UTILIZATION_CRITICAL}%)
                   </Text>
                 </FlexItem>
               )}
@@ -655,10 +587,10 @@ const CategorySection: React.FC<CategorySectionProps> = ({ categoryKey, category
   // Use GPU Count if available and > 0, otherwise try to estimate from power consumption
   let estimatedCount = gpuCount;
   if (estimatedCount === 0 && hasGPUMetrics) {
-    // Try to estimate based on total power (assuming ~250W per GPU average)
+    // Try to estimate based on total power
     const totalPower = metricsData['GPU Power Usage (W)']?.latest_value ?? 0;
     if (totalPower > 0) {
-      estimatedCount = Math.max(1, Math.round(totalPower / 250));
+      estimatedCount = Math.max(1, Math.round(totalPower / GPU_THRESHOLDS.POWER_ESTIMATE_PER_GPU));
     } else {
       // Fallback: if we have GPU metrics but no power data, assume at least 1 GPU
       estimatedCount = 1;
@@ -729,8 +661,8 @@ const CategorySection: React.FC<CategorySectionProps> = ({ categoryKey, category
                       <Text
                         component={TextVariants.small}
                         style={{
-                          color: gpuSummaryData.utilization > 90 ? '#dc2626' :
-                                 gpuSummaryData.utilization > 70 ? '#ea580c' : '#666',
+                          color: gpuSummaryData.utilization > GPU_THRESHOLDS.UTILIZATION_WARNING ? '#dc2626' :
+                                 gpuSummaryData.utilization > GPU_THRESHOLDS.UTILIZATION_HIGH ? '#ea580c' : '#666',
                           fontSize: '0.85rem',
                           display: 'block',
                           marginTop: '2px'
@@ -743,8 +675,8 @@ const CategorySection: React.FC<CategorySectionProps> = ({ categoryKey, category
                       <Text
                         component={TextVariants.small}
                         style={{
-                          color: gpuSummaryData.temperature > 85 ? '#dc2626' :
-                                 gpuSummaryData.temperature > 75 ? '#ea580c' : '#666',
+                          color: gpuSummaryData.temperature > GPU_THRESHOLDS.TEMPERATURE_DANGER ? '#dc2626' :
+                                 gpuSummaryData.temperature > GPU_THRESHOLDS.TEMPERATURE_WARNING ? '#ea580c' : '#666',
                           fontSize: '0.85rem',
                           display: 'block',
                           marginTop: '2px'

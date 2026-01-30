@@ -1,69 +1,16 @@
 /**
  * Tests for the enhanced formatValue function with unit-aware formatting
- * This tests the unit formatting logic that was added in Phase 3.2
+ * This tests the unit formatting logic from the shared utility
  */
 
-// Since formatValue is defined inside MetricCard component, we'll test it indirectly
-// through component rendering. This file tests the formatting logic separately.
-
-/**
- * Standalone implementation of the enhanced formatValue function for testing
- * This matches the implementation in MetricCard component
- */
-export const formatValue = (val: number | null, unitType?: string): { value: string; unit: string } => {
-  if (val === null || val === undefined || isNaN(val)) {
-    return { value: '—', unit: unitType || '' };
-  }
-
-  // Handle energy units: Joules → kJ → MJ → GJ
-  if (unitType === 'J') {
-    if (val >= 1000000000) return { value: (val / 1000000000).toFixed(2), unit: 'GJ' };
-    if (val >= 1000000) return { value: (val / 1000000).toFixed(2), unit: 'MJ' };
-    if (val >= 1000) return { value: (val / 1000).toFixed(2), unit: 'kJ' };
-    return { value: val.toFixed(2), unit: 'J' };
-  }
-
-  // Handle frequency units: Hz → kHz → MHz → GHz
-  if (unitType === 'Hz') {
-    if (val >= 1000000000) return { value: (val / 1000000000).toFixed(2), unit: 'GHz' };
-    if (val >= 1000000) return { value: (val / 1000000).toFixed(2), unit: 'MHz' };
-    if (val >= 1000) return { value: (val / 1000).toFixed(2), unit: 'kHz' };
-    return { value: val.toFixed(0), unit: 'Hz' };
-  }
-
-  // Handle MHz → GHz conversion
-  if (unitType === 'MHz') {
-    if (val >= 1000) return { value: (val / 1000).toFixed(2), unit: 'GHz' };
-    return { value: val.toFixed(0), unit: 'MHz' };
-  }
-
-  // Handle power units: W → kW → MW
-  if (unitType === 'W') {
-    if (val >= 1000000) return { value: (val / 1000000).toFixed(2), unit: 'MW' };
-    if (val >= 1000) return { value: (val / 1000).toFixed(2), unit: 'kW' };
-    return { value: val.toFixed(1), unit: 'W' };
-  }
-
-  // Handle bytes: B → KB → MB → GB → TB
-  if (unitType === 'B') {
-    if (val >= 1099511627776) return { value: (val / 1099511627776).toFixed(2), unit: 'TB' };
-    if (val >= 1073741824) return { value: (val / 1073741824).toFixed(2), unit: 'GB' };
-    if (val >= 1048576) return { value: (val / 1048576).toFixed(2), unit: 'MB' };
-    if (val >= 1024) return { value: (val / 1024).toFixed(2), unit: 'KB' };
-    return { value: val.toFixed(0), unit: 'B' };
-  }
-
-  // Generic number formatting for other units (%, cores, /s, etc.)
-  let formattedValue: string;
-  if (val >= 1000000000) formattedValue = `${(val / 1000000000).toFixed(2)}B`;
-  else if (val >= 1000000) formattedValue = `${(val / 1000000).toFixed(2)}M`;
-  else if (val >= 1000) formattedValue = `${(val / 1000).toFixed(1)}K`;
-  else if (val < 0.01 && val > 0) formattedValue = val.toExponential(2);
-  else if (Number.isInteger(val)) formattedValue = val.toString();
-  else formattedValue = val.toFixed(2);
-
-  return { value: formattedValue, unit: unitType || '' };
-};
+import { 
+  formatValue, 
+  formatValueWithUnit,
+  UNIT_CONVERSION,
+  PRECISION,
+  GPU_THRESHOLDS,
+  SMALL_VALUE_THRESHOLD
+} from '../../src/core/utils/formatValue';
 
 describe('formatValue - Enhanced Unit Formatting', () => {
   describe('Energy Units (Joules)', () => {
@@ -244,6 +191,244 @@ describe('formatValue - Enhanced Unit Formatting', () => {
     it('should use integer precision for Hz base unit', () => {
       expect(formatValue(999.7, 'Hz')).toEqual({ value: '1000', unit: 'Hz' });
       expect(formatValue(500.3, 'Hz')).toEqual({ value: '500', unit: 'Hz' });
+    });
+  });
+
+  describe('formatValueWithUnit Helper Function', () => {
+    it('should combine value and unit into a single string', () => {
+      expect(formatValueWithUnit(1500, 'W')).toBe('1.50kW');
+      expect(formatValueWithUnit(2048, 'B')).toBe('2.00KB');
+      expect(formatValueWithUnit(45.5, '%')).toBe('45.50%');
+    });
+
+    it('should handle null values', () => {
+      expect(formatValueWithUnit(null, 'W')).toBe('—W');
+      expect(formatValueWithUnit(null)).toBe('—');
+    });
+
+    it('should handle missing units', () => {
+      expect(formatValueWithUnit(100)).toBe('100');
+      expect(formatValueWithUnit(1500)).toBe('1.5K');
+    });
+  });
+
+  describe('UNIT_CONVERSION Constants', () => {
+    describe('Decimal scaling (1000-based)', () => {
+      it('should have correct decimal conversion values', () => {
+        expect(UNIT_CONVERSION.KILO).toBe(1000);
+        expect(UNIT_CONVERSION.MEGA).toBe(1000000);
+        expect(UNIT_CONVERSION.GIGA).toBe(1000000000);
+      });
+
+      it('should maintain proper mathematical relationships', () => {
+        expect(UNIT_CONVERSION.MEGA).toBe(UNIT_CONVERSION.KILO * 1000);
+        expect(UNIT_CONVERSION.GIGA).toBe(UNIT_CONVERSION.MEGA * 1000);
+        expect(UNIT_CONVERSION.GIGA).toBe(UNIT_CONVERSION.KILO * 1000 * 1000);
+      });
+    });
+
+    describe('Binary scaling (1024-based)', () => {
+      it('should have correct binary conversion values', () => {
+        expect(UNIT_CONVERSION.KILO_BYTE).toBe(1024);
+        expect(UNIT_CONVERSION.MEGA_BYTE).toBe(1048576); // 1024²
+        expect(UNIT_CONVERSION.GIGA_BYTE).toBe(1073741824); // 1024³
+        expect(UNIT_CONVERSION.TERA_BYTE).toBe(1099511627776); // 1024⁴
+      });
+
+      it('should maintain proper mathematical relationships', () => {
+        expect(UNIT_CONVERSION.MEGA_BYTE).toBe(UNIT_CONVERSION.KILO_BYTE * 1024);
+        expect(UNIT_CONVERSION.GIGA_BYTE).toBe(UNIT_CONVERSION.MEGA_BYTE * 1024);
+        expect(UNIT_CONVERSION.TERA_BYTE).toBe(UNIT_CONVERSION.GIGA_BYTE * 1024);
+      });
+
+      it('should verify powers of 1024 are calculated correctly', () => {
+        expect(UNIT_CONVERSION.MEGA_BYTE).toBe(Math.pow(1024, 2));
+        expect(UNIT_CONVERSION.GIGA_BYTE).toBe(Math.pow(1024, 3));
+        expect(UNIT_CONVERSION.TERA_BYTE).toBe(Math.pow(1024, 4));
+      });
+    });
+
+    it('should be immutable (readonly)', () => {
+      // TypeScript should prevent this at compile time
+      // At runtime, `as const` provides type-level immutability but not runtime immutability
+      // We verify that the constants have the expected values and won't change during tests
+      expect(UNIT_CONVERSION.KILO).toBe(1000);
+      expect(typeof UNIT_CONVERSION.KILO).toBe('number');
+      // TypeScript prevents modification: (UNIT_CONVERSION as any).KILO = 999; would be a compile error
+    });
+  });
+
+  describe('PRECISION Constants', () => {
+    it('should have appropriate precision values for different unit types', () => {
+      expect(PRECISION.ENERGY).toBe(2);
+      expect(PRECISION.FREQUENCY).toBe(2);
+      expect(PRECISION.FREQUENCY_BASE).toBe(0);
+      expect(PRECISION.POWER_BASE).toBe(1);
+      expect(PRECISION.POWER_SCALED).toBe(2);
+      expect(PRECISION.BYTES).toBe(2);
+      expect(PRECISION.BYTES_BASE).toBe(0);
+      expect(PRECISION.GENERIC).toBe(2);
+      expect(PRECISION.GENERIC_K).toBe(1);
+      expect(PRECISION.EXPONENTIAL).toBe(2);
+      expect(PRECISION.MHZ_BASE).toBe(0);
+    });
+
+    it('should use integer values for base units (no decimals)', () => {
+      const baseUnits = [
+        PRECISION.FREQUENCY_BASE,
+        PRECISION.BYTES_BASE,
+        PRECISION.MHZ_BASE
+      ];
+      baseUnits.forEach(precision => {
+        expect(precision).toBe(0);
+        expect(Number.isInteger(precision)).toBe(true);
+      });
+    });
+
+    it('should use appropriate precision for scaled units', () => {
+      const scaledUnits = [
+        PRECISION.ENERGY,
+        PRECISION.FREQUENCY,
+        PRECISION.POWER_SCALED,
+        PRECISION.BYTES,
+        PRECISION.GENERIC,
+        PRECISION.EXPONENTIAL
+      ];
+      scaledUnits.forEach(precision => {
+        expect(precision).toBeGreaterThanOrEqual(1);
+        expect(precision).toBeLessThanOrEqual(3);
+      });
+    });
+
+    it('should be immutable (readonly)', () => {
+      // TypeScript should prevent this at compile time
+      // We verify that the constants have the expected values and won't change during tests
+      expect(PRECISION.ENERGY).toBe(2);
+      expect(typeof PRECISION.ENERGY).toBe('number');
+      // TypeScript prevents modification: (PRECISION as any).ENERGY = 5; would be a compile error
+    });
+  });
+
+  describe('GPU_THRESHOLDS Constants', () => {
+    describe('Temperature thresholds', () => {
+      it('should have reasonable temperature values in Celsius', () => {
+        expect(GPU_THRESHOLDS.TEMPERATURE_WARNING).toBe(75);
+        expect(GPU_THRESHOLDS.TEMPERATURE_CRITICAL).toBe(80);
+        expect(GPU_THRESHOLDS.TEMPERATURE_DANGER).toBe(85);
+      });
+
+      it('should maintain proper temperature hierarchy', () => {
+        expect(GPU_THRESHOLDS.TEMPERATURE_WARNING).toBeLessThan(GPU_THRESHOLDS.TEMPERATURE_CRITICAL);
+        expect(GPU_THRESHOLDS.TEMPERATURE_CRITICAL).toBeLessThan(GPU_THRESHOLDS.TEMPERATURE_DANGER);
+      });
+
+      it('should use realistic GPU temperature ranges', () => {
+        // Typical GPU operating range is 30-90°C
+        expect(GPU_THRESHOLDS.TEMPERATURE_WARNING).toBeGreaterThan(30);
+        expect(GPU_THRESHOLDS.TEMPERATURE_WARNING).toBeLessThan(90);
+        expect(GPU_THRESHOLDS.TEMPERATURE_DANGER).toBeLessThan(100);
+      });
+    });
+
+    describe('Utilization thresholds', () => {
+      it('should have reasonable utilization percentages', () => {
+        expect(GPU_THRESHOLDS.UTILIZATION_HIGH).toBe(70);
+        expect(GPU_THRESHOLDS.UTILIZATION_WARNING).toBe(90);
+        expect(GPU_THRESHOLDS.UTILIZATION_CRITICAL).toBe(95);
+      });
+
+      it('should maintain proper utilization hierarchy', () => {
+        expect(GPU_THRESHOLDS.UTILIZATION_HIGH).toBeLessThan(GPU_THRESHOLDS.UTILIZATION_WARNING);
+        expect(GPU_THRESHOLDS.UTILIZATION_WARNING).toBeLessThan(GPU_THRESHOLDS.UTILIZATION_CRITICAL);
+      });
+
+      it('should use valid percentage ranges', () => {
+        const utilizationThresholds = [
+          GPU_THRESHOLDS.UTILIZATION_HIGH,
+          GPU_THRESHOLDS.UTILIZATION_WARNING,
+          GPU_THRESHOLDS.UTILIZATION_CRITICAL
+        ];
+        utilizationThresholds.forEach(threshold => {
+          expect(threshold).toBeGreaterThan(0);
+          expect(threshold).toBeLessThan(100);
+        });
+      });
+    });
+
+    describe('Power estimation', () => {
+      it('should have a reasonable power estimate per GPU', () => {
+        expect(GPU_THRESHOLDS.POWER_ESTIMATE_PER_GPU).toBe(250);
+      });
+
+      it('should be a realistic GPU power consumption value', () => {
+        // Modern GPUs typically consume 150-500W
+        expect(GPU_THRESHOLDS.POWER_ESTIMATE_PER_GPU).toBeGreaterThan(100);
+        expect(GPU_THRESHOLDS.POWER_ESTIMATE_PER_GPU).toBeLessThan(600);
+      });
+    });
+
+    it('should be immutable (readonly)', () => {
+      // TypeScript should prevent this at compile time
+      // We verify that the constants have the expected values and won't change during tests
+      expect(GPU_THRESHOLDS.TEMPERATURE_WARNING).toBe(75);
+      expect(typeof GPU_THRESHOLDS.TEMPERATURE_WARNING).toBe('number');
+      // TypeScript prevents modification: (GPU_THRESHOLDS as any).TEMPERATURE_WARNING = 100; would be a compile error
+    });
+  });
+
+  describe('SMALL_VALUE_THRESHOLD Constant', () => {
+    it('should have the correct small value threshold', () => {
+      expect(SMALL_VALUE_THRESHOLD).toBe(0.01);
+    });
+
+    it('should be a reasonable threshold for exponential notation', () => {
+      expect(SMALL_VALUE_THRESHOLD).toBeGreaterThan(0);
+      expect(SMALL_VALUE_THRESHOLD).toBeLessThan(0.1);
+    });
+
+    it('should work correctly with the formatValue function', () => {
+      // Values below threshold should use exponential notation
+      const belowThreshold = SMALL_VALUE_THRESHOLD / 2;
+      const aboveThreshold = SMALL_VALUE_THRESHOLD * 2;
+      
+      const belowResult = formatValue(belowThreshold, 'factor');
+      const aboveResult = formatValue(aboveThreshold, 'factor');
+      
+      expect(belowResult.value).toContain('e-'); // Exponential notation
+      expect(aboveResult.value).not.toContain('e'); // Regular decimal notation
+    });
+  });
+
+  describe('Constants Integration with formatValue', () => {
+    it('should use UNIT_CONVERSION constants for byte formatting', () => {
+      // Test that formatValue uses our constants correctly
+      expect(formatValue(UNIT_CONVERSION.KILO_BYTE, 'B')).toEqual({ value: '1.00', unit: 'KB' });
+      expect(formatValue(UNIT_CONVERSION.MEGA_BYTE, 'B')).toEqual({ value: '1.00', unit: 'MB' });
+      expect(formatValue(UNIT_CONVERSION.GIGA_BYTE, 'B')).toEqual({ value: '1.00', unit: 'GB' });
+      expect(formatValue(UNIT_CONVERSION.TERA_BYTE, 'B')).toEqual({ value: '1.00', unit: 'TB' });
+    });
+
+    it('should use UNIT_CONVERSION constants for decimal formatting', () => {
+      expect(formatValue(UNIT_CONVERSION.KILO, 'Hz')).toEqual({ value: '1.00', unit: 'kHz' });
+      expect(formatValue(UNIT_CONVERSION.MEGA, 'Hz')).toEqual({ value: '1.00', unit: 'MHz' });
+      expect(formatValue(UNIT_CONVERSION.GIGA, 'Hz')).toEqual({ value: '1.00', unit: 'GHz' });
+    });
+
+    it('should use PRECISION constants for formatting accuracy', () => {
+      // Energy should use PRECISION.ENERGY (2 decimals)
+      expect(formatValue(1230, 'J')).toEqual({ value: '1.23', unit: 'kJ' }); // 1230/1000 = 1.23
+      
+      // Base Hz should use PRECISION.FREQUENCY_BASE (0 decimals)  
+      expect(formatValue(500.7, 'Hz')).toEqual({ value: '501', unit: 'Hz' });
+      
+      // Base watts should use PRECISION.POWER_BASE (1 decimal)
+      expect(formatValue(250.67, 'W')).toEqual({ value: '250.7', unit: 'W' });
+    });
+
+    it('should use SMALL_VALUE_THRESHOLD for exponential formatting', () => {
+      const justBelowThreshold = SMALL_VALUE_THRESHOLD * 0.9;
+      const result = formatValue(justBelowThreshold, 'ratio');
+      expect(result.value).toMatch(/^\d+\.\d+e-\d+$/); // Exponential format
     });
   });
 });

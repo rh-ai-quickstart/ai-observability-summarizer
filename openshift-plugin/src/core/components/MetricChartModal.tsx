@@ -21,6 +21,7 @@ import {
   ChartVoronoiContainer,
 } from '@patternfly/react-charts';
 import { DownloadIcon } from '@patternfly/react-icons';
+import { formatValue, formatValueWithUnit } from '../utils/formatValue';
 
 interface TimeSeriesPoint {
   timestamp: string;
@@ -58,14 +59,15 @@ export const MetricChartModal: React.FC<MetricChartModalProps> = ({ metric, isOp
     }
   };
 
-  const formatValue = (val: number): string => {
-    if (val === null || val === undefined || isNaN(val)) return '—';
-    if (val >= 1000000000) return `${(val / 1000000000).toFixed(2)}B`;
-    if (val >= 1000000) return `${(val / 1000000).toFixed(2)}M`;
-    if (val >= 1000) return `${(val / 1000).toFixed(1)}K`;
-    if (val < 0.01 && val > 0) return val.toExponential(2);
-    if (Number.isInteger(val)) return val.toString();
-    return val.toFixed(2);
+  // Helper to format value with unit for display
+  const formatWithUnit = (val: number): string => {
+    return formatValueWithUnit(val, metric.unit);
+  };
+
+  // Helper for axis formatting (just the value part)
+  const formatAxisValue = (val: number): string => {
+    const { value, unit } = formatValue(val, metric.unit);
+    return unit ? `${value}${unit}` : value;
   };
 
   // Prepare data for Victory.js
@@ -159,7 +161,7 @@ export const MetricChartModal: React.FC<MetricChartModalProps> = ({ metric, isOp
         <Bullseye style={{ minHeight: '400px' }}>
           <div style={{ textAlign: 'center' }}>
             <Text component={TextVariants.p} style={{ color: 'var(--pf-v5-global--Color--200)' }}>
-              No time series data available for this metric
+              No data available for the selected time range.
             </Text>
           </div>
         </Bullseye>
@@ -172,7 +174,7 @@ export const MetricChartModal: React.FC<MetricChartModalProps> = ({ metric, isOp
                 <div style={{ textAlign: 'center', padding: '8px 16px', background: '#f0f0f0', borderRadius: '4px' }}>
                   <Text component={TextVariants.small} style={{ color: '#666', display: 'block' }}>Latest</Text>
                   <Text component={TextVariants.h4} style={{ fontWeight: 600 }}>
-                    {formatValue(latest)}{metric.unit ? ` ${metric.unit}` : ''}
+                    {formatWithUnit(latest)}
                   </Text>
                 </div>
               </ToolbarItem>
@@ -180,23 +182,23 @@ export const MetricChartModal: React.FC<MetricChartModalProps> = ({ metric, isOp
                 <div style={{ textAlign: 'center', padding: '8px 16px', background: '#f0f0f0', borderRadius: '4px' }}>
                   <Text component={TextVariants.small} style={{ color: '#666', display: 'block' }}>Average</Text>
                   <Text component={TextVariants.h4} style={{ fontWeight: 600 }}>
-                    {formatValue(avg)}{metric.unit ? ` ${metric.unit}` : ''}
+                    {formatWithUnit(avg)}
                   </Text>
                 </div>
               </ToolbarItem>
               <ToolbarItem>
                 <div style={{ textAlign: 'center', padding: '8px 16px', background: '#f0f0f0', borderRadius: '4px' }}>
-                  <Text component={TextVariants.small} style={{ color: '#666', display: 'block' }}>Min</Text>
+                  <Text component={TextVariants.small} style={{ color: '#666', display: 'block' }}>Minimum</Text>
                   <Text component={TextVariants.h4} style={{ fontWeight: 600 }}>
-                    {formatValue(min)}{metric.unit ? ` ${metric.unit}` : ''}
+                    {formatWithUnit(min)}
                   </Text>
                 </div>
               </ToolbarItem>
               <ToolbarItem>
                 <div style={{ textAlign: 'center', padding: '8px 16px', background: '#f0f0f0', borderRadius: '4px' }}>
-                  <Text component={TextVariants.small} style={{ color: '#666', display: 'block' }}>Max</Text>
+                  <Text component={TextVariants.small} style={{ color: '#666', display: 'block' }}>Maximum</Text>
                   <Text component={TextVariants.h4} style={{ fontWeight: 600 }}>
-                    {formatValue(max)}{metric.unit ? ` ${metric.unit}` : ''}
+                    {formatWithUnit(max)}
                   </Text>
                 </div>
               </ToolbarItem>
@@ -210,7 +212,7 @@ export const MetricChartModal: React.FC<MetricChartModalProps> = ({ metric, isOp
               ariaTitle={metric.label}
               containerComponent={
                 <ChartVoronoiContainer
-                  labels={({ datum }) => `${datum.name}\n${formatValue(datum.y)}${metric.unit ? ` ${metric.unit}` : ''}`}
+                  labels={({ datum }) => `${datum.name}\n${formatValueWithUnit(datum.y, metric.unit)}`}
                   constrainToVisibleArea
                 />
               }
@@ -255,7 +257,7 @@ export const MetricChartModal: React.FC<MetricChartModalProps> = ({ metric, isOp
               <ChartAxis
                 dependentAxis
                 showGrid
-                tickFormat={(t) => formatValue(t)}
+                tickFormat={(t) => formatAxisValue(t)}
                 label={metric.unit || 'Value'}
                 style={{
                   axisLabel: { fontSize: 12, padding: 50 }
