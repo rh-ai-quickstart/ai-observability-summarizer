@@ -314,15 +314,24 @@ interface KeyMetricCardProps {
 
 const KeyMetricCard: React.FC<KeyMetricCardProps> = ({ label, avgValue, maxValue, unit = '', loading, timeSeries }) => {
   // Smart value formatting with M/K suffixes
-  const formatValue = (val: number | null): string => {
+  const formatValue = (val: number | null, isMainValue: boolean = true): string => {
     if (val === null) return 'N/A';
     if (val === 0) return '0';
 
     // Special formatting for tokens
     if (label.includes('Tokens')) {
-      if (val >= 1000000) return `${(val / 1000000).toFixed(1)}M`;
-      if (val >= 1000) return `${(val / 1000).toFixed(1)}K`;
-      return val.toFixed(0);
+      // Main value: show total tokens
+      if (isMainValue) {
+        if (val >= 1000000) return `${(val / 1000000).toFixed(1)}M`;
+        if (val >= 1000) return `${(val / 1000).toFixed(1)}K`;
+        return val.toFixed(0);
+      }
+      // Max value for tokens is peak rate (tokens/sec)
+      else {
+        if (val >= 1000) return `${(val / 1000).toFixed(1)}K/s`;
+        if (val >= 1) return `${val.toFixed(1)}/s`;
+        return `${(val * 60).toFixed(1)}/min`;
+      }
     }
 
     // Special formatting for latency/time
@@ -407,8 +416,8 @@ const KeyMetricCard: React.FC<KeyMetricCardProps> = ({ label, avgValue, maxValue
     );
   };
 
-  const displayAvg = formatValue(avgValue);
-  const displayMax = formatValue(maxValue);
+  const displayAvg = formatValue(avgValue, true);
+  const displayMax = formatValue(maxValue, false); // false = this is a secondary value (rate for tokens)
   const displayUnit = unit && avgValue !== null ? ` ${unit}` : '';
 
   return (
@@ -451,7 +460,7 @@ const KeyMetricCard: React.FC<KeyMetricCardProps> = ({ label, avgValue, maxValue
           </FlexItem>
           <FlexItem>
             <Text component={TextVariants.small} style={{ color: 'var(--pf-v5-global--Color--200)', fontSize: '0.85rem' }}>
-              Max: {displayMax}{displayUnit}
+              {label.includes('Tokens') ? 'Peak:' : 'Max:'} {displayMax}
             </Text>
           </FlexItem>
           <FlexItem>
@@ -483,14 +492,24 @@ const KeyMetricCard: React.FC<KeyMetricCardProps> = ({ label, avgValue, maxValue
 interface KeyMetricsSectionProps {
   data: Record<string, MetricDataValue>;
   loading: boolean;
+  timeRange: string;
 }
 
-const KeyMetricsSection: React.FC<KeyMetricsSectionProps> = ({ data, loading }) => {
+const KeyMetricsSection: React.FC<KeyMetricsSectionProps> = ({ data, loading, timeRange }) => {
+  // Helper: Convert time range string to seconds
+  const getTimeRangeSeconds = (range: string): number => {
+    const num = parseInt(range);
+    if (range.includes('h')) return num * 3600;
+    if (range.includes('m')) return num * 60;
+    if (range.includes('d')) return num * 86400;
+    return 3600; // Default to 1 hour
+  };
+
   // Calculate avg and max from time series data (with NaN filtering like Streamlit)
   const getAvgAndMax = (key: string): { avg: number | null; max: number | null } => {
     const metricData = data[key];
 
-    // For token metrics (increase queries), use latest_value instead of averaging sparkline
+    // For token metrics (increase queries), show total and peak rate
     // Why: Token queries use increase(counter[1h]) which gives overlapping windows
     // Example for 1-hour window (14:00-15:00):
     //   - Instant query at 15:00: increase[1h] = tokens from 14:00-15:00 = 25K ✓ CORRECT
@@ -501,6 +520,7 @@ const KeyMetricsSection: React.FC<KeyMetricsSectionProps> = ({ data, loading }) 
     //   - Average of sparkline: (20K + 20K + ... + 25K) / 15 ≈ 22K ✗ WRONG (includes data before window)
     //   - Sum of sparkline: 20K + 20K + ... = 330K ✗ WRONG (massive double-counting due to overlap)
     //   - Latest value: 25K ✓ CORRECT (exact tokens during selected window)
+    //   - Peak rate: max(20K, 20K, ..., 25K) / 3600s = 25K / 3600 ≈ 7 tokens/sec
     if (key.includes('Tokens Created')) {
       const latestValue = metricData?.latest_value;
 
@@ -510,8 +530,22 @@ const KeyMetricsSection: React.FC<KeyMetricsSectionProps> = ({ data, loading }) 
         return { avg: null, max: null };
       }
 
-      // For increase queries, latest = max (shows total during window)
-      return { avg: latestValue, max: latestValue };
+      // Calculate peak rate from sparkline (highest burst rate observed)
+      let peakRate: number | null = null;
+      if (metricData?.time_series && metricData.time_series.length > 0) {
+        const windowDuration = getTimeRangeSeconds(timeRange);
+        const validValues = metricData.time_series
+          .map(p => p.value)
+          .filter(v => v !== null && v !== undefined && !isNaN(v) && isFinite(v));
+
+        if (validValues.length > 0 && windowDuration > 0) {
+          // Peak rate = highest increase observed / window duration
+          const maxIncrease = Math.max(...validValues);
+          peakRate = maxIncrease / windowDuration; // tokens per second
+        }
+      }
+
+      return { avg: latestValue, max: peakRate };
     }
 
     // Debug logging for P95 Latency
@@ -1133,7 +1167,7 @@ const VLLMMetricsPage: React.FC = () => {
         ) : !metricsLoading && (
           <>
             {/* Key Metrics Section - Priority metrics at the top */}
-            <KeyMetricsSection data={metricsData} loading={metricsLoading} />
+            <KeyMetricsSection data={metricsData} loading={metricsLoading} timeRange={timeRange} />
 
             {/* Detailed Category Sections - Collapsible */}
             {Object.entries(METRIC_CATEGORIES)
