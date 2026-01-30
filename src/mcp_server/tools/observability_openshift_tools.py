@@ -14,6 +14,7 @@ from core.metrics import (
     chat_openshift_metrics,
     NAMESPACE_SCOPED,
     CLUSTER_WIDE,
+    calculate_histogram_quantile_optimal_lookback,
 )
 from common.pylogger import get_python_logger
 from mcp_server.exceptions import (
@@ -32,30 +33,6 @@ logger = get_python_logger()
 K8S_SA_TOKEN_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/token"
 K8S_SA_CA_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
 K8S_API_URL = "https://kubernetes.default.svc"
-
-
-def _calculate_optimal_lookback(duration_hours: float) -> str:
-    """Calculate optimal lookback window for rate() queries based on total time range.
-
-    This prevents sparse data in histogram_quantile queries by using a lookback window
-    proportional to the total time range.
-
-    Args:
-        duration_hours: Total time range duration in hours
-
-    Returns:
-        Lookback window string (e.g., "5m", "30m", "2h")
-    """
-    if duration_hours <= 1:
-        return "5m"  # 1 hour or less -> 5 minute lookback
-    elif duration_hours <= 3:
-        return "15m"  # 1-3 hours -> 15 minute lookback
-    elif duration_hours <= 12:
-        return "1h"  # 3-12 hours -> 1 hour lookback
-    elif duration_hours <= 48:
-        return "4h"  # 12-48 hours -> 4 hour lookback
-    else:
-        return "12h"  # >48 hours -> 12 hour lookback
 
 
 def _detect_provider_from_model_id(model_id: Optional[str]) -> Optional[str]:
@@ -410,20 +387,36 @@ def fetch_openshift_metrics_data(
                     final_query = query.replace(')', f'{{namespace="{namespace}"}})')
             prepared_queries[label] = final_query
 
-        # Adjust rate() lookback windows based on the total time range
-        # This prevents sparse data with histogram_quantile queries
-        duration_hours = (end_ts - start_ts) / 3600
-        lookback_window = _calculate_optimal_lookback(duration_hours)
+        # Calculate time range for dynamic query adjustment
+        duration_seconds = end_ts - start_ts
+        duration_hours = duration_seconds / 3600
 
-        # Replace hardcoded [5m] with dynamic lookback in queries
+        # Format duration for PromQL (e.g., "6h", "30m", "1d")
+        if duration_hours >= 24:
+            duration_str = f"{int(duration_hours / 24)}d"
+        elif duration_hours >= 1:
+            duration_str = f"{int(duration_hours)}h"
+        else:
+            duration_str = f"{int(duration_seconds / 60)}m"
+
+        # Calculate lookback window for rate() queries
+        lookback_window = calculate_histogram_quantile_optimal_lookback(duration_hours)
+
+        # Replace hardcoded [5m] with appropriate time range in queries
         adjusted_queries = {}
         for label, query in prepared_queries.items():
-            # Replace [5m] with calculated lookback for rate() and histogram_quantile queries
-            adjusted_query = query.replace('[5m]', f'[{lookback_window}]')
-            adjusted_queries[label] = adjusted_query
+            # For increase() queries: use full duration to show change during time window
+            # For rate()/histogram_quantile(): use lookback window for smooth data
+            if 'increase(' in query:
+                adjusted_query = query.replace('[5m]', f'[{duration_str}]')
+                if '[5m]' in query and query != adjusted_query:
+                    logger.debug(f"Adjusted increase duration for '{label}': [5m] -> [{duration_str}]")
+            else:
+                adjusted_query = query.replace('[5m]', f'[{lookback_window}]')
+                if '[5m]' in query and query != adjusted_query:
+                    logger.debug(f"Adjusted lookback for '{label}': [5m] -> [{lookback_window}]")
 
-            if '[5m]' in query and query != adjusted_query:
-                logger.debug(f"Adjusted lookback for '{label}': [5m] -> [{lookback_window}]")
+            adjusted_queries[label] = adjusted_query
 
         prepared_queries = adjusted_queries
 

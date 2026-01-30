@@ -187,6 +187,30 @@ def execute_range_queries_parallel(
     return results
 
 
+def calculate_histogram_quantile_optimal_lookback(duration_hours: float) -> str:
+    """Calculate optimal lookback window for rate() queries based on total time range.
+
+    This prevents sparse data in histogram_quantile queries by using a lookback window
+    proportional to the total time range.
+
+    Args:
+        duration_hours: Total time range duration in hours
+
+    Returns:
+        Lookback window string (e.g., "5m", "30m", "2h")
+    """
+    if duration_hours <= 1:
+        return "5m"  # 1 hour or less -> 5 minute lookback
+    elif duration_hours <= 3:
+        return "15m"  # 1-3 hours -> 15 minute lookback
+    elif duration_hours <= 12:
+        return "1h"  # 3-12 hours -> 1 hour lookback
+    elif duration_hours <= 48:
+        return "4h"  # 12-48 hours -> 4 hour lookback
+    else:
+        return "12h"  # >48 hours -> 12 hour lookback
+
+
 @dataclass(frozen=True)
 class NamespacePodPair:
     namespace: str
@@ -695,24 +719,25 @@ def discover_vllm_metrics():
         vllm_metrics = set(m for m in all_metrics if m.startswith("vllm:"))
 
         # Tokens - For dashboard display, prefer current totals over increases
-        # This shows accumulated tokens rather than recent activity
+        # Token metrics: use increase() to show tokens during the selected time window
+        # The [5m] placeholder will be replaced with actual time range by the query executor
         if "vllm:request_prompt_tokens_sum" in vllm_metrics:
-            metric_mapping["Prompt Tokens Created"] = "vllm:request_prompt_tokens_sum"
+            metric_mapping["Prompt Tokens Created"] = "increase(vllm:request_prompt_tokens_sum[5m])"
         elif "vllm:prompt_tokens_total" in vllm_metrics:
-            metric_mapping["Prompt Tokens Created"] = "sum(vllm:prompt_tokens_total)"
+            metric_mapping["Prompt Tokens Created"] = "sum(increase(vllm:prompt_tokens_total[5m]))"
         elif "vllm:request_prompt_tokens_created" in vllm_metrics:
-            metric_mapping["Prompt Tokens Created"] = "sum(increase(vllm:request_prompt_tokens_created[1h]))"
+            metric_mapping["Prompt Tokens Created"] = "sum(increase(vllm:request_prompt_tokens_created[5m]))"
         elif "vllm:request_prompt_tokens_total" in vllm_metrics:
-            metric_mapping["Prompt Tokens Created"] = "sum(increase(vllm:request_prompt_tokens_total[1h]))"
+            metric_mapping["Prompt Tokens Created"] = "sum(increase(vllm:request_prompt_tokens_total[5m]))"
 
         if "vllm:request_generation_tokens_sum" in vllm_metrics:
-            metric_mapping["Output Tokens Created"] = "vllm:request_generation_tokens_sum"
+            metric_mapping["Output Tokens Created"] = "increase(vllm:request_generation_tokens_sum[5m])"
         elif "vllm:generation_tokens_total" in vllm_metrics:
-            metric_mapping["Output Tokens Created"] = "sum(vllm:generation_tokens_total)"
+            metric_mapping["Output Tokens Created"] = "sum(increase(vllm:generation_tokens_total[5m]))"
         elif "vllm:request_generation_tokens_created" in vllm_metrics:
-            metric_mapping["Output Tokens Created"] = "sum(increase(vllm:request_generation_tokens_created[1h]))"
+            metric_mapping["Output Tokens Created"] = "sum(increase(vllm:request_generation_tokens_created[5m]))"
         elif "vllm:request_generation_tokens_total" in vllm_metrics:
-            metric_mapping["Output Tokens Created"] = "sum(increase(vllm:request_generation_tokens_total[1h]))"
+            metric_mapping["Output Tokens Created"] = "sum(increase(vllm:request_generation_tokens_total[5m]))"
 
         # Requests running (gauge)
         if "vllm:num_requests_running" in vllm_metrics:
@@ -770,8 +795,8 @@ def discover_vllm_metrics():
             "GPU Energy Consumption (Joules)": "avg(DCGM_FI_DEV_TOTAL_ENERGY_CONSUMPTION) or avg(habanalabs_energy)",
             "GPU Memory Temperature (°C)": "avg(DCGM_FI_DEV_MEMORY_TEMP) or avg(habanalabs_temperature_onboard)",
             "GPU Usage (%)": "avg(DCGM_FI_DEV_GPU_UTIL) or avg(habanalabs_utilization)",
-            "Prompt Tokens Created": "vllm:request_prompt_tokens_sum",
-            "Output Tokens Created": "vllm:request_generation_tokens_sum",
+            "Prompt Tokens Created": "increase(vllm:request_prompt_tokens_sum[5m])",
+            "Output Tokens Created": "increase(vllm:request_generation_tokens_sum[5m])",
             "Requests Running": "vllm:num_requests_running",
             "P95 Latency (s)": "histogram_quantile(0.95, sum(rate(vllm:e2e_request_latency_seconds_bucket[5m])) by (le))",
             "Inference Time (s)": "sum(rate(vllm:request_inference_time_seconds_sum[5m])) / sum(rate(vllm:request_inference_time_seconds_count[5m]))",

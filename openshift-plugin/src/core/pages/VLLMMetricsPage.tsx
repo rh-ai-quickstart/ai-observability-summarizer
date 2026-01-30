@@ -490,6 +490,30 @@ const KeyMetricsSection: React.FC<KeyMetricsSectionProps> = ({ data, loading }) 
   const getAvgAndMax = (key: string): { avg: number | null; max: number | null } => {
     const metricData = data[key];
 
+    // For token metrics (increase queries), use latest_value instead of averaging sparkline
+    // Why: Token queries use increase(counter[1h]) which gives overlapping windows
+    // Example for 1-hour window (14:00-15:00):
+    //   - Instant query at 15:00: increase[1h] = tokens from 14:00-15:00 = 25K ✓ CORRECT
+    //   - Range query sparkline points:
+    //     * 14:00: increase[1h] from 13:00-14:00 = 20K (BEFORE selected window!)
+    //     * 14:04: increase[1h] from 13:04-14:04 = 20K (mostly before window, overlaps with above)
+    //     * 15:00: increase[1h] from 14:00-15:00 = 25K (matches window)
+    //   - Average of sparkline: (20K + 20K + ... + 25K) / 15 ≈ 22K ✗ WRONG (includes data before window)
+    //   - Sum of sparkline: 20K + 20K + ... = 330K ✗ WRONG (massive double-counting due to overlap)
+    //   - Latest value: 25K ✓ CORRECT (exact tokens during selected window)
+    if (key.includes('Tokens Created')) {
+      const latestValue = metricData?.latest_value;
+
+      // Filter out NaN, null, and infinite values
+      if (latestValue === null || latestValue === undefined ||
+          isNaN(latestValue) || !isFinite(latestValue)) {
+        return { avg: null, max: null };
+      }
+
+      // For increase queries, latest = max (shows total during window)
+      return { avg: latestValue, max: latestValue };
+    }
+
     // Debug logging for P95 Latency
     if (key === 'P95 Latency (s)') {
       console.log('[P95 Debug] metricData:', metricData);
