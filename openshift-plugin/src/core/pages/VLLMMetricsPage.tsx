@@ -960,20 +960,6 @@ const VLLMMetricsPage: React.FC = () => {
               Monitor and analyze vLLM model performance and resource utilization
             </Text>
           </FlexItem>
-          <FlexItem>
-            <Button
-              variant="secondary"
-              onClick={() => { handleRefresh(); }}
-              isLoading={metricsLoading}
-              style={{ 
-                backgroundColor: 'rgba(255,255,255,0.1)',
-                borderColor: 'rgba(255,255,255,0.3)',
-                color: 'white',
-              }}
-            >
-              <SyncIcon /> Refresh
-            </Button>
-          </FlexItem>
         </Flex>
       </PageSection>
 
