@@ -29,7 +29,6 @@ import {
   ToggleGroupItem,
   Toolbar,
   ToolbarContent,
-  ToolbarItem,
 } from '@patternfly/react-core';
 import {
   SyncIcon,
@@ -1147,151 +1146,157 @@ ${analysis?.summary || 'No analysis available. Click "Analyze with AI" to genera
       <PageSection variant="light" style={{ paddingTop: '16px', paddingBottom: '16px' }}>
         <Toolbar>
           <ToolbarContent>
-            {/* Namespace Selector (only for namespace scope) */}
-            <ToolbarItem>
-              <FormGroup label="Namespace" fieldId="namespace-select">
-                <FormSelect
-                  id="namespace-select"
-                  value={selectedNamespace}
-                  onChange={(_event, value) => setSelectedNamespace(value)}
-                  aria-label="Select namespace"
-                  isDisabled={scope === 'cluster_wide'}
-                  style={{ minWidth: '200px' }}
-                >
-                  {scope === 'cluster_wide' ? (
-                    <FormSelectOption value="" label="All Namespaces (Cluster-wide)" />
-                  ) : namespaces.length === 0 ? (
-                    <FormSelectOption value="" label="No namespaces available" isDisabled />
-                  ) : (
-                    namespaces.map((ns) => (
-                      <FormSelectOption key={ns} value={ns} label={ns} />
-                    ))
-                  )}
-                </FormSelect>
-              </FormGroup>
-            </ToolbarItem>
+            <Flex 
+              alignItems={{ default: 'alignItemsFlexEnd' }}
+              spaceItems={{ default: 'spaceItemsLg' }}
+              style={{ width: '100%' }}
+            >
+              {/* Namespace Selector (only for namespace scope) */}
+              <FlexItem>
+                <FormGroup label="Namespace" fieldId="namespace-select">
+                  <FormSelect
+                    id="namespace-select"
+                    value={selectedNamespace}
+                    onChange={(_event, value) => setSelectedNamespace(value)}
+                    aria-label="Select namespace"
+                    isDisabled={scope === 'cluster_wide'}
+                    style={{ minWidth: '200px' }}
+                  >
+                    {scope === 'cluster_wide' ? (
+                      <FormSelectOption value="" label="All Namespaces (Cluster-wide)" />
+                    ) : namespaces.length === 0 ? (
+                      <FormSelectOption value="" label="No namespaces available" isDisabled />
+                    ) : (
+                      namespaces.map((ns) => (
+                        <FormSelectOption key={ns} value={ns} label={ns} />
+                      ))
+                    )}
+                  </FormSelect>
+                </FormGroup>
+              </FlexItem>
 
-            {/* Category Selector */}
-            <ToolbarItem>
-              <FormGroup label="Metric Category" fieldId="category-select">
-                <FormSelect
-                  id="category-select"
-                  value={selectedCategory}
-                  onChange={(_event, value) => setSelectedCategory(value)}
-                  aria-label="Select category"
-                  style={{ minWidth: '180px' }}
-                >
-                  {categoryNames.map((cat) => (
-                    <FormSelectOption key={cat} value={cat} label={cat} />
-                  ))}
-                </FormSelect>
-              </FormGroup>
-            </ToolbarItem>
+              {/* Category Selector */}
+              <FlexItem>
+                <FormGroup label="Metric Category" fieldId="category-select">
+                  <FormSelect
+                    id="category-select"
+                    value={selectedCategory}
+                    onChange={(_event, value) => setSelectedCategory(value)}
+                    aria-label="Select category"
+                    style={{ minWidth: '180px' }}
+                  >
+                    {categoryNames.map((cat) => (
+                      <FormSelectOption key={cat} value={cat} label={cat} />
+                    ))}
+                  </FormSelect>
+                </FormGroup>
+              </FlexItem>
 
-            {/* Time Range Selector */}
-            <ToolbarItem>
-              <FormGroup label="Time Range" fieldId="time-range-select">
-                <Flex alignItems={{ default: 'alignItemsCenter' }}>
+              {/* Time Range Selector */}
+              <FlexItem>
+                <FormGroup label="Time Range" fieldId="time-range-select">
+                  <Flex alignItems={{ default: 'alignItemsCenter' }} spaceItems={{ default: 'spaceItemsXs' }}>
+                    <FlexItem>
+                      <FormSelect
+                        id="time-range-select"
+                        value={timeRange === 'custom' ? '1h' : timeRange}
+                        onChange={handleTimeRangeChange}
+                        aria-label="Select time range"
+                        style={{ minWidth: '120px' }}
+                      >
+                        {TIME_RANGE_OPTIONS.filter(opt => opt.value !== 'custom').map((opt) => (
+                          <FormSelectOption
+                            key={opt.value}
+                            value={opt.value}
+                            label={opt.label}
+                          />
+                        ))}
+                      </FormSelect>
+                    </FlexItem>
+                    <FlexItem>
+                      <Button
+                        variant={timeRange === 'custom' ? 'primary' : 'secondary'}
+                        size="sm"
+                        onClick={() => {
+                          setTimeRange('custom');
+                          setShowCustomRangePicker(true);
+                        }}
+                        aria-label="Select custom date range"
+                        title="Custom date range"
+                      >
+                        <CalendarAltIcon />
+                      </Button>
+                    </FlexItem>
+                  </Flex>
+                </FormGroup>
+              </FlexItem>
+
+              {/* Action Buttons */}
+              <FlexItem align={{ default: 'alignRight' }}>
+                <Flex spaceItems={{ default: 'spaceItemsXs' }} alignItems={{ default: 'alignItemsCenter' }}>
                   <FlexItem>
-                    <FormSelect
-                      id="time-range-select"
-                      value={timeRange === 'custom' ? '1h' : timeRange}
-                      onChange={handleTimeRangeChange}
-                      aria-label="Select time range"
-                      style={{ minWidth: '120px' }}
-                    >
-                      {TIME_RANGE_OPTIONS.filter(opt => opt.value !== 'custom').map((opt) => (
-                        <FormSelectOption 
-                          key={opt.value} 
-                          value={opt.value} 
-                          label={opt.label} 
-                        />
-                      ))}
-                    </FormSelect>
-                  </FlexItem>
-                  <FlexItem style={{ marginLeft: '4px' }}>
                     <Button
-                      variant={timeRange === 'custom' ? 'primary' : 'secondary'}
-                      size="sm"
-                      onClick={() => {
-                        setTimeRange('custom');
-                        setShowCustomRangePicker(true);
-                      }}
-                      aria-label="Select custom date range"
-                      title="Custom date range"
+                      variant="secondary"
+                      onClick={loadMetrics}
+                      isDisabled={loadingMetrics}
+                      isLoading={loadingMetrics}
+                      aria-label="Refresh metrics"
+                      title="Refresh metrics"
                     >
-                      <CalendarAltIcon />
+                      <SyncIcon />
+                    </Button>
+                  </FlexItem>
+                  <FlexItem>
+                    <Button
+                      variant="primary"
+                      icon={<OutlinedLightbulbIcon />}
+                      onClick={handleAnalyze}
+                      isDisabled={loadingAnalysis || (scope === 'namespace_scoped' && !selectedNamespace)}
+                      isLoading={loadingAnalysis}
+                      style={{
+                        background: 'linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%)',
+                        border: 'none',
+                      }}
+                    >
+                      AI Analysis
+                    </Button>
+                  </FlexItem>
+                  <FlexItem>
+                    <Button
+                      variant={chatPanelOpen ? 'primary' : 'secondary'}
+                      icon={chatPanelOpen ? <TimesIcon /> : <RobotIcon />}
+                      onClick={() => setChatPanelOpen(!chatPanelOpen)}
+                      style={chatPanelOpen ? {
+                        background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+                        border: 'none',
+                      } : {}}
+                    >
+                      {chatPanelOpen ? 'Close Chat' : 'AI Chat'}
+                    </Button>
+                  </FlexItem>
+                  <FlexItem>
+                    <Button
+                      variant="secondary"
+                      icon={<DownloadIcon />}
+                      onClick={downloadMarkdown}
+                      isDisabled={Object.keys(metricsData).length === 0}
+                    >
+                      Report
+                    </Button>
+                  </FlexItem>
+                  <FlexItem>
+                    <Button
+                      variant="secondary"
+                      icon={<DownloadIcon />}
+                      onClick={downloadCSV}
+                      isDisabled={Object.keys(metricsData).length === 0}
+                    >
+                      CSV
                     </Button>
                   </FlexItem>
                 </Flex>
-              </FormGroup>
-            </ToolbarItem>
-
-            {/* Action Buttons */}
-            <ToolbarItem align={{ default: 'alignRight' }}>
-              <Flex spaceItems={{ default: 'spaceItemsXs' }}>
-                <FlexItem>
-                  <Button
-                    variant="secondary"
-                    onClick={loadMetrics}
-                    isDisabled={loadingMetrics}
-                    isLoading={loadingMetrics}
-                    aria-label="Refresh metrics"
-                    title="Refresh metrics"
-                  >
-                    <SyncIcon />
-                  </Button>
-                </FlexItem>
-                <FlexItem>
-                  <Button
-                    variant="primary"
-                    icon={<OutlinedLightbulbIcon />}
-                    onClick={handleAnalyze}
-                    isDisabled={loadingAnalysis || (scope === 'namespace_scoped' && !selectedNamespace)}
-                    isLoading={loadingAnalysis}
-                    style={{
-                      background: 'linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%)',
-                      border: 'none',
-                    }}
-                  >
-                    AI Analysis
-                  </Button>
-                </FlexItem>
-                <FlexItem>
-                  <Button
-                    variant={chatPanelOpen ? 'primary' : 'secondary'}
-                    icon={chatPanelOpen ? <TimesIcon /> : <RobotIcon />}
-                    onClick={() => setChatPanelOpen(!chatPanelOpen)}
-                    style={chatPanelOpen ? {
-                      background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
-                      border: 'none',
-                    } : {}}
-                  >
-                    {chatPanelOpen ? 'Close Chat' : 'AI Chat'}
-                  </Button>
-                </FlexItem>
-                <FlexItem>
-                  <Button
-                    variant="secondary"
-                    icon={<DownloadIcon />}
-                    onClick={downloadMarkdown}
-                    isDisabled={Object.keys(metricsData).length === 0}
-                  >
-                    Report
-                  </Button>
-                </FlexItem>
-                <FlexItem>
-                  <Button
-                    variant="secondary"
-                    icon={<DownloadIcon />}
-                    onClick={downloadCSV}
-                    isDisabled={Object.keys(metricsData).length === 0}
-                  >
-                    CSV
-                  </Button>
-                </FlexItem>
-              </Flex>
-            </ToolbarItem>
+              </FlexItem>
+            </Flex>
           </ToolbarContent>
         </Toolbar>
       </PageSection>
