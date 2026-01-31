@@ -548,24 +548,9 @@ const KeyMetricsSection: React.FC<KeyMetricsSectionProps> = ({ data, loading, ti
       return { avg: latestValue, max: peakRate };
     }
 
-    // Debug logging for P95 Latency
-    if (key === 'P95 Latency (s)') {
-      console.log('[P95 Debug] metricData:', metricData);
-      console.log('[P95 Debug] time_series length:', metricData?.time_series?.length || 0);
-      if (metricData?.time_series) {
-        console.log('[P95 Debug] First 5 time_series values:',
-          metricData.time_series.slice(0, 5).map(p => p.value)
-        );
-      }
-    }
-
     // If no time series data, check if latest_value is valid
     if (!metricData || !metricData.time_series || metricData.time_series.length === 0) {
       const latestValue = metricData?.latest_value;
-
-      if (key === 'P95 Latency (s)') {
-        console.log('[P95 Debug] No time series, using latest_value:', latestValue);
-      }
 
       // Filter out NaN, null, and infinite values (matches Streamlit behavior)
       if (latestValue === null || latestValue === undefined ||
@@ -582,11 +567,6 @@ const KeyMetricsSection: React.FC<KeyMetricsSectionProps> = ({ data, loading, ti
       .map(p => p.value)
       .filter(v => v !== null && v !== undefined && !isNaN(v) && isFinite(v));
 
-    if (key === 'P95 Latency (s)') {
-      console.log('[P95 Debug] Valid values:', validValues);
-      console.log('[P95 Debug] Valid values count:', validValues.length);
-    }
-
     // If no valid values, return null (will display as "N/A")
     if (validValues.length === 0) {
       return { avg: null, max: null };
@@ -594,10 +574,6 @@ const KeyMetricsSection: React.FC<KeyMetricsSectionProps> = ({ data, loading, ti
 
     const avg = validValues.reduce((sum, v) => sum + v, 0) / validValues.length;
     const max = Math.max(...validValues);
-
-    if (key === 'P95 Latency (s)') {
-      console.log('[P95 Debug] Calculated avg:', avg, 'max:', max);
-    }
 
     return { avg, max };
   };
@@ -722,7 +698,7 @@ const CategorySection: React.FC<CategorySectionProps> = ({ title, icon: Icon, de
 // Main Page Component
 const VLLMMetricsPage: React.FC = () => {
   const [namespace, setNamespace] = React.useState<string>('all');
-  const [model, setModel] = React.useState<string>('all');
+  const [model, setModel] = React.useState<string>('');
   const [timeRange, setTimeRange] = React.useState<string>('1h');
   const [namespaces, setNamespaces] = React.useState<NamespaceInfo[]>([]);
   const [models, setModels] = React.useState<ModelInfo[]>([]);
@@ -733,13 +709,34 @@ const VLLMMetricsPage: React.FC = () => {
   const [analysisLoading, setAnalysisLoading] = React.useState(false);
   const [analysisResult, setAnalysisResult] = React.useState<AnalysisResult | null>(null);
   const [metricsData, setMetricsData] = React.useState<Record<string, MetricDataValue>>({});
+  const fetchIdRef = React.useRef(0);
 
   React.useEffect(() => {
     loadData();
   }, []);
 
+  // Reset model when namespace changes
   React.useEffect(() => {
-    if (namespace && model && model !== 'all') {
+    if (namespace === 'all') {
+      // If showing all namespaces, select first available model
+      if (models.length > 0) {
+        setModel(`${models[0].namespace} | ${models[0].name}`);
+      }
+    } else {
+      // If namespace is selected, select first model in that namespace
+      const filteredModels = models.filter(m => m.namespace === namespace);
+      if (filteredModels.length > 0) {
+        setModel(`${filteredModels[0].namespace} | ${filteredModels[0].name}`);
+      } else {
+        setModel('');
+      }
+    }
+  }, [namespace, models]);
+
+  React.useEffect(() => {
+    if (namespace && model) {
+      // Clear old metrics data to avoid showing stale data
+      setMetricsData({});
       fetchMetrics();
     }
   }, [namespace, model, timeRange]);
@@ -757,13 +754,11 @@ const VLLMMetricsPage: React.FC = () => {
       
       // Detect RAG availability based on presence of vLLM models
       setRagAvailable(modelsData.length > 0);
-      
-      // Auto-select first namespace/model if available
+
+      // Auto-select first namespace if available
+      // Model will be auto-selected by the namespace useEffect
       if (namespacesData.length > 0) {
         setNamespace(namespacesData[0].name);
-      }
-      if (modelsData.length > 0) {
-        setModel(`${modelsData[0].namespace} | ${modelsData[0].name}`);
       }
     } catch (err) {
       setError('Failed to load data from MCP server');
@@ -774,24 +769,19 @@ const VLLMMetricsPage: React.FC = () => {
   };
 
   const fetchMetrics = async () => {
-    if (model === 'all') return;
+    if (!model) return;
+
+    // Increment fetch ID to track this request
+    const currentFetchId = ++fetchIdRef.current;
 
     setMetricsLoading(true);
     setError(null);
     try {
       const metricsResponse = await fetchVLLMMetrics(model, timeRange, namespace !== 'all' ? namespace : undefined);
 
-      console.log('[VLLMMetrics] Response received:', {
-        model_name: metricsResponse?.model_name,
-        start_ts: metricsResponse?.start_ts,
-        end_ts: metricsResponse?.end_ts,
-        metrics_count: metricsResponse?.metrics ? Object.keys(metricsResponse.metrics).length : 0
-      });
-
-      // Debug: Check time range being returned
-      if (metricsResponse?.start_ts && metricsResponse?.end_ts) {
-        const durationHours = (metricsResponse.end_ts - metricsResponse.start_ts) / 3600;
-        console.log('[VLLMMetrics] Backend returned duration:', durationHours.toFixed(2), 'hours');
+      // Check if this is still the latest fetch
+      if (currentFetchId !== fetchIdRef.current) {
+        return;
       }
 
       if (!metricsResponse || !metricsResponse.metrics) {
@@ -811,8 +801,8 @@ const VLLMMetricsPage: React.FC = () => {
   };
 
   const handleAnalyze = async () => {
-    if (model === 'all') return;
-    
+    if (!model) return;
+
     setAnalysisLoading(true);
     setAnalysisResult(null);
     setError(null);
@@ -982,7 +972,6 @@ const VLLMMetricsPage: React.FC = () => {
                   onChange={(_e, val) => setModel(val)}
                   style={{ minWidth: '300px' }}
                 >
-                  <FormSelectOption key="all" value="all" label="All Models" />
                   {filteredModels.map((m) => (
                     <FormSelectOption
                       key={`${m.namespace}-${m.name}`}
@@ -1026,7 +1015,7 @@ const VLLMMetricsPage: React.FC = () => {
                 variant="primary"
                 onClick={handleAnalyze}
                 isLoading={analysisLoading}
-                isDisabled={model === 'all'}
+                isDisabled={!model}
                 icon={<OutlinedLightbulbIcon />}
                 style={{
                   background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 50%, #6366f1 100%)',
@@ -1116,13 +1105,7 @@ const VLLMMetricsPage: React.FC = () => {
         )}
 
         {/* Metrics Display */}
-        {model === 'all' ? (
-          <EmptyState>
-            <EmptyStateBody>
-              Select a specific model to view detailed metrics.
-            </EmptyStateBody>
-          </EmptyState>
-        ) : !metricsLoading && (
+        {!metricsLoading && (
           <>
             {/* Key Metrics Section - Priority metrics at the top */}
             <KeyMetricsSection data={metricsData} loading={metricsLoading} timeRange={timeRange} />
@@ -1145,7 +1128,7 @@ const VLLMMetricsPage: React.FC = () => {
         )}
 
         {/* No data message */}
-        {!metricsLoading && model !== 'all' && Object.keys(metricsData).length === 0 && (
+        {!metricsLoading && model && Object.keys(metricsData).length === 0 && (
           <Alert variant={AlertVariant.warning} title="No metrics data" isInline>
             No metrics data available for {model}. Make sure the model is active and metrics are enabled.
           </Alert>
