@@ -38,6 +38,7 @@ Perfect for AI operations teams, platform engineers, and business stakeholders w
 - [Build & Deploy](#build--deploy)
 - [Local Development](#local-development-via-port-forwarding)
 - [Running Tests with Pytest](#running-tests-with-pytest)
+- [E2E Test Verification in OpenShift](#e2e-test-verification-in-openshift)
 - [GitHub Actions CI/CD](#github-actions-cicd)
 - [Semantic Versioning](#semantic-versioning)
 - [Helm Charts Documentation](#helm-charts-documentation)
@@ -746,6 +747,153 @@ uv run pytest -v tests/api/test_api_endpoints.py
 ```
 
 To view a detailed coverage report after generating, open `htmlcov/index.html`.
+
+---
+
+## E2E Test Verification in OpenShift
+
+This section describes how to verify that all components of the OpenShift AI Observability Summarizer are working together end-to-end. This test validates the complete observability stack including Tempo (distributed tracing), Loki (logging), Korrel8r (log-trace correlation), MCP server, and the Console Plugin/React UI with external AI model integration.
+
+### Prerequisites
+
+Before running the E2E test, ensure the following components are deployed:
+
+1. **OpenShift AI Observability Summarizer** - Main application with Console Plugin or React UI
+2. **Observability Stack** - MinIO, Tempo, Loki, OpenTelemetry Collector, Korrel8r
+3. **User Workload Monitoring** - Enabled in the cluster to fetch user workload metrics and alerts
+4. **Alert Example Application** - Sample app that generates intentional failures
+5. **Anthropic API Key** - For accessing Claude 3.5 Haiku model
+
+### Step 1: Deploy the Alert Example Application
+
+The alert example app is designed to fail intentionally, generating traces and logs that demonstrate the correlation capabilities of the observability stack.
+
+```bash
+# Build the alert example image
+make build-alert-example
+
+# Push the alert example image to registry
+make push-alert-example
+
+# Deploy the alert example application
+make install-alert-example NAMESPACE=<your-namespace>
+```
+
+The `install-alert-example` target will:
+- Deploy both the `alert-example` app (which crashes intentionally) and the `my-app-example` service
+- Wait for the `alert-example` pod to enter CrashLoopBackOff state (expected behavior)
+- Wait for the `my-app-example` pod to become ready
+- Trigger the `/config` endpoint on `my-app-example` to generate error traces
+- Wait for the `my-app-example` pod to fail (expected behavior)
+
+Both applications will generate traces and logs showing configuration errors that can be correlated.
+
+### Step 2: Configure the UI to Use Anthropic Claude 3.5 Haiku
+
+1. **Access the UI**:
+   - **Console Plugin** (production mode): Navigate to **OpenShift Console → OpenShift AI Observability** in the left navigation
+   - **React UI** (dev mode): Access the route via `oc get route aiobs-react-ui`
+
+2. **Configure External Model**:
+   - Navigate to the **Settings** page
+   - Go to the **API Key** tab
+   - Enter your Anthropic API key and save it
+   - Switch to the **Available Models** tab
+   - In the model selection dropdown, choose **Anthropic** as the provider
+   - Select **Claude 3.5 Haiku** (`claude-3-5-haiku-20241022`) as the model
+   - Save the configuration
+
+### Step 3: Test Alert Investigation via AI Chat
+
+This test verifies that the system can analyze alerts, correlate logs, and analyze distributed traces to identify issues.
+
+#### 3a. Check Alert Status
+
+1. **Navigate to AI Chat**:
+   - Go to the **AI Chat** tab in the UI
+   - Ensure you're using the Anthropic Claude 3.5 Haiku model configured in Step 2
+
+2. **Ask About Alerts**:
+   - In the chat interface, ask: *"Any alerts are firing in jianrong namespace?"*
+
+3. **Expected Result - Alert is Firing**:
+   - The AI assistant should confirm that an alert is firing in the namespace
+   - The response should show alert details including the alert name and severity
+   - **This confirms that user workload monitoring is enabled and the system can fetch user workload data**
+
+   ![Alert Status](docs/images/e2e-test-alert-status.png)
+   *Screenshot showing alert firing in the namespace, confirming user workload monitoring is operational*
+
+#### 3b. Investigate the Alert
+
+4. **Request Alert Investigation**:
+   - Ask a follow-up question: *"Investigate this alert"*
+
+5. **Expected Result - Alert Analysis with Logs**:
+   - The AI assistant should provide detailed analysis of the alert
+   - The analysis should identify the affected deployment and pod
+   - **The response should reference log data retrieved from the pod associated with the alert**
+   - Example expected output includes error signatures, log highlights, and potential causes from the logs
+   - **This confirms that Korrel8r successfully correlated the alert with pod logs**
+
+   ![Alert Investigation](docs/images/e2e-test-alert-investigation.png)
+   *Screenshot showing alert analysis with corresponding pod logs retrieved via Korrel8r*
+
+#### 3c. Analyze Pod Failures
+
+6. **Check for Pod Failures**:
+   - Ask: *"Which pods are failing in jianrong namespace?"*
+
+7. **Expected Result - Pod Failure Analysis**:
+   - The AI assistant should list failing pods in the namespace
+   - The response should identify pods in Failed or CrashLoopBackOff state
+   - The analysis should provide PromQL queries used to fetch the pod status
+
+   ![Pod Failures](docs/images/e2e-test-pod-failures.png)
+   *Screenshot showing pod failure analysis in the namespace*
+
+#### 3d. Deep Dive into Application Failure
+
+8. **Investigate Application Failure**:
+   - Ask: *"Use correlated data to investigate pod failure for my-app-example-sosim"*
+
+9. **Expected Result - Trace and Log Analysis**:
+   - The AI assistant should provide comprehensive failure analysis
+   - **The response should reference both distributed traces and logs retrieved for the application**
+   - The analysis should show:
+     - Configuration errors from trace analysis
+     - Specific error messages from logs
+     - HTTP endpoint errors and status codes
+     - Tags indicating failure (e.g., `sys.exit(1)`, `config.contains_error: true`)
+   - **This confirms that the system can fetch and analyze application traces and logs for failure investigation**
+
+   ![Application Failure Analysis](docs/images/e2e-test-failure-investigation.png)
+   *Screenshot showing comprehensive failure analysis with traces and logs, highlighting configuration errors and error signatures*
+
+### Step 4: Verify E2E Functionality
+
+If the AI Chat conversation above produces the expected results across all steps (3a-3d), this confirms:
+
+- **User Workload Monitoring** - Cluster is configured to fetch user workload metrics and alerts
+- **Alert Detection** - System can query and identify firing alerts in namespaces
+- **Distributed Tracing** - Tempo is collecting and storing trace data from applications
+- **Logging** - Loki is collecting and storing log data from pods
+- **Correlation** - Korrel8r is successfully correlating alerts with logs and traces
+- **MCP Server** - Backend is properly querying observability data sources (Prometheus, Tempo, Loki)
+- **AI Chat Integration** - Console Plugin/React UI is correctly integrating with external AI models
+- **External AI Model** - Anthropic Claude 3.5 Haiku is providing intelligent analysis of observability data
+- **End-to-End Analysis Pipeline** - Complete workflow from alert detection to root cause analysis is functional
+
+### Cleanup
+
+After completing the E2E test, you can remove the alert example application:
+
+```bash
+# Uninstall the alert example app
+make uninstall-alert-example NAMESPACE=<your-namespace>
+```
+
+This will remove both the `alert-example` and `my-app-example` deployments, along with their associated resources (Services, Routes, ConfigMaps, and PrometheusRules).
 
 ---
 
