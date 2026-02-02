@@ -1,12 +1,11 @@
 {{/*
 Create required namespaces for infrastructure components.
-Uses lookup to check if namespace already exists - if it does, skip creation.
-This prevents conflicts with namespaces created by other operators or manually.
+- openshift-logging: Managed by OpenShift Logging Operator (DO NOT CREATE)
+- openshift-cluster-observability-operator: Created if it doesn't exist (for Korrel8r)
+- observability-hub: Created by this chart for Tempo, OTEL, MinIO
 */}}
 
-{{- if .Values.infrastructure.enabled }}
-
-{{/* observability-hub namespace for Tempo, OTEL, MinIO */}}
+{{/* observability-hub namespace for Tempo, OTEL, MinIO - this is ours to manage */}}
 {{- if or .Values.tempo.enabled .Values.otelCollector.enabled .Values.minio.enabled }}
 {{- if not (lookup "v1" "Namespace" "" .Values.global.observabilityNamespace) }}
 ---
@@ -23,25 +22,7 @@ metadata:
 {{- end }}
 {{- end }}
 
-{{/* openshift-logging namespace for Loki - likely already exists from OpenShift Logging */}}
-{{- if .Values.loki.enabled }}
-{{- if not (lookup "v1" "Namespace" "" .Values.global.lokiNamespace) }}
----
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: {{ .Values.global.lokiNamespace }}
-  labels:
-    app.kubernetes.io/managed-by: {{ .Release.Service }}
-    app.kubernetes.io/part-of: aiobs-operator
-    app.kubernetes.io/created-by: aiobs-stack
-    openshift.io/cluster-monitoring: "true"
-  annotations:
-    openshift.io/description: "OpenShift Logging namespace for LokiStack"
-{{- end }}
-{{- end }}
-
-{{/* openshift-cluster-observability-operator namespace for Korrel8r */}}
+{{/* openshift-cluster-observability-operator namespace for Korrel8r - create if doesn't exist */}}
 {{- if .Values.korrel8r.enabled }}
 {{- if not (lookup "v1" "Namespace" "" .Values.global.korrel8rNamespace) }}
 ---
@@ -58,5 +39,8 @@ metadata:
 {{- end }}
 {{- end }}
 
-{{- end }}
+{{/*
+NOTE: openshift-logging namespace is NOT created by this chart.
+It must be pre-existing (created by OpenShift Logging Operator).
+*/}}
 

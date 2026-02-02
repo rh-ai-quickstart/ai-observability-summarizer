@@ -64,15 +64,15 @@ metadata:
       ]
     capabilities: Basic Install
     categories: AI/Machine Learning, Monitoring
-    containerImage: quay.io/ecosystem-appeng/aiobs-operator:v1.0.7
-    createdAt: "2025-12-18T19:58:01Z"
+    containerImage: quay.io/ecosystem-appeng/aiobs-operator:v1.0.14-feature
+    createdAt: "2026-02-02T20:57:38Z"
     description: Deploy AI-powered observability summarization for OpenShift
     operatorframework.io/suggested-namespace: ai-observability
     operators.operatorframework.io/builder: operator-sdk-v1.37.0
     operators.operatorframework.io/project_layout: helm.sdk.operatorframework.io/v1
     repository: https://github.com/rh-ai-quickstart/openshift-ai-observability-summarizer
     support: Community
-  name: aiobs-operator.v0.0.1
+  name: aiobs-operator.v1.0.14-feature
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
@@ -379,7 +379,7 @@ spec:
                 - --metrics-bind-address=127.0.0.1:8080
                 - --leader-elect
                 - --leader-election-id=aiobs-operator
-                image: quay.io/ecosystem-appeng/aiobs-operator:v1.0.7
+                image: quay.io/ecosystem-appeng/aiobs-operator:v1.0.14-feature
                 imagePullPolicy: Always
                 livenessProbe:
                   httpGet:
@@ -478,4 +478,4 @@ spec:
   provider:
     name: RH AI Quickstart
     url: https://github.com/rh-ai-quickstart
-  version: 0.0.1
+  version: 1.0.14-feature
