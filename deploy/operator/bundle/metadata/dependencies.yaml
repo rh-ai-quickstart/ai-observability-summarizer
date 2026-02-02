@@ -19,10 +19,11 @@ dependencies:
 
   # Tempo Operator - Distributed tracing backend
   # Provides: TempoStack CRD
+  # NOTE: v0.18.x had crash issues (APPENG-3916), using >=0.19.0-0
   - type: olm.package
     value:
       packageName: tempo-product
-      version: ">=0.0.0"
+      version: ">=0.19.0-0"
 
   # Red Hat OpenShift Logging Operator - Log forwarding
   # Provides: ClusterLogForwarder CRD
@@ -37,3 +38,6 @@ dependencies:
     value:
       packageName: loki-operator
       version: ">=0.0.0"
+
+  # NOTE: User Workload Monitoring must be enabled manually as a prerequisite.
+  # Run: oc apply -f scripts/enable-user-workload-monitoring.yaml

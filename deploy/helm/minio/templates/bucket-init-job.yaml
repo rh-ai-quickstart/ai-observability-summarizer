@@ -28,7 +28,7 @@ spec:
           type: RuntimeDefault
       containers:
       - name: bucket-init
-        image: minio/mc:latest
+        image: quay.io/minio/mc:RELEASE.2024-11-21T17-21-54Z
         command:
         - /bin/sh
         - -c

@@ -19,6 +19,7 @@ dependencies:
     version: ">=0.0.0"
     repository: "file://../mcp-server"
     condition: mcpServer.enabled
+    alias: mcpServer
 
   # OpenShift Console Plugin - Native console integration
   - name: openshift-console-plugin
@@ -52,6 +53,7 @@ dependencies:
     alias: tempo
 
   # LokiStack - Log aggregation (openshift-logging)
+  # NOTE: rbac.collector.create is disabled to avoid conflicts with OLM-managed ClusterRoles
   - name: loki-stack
     version: ">=0.0.0"
     repository: "file://../observability/loki"
@@ -63,6 +65,7 @@ dependencies:
     version: ">=0.0.0"
     repository: "file://../observability/otel-collector"
     condition: otelCollector.enabled
+    alias: otelCollector
 
   # Korrel8r - Signal correlation engine (openshift-cluster-observability-operator)
   - name: korrel8r
