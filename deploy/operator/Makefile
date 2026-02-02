@@ -103,6 +103,9 @@ prepare-build: ## Copy helm charts from deploy/helm for container build
 	@cp -r ../helm/rag helm-charts/
 	@# Restore config files
 	@cp -f /tmp/*.json /tmp/*.template helm-charts/ 2>/dev/null || true
+	@# Update helm dependencies to regenerate .tgz files
+	@echo "Updating helm dependencies..."
+	@cd helm-charts/aiobs-stack && helm dependency update
 	@echo "Helm charts ready for build!"
 
 .PHONY: clean-charts
@@ -206,7 +209,7 @@ bundle: kustomize operator-sdk ## Generate bundle manifests and metadata, then v
 	$(OPERATOR_SDK) bundle validate ./bundle
 
 .PHONY: bundle-build
-bundle-build: prepare-build ## Build the bundle image.
+bundle-build: bundle prepare-build ## Build the bundle image.
 	$(CONTAINER_TOOL) build --platform=$(PLATFORMS) -f bundle.Dockerfile -t $(BUNDLE_IMG) .
 
 .PHONY: bundle-push

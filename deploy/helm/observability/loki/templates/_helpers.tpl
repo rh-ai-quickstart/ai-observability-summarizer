@@ -75,9 +75,10 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 
 {{/*
 Create the name of the namespace to use
+Priority: .Values.global.namespace > .Release.Namespace
 */}}
 {{- define "loki-stack.namespace" -}}
-{{- default .Values.global.namespace .Release.Namespace }}
+{{- default .Release.Namespace .Values.global.namespace }}
 {{- end }}
 
 {{/*
