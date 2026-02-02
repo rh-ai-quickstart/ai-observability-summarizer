@@ -734,23 +734,24 @@ def extract_time_range_with_info(
         logger.debug(f"Shorthand time format detected: {number}{unit}")
 
         # Convert to hours
-        if unit == 'm':
-            hours = number / 60
-            duration_str = f"past {int(number)} {'minute' if number == 1 else 'minutes'}"
-            rate_syntax = f"{int(number)}m"
-        elif unit == 'h':
-            hours = number
-            duration_str = f"past {int(number) if number == int(number) else number} {'hour' if number == 1 else 'hours'}"
-            rate_syntax = f"{int(number)}h" if number == int(number) else f"{number}h"
-        elif unit == 'd':
-            hours = number * 24
-            duration_str = f"past {int(number)} {'day' if number == 1 else 'days'}"
-            rate_syntax = f"{int(number)}d"
-        else:
-            # Shouldn't reach here given the regex, but fallback just in case
-            hours = 1
-            duration_str = "past 1 hour"
-            rate_syntax = "1h"
+        match unit:
+            case "m":
+                hours = number / 60
+                duration_str = f"past {int(number)} {'minute' if number == 1 else 'minutes'}"
+                rate_syntax = f"{int(number)}m"
+            case "h":
+                hours = number
+                duration_str = f"past {int(number) if number == int(number) else number} {'hour' if number == 1 else 'hours'}"
+                rate_syntax = f"{int(number)}h" if number == int(number) else f"{number}h"
+            case "d":
+                hours = number * 24
+                duration_str = f"past {int(number)} {'day' if number == 1 else 'days'}"
+                rate_syntax = f"{int(number)}d"
+            case _:
+                # Shouldn't reach here given the regex, but fallback just in case
+                hours = 1
+                duration_str = "past 1 hour"
+                rate_syntax = "1h"
 
         end_time = datetime.now()
         start_time = end_time - timedelta(hours=hours)
