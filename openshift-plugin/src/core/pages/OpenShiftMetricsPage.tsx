@@ -11,7 +11,6 @@ import {
   Button,
   Alert,
   AlertVariant,
-  AlertActionLink,
   Grid,
   GridItem,
   Spinner,
@@ -29,6 +28,11 @@ import {
   ToggleGroupItem,
   Toolbar,
   ToolbarContent,
+  Dropdown,
+  DropdownItem,
+  DropdownList,
+  MenuToggle,
+  MenuToggleElement,
 } from '@patternfly/react-core';
 import {
   SyncIcon,
@@ -48,10 +52,12 @@ import {
 } from '@patternfly/react-icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { Panel, Group as PanelGroup, Separator as PanelResizeHandle } from 'react-resizable-panels';
 import { AlertList } from '../components/AlertList';
 import { MetricChartModal } from '../components/MetricChartModal';
 import { MetricsChatPanel } from '../components/MetricsChatPanel';
 import { CustomRangePickerModal } from '../components/CustomRangePickerModal';
+import { ConfigurationRequiredAlert } from '../components/ConfigurationRequiredAlert';
 import { formatValue, GPU_THRESHOLDS } from '../utils/formatValue';
 import {
   fetchOpenShiftMetrics,
@@ -697,7 +703,7 @@ const CategorySection: React.FC<CategorySectionProps> = ({ categoryKey, category
 
 export const OpenShiftMetricsPage: React.FC = () => {
   const { t } = useTranslation('plugin__openshift-ai-observability');
-  const { handleOpenSettings, useAIConfigWarningDismissal, AI_CONFIG_WARNING } = useSettings();
+  const { useAIConfigWarningDismissal, AI_CONFIG_WARNING } = useSettings();
 
   // Scope and filters
   const [scope, setScope] = React.useState<ScopeType>('cluster_wide');
@@ -733,6 +739,9 @@ export const OpenShiftMetricsPage: React.FC = () => {
 
   const [error, setError] = React.useState<string | null>(null);
   const [errorType, setErrorType] = React.useState<string | null>(null);
+  
+  // Download dropdown state
+  const [downloadDropdownOpen, setDownloadDropdownOpen] = React.useState(false);
 
   // Auto-dismiss AI configuration warnings when settings are closed
   useAIConfigWarningDismissal(errorType, setError, setErrorType);
@@ -834,7 +843,7 @@ export const OpenShiftMetricsPage: React.FC = () => {
       const config = getSessionConfig();
       
       if (!config.ai_model) {
-        setError('Please configure an AI model in Settings first');
+        setError('CONFIGURATION_REQUIRED');
         setErrorType(AI_CONFIG_WARNING);
         setLoadingAnalysis(false);
         setAnalysisController(null);
@@ -999,30 +1008,52 @@ export const OpenShiftMetricsPage: React.FC = () => {
     return null;
   }, [selectedMetricForChart, metricsData, scope]);
 
+  // Generate report content
+  const generateReportContent = () => {
+    const timestamp = new Date().toISOString();
+    const timeRangeLabel = timeRange === 'custom' && customRangeLabel 
+      ? customRangeLabel 
+      : TIME_RANGE_OPTIONS.find(o => o.value === timeRange)?.label || timeRange;
+
+    const metricsSection = Object.entries(metricsData).map(([key, val]) => {
+      const categoryDef = categories[selectedCategory as keyof typeof categories] as any;
+      const metricDef = categoryDef?.metrics?.find((m: any) => m.key === key);
+      const unit = metricDef?.unit || '';
+      return {
+        name: key,
+        value: val.latest_value !== null ? `${val.latest_value}${unit ? ` ${unit}` : ''}` : 'N/A',
+        description: metricDef?.description || ''
+      };
+    });
+
+    return {
+      title: 'OpenShift Metrics Report',
+      category: selectedCategory,
+      scope: scope === 'cluster_wide' ? 'Cluster-wide' : selectedNamespace,
+      timeRange: timeRangeLabel,
+      timestamp,
+      metrics: metricsSection,
+      analysis: analysis?.summary || 'No analysis available. Click "Analyze with AI" to generate insights.'
+    };
+  };
+
   const downloadMarkdown = () => {
     try {
-      const timestamp = new Date().toISOString();
-      const timeRangeLabel = TIME_RANGE_OPTIONS.find(o => o.value === timeRange)?.label || timeRange;
+      const report = generateReportContent();
+      const content = `# ${report.title}
 
-      const content = `# OpenShift Metrics Report
-
-**Category**: ${selectedCategory}
-**Scope**: ${scope === 'cluster_wide' ? 'Cluster-wide' : selectedNamespace}
-**Time Range**: ${timeRangeLabel}
-**Generated**: ${timestamp}
+**Category**: ${report.category}
+**Scope**: ${report.scope}
+**Time Range**: ${report.timeRange}
+**Generated**: ${report.timestamp}
 
 ## Metrics Summary
 
-${Object.entries(metricsData).map(([key, val]) => {
-  const categoryDef = categories[selectedCategory as keyof typeof categories] as any;
-  const metricDef = categoryDef?.metrics?.find((m: any) => m.key === key);
-  const unit = metricDef?.unit || '';
-  return `- **${key}**: ${val.latest_value !== null ? `${val.latest_value}${unit ? ` ${unit}` : ''}` : 'N/A'}`;
-}).join('\n')}
+${report.metrics.map(metric => `- **${metric.name}**: ${metric.value}`).join('\n')}
 
 ## AI Analysis
 
-${analysis?.summary || 'No analysis available. Click "Analyze with AI" to generate insights.'}
+${report.analysis}
 
 ---
 *Generated by OpenShift AI Observability Plugin*
@@ -1043,39 +1074,202 @@ ${analysis?.summary || 'No analysis available. Click "Analyze with AI" to genera
     }
   };
 
-  const downloadCSV = () => {
+  const downloadHTML = () => {
     try {
-      const categoryDef = categories[selectedCategory as keyof typeof categories];
-      const headers = ['Metric', 'Latest Value', 'Unit', 'Description'];
-      const categoryDefTyped = categoryDef as any;
-      const rows = categoryDefTyped?.metrics?.map((metricDef: any) => {
-        const metricData = metricsData[metricDef.key];
-        return [
-          metricDef.key,
-          metricData?.latest_value?.toString() || 'N/A',
-          metricDef.unit || '',
-          metricDef.description || ''
-        ];
-      }) || [];
+      const report = generateReportContent();
+      const content = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${report.title}</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; }
+        h1 { color: #1f2937; border-bottom: 2px solid #3b82f6; padding-bottom: 10px; }
+        h2 { color: #374151; margin-top: 30px; }
+        .metadata { background: #f3f4f6; padding: 15px; border-radius: 8px; margin: 20px 0; }
+        .metadata strong { color: #1f2937; }
+        .metrics-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        .metrics-table th, .metrics-table td { 
+            border: 1px solid #d1d5db; padding: 12px; text-align: left; 
+        }
+        .metrics-table th { background-color: #f9fafb; font-weight: bold; }
+        .analysis { background: #f0f9ff; padding: 20px; border-radius: 8px; margin: 20px 0; }
+        .footer { margin-top: 40px; text-align: center; color: #6b7280; font-style: italic; }
+    </style>
+</head>
+<body>
+    <h1>${report.title}</h1>
+    
+    <div class="metadata">
+        <strong>Category:</strong> ${report.category}<br>
+        <strong>Scope:</strong> ${report.scope}<br>
+        <strong>Time Range:</strong> ${report.timeRange}<br>
+        <strong>Generated:</strong> ${new Date(report.timestamp).toLocaleString()}
+    </div>
 
-      const csv = [headers, ...rows].map(row => row.map(cell => {
-        // Escape double quotes and wrap in quotes if contains comma
-        const escaped = cell.replace(/"/g, '""');
-        return escaped.includes(',') ? `"${escaped}"` : escaped;
-      }).join(',')).join('\n');
+    <h2>Metrics Summary</h2>
+    <table class="metrics-table">
+        <thead>
+            <tr>
+                <th>Metric</th>
+                <th>Value</th>
+                <th>Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            ${report.metrics.map(metric => `
+                <tr>
+                    <td><strong>${metric.name}</strong></td>
+                    <td>${metric.value}</td>
+                    <td>${metric.description}</td>
+                </tr>
+            `).join('')}
+        </tbody>
+    </table>
 
-      const blob = new Blob([csv], { type: 'text/csv' });
+    <h2>AI Analysis</h2>
+    <div class="analysis">
+        ${report.analysis.replace(/\n/g, '<br>')}
+    </div>
+
+    <div class="footer">
+        Generated by OpenShift AI Observability Plugin
+    </div>
+</body>
+</html>`;
+
+      const blob = new Blob([content], { type: 'text/html' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `openshift-metrics-${selectedCategory.replace(/\s+/g, '_')}-${Date.now()}.csv`;
+      a.download = `openshift-metrics-${selectedCategory.replace(/\s+/g, '_')}-${Date.now()}.html`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (error) {
-      console.error('Failed to download CSV:', error);
-      setError('Failed to download CSV. Please try again.');
+      console.error('Failed to download HTML report:', error);
+      setError('Failed to download report. Please try again.');
+    }
+  };
+
+  const downloadPDF = () => {
+    try {
+      // For PDF generation, we'll use print-optimized HTML and trigger browser's print-to-PDF
+      const report = generateReportContent();
+      const printContent = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>${report.title}</title>
+    <style>
+        @media print {
+            body { margin: 0; }
+            .no-print { display: none; }
+        }
+        body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.4; }
+        h1 { color: #1f2937; border-bottom: 2px solid #3b82f6; padding-bottom: 10px; page-break-after: avoid; }
+        h2 { color: #374151; margin-top: 25px; page-break-after: avoid; }
+        .metadata { background: #f8f9fa; padding: 15px; border: 1px solid #dee2e6; margin: 15px 0; }
+        .metadata strong { color: #1f2937; }
+        .metrics-table { width: 100%; border-collapse: collapse; margin: 15px 0; page-break-inside: avoid; }
+        .metrics-table th, .metrics-table td { 
+            border: 1px solid #666; padding: 8px; text-align: left; font-size: 12px;
+        }
+        .metrics-table th { background-color: #f0f0f0; font-weight: bold; }
+        .analysis { border: 1px solid #ccc; padding: 15px; margin: 15px 0; }
+        .footer { margin-top: 30px; text-align: center; color: #666; font-size: 10px; }
+        .print-button { margin: 20px 0; text-align: center; }
+    </style>
+</head>
+<body>
+    <div class="no-print print-button">
+        <button onclick="window.print()" style="padding: 10px 20px; background: #3b82f6; color: white; border: none; border-radius: 5px; cursor: pointer;">
+            Print to PDF
+        </button>
+        <p><small>Use your browser's print function and select "Save as PDF" as the destination.</small></p>
+    </div>
+    
+    <h1>${report.title}</h1>
+    
+    <div class="metadata">
+        <strong>Category:</strong> ${report.category}<br>
+        <strong>Scope:</strong> ${report.scope}<br>
+        <strong>Time Range:</strong> ${report.timeRange}<br>
+        <strong>Generated:</strong> ${new Date(report.timestamp).toLocaleString()}
+    </div>
+
+    <h2>Metrics Summary</h2>
+    <table class="metrics-table">
+        <thead>
+            <tr>
+                <th>Metric</th>
+                <th>Value</th>
+                <th>Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            ${report.metrics.map(metric => `
+                <tr>
+                    <td><strong>${metric.name}</strong></td>
+                    <td>${metric.value}</td>
+                    <td>${metric.description}</td>
+                </tr>
+            `).join('')}
+        </tbody>
+    </table>
+
+    <h2>AI Analysis</h2>
+    <div class="analysis">
+        ${report.analysis.replace(/\n/g, '<br>')}
+    </div>
+
+    <div class="footer">
+        Generated by OpenShift AI Observability Plugin
+    </div>
+</body>
+</html>`;
+
+      // Open in a new window for printing
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write(printContent);
+        printWindow.document.close();
+        printWindow.focus();
+      } else {
+        // Fallback: create a blob and download as HTML
+        const blob = new Blob([printContent], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `openshift-metrics-${selectedCategory.replace(/\s+/g, '_')}-${Date.now()}-print.html`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+    } catch (error) {
+      console.error('Failed to generate PDF report:', error);
+      setError('Failed to generate PDF report. Please try again.');
+    }
+  };
+
+  // Handle download format selection
+  const handleDownloadFormat = (format: string) => {
+    setDownloadDropdownOpen(false);
+    switch (format) {
+      case 'html':
+        downloadHTML();
+        break;
+      case 'pdf':
+        downloadPDF();
+        break;
+      case 'markdown':
+        downloadMarkdown();
+        break;
+      default:
+        console.warn('Unknown download format:', format);
     }
   };
 
@@ -1102,6 +1296,16 @@ ${analysis?.summary || 'No analysis available. Click "Analyze with AI" to genera
     <>
       <Helmet>
         <title>{t('OpenShift Metrics - AI Observability')}</title>
+        <style>{`
+          .chat-panel-resize-handle:hover {
+            background: var(--pf-v5-global--primary-color--100) !important;
+            width: 3px !important;
+          }
+          .chat-panel-resize-handle:active {
+            background: var(--pf-v5-global--primary-color--200) !important;
+            width: 4px !important;
+          }
+        `}</style>
       </Helmet>
       
       {/* Header */}
@@ -1275,24 +1479,46 @@ ${analysis?.summary || 'No analysis available. Click "Analyze with AI" to genera
                     </Button>
                   </FlexItem>
                   <FlexItem>
-                    <Button
-                      variant="secondary"
-                      icon={<DownloadIcon />}
-                      onClick={downloadMarkdown}
-                      isDisabled={Object.keys(metricsData).length === 0}
+                    <Dropdown
+                      isOpen={downloadDropdownOpen}
+                      onSelect={() => {}}
+                      onOpenChange={(isOpen: boolean) => setDownloadDropdownOpen(isOpen)}
+                      toggle={(toggleRef: React.Ref<MenuToggleElement>) => (
+                        <MenuToggle
+                          ref={toggleRef}
+                          onClick={() => setDownloadDropdownOpen(!downloadDropdownOpen)}
+                          isExpanded={downloadDropdownOpen}
+                          isDisabled={Object.keys(metricsData).length === 0}
+                          icon={<DownloadIcon />}
+                        >
+                          Download Report
+                        </MenuToggle>
+                      )}
                     >
-                      Report
-                    </Button>
-                  </FlexItem>
-                  <FlexItem>
-                    <Button
-                      variant="secondary"
-                      icon={<DownloadIcon />}
-                      onClick={downloadCSV}
-                      isDisabled={Object.keys(metricsData).length === 0}
-                    >
-                      CSV
-                    </Button>
+                      <DropdownList>
+                        <DropdownItem 
+                          value="html"
+                          key="html" 
+                          onClick={() => handleDownloadFormat('html')}
+                        >
+                          HTML
+                        </DropdownItem>
+                        <DropdownItem 
+                          value="pdf"
+                          key="pdf" 
+                          onClick={() => handleDownloadFormat('pdf')}
+                        >
+                          PDF
+                        </DropdownItem>
+                        <DropdownItem 
+                          value="markdown"
+                          key="markdown" 
+                          onClick={() => handleDownloadFormat('markdown')}
+                        >
+                          Markdown
+                        </DropdownItem>
+                      </DropdownList>
+                    </Dropdown>
                   </FlexItem>
                 </Flex>
               </FlexItem>
@@ -1314,16 +1540,8 @@ ${analysis?.summary || 'No analysis available. Click "Analyze with AI" to genera
       {/* Error */}
       {error && (
         <PageSection style={{ paddingTop: '8px', paddingBottom: '8px' }}>
-          {error.includes('Please configure an AI model in Settings first') ? (
-            <Alert
-              variant={AlertVariant.warning}
-              title="Configuration Required"
-              isInline
-              actionLinks={<AlertActionLink onClick={handleOpenSettings}>Open Settings</AlertActionLink>}
-              actionClose={<Button variant="plain" onClick={() => setError(null)}>✕</Button>}
-            >
-              {error}. Click "Open Settings" to configure your AI model.
-            </Alert>
+          {error === 'CONFIGURATION_REQUIRED' ? (
+            <ConfigurationRequiredAlert onClose={() => setError(null)} />
           ) : (
             <Alert 
               variant={AlertVariant.danger} 
@@ -1402,15 +1620,26 @@ ${analysis?.summary || 'No analysis available. Click "Analyze with AI" to genera
       )}
 
       {/* Main Content */}
-      <PageSection style={{ paddingLeft: 0, paddingRight: 0 }}>
-        <div style={{ display: 'flex', height: 'calc(100vh - 400px)' }}>
-          {/* Metrics Panel */}
-          <div style={{ 
-            flex: chatPanelOpen ? '70%' : '100%', 
-            paddingLeft: 'var(--pf-v5-global--spacer--lg)', 
-            paddingRight: chatPanelOpen ? '8px' : 'var(--pf-v5-global--spacer--lg)',
-            overflowY: 'auto'
-          }}>
+      <PageSection style={{ paddingLeft: 0, paddingRight: 0, height: 'calc(100vh - 400px)' }}>
+        <div style={{ 
+          height: '100%',
+          width: '100%',
+          maxWidth: '100%',
+          overflow: 'hidden'
+        }}>
+          <PanelGroup direction="horizontal">
+            {/* Metrics Panel */}
+            <Panel 
+              defaultSize={65}
+              minSize={50}
+              maxSize={75}
+              style={{
+                paddingLeft: 'var(--pf-v5-global--spacer--lg)', 
+                paddingRight: chatPanelOpen ? '8px' : 'var(--pf-v5-global--spacer--lg)',
+                overflowY: 'auto',
+                overflowX: 'hidden'
+              }}
+            >
             {/* Current Selection Labels */}
         <Flex style={{ marginBottom: '16px' }}>
           <FlexItem>
@@ -1472,26 +1701,44 @@ ${analysis?.summary || 'No analysis available. Click "Analyze with AI" to genera
                 No metrics data available for {selectedCategory}. This may be expected if there are no resources in this category.
               </Alert>
             )}
-          </div>
+            </Panel>
 
-          {/* Chat Panel */}
-          {chatPanelOpen && (
-            <div style={{ 
-              flex: '30%', 
-              paddingLeft: '8px', 
-              paddingRight: 'var(--pf-v5-global--spacer--lg)',
-              borderLeft: '1px solid var(--pf-v5-global--BorderColor--100)'
-            }}>
-              <MetricsChatPanel
-                scope={scope}
-                namespace={scope === 'namespace_scoped' ? selectedNamespace : undefined}
-                category={selectedCategory}
-                timeRange={timeRange === 'custom' && customRangeLabel ? customRangeLabel : timeRange}
-                isOpen={chatPanelOpen}
-                onClose={() => setChatPanelOpen(false)}
-              />
-            </div>
-          )}
+            {/* Chat Panel */}
+            {chatPanelOpen && (
+              <>
+                <PanelResizeHandle 
+                  style={{
+                    width: '2px',
+                    background: 'var(--pf-v5-global--BorderColor--100)',
+                    cursor: 'col-resize',
+                    transition: 'background 0.2s ease',
+                    position: 'relative'
+                  }}
+                  className="chat-panel-resize-handle"
+                />
+                <Panel 
+                  defaultSize={35}
+                  minSize={25}
+                  maxSize={50}
+                  style={{
+                    paddingLeft: '8px', 
+                    paddingRight: 'var(--pf-v5-global--spacer--lg)',
+                    overflowX: 'hidden',
+                    minWidth: '350px'
+                  }}
+                >
+                  <MetricsChatPanel
+                    scope={scope}
+                    namespace={scope === 'namespace_scoped' ? selectedNamespace : undefined}
+                    category={selectedCategory}
+                    timeRange={timeRange === 'custom' && customRangeLabel ? customRangeLabel : timeRange}
+                    isOpen={chatPanelOpen}
+                    onClose={() => setChatPanelOpen(false)}
+                  />
+                </Panel>
+              </>
+            )}
+          </PanelGroup>
         </div>
       </PageSection>
 
