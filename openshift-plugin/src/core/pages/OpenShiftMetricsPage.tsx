@@ -52,7 +52,7 @@ import {
 } from '@patternfly/react-icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Panel, Group as PanelGroup, Separator as PanelResizeHandle } from 'react-resizable-panels';
+import { Panel, Group, Separator } from 'react-resizable-panels';
 import { AlertList } from '../components/AlertList';
 import { MetricChartModal } from '../components/MetricChartModal';
 import { MetricsChatPanel } from '../components/MetricsChatPanel';
@@ -746,6 +746,7 @@ export const OpenShiftMetricsPage: React.FC = () => {
   // Auto-dismiss AI configuration warnings when settings are closed
   useAIConfigWarningDismissal(errorType, setError, setErrorType);
 
+
   // All categories are now available for both scopes
   const categories = CLUSTER_WIDE_CATEGORIES;
   const categoryNames = Object.keys(categories);
@@ -1297,10 +1298,10 @@ ${report.analysis}
       <Helmet>
         <title>{t('OpenShift Metrics - AI Observability')}</title>
         <style>{`
-          [data-separator-id="chat-panel-separator"]:hover {
+          #chat-panel-separator[data-separator]:hover {
             background: var(--pf-v5-global--primary-color--100) !important;
           }
-          [data-separator-id="chat-panel-separator"]:active {
+          #chat-panel-separator[data-separator][data-resize-handle-active] {
             background: var(--pf-v5-global--primary-color--200) !important;
           }
         `}</style>
@@ -1625,11 +1626,15 @@ ${report.analysis}
           maxWidth: '100%',
           overflow: 'hidden'
         }}>
-          <PanelGroup orientation="horizontal" id="openshift-metrics-panel-group">
+          <Group 
+            orientation="horizontal" 
+            id="openshift-metrics-panel-group" 
+            style={{ height: '100%', width: '100%' }}
+          >
             {/* Metrics Panel */}
             <Panel
               id="metrics-panel"
-              defaultSize={65}
+              defaultSize={chatPanelOpen ? 65 : 100}
               minSize={50}
               maxSize={75}
               style={{
@@ -1702,42 +1707,34 @@ ${report.analysis}
             )}
             </Panel>
 
-            {/* Chat Panel */}
-            {chatPanelOpen && (
-              <>
-                <PanelResizeHandle
-                  id="chat-panel-separator"
-                  style={{
-                    width: '6px',
-                    background: 'var(--pf-v5-global--BorderColor--100)',
-                    cursor: 'col-resize'
-                  }}
-                  className="chat-panel-resize-handle"
+            {/* Chat Panel Separator - Always rendered */}
+            <Separator id="chat-panel-separator" />
+            {/* Chat Panel - Always rendered, key forces remount when chatPanelOpen changes */}
+            <Panel
+              key={`chat-panel-${chatPanelOpen}`}
+              id="chat-panel"
+              defaultSize={chatPanelOpen ? 35 : 0}
+              minSize={chatPanelOpen ? 25 : 0}
+              maxSize={chatPanelOpen ? 50 : 0}
+              collapsible={true}
+              style={{
+                paddingLeft: '8px',
+                paddingRight: 'var(--pf-v5-global--spacer--lg)',
+                overflowX: 'hidden'
+              }}
+            >
+              {chatPanelOpen && (
+                <MetricsChatPanel
+                  scope={scope}
+                  namespace={scope === 'namespace_scoped' ? selectedNamespace : undefined}
+                  category={selectedCategory}
+                  timeRange={timeRange === 'custom' && customRangeLabel ? customRangeLabel : timeRange}
+                  isOpen={chatPanelOpen}
+                  onClose={() => setChatPanelOpen(false)}
                 />
-                <Panel
-                  id="chat-panel"
-                  defaultSize={35}
-                  minSize={25}
-                  maxSize={50}
-                  style={{
-                    paddingLeft: '8px', 
-                    paddingRight: 'var(--pf-v5-global--spacer--lg)',
-                    overflowX: 'hidden',
-                    minWidth: '350px'
-                  }}
-                >
-                  <MetricsChatPanel
-                    scope={scope}
-                    namespace={scope === 'namespace_scoped' ? selectedNamespace : undefined}
-                    category={selectedCategory}
-                    timeRange={timeRange === 'custom' && customRangeLabel ? customRangeLabel : timeRange}
-                    isOpen={chatPanelOpen}
-                    onClose={() => setChatPanelOpen(false)}
-                  />
-                </Panel>
-              </>
-            )}
-          </PanelGroup>
+              )}
+            </Panel>
+          </Group>
         </div>
       </PageSection>
 
