@@ -216,8 +216,8 @@ describe('OpenShiftMetricsPage', () => {
 
     it('should render all action buttons', () => {
       expect(screen.getByLabelText('Refresh metrics')).toBeInTheDocument();
-      expect(screen.getByText('Download Report')).toBeInTheDocument();
-      expect(screen.getByText('AI Analysis')).toBeInTheDocument();
+      expect(screen.getByText('Report')).toBeInTheDocument();
+      expect(screen.getByText('Analyze with AI')).toBeInTheDocument();
     });
 
     it('should trigger metrics refresh when refresh button is clicked', () => {
@@ -239,7 +239,7 @@ describe('OpenShiftMetricsPage', () => {
       fireEvent.click(refreshButton);
 
       await waitFor(() => {
-        expect(screen.getByText('Download Report').closest('button')).toBeDisabled();
+        expect(screen.getByText('Report').closest('button')).toBeDisabled();
       });
     });
   });
@@ -338,7 +338,7 @@ describe('OpenShiftMetricsPage', () => {
         scope: 'cluster_wide',
       });
 
-      const analyzeButton = screen.getAllByText('AI Analysis')[0];
+      const analyzeButton = screen.getAllByText('Analyze with AI')[0];
       fireEvent.click(analyzeButton);
 
       expect(analyzeOpenShift).toHaveBeenCalledWith(
@@ -352,7 +352,7 @@ describe('OpenShiftMetricsPage', () => {
 
       await waitFor(() => {
         // AI Analysis appears in both button and panel header
-        expect(screen.getAllByText('AI Analysis').length).toBeGreaterThanOrEqual(1);
+        expect(screen.getAllByText('Analyze with AI').length).toBeGreaterThanOrEqual(1);
         expect(screen.getByTestId('markdown-content')).toBeInTheDocument();
       });
     });
@@ -369,7 +369,7 @@ describe('OpenShiftMetricsPage', () => {
       });
 
       // Find and click the AI Analysis button
-      const analyzeButtons = screen.getAllByText('AI Analysis');
+      const analyzeButtons = screen.getAllByText('Analyze with AI');
       const analyzeButton = analyzeButtons[0].closest('button');
 
       expect(analyzeButton).toBeTruthy();
@@ -385,7 +385,7 @@ describe('OpenShiftMetricsPage', () => {
     it('should show loading state during analysis', () => {
       analyzeOpenShift.mockImplementation(() => new Promise(() => {})); // Never resolves
 
-      const analyzeButton = screen.getAllByText('AI Analysis')[0];
+      const analyzeButton = screen.getAllByText('Analyze with AI')[0];
       fireEvent.click(analyzeButton);
 
       expect(screen.getByText('Analyzing Fleet Overview...')).toBeInTheDocument();
@@ -399,7 +399,7 @@ describe('OpenShiftMetricsPage', () => {
         scope: 'cluster_wide',
       });
 
-      const analyzeButton = screen.getAllByText('AI Analysis')[0];
+      const analyzeButton = screen.getAllByText('Analyze with AI')[0];
       fireEvent.click(analyzeButton);
 
       await waitFor(() => {
@@ -536,7 +536,7 @@ describe('OpenShiftMetricsPage', () => {
       removeChildSpy = jest.spyOn(document.body, 'removeChild').mockImplementation((node) => node);
 
       await waitFor(() => {
-        const downloadButton = screen.getByText('Download Report');
+        const downloadButton = screen.getByText('Report');
         expect(downloadButton.closest('button')).not.toBeDisabled();
         
         // Open the dropdown
@@ -563,7 +563,7 @@ describe('OpenShiftMetricsPage', () => {
       removeChildSpy = jest.spyOn(document.body, 'removeChild').mockImplementation((node) => node);
 
       await waitFor(() => {
-        const downloadButton = screen.getByText('Download Report');
+        const downloadButton = screen.getByText('Report');
         expect(downloadButton.closest('button')).not.toBeDisabled();
         
         // Open the dropdown

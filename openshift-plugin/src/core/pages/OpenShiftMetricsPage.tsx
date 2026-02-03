@@ -1297,13 +1297,11 @@ ${report.analysis}
       <Helmet>
         <title>{t('OpenShift Metrics - AI Observability')}</title>
         <style>{`
-          .chat-panel-resize-handle:hover {
+          [data-separator-id="chat-panel-separator"]:hover {
             background: var(--pf-v5-global--primary-color--100) !important;
-            width: 3px !important;
           }
-          .chat-panel-resize-handle:active {
+          [data-separator-id="chat-panel-separator"]:active {
             background: var(--pf-v5-global--primary-color--200) !important;
-            width: 4px !important;
           }
         `}</style>
       </Helmet>
@@ -1462,7 +1460,7 @@ ${report.analysis}
                         border: 'none',
                       }}
                     >
-                      AI Analysis
+                      Analyze with AI
                     </Button>
                   </FlexItem>
                   <FlexItem>
@@ -1475,7 +1473,7 @@ ${report.analysis}
                         border: 'none',
                       } : {}}
                     >
-                      {chatPanelOpen ? 'Close Chat' : 'AI Chat'}
+                      {chatPanelOpen ? 'Close Assistant' : 'AI Assistant'}
                     </Button>
                   </FlexItem>
                   <FlexItem>
@@ -1491,7 +1489,7 @@ ${report.analysis}
                           isDisabled={Object.keys(metricsData).length === 0}
                           icon={<DownloadIcon />}
                         >
-                          Download Report
+                          Report
                         </MenuToggle>
                       )}
                     >
@@ -1627,9 +1625,10 @@ ${report.analysis}
           maxWidth: '100%',
           overflow: 'hidden'
         }}>
-          <PanelGroup orientation="horizontal">
+          <PanelGroup orientation="horizontal" id="openshift-metrics-panel-group">
             {/* Metrics Panel */}
-            <Panel 
+            <Panel
+              id="metrics-panel"
               defaultSize={65}
               minSize={50}
               maxSize={75}
@@ -1706,17 +1705,17 @@ ${report.analysis}
             {/* Chat Panel */}
             {chatPanelOpen && (
               <>
-                <PanelResizeHandle 
+                <PanelResizeHandle
+                  id="chat-panel-separator"
                   style={{
-                    width: '2px',
+                    width: '6px',
                     background: 'var(--pf-v5-global--BorderColor--100)',
-                    cursor: 'col-resize',
-                    transition: 'background 0.2s ease',
-                    position: 'relative'
+                    cursor: 'col-resize'
                   }}
                   className="chat-panel-resize-handle"
                 />
-                <Panel 
+                <Panel
+                  id="chat-panel"
                   defaultSize={35}
                   minSize={25}
                   maxSize={50}
