@@ -721,8 +721,50 @@ def extract_time_range_with_info(
     Enhanced time range extraction that DYNAMICALLY parses any time expression from user's question
     Supports historical queries for months/years
     """
-    query_lower = query.lower()
-    
+    query_lower = query.lower().strip()
+
+    # Priority 0: Handle shorthand time formats (e.g., "15m", "1h", "6h", "24h", "7d")
+    # This is used by the React UI time range selector
+    shorthand_pattern = r'^(\d+(?:\.\d+)?)(m|h|d)$'
+    shorthand_match = re.match(shorthand_pattern, query_lower)
+    if shorthand_match:
+        number = float(shorthand_match.group(1))
+        unit = shorthand_match.group(2)
+
+        logger.debug(f"Shorthand time format detected: {number}{unit}")
+
+        # Convert to hours
+        match unit:
+            case "m":
+                hours = number / 60
+                duration_str = f"past {int(number)} {'minute' if number == 1 else 'minutes'}"
+                rate_syntax = f"{int(number)}m"
+            case "h":
+                hours = number
+                duration_str = f"past {int(number) if number == int(number) else number} {'hour' if number == 1 else 'hours'}"
+                rate_syntax = f"{int(number)}h" if number == int(number) else f"{number}h"
+            case "d":
+                hours = number * 24
+                duration_str = f"past {int(number)} {'day' if number == 1 else 'days'}"
+                rate_syntax = f"{int(number)}d"
+            case _:
+                # Shouldn't reach here given the regex, but fallback just in case
+                hours = 1
+                duration_str = "past 1 hour"
+                rate_syntax = "1h"
+
+        end_time = datetime.now()
+        start_time = end_time - timedelta(hours=hours)
+
+        time_range_info = {
+            "duration_str": duration_str,
+            "rate_syntax": rate_syntax,
+            "hours": hours
+        }
+
+        logger.debug(f"Parsed shorthand: {query} -> {duration_str} (start: {start_time}, end: {end_time})")
+        return int(start_time.timestamp()), int(end_time.timestamp()), time_range_info
+
     # Priority 1: DYNAMIC parsing using regex patterns for any time expression  
     time_patterns = [
         # Pattern: "past/last X minutes/hours/days/weeks/months/years"

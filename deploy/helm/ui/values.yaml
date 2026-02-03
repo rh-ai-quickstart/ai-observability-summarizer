@@ -3,7 +3,7 @@ deployment:
 
 image:
   repository: quay.io/ecosystem-appeng/aiobs-metrics-ui
-  tag: 1.0.14-feature
+  tag: 1.0.15-feature
   pullPolicy: IfNotPresent
 
 service:
