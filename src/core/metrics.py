@@ -1543,7 +1543,8 @@ def chat_openshift_metrics(
         promql = (promql_value or "").strip() if isinstance(promql_value, str) else (promql_value or "")
         if not isinstance(promql, str):
             promql = ""
-        summary = (parsed.get("summary") or llm_response).strip()
+        summary_value = parsed.get("summary") or llm_response
+        summary = summary_value.strip() if isinstance(summary_value, str) else str(summary_value)
 
         # Add namespace filter when needed
         if promql and namespace and "namespace=" not in promql:
