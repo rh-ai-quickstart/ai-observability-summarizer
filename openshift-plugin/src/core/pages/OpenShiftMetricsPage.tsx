@@ -1626,20 +1626,21 @@ ${report.analysis}
           maxWidth: '100%',
           overflow: 'hidden'
         }}>
-          <Group 
-            orientation="horizontal" 
-            id="openshift-metrics-panel-group" 
+          <Group
+            orientation="horizontal"
+            id="openshift-metrics-panel-group"
             style={{ height: '100%', width: '100%' }}
           >
             {/* Metrics Panel */}
             <Panel
               id="metrics-panel"
-              defaultSize={chatPanelOpen ? 65 : 100}
+              defaultSize={chatPanelOpen ? 70 : 100}
               minSize={50}
-              maxSize={75}
+              maxSize={chatPanelOpen ? 75 : 100}
               style={{
-                paddingLeft: 'var(--pf-v5-global--spacer--lg)', 
+                paddingLeft: 'var(--pf-v5-global--spacer--lg)',
                 paddingRight: chatPanelOpen ? '8px' : 'var(--pf-v5-global--spacer--lg)',
+                paddingBottom: 'var(--pf-v5-global--spacer--lg)',
                 overflowY: 'auto',
                 overflowX: 'hidden'
               }}
@@ -1707,19 +1708,21 @@ ${report.analysis}
             )}
             </Panel>
 
-            {/* Chat Panel Separator - Always rendered */}
+            {/* Chat Panel Separator - Always rendered for stable DOM */}
             <Separator id="chat-panel-separator" />
             {/* Chat Panel - Always rendered, key forces remount when chatPanelOpen changes */}
             <Panel
               key={`chat-panel-${chatPanelOpen}`}
               id="chat-panel"
-              defaultSize={chatPanelOpen ? 35 : 0}
+              defaultSize={chatPanelOpen ? 30 : 0}
               minSize={chatPanelOpen ? 25 : 0}
               maxSize={chatPanelOpen ? 50 : 0}
               collapsible={true}
               style={{
                 paddingLeft: '8px',
                 paddingRight: 'var(--pf-v5-global--spacer--lg)',
+                paddingBottom: 'var(--pf-v5-global--spacer--lg)',
+                overflowY: 'auto',
                 overflowX: 'hidden'
               }}
             >
