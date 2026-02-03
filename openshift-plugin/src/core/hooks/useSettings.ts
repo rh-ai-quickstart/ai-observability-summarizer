@@ -23,12 +23,14 @@ export const useSettings = () => {
   ) => {
     React.useEffect(() => {
       const handleSettingsClosed = () => {
-        // Only check if we currently have the AI config warning
-        if (warningType === AI_CONFIG_WARNING) {
+        // Check if we currently have an AI config warning (either type)
+        if (warningType === AI_CONFIG_WARNING || warningType === 'CONFIGURATION_REQUIRED') {
           const config = getSessionConfig();
           if (config.ai_model) {
             setWarning(null);
-            setWarningType?.(null);
+            if (setWarningType) {
+              setWarningType(null);
+            }
           }
         }
       };

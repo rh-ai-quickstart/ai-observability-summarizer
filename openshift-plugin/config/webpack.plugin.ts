@@ -24,6 +24,10 @@ const config: Configuration = {
     filename: isProd ? '[name]-bundle-[hash].min.js' : '[name]-bundle.js',
     chunkFilename: isProd ? '[name]-chunk-[chunkhash].min.js' : '[name]-chunk.js',
   },
+  externals: {
+    'react': 'react',
+    'react-dom': 'react-dom',
+  },
   ...commonConfig,
   module: {
     rules: [
@@ -57,7 +61,9 @@ const config: Configuration = {
     },
   },
   plugins: [
-    new ConsoleRemotePlugin(),
+    new ConsoleRemotePlugin({
+      validateSharedModules: false
+    }),
     new CopyWebpackPlugin({
       patterns: [{ from: path.resolve(__dirname, '../locales'), to: 'locales' }],
     }),

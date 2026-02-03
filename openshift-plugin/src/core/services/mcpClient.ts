@@ -503,6 +503,85 @@ export interface OpenShiftAnalysisResult {
   namespace?: string;
 }
 
+export async function chatOpenShift(
+  category: string,
+  question: string,
+  scope: string,
+  namespace: string | undefined,
+  timeRange: string,
+  model: string,
+  apiKey?: string
+): Promise<{ response: string; promql?: string }> {
+  try {
+    console.log('[OpenShift] Chat:', { category, question, scope, namespace, timeRange, model });
+
+    // Convert timeRange to start/end timestamps
+    let start: number, end: number;
+    const now = Math.floor(Date.now() / 1000);
+
+    if (timeRange.startsWith('custom:')) {
+      // Parse custom range format: "custom:START_ISO:END_ISO"
+      const parts = timeRange.split(':');
+      if (parts.length >= 3) {
+        start = Math.floor(new Date(parts[1]).getTime() / 1000);
+        end = Math.floor(new Date(parts[2]).getTime() / 1000);
+      } else {
+        // Fallback to 1 hour
+        start = now - 3600;
+        end = now;
+      }
+    } else {
+      // Handle preset ranges
+      const rangeSeconds = {
+        '15m': 15 * 60,
+        '1h': 60 * 60,
+        '6h': 6 * 60 * 60,
+        '24h': 24 * 60 * 60,
+        '7d': 7 * 24 * 60 * 60,
+      }[timeRange] || 3600; // Default 1 hour
+
+      start = now - rangeSeconds;
+      end = now;
+    }
+
+    // Use the same MCP call pattern as analyzeOpenShift
+    const text = await callMcpToolText('chat_openshift', {
+      metric_category: category,
+      question: question,
+      scope: scope,
+      namespace: namespace || '',
+      start_datetime: new Date(start * 1000).toISOString(),
+      end_datetime: new Date(end * 1000).toISOString(),
+      summarize_model_id: model,
+      api_key: apiKey,
+    });
+
+    console.log('[OpenShift] Chat response length:', text.length);
+
+    // Parse response - try JSON first, fallback to plain text
+    let responseText = '';
+    let promqlText = '';
+
+    try {
+      const parsed = JSON.parse(text);
+      responseText = parsed.summary || parsed.response || text;
+      promqlText = parsed.promql || '';
+    } catch {
+      // If not JSON, treat as plain text response
+      responseText = text;
+    }
+
+    return {
+      response: responseText,
+      promql: promqlText || undefined,
+    };
+
+  } catch (error) {
+    console.error('OpenShift chat error:', error);
+    throw error;
+  }
+}
+
 export async function analyzeOpenShift(
   category: string,
   scope: 'cluster_wide' | 'namespace_scoped',

@@ -12,12 +12,15 @@ jest.mock('../../src/core/services/mcpClient', () => ({
   getSessionConfig: jest.fn(),
 }));
 
-// Mock the useSettings hook
+// Mock the useSettings hook with proper implementation
+const mockHandleOpenSettings = jest.fn();
+const mockUseAIConfigWarningDismissal = jest.fn();
+
 jest.mock('../../src/core/hooks/useSettings', () => ({
   useSettings: () => ({
-    handleOpenSettings: jest.fn(),
-    useAIConfigWarningDismissal: jest.fn(),
-    AI_CONFIG_WARNING: 'ai-config-warning',
+    handleOpenSettings: mockHandleOpenSettings,
+    useAIConfigWarningDismissal: mockUseAIConfigWarningDismissal,
+    AI_CONFIG_WARNING: 'AI_CONFIG_REQUIRED',
   }),
 }));
 
@@ -36,6 +39,13 @@ jest.mock('react-helmet', () => ({
 jest.mock('../../src/core/components/MetricChartModal', () => ({
   MetricChartModal: ({ isOpen, onClose }: any) => 
     isOpen ? <div data-testid="chart-modal"><button onClick={onClose}>Close Modal</button></div> : null,
+}));
+
+// Mock react-resizable-panels
+jest.mock('react-resizable-panels', () => ({
+  Panel: ({ children, style, defaultSize, minSize, maxSize, ...props }: any) => <div style={style} {...props}>{children}</div>,
+  Group: ({ children, orientation, ...props }: any) => <div {...props}>{children}</div>,
+  Separator: ({ style, className, ...props }: any) => <div style={style} className={className} {...props} data-testid="resize-handle" />,
 }));
 
 const {
@@ -206,8 +216,7 @@ describe('OpenShiftMetricsPage', () => {
 
     it('should render all action buttons', () => {
       expect(screen.getByLabelText('Refresh metrics')).toBeInTheDocument();
-      expect(screen.getByText('Report')).toBeInTheDocument();
-      expect(screen.getByText('CSV')).toBeInTheDocument();
+      expect(screen.getByText('Download Report')).toBeInTheDocument();
       expect(screen.getByText('AI Analysis')).toBeInTheDocument();
     });
 
@@ -223,15 +232,14 @@ describe('OpenShiftMetricsPage', () => {
       );
     });
 
-    it('should disable download buttons when no metrics data', async () => {
+    it('should disable download dropdown when no metrics data', async () => {
       fetchOpenShiftMetrics.mockResolvedValue({ metrics: {} });
       
       const refreshButton = screen.getByLabelText('Refresh metrics');
       fireEvent.click(refreshButton);
 
       await waitFor(() => {
-        expect(screen.getByText('Report').closest('button')).toBeDisabled();
-        expect(screen.getByText('CSV').closest('button')).toBeDisabled();
+        expect(screen.getByText('Download Report').closest('button')).toBeDisabled();
       });
     });
   });
@@ -350,14 +358,27 @@ describe('OpenShiftMetricsPage', () => {
     });
 
     it('should show configuration error when AI model not configured', async () => {
+      // Mock getSessionConfig to return null ai_model
       getSessionConfig.mockReturnValue({ ai_model: null });
 
-      const analyzeButton = screen.getAllByText('AI Analysis')[0];
+      render(<OpenShiftMetricsPage />);
+
+      // Wait for initial load
+      await waitFor(() => {
+        expect(screen.getByText('OpenShift Metrics')).toBeInTheDocument();
+      });
+
+      // Find and click the AI Analysis button
+      const analyzeButtons = screen.getAllByText('AI Analysis');
+      const analyzeButton = analyzeButtons[0].closest('button');
+
+      expect(analyzeButton).toBeTruthy();
       fireEvent.click(analyzeButton);
 
+      // Check that the configuration error is displayed
       await waitFor(() => {
-        expect(screen.getByText('Configuration Required')).toBeInTheDocument();
-        expect(screen.getByText('Open Settings')).toBeInTheDocument();
+        expect(screen.getByText(/Configuration Required/i)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Open Settings/i })).toBeInTheDocument();
       });
     });
 
@@ -503,7 +524,7 @@ describe('OpenShiftMetricsPage', () => {
       if (removeChildSpy) removeChildSpy.mockRestore();
     });
 
-    it('should trigger markdown download when Report button is clicked', async () => {
+    it('should trigger markdown download when Markdown option is selected', async () => {
       // Setup mocks for download
       const mockAnchor = { click: jest.fn(), href: '', download: '' };
       const originalCreateElement = document.createElement.bind(document);
@@ -515,16 +536,22 @@ describe('OpenShiftMetricsPage', () => {
       removeChildSpy = jest.spyOn(document.body, 'removeChild').mockImplementation((node) => node);
 
       await waitFor(() => {
-        const downloadButton = screen.getByText('Report');
+        const downloadButton = screen.getByText('Download Report');
         expect(downloadButton.closest('button')).not.toBeDisabled();
         
+        // Open the dropdown
         fireEvent.click(downloadButton);
+      });
+
+      await waitFor(() => {
+        const markdownOption = screen.getByText('Markdown');
+        fireEvent.click(markdownOption);
         
         expect(window.URL.createObjectURL).toHaveBeenCalled();
       });
     });
 
-    it('should trigger CSV download when CSV button is clicked', async () => {
+    it('should trigger HTML download when HTML option is selected', async () => {
       // Setup mocks for download
       const mockAnchor = { click: jest.fn(), href: '', download: '' };
       const originalCreateElement = document.createElement.bind(document);
@@ -536,10 +563,16 @@ describe('OpenShiftMetricsPage', () => {
       removeChildSpy = jest.spyOn(document.body, 'removeChild').mockImplementation((node) => node);
 
       await waitFor(() => {
-        const downloadButton = screen.getByText('CSV');
+        const downloadButton = screen.getByText('Download Report');
         expect(downloadButton.closest('button')).not.toBeDisabled();
         
+        // Open the dropdown
         fireEvent.click(downloadButton);
+      });
+
+      await waitFor(() => {
+        const htmlOption = screen.getByText('HTML');
+        fireEvent.click(htmlOption);
         
         expect(window.URL.createObjectURL).toHaveBeenCalled();
       });

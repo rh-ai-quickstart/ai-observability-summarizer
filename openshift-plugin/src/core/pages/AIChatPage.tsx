@@ -14,7 +14,6 @@ import {
   Divider,
   Alert,
   AlertVariant,
-  AlertActionLink,
   Label,
   Popover,
 } from '@patternfly/react-core';
@@ -42,13 +41,14 @@ import { useChatSettings } from '../hooks/useChatSettings';
 import { useSettings } from '../hooks/useSettings';
 import { SuggestedQuestions } from '../components/SuggestedQuestions';
 import { SuggestedQuestionsPopover } from '../components/SuggestedQuestionsPopover';
+import { ConfigurationRequiredAlert } from '../components/ConfigurationRequiredAlert';
 import '../styles/chat-markdown.css';
 
 const AIChatPage: React.FC = () => {
   const { messages, setMessages, clearHistory, exportToMarkdown } = useChatHistory();
   const { progressMessage, startProgress, stopProgress } = useProgressIndicator();
   const { settings: chatSettings } = useChatSettings();
-  const { handleOpenSettings, useAIConfigWarningDismissal, AI_CONFIG_WARNING } = useSettings();
+  const { useAIConfigWarningDismissal, AI_CONFIG_WARNING } = useSettings();
   const [inputValue, setInputValue] = React.useState('');
   const [isLoading, setIsLoading] = React.useState(false);
   const [configError, setConfigError] = React.useState<string | null>(null);
@@ -427,24 +427,12 @@ const AIChatPage: React.FC = () => {
 
       {/* Configuration Error Banner */}
       {configError && (
-        <Alert
-          variant={AlertVariant.warning}
-          title="Configuration Required"
-          isInline
-          style={{ marginBottom: '16px' }}
-          actionLinks={
-            <>
-              <AlertActionLink onClick={handleOpenSettings}>
-                Open Settings
-              </AlertActionLink>
-              <AlertActionLink onClick={() => setConfigError(null)}>
-                Dismiss
-              </AlertActionLink>
-            </>
-          }
-        >
-          {configError}. Click "Open Settings" to configure your AI model.
-        </Alert>
+        <div style={{ marginBottom: '16px' }}>
+          <ConfigurationRequiredAlert 
+            onClose={() => setConfigError(null)}
+            message={`${configError}. Click "Open Settings" to configure your AI model.`}
+          />
+        </div>
       )}
 
       {/* Copy Success Banner */}

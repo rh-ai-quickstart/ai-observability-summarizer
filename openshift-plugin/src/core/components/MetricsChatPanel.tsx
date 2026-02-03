@@ -1,6 +1,5 @@
 import * as React from 'react';
 import {
-  Title,
   Text,
   TextVariants,
   TextInput,
@@ -248,14 +247,23 @@ export const MetricsChatPanel: React.FC<MetricsChatPanelProps> = ({
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        padding: '12px 16px',
-        borderBottom: '1px solid var(--pf-v5-global--BorderColor--100)'
+        padding: '10px 16px',
+        borderBottom: '1px solid var(--pf-v5-global--BorderColor--100)',
+        minHeight: '48px'
       }}>
-        <Title headingLevel="h3" size="lg" style={{ margin: 0 }}>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          fontSize: '1.125rem',
+          fontWeight: 600,
+          margin: 0,
+          padding: 0,
+          lineHeight: '1.2'
+        }}>
           <RobotIcon style={{ marginRight: '8px', color: 'var(--pf-v5-global--primary-color--100)' }} />
           AI Assistant
-        </Title>
-        <Button variant="plain" onClick={onClose} aria-label="Close chat panel">
+        </div>
+        <Button variant="plain" onClick={onClose} aria-label="Close chat panel" style={{ padding: '4px', minWidth: 'auto' }}>
           <TimesIcon />
         </Button>
       </div>

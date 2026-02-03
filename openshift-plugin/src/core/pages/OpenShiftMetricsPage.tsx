@@ -1627,7 +1627,7 @@ ${report.analysis}
           maxWidth: '100%',
           overflow: 'hidden'
         }}>
-          <PanelGroup direction="horizontal">
+          <PanelGroup orientation="horizontal">
             {/* Metrics Panel */}
             <Panel 
               defaultSize={65}
