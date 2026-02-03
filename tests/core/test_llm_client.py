@@ -6,7 +6,7 @@ response parsing, and error handling for different providers (Anthropic, OpenAI,
 """
 
 import pytest
-from unittest.mock import patch, Mock
+from unittest.mock import patch, Mock, ANY
 
 from src.core.llm_client import (
     summarize_with_llm,
@@ -110,8 +110,8 @@ class TestLLMClientAuthentication:
                 api_key="test-anthropic-key"
             )
         
-        # Verify the Anthropic client was initialized with correct API key
-        mock_anthropic_class.assert_called_once_with(api_key="test-anthropic-key")
+        # Verify the Anthropic client was initialized with correct API key and timeout
+        mock_anthropic_class.assert_called_once_with(api_key="test-anthropic-key", timeout=ANY)
         
         # Verify the response was processed correctly
         assert result == "Test response"

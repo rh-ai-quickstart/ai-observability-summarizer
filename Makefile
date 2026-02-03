@@ -14,7 +14,7 @@ MAKEFLAGS += --no-print-directory
 REGISTRY ?= quay.io
 ORG ?= ecosystem-appeng
 IMAGE_PREFIX ?= aiobs
-VERSION ?= 1.0.12-feature
+VERSION ?= 1.0.16-feature
 PLATFORM ?= linux/amd64
 DEV_MODE ?= false
 
@@ -727,6 +727,11 @@ test-python:
 test-react:
 	@echo "🧪 Running React tests..."
 	@cd openshift-plugin && yarn install
+	@echo "🏗️  Building console plugin (validates TypeScript)..."
+	@cd openshift-plugin && yarn build:plugin
+	@echo "🏗️  Building React UI (validates TypeScript)..."
+	@cd openshift-plugin && yarn build:react-ui
+	@echo "🧪 Running Jest tests..."
 	@cd openshift-plugin && yarn test --ci
 
 # Convenience targets for common workflows

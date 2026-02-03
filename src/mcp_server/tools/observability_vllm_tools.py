@@ -44,6 +44,7 @@ from core.metrics import (
     execute_instant_queries_parallel,
     execute_range_queries_parallel,
     build_correlated_context_from_metrics,
+    calculate_histogram_quantile_optimal_lookback,
 )
 from core.llm_client import build_prompt, summarize_with_llm, extract_time_range_with_info
 from core.response_validator import ResponseType
@@ -398,9 +399,42 @@ def fetch_vllm_metrics_data(
             # Add namespace filter if specified separately
             if namespace and namespace.lower() != "all" and "namespace=" not in final_query:
                 final_query = _inject_labels_into_query(final_query, f'namespace="{namespace}"')
-            
+
             prepared_queries[label] = final_query
-        
+
+        # Calculate time range for dynamic query adjustment
+        duration_seconds = resolved_end - resolved_start
+        duration_hours = duration_seconds / 3600
+
+        # Format duration for PromQL (e.g., "6h", "30m", "1d")
+        if duration_hours >= 24:
+            duration_str = f"{int(duration_hours / 24)}d"
+        elif duration_hours >= 1:
+            duration_str = f"{int(duration_hours)}h"
+        else:
+            duration_str = f"{int(duration_seconds / 60)}m"
+
+        # Calculate lookback window for rate() queries
+        lookback_window = calculate_histogram_quantile_optimal_lookback(duration_hours)
+
+        # Replace hardcoded [5m] with appropriate time range in queries
+        adjusted_queries = {}
+        for label, query in prepared_queries.items():
+            # For increase() queries: use full duration to show tokens during time window
+            # For rate()/histogram_quantile(): use lookback window for smooth data
+            if 'increase(' in query:
+                adjusted_query = query.replace('[5m]', f'[{duration_str}]')
+                if '[5m]' in query and query != adjusted_query:
+                    logger.debug(f"Adjusted increase duration for '{label}': [5m] -> [{duration_str}]")
+            else:
+                adjusted_query = query.replace('[5m]', f'[{lookback_window}]')
+                if '[5m]' in query and query != adjusted_query:
+                    logger.debug(f"Adjusted lookback for '{label}': [5m] -> [{lookback_window}]")
+
+            adjusted_queries[label] = adjusted_query
+
+        prepared_queries = adjusted_queries
+
         # Execute instant queries for current values (fast!)
         values = execute_instant_queries_parallel(prepared_queries, max_workers=10)
         
@@ -451,15 +485,15 @@ def analyze_vllm(
     api_key: Optional[str] = None,
 ) -> str:
     """Analyze vLLM metrics and generate AI summary.
-    
+
     Fetches metrics, builds a prompt, and uses LLM to generate analysis.
-    
+
     Args:
         model_name: Model to analyze (e.g., "demo3 | meta-llama/Llama-3.2-3B-Instruct")
         summarize_model_id: LLM model to use for analysis
         time_range: Time range like "1h", "6h", "24h"
         api_key: Optional API key for external LLM
-        
+
     Returns:
         JSON string: {"model_name": "...", "summary": "...", "time_range": "..."}
     """
@@ -548,6 +582,20 @@ def analyze_vllm(
         return e.to_mcp_response()
     except LLMServiceError as e:
         return e.to_mcp_response()
+    except TimeoutError as e:
+        error = MCPException(
+            message=f"Analysis timed out: {str(e)}",
+            error_code=MCPErrorCode.TIMEOUT_ERROR,
+            recovery_suggestion="The AI analysis took too long. Try using a faster model or reducing the time range."
+        )
+        return error.to_mcp_response()
+    except ConnectionError as e:
+        error = MCPException(
+            message=f"Connection failed: {str(e)}",
+            error_code=MCPErrorCode.CONNECTION_ERROR,
+            recovery_suggestion="Failed to connect to the AI service. Check your network connection and API endpoint."
+        )
+        return error.to_mcp_response()
     except Exception as e:
         error = MCPException(
             message=f"Analysis failed: {str(e)}",

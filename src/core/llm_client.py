@@ -12,7 +12,7 @@ from .config import CHAT_SCOPE_FLEET_WIDE
 from datetime import datetime, timedelta, timezone, time
 from dateparser.search import search_dates
 
-from .config import LLM_API_TOKEN, LLAMA_STACK_URL, VERIFY_SSL
+from .config import LLM_API_TOKEN, LLAMA_STACK_URL, VERIFY_SSL, LLM_TIMEOUT_SECONDS
 from .model_config_manager import get_model_config
 
 import logging
@@ -36,19 +36,29 @@ FALLBACK_RATE_SYNTAX = "5m"  # Fallback PromQL time range for shorter queries
 
 
 def _make_api_request(
-    url: str, headers: dict, payload: dict, verify_ssl: bool = True
+    url: str, headers: dict, payload: dict, verify_ssl: bool = True, timeout: float = 120.0
 ) -> dict:
     """Make API request with consistent error handling"""
-    response = requests.post(url, headers=headers, json=payload, verify=verify_ssl)
-    if response.status_code != 200:
-        # Log the error response for debugging
-        try:
-            error_body = response.json()
-            logger.error(f"API request failed with status {response.status_code}: {error_body}")
-        except Exception:
-            logger.error(f"API request failed with status {response.status_code}: {response.text}")
-    response.raise_for_status()
-    return response.json()
+    try:
+        response = requests.post(url, headers=headers, json=payload, verify=verify_ssl, timeout=timeout)
+        if response.status_code != 200:
+            # Log the error response for debugging
+            try:
+                error_body = response.json()
+                logger.error(f"API request failed with status {response.status_code}: {error_body}")
+            except Exception:
+                logger.error(f"API request failed with status {response.status_code}: {response.text}")
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.Timeout:
+        logger.error(f"LLM API request timed out after {timeout} seconds")
+        raise TimeoutError(f"LLM API request timed out after {timeout} seconds. The AI model may be overloaded or the request is too complex. Try again or use a faster model.")
+    except requests.exceptions.ConnectionError as e:
+        logger.error(f"LLM API connection error: {e}")
+        raise ConnectionError(f"Failed to connect to LLM API: {e}")
+    except requests.exceptions.RequestException as e:
+        logger.error(f"LLM API request failed: {e}")
+        raise
 
 
 def _validate_and_extract_response(
@@ -151,7 +161,7 @@ def summarize_with_llm(
 ) -> str:
     """
     Summarize content using an LLM (local or external).
-    
+
     Args:
         prompt: The content to summarize
         summarize_model_id: Model identifier from MODEL_CONFIG
@@ -217,7 +227,11 @@ def summarize_with_llm(
             # Use official Anthropic client instead of raw HTTP requests
             try:
                 import anthropic
-                client = anthropic.Anthropic(api_key=api_key)
+                import httpx
+                # Configure timeout with separate connect and read timeouts
+                # Connect timeout: 60s, Read timeout: LLM_TIMEOUT_SECONDS
+                timeout_config = httpx.Timeout(connect=60.0, read=LLM_TIMEOUT_SECONDS, write=60.0, pool=60.0)
+                client = anthropic.Anthropic(api_key=api_key, timeout=timeout_config)
 
                 # Convert messages to Anthropic format
                 anthropic_messages = []
@@ -244,7 +258,17 @@ def summarize_with_llm(
 
             except ImportError:
                 raise ValueError("Anthropic client not available. Please install anthropic package.")
+            except anthropic.APITimeoutError as e:
+                logger.error(f"Anthropic API timed out: {e}")
+                raise TimeoutError(f"Anthropic API request timed out after {LLM_TIMEOUT_SECONDS} seconds. The AI model may be overloaded. Try again or use a different model.")
+            except anthropic.APIConnectionError as e:
+                logger.error(f"Anthropic API connection error: {e}")
+                raise ConnectionError(f"Failed to connect to Anthropic API: {e}")
+            except anthropic.APIError as e:
+                logger.error(f"Anthropic API error: {e}")
+                raise ValueError(f"Anthropic API error: {str(e)}")
             except Exception as e:
+                logger.error(f"Unexpected Anthropic error: {e}")
                 raise ValueError(f"Anthropic API error: {str(e)}")
         else:
             # OpenAI and compatible APIs
@@ -277,7 +301,7 @@ def summarize_with_llm(
             # Anthropic response already handled above
             pass
         else:
-            response_json = _make_api_request(api_url, headers, payload, verify_ssl=DEFAULT_SSL_VERIFICATION)
+            response_json = _make_api_request(api_url, headers, payload, verify_ssl=DEFAULT_SSL_VERIFICATION, timeout=LLM_TIMEOUT_SECONDS)
             raw_response = _validate_and_extract_response(
                 response_json, is_external=True, provider=provider
             )
@@ -342,7 +366,7 @@ def summarize_with_llm(
             }
             try:
                 response_json = _make_api_request(
-                    f"{LLAMA_STACK_URL}/chat/completions", headers, payload, verify_ssl=VERIFY_SSL
+                    f"{LLAMA_STACK_URL}/chat/completions", headers, payload, verify_ssl=VERIFY_SSL, timeout=LLM_TIMEOUT_SECONDS
                 )
                 break  # Success - stop trying other candidates
             except requests.exceptions.HTTPError as http_err:  # type: ignore[name-defined]
@@ -697,8 +721,50 @@ def extract_time_range_with_info(
     Enhanced time range extraction that DYNAMICALLY parses any time expression from user's question
     Supports historical queries for months/years
     """
-    query_lower = query.lower()
-    
+    query_lower = query.lower().strip()
+
+    # Priority 0: Handle shorthand time formats (e.g., "15m", "1h", "6h", "24h", "7d")
+    # This is used by the React UI time range selector
+    shorthand_pattern = r'^(\d+(?:\.\d+)?)(m|h|d)$'
+    shorthand_match = re.match(shorthand_pattern, query_lower)
+    if shorthand_match:
+        number = float(shorthand_match.group(1))
+        unit = shorthand_match.group(2)
+
+        logger.debug(f"Shorthand time format detected: {number}{unit}")
+
+        # Convert to hours
+        match unit:
+            case "m":
+                hours = number / 60
+                duration_str = f"past {int(number)} {'minute' if number == 1 else 'minutes'}"
+                rate_syntax = f"{int(number)}m"
+            case "h":
+                hours = number
+                duration_str = f"past {int(number) if number == int(number) else number} {'hour' if number == 1 else 'hours'}"
+                rate_syntax = f"{int(number)}h" if number == int(number) else f"{number}h"
+            case "d":
+                hours = number * 24
+                duration_str = f"past {int(number)} {'day' if number == 1 else 'days'}"
+                rate_syntax = f"{int(number)}d"
+            case _:
+                # Shouldn't reach here given the regex, but fallback just in case
+                hours = 1
+                duration_str = "past 1 hour"
+                rate_syntax = "1h"
+
+        end_time = datetime.now()
+        start_time = end_time - timedelta(hours=hours)
+
+        time_range_info = {
+            "duration_str": duration_str,
+            "rate_syntax": rate_syntax,
+            "hours": hours
+        }
+
+        logger.debug(f"Parsed shorthand: {query} -> {duration_str} (start: {start_time}, end: {end_time})")
+        return int(start_time.timestamp()), int(end_time.timestamp()), time_range_info
+
     # Priority 1: DYNAMIC parsing using regex patterns for any time expression  
     time_patterns = [
         # Pattern: "past/last X minutes/hours/days/weeks/months/years"

@@ -5,7 +5,7 @@ deployment:
 
 image:
   repository: quay.io/ecosystem-appeng/aiobs-mcp-server
-  tag: 1.0.12-feature
+  tag: 1.0.16-feature
   pullPolicy: IfNotPresent
 
 service:
@@ -37,6 +37,7 @@ env:
   MAX_NUM_LOG_ROWS: 10
   MAX_NUM_TRACE_SPANS: 10
   KORREL8R_TIMEOUT_SECONDS: 8
+  LLM_TIMEOUT_SECONDS: 180
 
 # Name of the LLM used
 LLM_PREDICTOR: "llama-3-1-8b-instruct-predictor"

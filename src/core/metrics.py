@@ -116,14 +116,18 @@ def execute_range_queries_parallel(
     max_points: int = 20
 ) -> Dict[str, List[Dict[str, Any]]]:
     """Execute multiple Prometheus range queries in parallel for sparklines.
-    
+
+    For gauge metrics (GPU utilization, temperature, power), automatically wraps
+    queries with max_over_time() to capture peak values during each sampling interval.
+    This ensures brief activity spikes aren't missed between sample points.
+
     Args:
         queries: Dict mapping label -> PromQL query
         start_ts: Start timestamp (epoch seconds)
         end_ts: End timestamp (epoch seconds)
         max_workers: Max parallel threads
         max_points: Target number of data points for sparklines
-        
+
     Returns:
         Dict mapping label -> list of {timestamp, value} dicts
     """
@@ -133,16 +137,66 @@ def execute_range_queries_parallel(
     # Calculate step to get approximately max_points data points
     duration = end_ts - start_ts
     step = max(60, duration // max_points)  # At least 1 minute step
-    
+
+    # Format step duration for PromQL (e.g., "4m", "1h")
+    if step >= 3600:
+        step_str = f"{step // 3600}h"
+    elif step >= 60:
+        step_str = f"{step // 60}m"
+    else:
+        step_str = f"{step}s"
+
     headers = _auth_headers()
-    
+
+    # Gauge metrics that should use max_over_time() to capture peaks in sparklines
+    # These metrics show instantaneous values, so we want the max during each step interval
+    # This is critical for metrics like GPU utilization where brief spikes (e.g., 10s of activity
+    # in a 1-hour window with 4-minute sampling) would otherwise be missed
+    GAUGE_METRICS = [
+        "GPU Usage (%)",
+        "GPU Utilization (%)",
+        "GPU Temperature (°C)",
+        "GPU Power Usage (Watts)",
+        "GPU Memory Usage (GB)",
+        "GPU Memory Temperature (°C)",
+        "GPU Energy Consumption (Joules)",
+    ]
+
     def fetch_range(label: str, query: str) -> Tuple[str, List[Dict[str, Any]]]:
         try:
+            # For gauge metrics, inject max_over_time() to capture peak values during each step
+            # This ensures we don't miss brief GPU activity spikes between sample points
+            range_query = query
+            if label in GAUGE_METRICS and "max_over_time" not in query:
+                # Inject max_over_time() inside aggregation functions
+                # Examples:
+                #   avg(DCGM_FI_DEV_GPU_UTIL) -> avg(max_over_time(DCGM_FI_DEV_GPU_UTIL[4m]))
+                #   avg(DCGM_FI_DEV_FB_USED) / (1024*1024*1024) -> avg(max_over_time(DCGM_FI_DEV_FB_USED[4m])) / (1024*1024*1024)
+                import re
+
+                # Pattern: aggregation_func(metric_name)
+                # Replace with: aggregation_func(max_over_time(metric_name[duration]))
+                def inject_max_over_time(match):
+                    agg_func = match.group(1)
+                    metric = match.group(2)
+                    return f"{agg_func}(max_over_time({metric}[{step_str}]))"
+
+                # Match avg(...), sum(...), min(...), max(...), count(...)
+                range_query = re.sub(
+                    r'(avg|sum|min|max|count)\(([^()]+)\)',
+                    inject_max_over_time,
+                    query
+                )
+
+                # If no aggregation found (bare metric), wrap it directly
+                if range_query == query:
+                    range_query = f"max_over_time({query}[{step_str}])"
+
             resp = requests.get(
                 f"{PROMETHEUS_URL}/api/v1/query_range",
                 headers=headers,
                 params={
-                    "query": query,
+                    "query": range_query,
                     "start": start_ts,
                     "end": end_ts,
                     "step": f"{step}s"
@@ -185,6 +239,30 @@ def execute_range_queries_parallel(
                 logger.warning(f"Failed to fetch range for {label}: {e}")
                 results[label] = []
     return results
+
+
+def calculate_histogram_quantile_optimal_lookback(duration_hours: float) -> str:
+    """Calculate optimal lookback window for rate() queries based on total time range.
+
+    This prevents sparse data in histogram_quantile queries by using a lookback window
+    proportional to the total time range.
+
+    Args:
+        duration_hours: Total time range duration in hours
+
+    Returns:
+        Lookback window string (e.g., "5m", "30m", "2h")
+    """
+    if duration_hours <= 1:
+        return "5m"  # 1 hour or less -> 5 minute lookback
+    elif duration_hours <= 3:
+        return "15m"  # 1-3 hours -> 15 minute lookback
+    elif duration_hours <= 12:
+        return "1h"  # 3-12 hours -> 1 hour lookback
+    elif duration_hours <= 48:
+        return "4h"  # 12-48 hours -> 4 hour lookback
+    else:
+        return "12h"  # >48 hours -> 12 hour lookback
 
 
 @dataclass(frozen=True)
@@ -651,15 +729,21 @@ def discover_vllm_metrics():
         }
 
         # Try NVIDIA metrics first
+        nvidia_found = False
         for friendly_name, metric_name in gpu_metrics_nvidia.items():
             # Handle expressions (like memory GB conversion) by checking base metric presence
             if friendly_name == "GPU Memory Usage (GB)":
                 if "DCGM_FI_DEV_FB_USED" in all_metrics:
                     metric_mapping[friendly_name] = "avg(DCGM_FI_DEV_FB_USED) / (1024*1024*1024)"
+                    nvidia_found = True
                 continue
 
             if metric_name in all_metrics:
                 metric_mapping[friendly_name] = f"avg({metric_name})"
+                nvidia_found = True
+
+        if nvidia_found:
+            logger.info("Using NVIDIA DCGM metrics for GPU monitoring")
 
         # If no NVIDIA metrics, try Intel Gaudi metrics
         if not metric_mapping:
@@ -679,13 +763,15 @@ def discover_vllm_metrics():
                 if metric_name and metric_name in all_metrics:
                     metric_mapping[friendly_name] = f"avg({metric_name})"
 
-        # Ensure GPU Usage (%) metric is available by aliasing to vendor-specific utilization metrics
-        # This provides a fallback when vLLM-specific GPU cache usage metric is not available
+        # Ensure GPU Usage (%) metric is available using vendor-specific GPU utilization metrics
+        # This represents actual GPU compute utilization, not cache usage
         if "GPU Usage (%)" not in metric_mapping:
             if "DCGM_FI_DEV_GPU_UTIL" in all_metrics:
                 metric_mapping["GPU Usage (%)"] = "avg(DCGM_FI_DEV_GPU_UTIL)"
             elif "habanalabs_utilization" in all_metrics:
                 metric_mapping["GPU Usage (%)"] = "avg(habanalabs_utilization)"
+            else:
+                logger.warning("GPU Usage (%): No vendor-specific GPU utilization metric found")
             # TODO: Add AMD support here when available.
             # When AMD GPU metrics are available, add:
             # elif "amd_smi_utilization" in all_metrics:
@@ -695,36 +781,29 @@ def discover_vllm_metrics():
         vllm_metrics = set(m for m in all_metrics if m.startswith("vllm:"))
 
         # Tokens - For dashboard display, prefer current totals over increases
-        # This shows accumulated tokens rather than recent activity
+        # Token metrics: use increase() to show tokens during the selected time window
+        # The [5m] placeholder will be replaced with actual time range by the query executor
         if "vllm:request_prompt_tokens_sum" in vllm_metrics:
-            metric_mapping["Prompt Tokens Created"] = "vllm:request_prompt_tokens_sum"
+            metric_mapping["Prompt Tokens Created"] = "increase(vllm:request_prompt_tokens_sum[5m])"
         elif "vllm:prompt_tokens_total" in vllm_metrics:
-            metric_mapping["Prompt Tokens Created"] = "sum(vllm:prompt_tokens_total)"
+            metric_mapping["Prompt Tokens Created"] = "sum(increase(vllm:prompt_tokens_total[5m]))"
         elif "vllm:request_prompt_tokens_created" in vllm_metrics:
-            metric_mapping["Prompt Tokens Created"] = "sum(increase(vllm:request_prompt_tokens_created[1h]))"
+            metric_mapping["Prompt Tokens Created"] = "sum(increase(vllm:request_prompt_tokens_created[5m]))"
         elif "vllm:request_prompt_tokens_total" in vllm_metrics:
-            metric_mapping["Prompt Tokens Created"] = "sum(increase(vllm:request_prompt_tokens_total[1h]))"
+            metric_mapping["Prompt Tokens Created"] = "sum(increase(vllm:request_prompt_tokens_total[5m]))"
 
         if "vllm:request_generation_tokens_sum" in vllm_metrics:
-            metric_mapping["Output Tokens Created"] = "vllm:request_generation_tokens_sum"
+            metric_mapping["Output Tokens Created"] = "increase(vllm:request_generation_tokens_sum[5m])"
         elif "vllm:generation_tokens_total" in vllm_metrics:
-            metric_mapping["Output Tokens Created"] = "sum(vllm:generation_tokens_total)"
+            metric_mapping["Output Tokens Created"] = "sum(increase(vllm:generation_tokens_total[5m]))"
         elif "vllm:request_generation_tokens_created" in vllm_metrics:
-            metric_mapping["Output Tokens Created"] = "sum(increase(vllm:request_generation_tokens_created[1h]))"
+            metric_mapping["Output Tokens Created"] = "sum(increase(vllm:request_generation_tokens_created[5m]))"
         elif "vllm:request_generation_tokens_total" in vllm_metrics:
-            metric_mapping["Output Tokens Created"] = "sum(increase(vllm:request_generation_tokens_total[1h]))"
+            metric_mapping["Output Tokens Created"] = "sum(increase(vllm:request_generation_tokens_total[5m]))"
 
         # Requests running (gauge)
         if "vllm:num_requests_running" in vllm_metrics:
             metric_mapping["Requests Running"] = "vllm:num_requests_running"
-
-        # GPU cache usage percent exposed by vLLM (model-scoped proxy for GPU usage)
-        # This is preferred over DCGM_FI_DEV_GPU_UTIL as it's model-specific
-        if "vllm:gpu_cache_usage_perc" in vllm_metrics:
-            metric_mapping["GPU Usage (%)"] = "avg(vllm:gpu_cache_usage_perc)"
-        elif "vllm:gpu_memory_usage" in vllm_metrics:
-            # Alternative vLLM GPU metric
-            metric_mapping["GPU Usage (%)"] = "avg(vllm:gpu_memory_usage)"
 
         # P95 latency from histogram buckets
         if "vllm:e2e_request_latency_seconds_bucket" in vllm_metrics:
@@ -770,8 +849,8 @@ def discover_vllm_metrics():
             "GPU Energy Consumption (Joules)": "avg(DCGM_FI_DEV_TOTAL_ENERGY_CONSUMPTION) or avg(habanalabs_energy)",
             "GPU Memory Temperature (°C)": "avg(DCGM_FI_DEV_MEMORY_TEMP) or avg(habanalabs_temperature_onboard)",
             "GPU Usage (%)": "avg(DCGM_FI_DEV_GPU_UTIL) or avg(habanalabs_utilization)",
-            "Prompt Tokens Created": "vllm:request_prompt_tokens_sum",
-            "Output Tokens Created": "vllm:request_generation_tokens_sum",
+            "Prompt Tokens Created": "increase(vllm:request_prompt_tokens_sum[5m])",
+            "Output Tokens Created": "increase(vllm:request_generation_tokens_sum[5m])",
             "Requests Running": "vllm:num_requests_running",
             "P95 Latency (s)": "histogram_quantile(0.95, sum(rate(vllm:e2e_request_latency_seconds_bucket[5m])) by (le))",
             "Inference Time (s)": "sum(rate(vllm:request_inference_time_seconds_sum[5m])) / sum(rate(vllm:request_inference_time_seconds_count[5m]))",

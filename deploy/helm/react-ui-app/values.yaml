@@ -28,6 +28,7 @@ route:
   enabled: true
   host: ""  # Auto-generated if empty
   path: "/"
+  timeout: "240s"  # HAProxy timeout for long-running AI analysis requests
   tls:
     enabled: true
     termination: edge
@@ -41,6 +42,7 @@ oauth:
     tag: "4.14"
     pullPolicy: IfNotPresent
   port: 8443
+  upstreamTimeout: "240s"  # Timeout for upstream requests (AI analysis can take time)
 
   # Cookie configuration
   cookieSecret: ""  # Auto-generated if empty

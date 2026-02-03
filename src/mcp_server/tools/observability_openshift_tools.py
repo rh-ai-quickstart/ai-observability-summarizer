@@ -14,6 +14,7 @@ from core.metrics import (
     chat_openshift_metrics,
     NAMESPACE_SCOPED,
     CLUSTER_WIDE,
+    calculate_histogram_quantile_optimal_lookback,
 )
 from common.pylogger import get_python_logger
 from mcp_server.exceptions import (
@@ -32,6 +33,7 @@ logger = get_python_logger()
 K8S_SA_TOKEN_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/token"
 K8S_SA_CA_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
 K8S_API_URL = "https://kubernetes.default.svc"
+
 
 def _detect_provider_from_model_id(model_id: Optional[str]) -> Optional[str]:
     try:
@@ -384,6 +386,39 @@ def fetch_openshift_metrics_data(
                     # Add namespace filter to queries without existing filters
                     final_query = query.replace(')', f'{{namespace="{namespace}"}})')
             prepared_queries[label] = final_query
+
+        # Calculate time range for dynamic query adjustment
+        duration_seconds = end_ts - start_ts
+        duration_hours = duration_seconds / 3600
+
+        # Format duration for PromQL (e.g., "6h", "30m", "1d")
+        if duration_hours >= 24:
+            duration_str = f"{int(duration_hours / 24)}d"
+        elif duration_hours >= 1:
+            duration_str = f"{int(duration_hours)}h"
+        else:
+            duration_str = f"{int(duration_seconds / 60)}m"
+
+        # Calculate lookback window for rate() queries
+        lookback_window = calculate_histogram_quantile_optimal_lookback(duration_hours)
+
+        # Replace hardcoded [5m] with appropriate time range in queries
+        adjusted_queries = {}
+        for label, query in prepared_queries.items():
+            # For increase() queries: use full duration to show change during time window
+            # For rate()/histogram_quantile(): use lookback window for smooth data
+            if 'increase(' in query:
+                adjusted_query = query.replace('[5m]', f'[{duration_str}]')
+                if '[5m]' in query and query != adjusted_query:
+                    logger.debug(f"Adjusted increase duration for '{label}': [5m] -> [{duration_str}]")
+            else:
+                adjusted_query = query.replace('[5m]', f'[{lookback_window}]')
+                if '[5m]' in query and query != adjusted_query:
+                    logger.debug(f"Adjusted lookback for '{label}': [5m] -> [{lookback_window}]")
+
+            adjusted_queries[label] = adjusted_query
+
+        prepared_queries = adjusted_queries
 
         # Execute instant queries for current values (fast!)
         values = core_metrics.execute_instant_queries_parallel(prepared_queries, max_workers=10)
