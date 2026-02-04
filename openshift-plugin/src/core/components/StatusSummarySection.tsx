@@ -21,7 +21,7 @@ import {
   ExclamationTriangleIcon,
   ServerIcon,
 } from '@patternfly/react-icons';
-import { healthCheck, listModels, listNamespaces } from '../services/mcpClient';
+import type { ModelInfo, NamespaceInfo } from '../services/mcpClient';
 
 interface StatusCardProps {
   title: string;
@@ -113,50 +113,23 @@ const StatusCard: React.FC<StatusCardProps> = ({ title, value, subtitle, status,
   );
 };
 
-export const StatusSummarySection: React.FC = () => {
-  const [loading, setLoading] = React.useState(true);
-  const [mcpConnected, setMcpConnected] = React.useState(false);
-  const [modelCount, setModelCount] = React.useState(0);
-  const [namespaceCount, setNamespaceCount] = React.useState(0);
-  const [error, setError] = React.useState<string | null>(null);
+interface StatusSummarySectionProps {
+  loading: boolean;
+  error: string | null;
+  mcpConnected: boolean;
+  models: ModelInfo[];
+  namespaces: NamespaceInfo[];
+}
 
-  React.useEffect(() => {
-    let isMounted = true;
-
-    const loadStatus = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const [isHealthy, models, namespaces] = await Promise.all([
-          healthCheck(),
-          listModels(),
-          listNamespaces(),
-        ]);
-        if (!isMounted) {
-          return;
-        }
-        setMcpConnected(isHealthy);
-        setModelCount(models.length);
-        setNamespaceCount(namespaces.length);
-      } catch (err) {
-        if (!isMounted) {
-          return;
-        }
-        setError('Failed to load status summary');
-        setMcpConnected(false);
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
-      }
-    };
-
-    loadStatus();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+export const StatusSummarySection: React.FC<StatusSummarySectionProps> = ({
+  loading,
+  error,
+  mcpConnected,
+  models,
+  namespaces,
+}) => {
+  const modelCount = models.length;
+  const namespaceCount = namespaces.length;
 
   if (loading) {
     return (
@@ -169,7 +142,11 @@ export const StatusSummarySection: React.FC = () => {
   return (
     <>
       {error && (
-        <Alert variant={AlertVariant.warning} title="Connection Issue" style={{ marginBottom: '16px' }}>
+        <Alert
+          variant={AlertVariant.warning}
+          title="Connection Issue"
+          style={{ marginBottom: '16px' }}
+        >
           {error}. Some features may be limited.
         </Alert>
       )}

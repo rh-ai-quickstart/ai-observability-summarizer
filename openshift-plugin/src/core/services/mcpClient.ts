@@ -54,7 +54,7 @@ export function clearSessionConfig(): void {
 /**
  * Detect provider from model ID or name
  */
-function detectProviderFromModelId(modelId: string): string | null {
+export function detectProviderFromModelId(modelId: string): string | null {
   const patterns: Record<string, RegExp> = {
     openai: /^(openai\/|gpt-)/,
     anthropic: /^(anthropic\/|claude-)/,

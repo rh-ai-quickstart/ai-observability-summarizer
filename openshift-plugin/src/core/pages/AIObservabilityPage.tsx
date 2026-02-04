@@ -27,17 +27,77 @@ import { OpenShiftMetricsPage } from './OpenShiftMetricsPage';
 import { AIChatPage } from './AIChatPage';
 import { SettingsModal } from '../components/SettingsModal';
 import { ModelInsightsSection, QuickActionsSection, StatusSummarySection } from '../components';
-import { getSessionConfig } from '../services/mcpClient';
+import { getSessionConfig, healthCheck, listModels, listNamespaces } from '../services/mcpClient';
+import type { ModelInfo, NamespaceInfo } from '../services/mcpClient';
 import { initializeRuntimeConfig } from '../services/runtimeConfig';
 
 // Overview Dashboard Component
-const OverviewDashboard: React.FC = () => (
-  <>
-    <StatusSummarySection />
-    <ModelInsightsSection />
-    <QuickActionsSection />
-  </>
-);
+const OverviewDashboard: React.FC = () => {
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+  const [mcpConnected, setMcpConnected] = React.useState(false);
+  const [models, setModels] = React.useState<ModelInfo[]>([]);
+  const [namespaces, setNamespaces] = React.useState<NamespaceInfo[]>([]);
+
+  React.useEffect(() => {
+    let isMounted = true;
+
+    const loadOverview = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const [isHealthy, modelsResponse, namespacesResponse] = await Promise.all([
+          healthCheck(),
+          listModels(),
+          listNamespaces(),
+        ]);
+        if (!isMounted) {
+          return;
+        }
+        setMcpConnected(isHealthy);
+        setModels(modelsResponse);
+        setNamespaces(namespacesResponse);
+      } catch (err) {
+        if (!isMounted) {
+          return;
+        }
+        setError('Failed to load overview data');
+        setMcpConnected(false);
+        setModels([]);
+        setNamespaces([]);
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    loadOverview();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  return (
+    <>
+      <StatusSummarySection
+        loading={loading}
+        error={error}
+        mcpConnected={mcpConnected}
+        models={models}
+        namespaces={namespaces}
+      />
+      <ModelInsightsSection
+        loading={loading}
+        error={error}
+        models={models}
+        namespaces={namespaces}
+      />
+      <QuickActionsSection />
+    </>
+  );
+};
 
 // Main Page with Tabs
 const AIObservabilityPage: React.FC = () => {

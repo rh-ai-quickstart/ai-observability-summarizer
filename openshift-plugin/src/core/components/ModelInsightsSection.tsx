@@ -16,11 +16,11 @@ import {
 } from '@patternfly/react-core';
 import { ChartDonut, ChartThemeColor } from '@patternfly/react-charts';
 import {
+  detectProviderFromModelId,
   fetchVLLMMetrics,
-  listModels,
-  listNamespaces,
   VLLMMetricsResponse,
 } from '../services/mcpClient';
+import type { ModelInfo } from '../services/mcpClient';
 
 export interface DonutDatum {
   x: string;
@@ -79,11 +79,31 @@ const InsightDonutCard: React.FC<InsightDonutCardProps> = ({
   );
 };
 
-export const ModelInsightsSection: React.FC = () => {
-  const [loading, setLoading] = React.useState(true);
-  const [models, setModels] = React.useState<string[]>([]);
-  const [namespaces, setNamespaces] = React.useState<string[]>([]);
-  const [error, setError] = React.useState<string | null>(null);
+interface ModelInsightsSectionProps {
+  loading: boolean;
+  error: string | null;
+  models: ModelInfo[];
+}
+
+const PERFORMANCE_THRESHOLDS = {
+  // Metrics are labeled in seconds in the MCP response.
+  critical: {
+    p95Seconds: 5,
+    inferenceSeconds: 3,
+  },
+  warning: {
+    p95Seconds: 2,
+    inferenceSeconds: 1.5,
+  },
+} as const;
+
+export const ModelInsightsSection: React.FC<ModelInsightsSectionProps> = ({
+  loading,
+  error,
+  models,
+}) => {
+  const [metricsLoading, setMetricsLoading] = React.useState(true);
+  const [metricsError, setMetricsError] = React.useState<string | null>(null);
   const [performanceCounts, setPerformanceCounts] = React.useState<Record<string, number>>({});
 
   const buildDonutData = React.useCallback((items: Record<string, number>): DonutDatum[] => {
@@ -107,26 +127,12 @@ export const ModelInsightsSection: React.FC = () => {
       .join(' ');
 
   const resolveProvider = (modelName: string): string => {
-    const lower = modelName.toLowerCase();
+    const detected = detectProviderFromModelId(modelName);
+    if (detected) {
+      return formatProviderLabel(detected);
+    }
+
     const prefix = modelName.includes('/') ? modelName.split('/')[0].toLowerCase() : '';
-
-    if (lower.includes('openai') || prefix === 'openai') {
-      return 'OpenAI';
-    }
-    if (lower.includes('huggingface') || prefix === 'huggingface' || prefix === 'hf') {
-      return 'Hugging Face';
-    }
-    if (
-      lower.includes('amazon') ||
-      lower.includes('bedrock') ||
-      lower.includes('aws') ||
-      prefix === 'amazon' ||
-      prefix === 'bedrock' ||
-      prefix === 'aws'
-    ) {
-      return 'Amazon';
-    }
-
     return prefix ? formatProviderLabel(prefix) : 'Unknown';
   };
 
@@ -145,13 +151,17 @@ export const ModelInsightsSection: React.FC = () => {
       return 'No data';
     }
 
-    if ((p95Value !== null && p95Value >= 5) || (inferenceValue !== null && inferenceValue >= 3)) {
+    if (
+      (p95Value !== null && p95Value >= PERFORMANCE_THRESHOLDS.critical.p95Seconds) ||
+      (inferenceValue !== null &&
+        inferenceValue >= PERFORMANCE_THRESHOLDS.critical.inferenceSeconds)
+    ) {
       return 'Critical';
     }
 
     if (
-      (p95Value !== null && p95Value >= 2) ||
-      (inferenceValue !== null && inferenceValue >= 1.5)
+      (p95Value !== null && p95Value >= PERFORMANCE_THRESHOLDS.warning.p95Seconds) ||
+      (inferenceValue !== null && inferenceValue >= PERFORMANCE_THRESHOLDS.warning.inferenceSeconds)
     ) {
       return 'Warning';
     }
@@ -163,30 +173,22 @@ export const ModelInsightsSection: React.FC = () => {
     let isMounted = true;
 
     const loadInsights = async () => {
-      setLoading(true);
-      setError(null);
+      if (loading) {
+        setMetricsLoading(true);
+        return;
+      }
+
+      setMetricsLoading(true);
+      setMetricsError(null);
 
       try {
-        const [modelsResponse, namespacesResponse] = await Promise.all([
-          listModels(),
-          listNamespaces(),
-        ]);
-
-        if (!isMounted) {
-          return;
-        }
-
-        const modelNames = modelsResponse.map((model) => model.name);
-        setModels(modelNames);
-        setNamespaces(namespacesResponse.map((ns) => ns.name));
-
-        if (modelsResponse.length === 0) {
+        if (models.length === 0) {
           setPerformanceCounts({ 'No data': 1 });
           return;
         }
 
         const performanceMetrics = await Promise.all(
-          modelsResponse.map(async (model) => ({
+          models.map(async (model) => ({
             model,
             metrics: await fetchVLLMMetrics(model.name, '1h', model.namespace),
           })),
@@ -211,10 +213,10 @@ export const ModelInsightsSection: React.FC = () => {
         if (!isMounted) {
           return;
         }
-        setError('Failed to load model insights');
+        setMetricsError('Failed to load model insights');
       } finally {
         if (isMounted) {
-          setLoading(false);
+          setMetricsLoading(false);
         }
       }
     };
@@ -224,12 +226,12 @@ export const ModelInsightsSection: React.FC = () => {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [loading, models]);
 
   const providerCounts = React.useMemo(
     () =>
-      models.reduce<Record<string, number>>((acc, modelName) => {
-        const provider = resolveProvider(modelName);
+      models.reduce<Record<string, number>>((acc, model) => {
+        const provider = resolveProvider(model.name);
         acc[provider] = (acc[provider] || 0) + 1;
         return acc;
       }, {}),
@@ -238,11 +240,11 @@ export const ModelInsightsSection: React.FC = () => {
 
   const departmentCounts = React.useMemo(
     () =>
-      namespaces.reduce<Record<string, number>>((acc, namespace) => {
-        acc[namespace] = (acc[namespace] || 0) + 1;
+      models.reduce<Record<string, number>>((acc, model) => {
+        acc[model.namespace] = (acc[model.namespace] || 0) + 1;
         return acc;
       }, {}),
-    [namespaces],
+    [models],
   );
 
   const providerData = buildDonutData(providerCounts);
@@ -250,7 +252,7 @@ export const ModelInsightsSection: React.FC = () => {
   const departmentData = buildDonutData(departmentCounts);
   const totalModelsLabel = `${models.length || 0}`;
 
-  if (loading) {
+  if (loading || metricsLoading) {
     return (
       <Bullseye style={{ minHeight: '240px' }}>
         <Spinner size="lg" />
@@ -260,13 +262,13 @@ export const ModelInsightsSection: React.FC = () => {
 
   return (
     <div style={{ marginTop: '32px' }}>
-      {error && (
+      {(error || metricsError) && (
         <Alert
           variant={AlertVariant.warning}
           title="Model Insights Unavailable"
           style={{ marginBottom: '16px' }}
         >
-          {error}. Some charts may be unavailable.
+          {error || metricsError}. Some charts may be unavailable.
         </Alert>
       )}
       <Title headingLevel="h2" size="lg" style={{ marginBottom: '16px' }}>
