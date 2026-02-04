@@ -52,7 +52,6 @@ import {
 } from '@patternfly/react-icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Panel, Group, Separator } from 'react-resizable-panels';
 import { AlertList } from '../components/AlertList';
 import { MetricChartModal } from '../components/MetricChartModal';
 import { MetricsChatPanel } from '../components/MetricsChatPanel';
@@ -1619,32 +1618,25 @@ ${report.analysis}
       )}
 
       {/* Main Content */}
-      <PageSection style={{ paddingLeft: 0, paddingRight: 0, height: 'calc(100vh - 400px)' }}>
-        <div style={{ 
-          height: '100%',
+      <PageSection style={{ paddingLeft: 0, paddingRight: 0 }}>
+        <div style={{
+          height: 'calc(100vh - 550px)',
+          minHeight: '400px',
           width: '100%',
           maxWidth: '100%',
           overflow: 'hidden'
         }}>
-          <Group
-            orientation="horizontal"
-            id="openshift-metrics-panel-group"
-            style={{ height: '100%', width: '100%' }}
-          >
+          <Grid hasGutter span={12} style={{ height: '100%' }}>
             {/* Metrics Panel */}
-            <Panel
-              id="metrics-panel"
-              defaultSize={chatPanelOpen ? 70 : 100}
-              minSize={50}
-              maxSize={chatPanelOpen ? 75 : 100}
-              style={{
+            <GridItem span={chatPanelOpen ? 8 : 12}>
+              <div style={{
                 paddingLeft: 'var(--pf-v5-global--spacer--lg)',
                 paddingRight: chatPanelOpen ? '8px' : 'var(--pf-v5-global--spacer--lg)',
                 paddingBottom: 'var(--pf-v5-global--spacer--lg)',
                 overflowY: 'auto',
-                overflowX: 'hidden'
-              }}
-            >
+                overflowX: 'hidden',
+                height: '100%'
+              }}>
             {/* Current Selection Labels */}
         <Flex style={{ marginBottom: '16px' }}>
           <FlexItem>
@@ -1706,38 +1698,32 @@ ${report.analysis}
                 No metrics data available for {selectedCategory}. This may be expected if there are no resources in this category.
               </Alert>
             )}
-            </Panel>
+              </div>
+            </GridItem>
 
-            {/* Chat Panel Separator - Always rendered for stable DOM */}
-            <Separator id="chat-panel-separator" />
-            {/* Chat Panel - Always rendered, key forces remount when chatPanelOpen changes */}
-            <Panel
-              key={`chat-panel-${chatPanelOpen}`}
-              id="chat-panel"
-              defaultSize={chatPanelOpen ? 30 : 0}
-              minSize={chatPanelOpen ? 25 : 0}
-              maxSize={chatPanelOpen ? 50 : 0}
-              collapsible={true}
-              style={{
-                paddingLeft: '8px',
-                paddingRight: 'var(--pf-v5-global--spacer--lg)',
-                paddingBottom: 'var(--pf-v5-global--spacer--lg)',
-                overflowY: 'auto',
-                overflowX: 'hidden'
-              }}
-            >
-              {chatPanelOpen && (
-                <MetricsChatPanel
-                  scope={scope}
-                  namespace={scope === 'namespace_scoped' ? selectedNamespace : undefined}
-                  category={selectedCategory}
-                  timeRange={timeRange === 'custom' && customRangeLabel ? customRangeLabel : timeRange}
-                  isOpen={chatPanelOpen}
-                  onClose={() => setChatPanelOpen(false)}
-                />
-              )}
-            </Panel>
-          </Group>
+            {/* Chat Panel */}
+            {chatPanelOpen && (
+              <GridItem span={4}>
+                <div style={{
+                  paddingLeft: '8px',
+                  paddingRight: 'var(--pf-v5-global--spacer--lg)',
+                  paddingBottom: 'var(--pf-v5-global--spacer--lg)',
+                  overflowY: 'auto',
+                  overflowX: 'hidden',
+                  height: '100%'
+                }}>
+                  <MetricsChatPanel
+                    scope={scope}
+                    namespace={scope === 'namespace_scoped' ? selectedNamespace : undefined}
+                    category={selectedCategory}
+                    timeRange={timeRange === 'custom' && customRangeLabel ? customRangeLabel : timeRange}
+                    isOpen={chatPanelOpen}
+                    onClose={() => setChatPanelOpen(false)}
+                  />
+                </div>
+              </GridItem>
+            )}
+          </Grid>
         </div>
       </PageSection>
 

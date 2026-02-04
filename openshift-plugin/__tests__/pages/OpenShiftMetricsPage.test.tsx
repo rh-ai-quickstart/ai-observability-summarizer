@@ -41,13 +41,6 @@ jest.mock('../../src/core/components/MetricChartModal', () => ({
     isOpen ? <div data-testid="chart-modal"><button onClick={onClose}>Close Modal</button></div> : null,
 }));
 
-// Mock react-resizable-panels
-jest.mock('react-resizable-panels', () => ({
-  Panel: ({ children, style, defaultSize, minSize, maxSize, ...props }: any) => <div style={style} {...props}>{children}</div>,
-  Group: ({ children, orientation, ...props }: any) => <div {...props}>{children}</div>,
-  Separator: ({ style, className, ...props }: any) => <div style={style} className={className} {...props} data-testid="resize-handle" />,
-}));
-
 const {
   fetchOpenShiftMetrics,
   listOpenShiftNamespaces,
