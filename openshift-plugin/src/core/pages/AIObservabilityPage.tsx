@@ -88,12 +88,7 @@ const OverviewDashboard: React.FC = () => {
         models={models}
         namespaces={namespaces}
       />
-      <ModelInsightsSection
-        loading={loading}
-        error={error}
-        models={models}
-        namespaces={namespaces}
-      />
+      <ModelInsightsSection loading={loading} error={error} models={models} />
       <QuickActionsSection />
     </>
   );
