@@ -38,6 +38,8 @@ import {
   CogIcon,
   AngleDownIcon,
   AngleRightIcon,
+  ChartLineIcon,
+  NetworkIcon,
 } from '@patternfly/react-icons';
 import { listModels, listNamespaces, ModelInfo, NamespaceInfo, fetchVLLMMetrics, analyzeVLLM, getSessionConfig, AnalysisResult } from '../services/mcpClient';
 import { ConfigurationRequiredAlert } from '../components/ConfigurationRequiredAlert';
@@ -54,9 +56,20 @@ const KEY_METRICS_CONFIG = [
 
 // Comprehensive vLLM metric categories based on actual Prometheus metrics
 const METRIC_CATEGORIES = {
+  'Request Tracking & Throughput': {
+    icon: ChartLineIcon,
+    priority: 1,
+    description: 'Monitor request volume, status, and reliability',
+    metrics: [
+      { key: 'Requests Total', label: 'Total Requests', unit: '', description: 'Total inference requests processed' },
+      { key: 'Requests Running', label: 'In-Progress', unit: '', description: 'Active ongoing requests' },
+      { key: 'Request Errors Total', label: 'Request Errors', unit: '', description: 'Total failed inference requests' },
+      { key: 'Num Requests Waiting', label: 'Waiting', unit: '', description: 'Requests waiting in queue' },
+    ]
+  },
   'Token Throughput': {
     icon: TachometerAltIcon,
-    priority: 1,
+    priority: 2,
     description: 'Token processing performance and rates',
     metrics: [
       // Prompt Tokens Created and Output Tokens Created removed - shown in Key Metrics
@@ -68,7 +81,7 @@ const METRIC_CATEGORIES = {
   },
   'Latency & Timing': {
     icon: ClockIcon,
-    priority: 2,
+    priority: 3,
     description: 'Response time breakdown and analysis',
     metrics: [
       // P95 Latency removed - shown in Key Metrics
@@ -83,7 +96,7 @@ const METRIC_CATEGORIES = {
   },
   'Memory & Cache': {
     icon: MemoryIcon,
-    priority: 3,
+    priority: 4,
     description: 'Cache efficiency and memory utilization',
     metrics: [
       { key: 'Kv Cache Usage Perc', label: 'KV Cache', unit: '%', description: 'Key-Value cache utilization' },
@@ -96,9 +109,20 @@ const METRIC_CATEGORIES = {
       { key: 'Gpu Prefix Cache Queries Created', label: 'GPU Query Rate', unit: '/s', description: 'GPU cache query rate' },
     ]
   },
+  'Networking & API': {
+    icon: NetworkIcon,
+    priority: 5,
+    description: 'HTTP/RPC monitoring and API performance',
+    metrics: [
+      { key: 'Http Requests Total Status Not 2Xx', label: 'HTTP Errors', unit: '', description: 'Non-2xx HTTP response errors' },
+      { key: 'Http Server Request Duration Seconds', label: 'HTTP Latency', unit: 's', description: 'HTTP request latency' },
+      { key: 'Vllm Rpc Server Error Count', label: 'RPC Errors', unit: '', description: 'RPC server errors' },
+      { key: 'Vllm Rpc Server Connection Total', label: 'RPC Connections', unit: '', description: 'Total RPC connections' },
+    ]
+  },
   'GPU Hardware': {
     icon: CubesIcon,
-    priority: 4,
+    priority: 6,
     description: 'GPU hardware monitoring and resource usage',
     metrics: [
       // GPU Temperature, GPU Power Usage, GPU Usage removed - shown in Key Metrics
@@ -110,7 +134,7 @@ const METRIC_CATEGORIES = {
   },
   'Request Parameters': {
     icon: CogIcon,
-    priority: 5,
+    priority: 7,
     description: 'Request configuration and parameter analysis',
     metrics: [
       { key: 'Request Max Num Generation Tokens Sum', label: 'Max Gen Tokens', unit: '', description: 'Max generation tokens requested' },

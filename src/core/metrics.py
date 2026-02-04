@@ -821,6 +821,52 @@ def discover_vllm_metrics():
                 "sum(rate(vllm:request_inference_time_seconds_count[5m]))"
             )
 
+        # Phase 1: Request Tracking & Throughput metrics
+        # Total requests counter
+        if "vllm:num_requests_total" in vllm_metrics:
+            metric_mapping["Requests Total"] = "vllm:num_requests_total"
+
+        # Request errors
+        if "vllm:request_success_total" in vllm_metrics and "vllm:num_requests_total" in vllm_metrics:
+            # Calculate error rate as total - success
+            metric_mapping["Request Errors Total"] = (
+                "vllm:num_requests_total - vllm:request_success_total"
+            )
+        elif "vllm:request_errors_total" in vllm_metrics:
+            metric_mapping["Request Errors Total"] = "vllm:request_errors_total"
+
+        # Waiting requests (queue depth)
+        if "vllm:num_requests_waiting" in vllm_metrics:
+            metric_mapping["Num Requests Waiting"] = "vllm:num_requests_waiting"
+
+        # Phase 1: Networking & API metrics
+        # HTTP errors - filter HTTP metrics from all_metrics list (already fetched above)
+        http_metrics = set(m for m in all_metrics if m.startswith("http_"))
+
+        # HTTP request errors (non-2xx status codes)
+        if "http_requests_total" in http_metrics:
+            metric_mapping["Http Requests Total Status Not 2Xx"] = (
+                'sum(rate(http_requests_total{status!~"2.."}[5m]))'
+            )
+
+        # HTTP request latency
+        if "http_server_request_duration_seconds_bucket" in http_metrics:
+            metric_mapping["Http Server Request Duration Seconds"] = (
+                "histogram_quantile(0.95, sum(rate(http_server_request_duration_seconds_bucket[5m])) by (le))"
+            )
+        elif "http_server_request_duration_seconds_sum" in http_metrics and "http_server_request_duration_seconds_count" in http_metrics:
+            metric_mapping["Http Server Request Duration Seconds"] = (
+                "sum(rate(http_server_request_duration_seconds_sum[5m])) / "
+                "sum(rate(http_server_request_duration_seconds_count[5m]))"
+            )
+
+        # RPC metrics
+        if "vllm:rpc_server_error_count" in vllm_metrics:
+            metric_mapping["Vllm Rpc Server Error Count"] = "vllm:rpc_server_error_count"
+
+        if "vllm:rpc_server_connection_total" in vllm_metrics:
+            metric_mapping["Vllm Rpc Server Connection Total"] = "vllm:rpc_server_connection_total"
+
         # Add any other vLLM metrics with a generic friendly name if not already mapped
         for metric in vllm_metrics:
             if metric in (
@@ -832,6 +878,12 @@ def discover_vllm_metrics():
                 "vllm:e2e_request_latency_seconds_bucket",
                 "vllm:request_inference_time_seconds_sum",
                 "vllm:request_inference_time_seconds_count",
+                "vllm:num_requests_total",
+                "vllm:request_success_total",
+                "vllm:request_errors_total",
+                "vllm:num_requests_waiting",
+                "vllm:rpc_server_error_count",
+                "vllm:rpc_server_connection_total",
             ):
                 continue
             friendly_name = metric.replace("vllm:", "").replace("_", " ").title()
@@ -854,6 +906,15 @@ def discover_vllm_metrics():
             "Requests Running": "vllm:num_requests_running",
             "P95 Latency (s)": "histogram_quantile(0.95, sum(rate(vllm:e2e_request_latency_seconds_bucket[5m])) by (le))",
             "Inference Time (s)": "sum(rate(vllm:request_inference_time_seconds_sum[5m])) / sum(rate(vllm:request_inference_time_seconds_count[5m]))",
+            # Phase 1: Request tracking
+            "Requests Total": "vllm:num_requests_total",
+            "Request Errors Total": "vllm:request_errors_total",
+            "Num Requests Waiting": "vllm:num_requests_waiting",
+            # Phase 1: Networking
+            "Http Requests Total Status Not 2Xx": 'sum(rate(http_requests_total{status!~"2.."}[5m]))',
+            "Http Server Request Duration Seconds": "histogram_quantile(0.95, sum(rate(http_server_request_duration_seconds_bucket[5m])) by (le))",
+            "Vllm Rpc Server Error Count": "vllm:rpc_server_error_count",
+            "Vllm Rpc Server Connection Total": "vllm:rpc_server_connection_total",
         }
 
 
