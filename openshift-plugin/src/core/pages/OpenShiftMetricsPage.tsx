@@ -236,6 +236,11 @@ const TIME_RANGE_OPTIONS = [
   { value: 'custom', label: 'Custom Range...' },
 ];
 
+// Grid layout constants
+const GRID_SPAN_FULL = 12;
+const GRID_SPAN_METRICS_WITH_CHAT = 8;
+const GRID_SPAN_CHAT = 4;
+
 type ScopeType = 'cluster_wide' | 'namespace_scoped';
 
 // Time series data point
@@ -745,6 +750,15 @@ export const OpenShiftMetricsPage: React.FC = () => {
   // Auto-dismiss AI configuration warnings when settings are closed
   useAIConfigWarningDismissal(errorType, setError, setErrorType);
 
+  // Cleanup abort controller on unmount
+  React.useEffect(() => {
+    return () => {
+      if (analysisController) {
+        analysisController.abort();
+      }
+    };
+  }, [analysisController]);
+
 
   // All categories are now available for both scopes
   const categories = CLUSTER_WIDE_CATEGORIES;
@@ -868,22 +882,6 @@ export const OpenShiftMetricsPage: React.FC = () => {
       }
       
       if (result && result.summary) {
-        // Count questions in the analysis
-        const questionMatches = result.summary.match(/^\d+\.\s/gm) || [];
-        const questionCount = questionMatches.length;
-        
-        console.log('[OpenShift] AI Analysis result:', {
-          category: result.category,
-          scope: result.scope,
-          namespace: result.namespace,
-          summaryLength: result.summary?.length,
-          questionCount: questionCount,
-          questions: questionMatches,
-          summaryPreview: result.summary?.substring(0, 200) + '...'
-        });
-        
-        // Also log the full summary for debugging
-        console.log('[OpenShift] Full analysis summary:', result.summary);
         setAnalysis(result);
       } else {
         console.error('[OpenShift] Analysis returned empty or invalid response:', result);
@@ -1008,16 +1006,11 @@ export const OpenShiftMetricsPage: React.FC = () => {
     return null;
   }, [selectedMetricForChart, metricsData, scope]);
 
-  // Generate report content
-  const generateReportContent = () => {
-    const timestamp = new Date().toISOString();
-    const timeRangeLabel = timeRange === 'custom' && customRangeLabel 
-      ? customRangeLabel 
-      : TIME_RANGE_OPTIONS.find(o => o.value === timeRange)?.label || timeRange;
-
-    const metricsSection = Object.entries(metricsData).map(([key, val]) => {
-      const categoryDef = categories[selectedCategory as keyof typeof categories] as any;
-      const metricDef = categoryDef?.metrics?.find((m: any) => m.key === key);
+  // Memoize expensive metrics section computation
+  const metricsSection = React.useMemo(() => {
+    return Object.entries(metricsData).map(([key, val]) => {
+      const categoryDef = categories[selectedCategory as keyof typeof categories];
+      const metricDef = categoryDef?.metrics?.find((m) => m.key === key);
       const unit = metricDef?.unit || '';
       return {
         name: key,
@@ -1025,6 +1018,14 @@ export const OpenShiftMetricsPage: React.FC = () => {
         description: metricDef?.description || ''
       };
     });
+  }, [metricsData, selectedCategory]);
+
+  // Generate report content - timestamp generated fresh on each call
+  const generateReportContent = () => {
+    const timestamp = new Date().toISOString();
+    const timeRangeLabel = timeRange === 'custom' && customRangeLabel
+      ? customRangeLabel
+      : TIME_RANGE_OPTIONS.find(o => o.value === timeRange)?.label || timeRange;
 
     return {
       title: 'OpenShift Metrics Report',
@@ -1296,14 +1297,6 @@ ${report.analysis}
     <>
       <Helmet>
         <title>{t('OpenShift Metrics - AI Observability')}</title>
-        <style>{`
-          #chat-panel-separator[data-separator]:hover {
-            background: var(--pf-v5-global--primary-color--100) !important;
-          }
-          #chat-panel-separator[data-separator][data-resize-handle-active] {
-            background: var(--pf-v5-global--primary-color--200) !important;
-          }
-        `}</style>
       </Helmet>
       
       {/* Header */}
@@ -1626,9 +1619,9 @@ ${report.analysis}
           maxWidth: '100%',
           overflow: 'hidden'
         }}>
-          <Grid hasGutter span={12} style={{ height: '100%' }}>
+          <Grid hasGutter span={GRID_SPAN_FULL} style={{ height: '100%' }}>
             {/* Metrics Panel */}
-            <GridItem span={chatPanelOpen ? 8 : 12}>
+            <GridItem span={chatPanelOpen ? GRID_SPAN_METRICS_WITH_CHAT : GRID_SPAN_FULL}>
               <div style={{
                 paddingLeft: 'var(--pf-v5-global--spacer--lg)',
                 paddingRight: chatPanelOpen ? '8px' : 'var(--pf-v5-global--spacer--lg)',
@@ -1703,7 +1696,7 @@ ${report.analysis}
 
             {/* Chat Panel */}
             {chatPanelOpen && (
-              <GridItem span={4}>
+              <GridItem span={GRID_SPAN_CHAT}>
                 <div style={{
                   paddingLeft: '8px',
                   paddingRight: 'var(--pf-v5-global--spacer--lg)',

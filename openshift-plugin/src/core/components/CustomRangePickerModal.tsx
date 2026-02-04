@@ -30,9 +30,6 @@ export const CustomRangePickerModal: React.FC<CustomRangePickerModalProps> = ({
   const [endTime, setEndTime] = React.useState<string>('00:00');
   const [validationError, setValidationError] = React.useState<string>('');
 
-  // Debug: Component loaded
-  // console.log('🔧 CustomRangePickerModal component loaded/mounted');
-
   // Initialize with simple defaults (matching Streamlit UI pattern)
   React.useEffect(() => {
     if (isOpen) {
