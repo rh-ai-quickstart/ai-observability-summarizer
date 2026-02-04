@@ -45,6 +45,7 @@ class ObservabilityMCPServer:
             list_openshift_metric_groups,
             list_openshift_namespace_metric_groups,
             chat_openshift,
+            detect_device_vendors,
         )
         from .tools.prometheus_tools import (
             search_metrics,                    # Search metrics by pattern
@@ -91,6 +92,7 @@ class ObservabilityMCPServer:
         self.mcp.tool()(list_openshift_metric_groups)
         self.mcp.tool()(list_openshift_namespace_metric_groups)
         self.mcp.tool()(chat_openshift)
+        self.mcp.tool()(detect_device_vendors)
 
         # Register Prometheus tools one by one
         self.mcp.tool()(search_metrics)                    # Search metrics by pattern

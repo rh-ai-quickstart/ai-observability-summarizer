@@ -26,6 +26,7 @@ import {
 import {
   TachometerAltIcon,
   ServerIcon,
+  CubeIcon,
   CubesIcon,
   CommentIcon,
   CheckCircleIcon,
@@ -34,6 +35,7 @@ import {
   ArrowRightIcon,
 } from '@patternfly/react-icons';
 import VLLMMetricsPage from './VLLMMetricsPage';
+import DeviceMetricsPage from './DeviceMetricsPage';
 import { OpenShiftMetricsPage } from './OpenShiftMetricsPage';
 import { AIChatPage } from './AIChatPage';
 import { SettingsModal } from '../components/SettingsModal';
@@ -255,11 +257,20 @@ const OverviewDashboard: React.FC<OverviewDashboardProps> = ({ onNavigate }) => 
           </GridItem>
           <GridItem md={6} sm={12}>
             <QuickActionCard
+              title="Devices"
+              description="View GPU/accelerator utilization, memory, temperature, and power"
+              icon={<CubeIcon style={{ fontSize: '20px' }} />}
+              iconColor="#111827"
+              onClick={() => onNavigate(2)}
+            />
+          </GridItem>
+          <GridItem md={6} sm={12}>
+            <QuickActionCard
               title="OpenShift Metrics"
               description="View pod status, resource utilization, and cluster health"
               icon={<CubesIcon style={{ fontSize: '20px' }} />}
               iconColor="#3e8635"
-              onClick={() => onNavigate(2)}
+              onClick={() => onNavigate(3)}
             />
           </GridItem>
           <GridItem md={6} sm={12}>
@@ -268,7 +279,7 @@ const OverviewDashboard: React.FC<OverviewDashboardProps> = ({ onNavigate }) => 
               description="Ask questions about your metrics and get AI-powered insights"
               icon={<CommentIcon style={{ fontSize: '20px' }} />}
               iconColor="#7c3aed"
-              onClick={() => onNavigate(3)}
+              onClick={() => onNavigate(4)}
             />
           </GridItem>
           <GridItem md={6} sm={12}>
@@ -401,6 +412,16 @@ const AIObservabilityPage: React.FC = () => {
             eventKey={2}
             title={
               <>
+                <TabTitleIcon><CubeIcon /></TabTitleIcon>
+                <TabTitleText>Devices</TabTitleText>
+              </>
+            }
+            aria-label="Device Metrics"
+          />
+          <Tab
+            eventKey={3}
+            title={
+              <>
                 <TabTitleIcon><CubesIcon /></TabTitleIcon>
                 <TabTitleText>OpenShift</TabTitleText>
               </>
@@ -408,7 +429,7 @@ const AIObservabilityPage: React.FC = () => {
             aria-label="OpenShift Metrics"
           />
           <Tab
-            eventKey={3}
+            eventKey={4}
             title={
               <>
                 <TabTitleIcon><CommentIcon /></TabTitleIcon>
@@ -423,8 +444,9 @@ const AIObservabilityPage: React.FC = () => {
       <PageSection>
         {activeTabKey === 0 && <OverviewDashboard onNavigate={handleNavigate} />}
         {activeTabKey === 1 && <VLLMMetricsPage />}
-        {activeTabKey === 2 && <OpenShiftMetricsPage />}
-        {activeTabKey === 3 && <AIChatPage />}
+        {activeTabKey === 2 && <DeviceMetricsPage />}
+        {activeTabKey === 3 && <OpenShiftMetricsPage />}
+        {activeTabKey === 4 && <AIChatPage />}
       </PageSection>
     </Page>
   );

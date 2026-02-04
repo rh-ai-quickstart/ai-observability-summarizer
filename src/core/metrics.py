@@ -1079,6 +1079,33 @@ def discover_intel_gaudi_metrics():
         return {}
 
 
+def detect_device_vendors() -> Dict[str, bool]:
+    """Detect which device vendor metrics are present in Prometheus/Thanos.
+
+    Business logic:
+    - NVIDIA is considered available when any metric with prefix 'DCGM_' exists.
+    - Intel is considered available when any metric with prefix 'habanalabs_' exists.
+    """
+    try:
+        headers = {"Authorization": f"Bearer {THANOS_TOKEN}"}
+        response = requests.get(
+            f"{PROMETHEUS_URL}/api/v1/label/__name__/values",
+            headers=headers,
+            verify=VERIFY_SSL,
+            timeout=30,
+        )
+        response.raise_for_status()
+        all_metrics = response.json().get("data", []) or []
+
+        has_nvidia = any(m.startswith("DCGM_") for m in all_metrics)
+        has_intel = any(m.startswith("habanalabs_") for m in all_metrics)
+
+        return {"nvidia": has_nvidia, "intel": has_intel}
+    except Exception as e:
+        logger.error("Error detecting device vendors", exc_info=e)
+        return {"nvidia": False, "intel": False}
+
+
 def discover_openshift_metrics():
     """Return comprehensive OpenShift/Kubernetes metrics organized by category"""
     return {
@@ -1136,6 +1163,43 @@ def discover_openshift_metrics():
             "GPU Memory Used (GB)": "avg(DCGM_FI_DEV_FB_USED) / (1024*1024*1024) or avg(habanalabs_memory_used_bytes) / (1024*1024*1024)",
             "GPU Count": "count(DCGM_FI_DEV_GPU_TEMP) or sum(habana_hpu_count)",
             "GPU Memory Temp (°C)": "avg(DCGM_FI_DEV_MEMORY_TEMP) or avg(habanalabs_temperature_threshold_memory)",
+        },
+        "Device (DCGM)": {
+            # Crucial NVIDIA DCGM (fleet-level) metrics. These are aggregated across GPUs.
+            #
+            # Note: DCGM framebuffer metrics are typically reported in MiB; convert to GiB by dividing by 1024.
+            "GPU Count": "count(DCGM_FI_DEV_GPU_TEMP)",
+            "GPU Utilization Avg (%)": "avg(DCGM_FI_DEV_GPU_UTIL)",
+            "GPU Utilization Max (%)": "max(DCGM_FI_DEV_GPU_UTIL)",
+            "GPU Memory Used Avg (GiB)": "avg(DCGM_FI_DEV_FB_USED) / 1024",
+            "GPU Memory Used Max (GiB)": "max(DCGM_FI_DEV_FB_USED) / 1024",
+            "GPU Memory Free Avg (GiB)": "avg(DCGM_FI_DEV_FB_FREE) / 1024",
+            "GPU Memory Reserved Avg (GiB)": "avg(DCGM_FI_DEV_FB_RESERVED) / 1024",
+            "GPU Temperature Avg (°C)": "avg(DCGM_FI_DEV_GPU_TEMP)",
+            "GPU Temperature Max (°C)": "max(DCGM_FI_DEV_GPU_TEMP)",
+            "GPU Power Usage Avg (W)": "avg(DCGM_FI_DEV_POWER_USAGE)",
+            "GPU Power Usage Max (W)": "max(DCGM_FI_DEV_POWER_USAGE)",
+            "PCIe RX (MB/s)": "avg(DCGM_FI_PROF_PCIE_RX_BYTES) / (1024*1024)",
+            "PCIe TX (MB/s)": "avg(DCGM_FI_PROF_PCIE_TX_BYTES) / (1024*1024)",
+            "PCIe Replay Counter (max)": "max(DCGM_FI_DEV_PCIE_REPLAY_COUNTER)",
+            "Correctable Remapped Rows (max)": "max(DCGM_FI_DEV_CORRECTABLE_REMAPPED_ROWS)",
+            "Uncorrectable Remapped Rows (max)": "max(DCGM_FI_DEV_UNCORRECTABLE_REMAPPED_ROWS)",
+            "Row Remap Failure (any)": "max(DCGM_FI_DEV_ROW_REMAP_FAILURE)",
+        },
+        "Device (Intel)": {
+            # Crucial Intel Gaudi (habanalabs) metrics (fleet-level).
+            # Units:
+            # - power: mW → W
+            # - memory: bytes → GiB
+            "Device Count": "sum(habana_hpu_count)",
+            "Utilization Avg (%)": "avg(habanalabs_utilization)",
+            "Utilization Max (%)": "max(habanalabs_utilization)",
+            "Memory Used Avg (GiB)": "avg(habanalabs_memory_used_bytes) / (1024*1024*1024)",
+            "Memory Used Max (GiB)": "max(habanalabs_memory_used_bytes) / (1024*1024*1024)",
+            "Temperature Avg (°C)": "avg(habanalabs_temperature_onchip)",
+            "Temperature Max (°C)": "max(habanalabs_temperature_onchip)",
+            "Power Avg (W)": "avg(habanalabs_power_mW) / 1000",
+            "Power Max (W)": "max(habanalabs_power_mW) / 1000",
         },
         "Autoscaling & Scheduling": {
             # Autoscaling and scheduling metrics
