@@ -14,6 +14,7 @@ This proposal reorganizes the PDF's 32 vLLM metrics into **8 logical categories*
 - **Proposed UI**: Splits into 8 focused categories with 2-7 metrics each
 - **Coverage**: 18/32 metrics currently implemented (56%)
 - **GPU Hardware**: Remains unchanged per requirements ✅
+- **Scope Exclusions**: HTTP metrics (not vLLM-specific) and low priority metrics will not be implemented
 
 ---
 
@@ -101,14 +102,14 @@ This proposal reorganizes the PDF's 32 vLLM metrics into **8 logical categories*
 
 | # | Metric Name | PDF Metric | Status | Priority |
 |---|-------------|------------|--------|----------|
-| 1 | Engine Loop Duration | `vllm_engine_loop_duration_seconds` | ❌ Missing | LOW |
-| 2 | Model Load Time | `vllm_model_load_time_seconds` | ❌ Missing | LOW |
+| 1 | Engine Loop Duration | `vllm_engine_loop_duration_seconds` | ❌ Low priority - Not implemented | LOW |
+| 2 | Model Load Time | `vllm_model_load_time_seconds` | ❌ Low priority - Not implemented | LOW |
 
 **Metrics in Category**: 2
 **Currently Implemented**: 0 (0%)
 **PDF Source**: Category 1 (Inference Performance & Latency)
 
-**Notes**: Low priority - mainly for advanced debugging
+**Notes**: Low priority - mainly for advanced debugging. These metrics will not be implemented.
 
 ---
 
@@ -148,17 +149,19 @@ This proposal reorganizes the PDF's 32 vLLM metrics into **8 logical categories*
 
 | # | Metric Name | PDF Metric | Status | Priority |
 |---|-------------|------------|--------|----------|
-| 1 | HTTP Request Latency | `http_server_request_duration_seconds` | ❌ Missing | HIGH |
-| 2 | HTTP Error Count | `http_requests_total{status!~"2.."}` | ❌ Missing | CRITICAL |
+| 1 | HTTP Request Latency | `http_server_request_duration_seconds` | ❌ Not vLLM-specific - Excluded | HIGH |
+| 2 | HTTP Error Count | `http_requests_total{status!~"2.."}` | ❌ Not vLLM-specific - Excluded | CRITICAL |
 | 3 | RPC Connections | `vllm_rpc_server_connection_total` | ❌ Missing | MEDIUM |
 | 4 | RPC Request Count | `vllm_rpc_server_request_count` | ❌ Missing | MEDIUM |
 | 5 | RPC Error Count | `vllm_rpc_server_error_count` | ❌ Missing | HIGH |
 | 6 | Queue Depth | `vllm_scheduler_pending_requests` | ❌ Missing | HIGH |
 | 7 | Stream TTFT | `vllm_streaming_time_to_first_token_seconds` | ❌ Missing | MEDIUM |
 
-**Metrics in Category**: 7
+**Metrics in Category**: 7 (5 vLLM-specific, 2 HTTP excluded)
 **Currently Implemented**: 0 (0%)
 **PDF Source**: Category 3 (Networking - API/RPC)
+
+**Notes**: HTTP metrics (#1, #2) excluded as they are not vLLM-specific
 
 ---
 
@@ -231,9 +234,8 @@ This proposal reorganizes the PDF's 32 vLLM metrics into **8 logical categories*
 
 **Add these metrics**:
 - Category 1: `vllm_requests_total`, `vllm_request_errors_total`, `vllm_oom_errors_total`
-- Category 7: `http_requests_total{status!~"2.."}`
 
-**Effort**: 4 metrics
+**Effort**: 3 metrics (HTTP metrics excluded as not vLLM-specific)
 **Impact**: Enables request volume tracking and error monitoring
 
 ---
@@ -244,11 +246,11 @@ This proposal reorganizes the PDF's 32 vLLM metrics into **8 logical categories*
 
 **Add these metrics**:
 - Category 2: `vllm_tokens_generated_per_second`
-- Category 7: `http_server_request_duration_seconds`, `vllm_rpc_server_error_count`, `vllm_scheduler_pending_requests`
+- Category 7: `vllm_rpc_server_error_count`, `vllm_scheduler_pending_requests`
 - Category 6: `vllm_kv_cache_fragmentation_ratio`
 
-**Effort**: 5 metrics
-**Impact**: Token rate tracking, API performance monitoring, cache health
+**Effort**: 4 metrics (HTTP metrics excluded as not vLLM-specific)
+**Impact**: Token rate tracking, RPC monitoring, cache health
 
 ---
 
@@ -266,17 +268,16 @@ This proposal reorganizes the PDF's 32 vLLM metrics into **8 logical categories*
 
 ---
 
-### Phase 4: Low Priority (Future) 🔵
+### Phase 4: Low Priority (Not Implemented) ⚫
 
-**Goal**: Advanced debugging and cache optimization
+**Status**: Not being implemented
 
-**Add these metrics**:
+**Excluded metrics**:
 - Category 5: `vllm_engine_loop_duration_seconds`, `vllm_model_load_time_seconds`
 - Category 6: `vllm_kv_block_reuse_total`
 - Category 8: Optional Intel Gaudi metrics (thresholds, free/total memory)
 
-**Effort**: 5+ metrics
-**Impact**: Advanced troubleshooting and fine-tuning
+**Reason**: Low priority metrics - mainly for advanced debugging and not critical for operational monitoring
 
 ---
 
