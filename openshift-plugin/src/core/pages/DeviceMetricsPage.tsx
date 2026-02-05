@@ -54,14 +54,35 @@ const NVIDIA_DCGM_METRICS = [
 // Mirrors the "Device (Intel)" category labels from `src/core/metrics.py`
 const INTEL_HABANALABS_METRICS = [
   { key: 'Device Count', label: 'Device Count', unit: '', description: 'Total Gaudi devices detected via metrics' },
+
+  // Core / compute
+  { key: 'Energy (J)', label: 'Energy', unit: 'J', description: 'Device energy usage' },
   { key: 'Utilization Avg (%)', label: 'Util Avg', unit: '%', description: 'Average device utilization across all devices' },
   { key: 'Utilization Max (%)', label: 'Util Max', unit: '%', description: 'Max device utilization across all devices' },
-  { key: 'Memory Used Avg (GiB)', label: 'Mem Used Avg', unit: 'GiB', description: 'Average device memory used across devices' },
-  { key: 'Memory Used Max (GiB)', label: 'Mem Used Max', unit: 'GiB', description: 'Max device memory used across devices' },
-  { key: 'Temperature Avg (°C)', label: 'Temp Avg', unit: '°C', description: 'Average on-chip temperature across devices' },
-  { key: 'Temperature Max (°C)', label: 'Temp Max', unit: '°C', description: 'Max on-chip temperature across devices' },
+  { key: 'Power Cap (W)', label: 'Power Cap', unit: 'W', description: 'Power cap for the device' },
   { key: 'Power Avg (W)', label: 'Power Avg', unit: 'W', description: 'Average device power usage across devices' },
   { key: 'Power Max (W)', label: 'Power Max', unit: 'W', description: 'Max device power usage across devices' },
+  { key: 'Board Temp Avg (°C)', label: 'Board Temp Avg', unit: '°C', description: 'Average board temperature' },
+  { key: 'Board Temp Max (°C)', label: 'Board Temp Max', unit: '°C', description: 'Max board temperature' },
+  { key: 'ASIC Temp Avg (°C)', label: 'ASIC Temp Avg', unit: '°C', description: 'Average ASIC temperature' },
+  { key: 'ASIC Temp Max (°C)', label: 'ASIC Temp Max', unit: '°C', description: 'Max ASIC temperature' },
+  { key: 'ASIC Temp Threshold Avg (°C)', label: 'ASIC Threshold', unit: '°C', description: 'ASIC temperature threshold' },
+  { key: 'Memory Temp Threshold Avg (°C)', label: 'Mem Threshold', unit: '°C', description: 'Memory temperature threshold' },
+
+  // Memory (HBM)
+  { key: 'Memory Free Avg (GiB)', label: 'Mem Free Avg', unit: 'GiB', description: 'Average free memory' },
+  { key: 'Memory Total Avg (GiB)', label: 'Mem Total Avg', unit: 'GiB', description: 'Average total memory' },
+  { key: 'Memory Used Avg (GiB)', label: 'Mem Used Avg', unit: 'GiB', description: 'Average memory used' },
+  { key: 'Memory Used Max (GiB)', label: 'Mem Used Max', unit: 'GiB', description: 'Max memory used' },
+
+  // Interconnect (PCIe / link)
+  { key: 'PCIe Link Speed', label: 'PCIe Speed', unit: '', description: 'PCIe link speed' },
+  { key: 'PCIe Link Width', label: 'PCIe Width', unit: '', description: 'PCIe link width' },
+  { key: 'PCIe RX Throughput (MB/s)', label: 'PCIe RX Thrpt', unit: 'MB/s', description: 'PCIe receive throughput' },
+  { key: 'PCIe TX Throughput (MB/s)', label: 'PCIe TX Thrpt', unit: 'MB/s', description: 'PCIe transmit throughput' },
+  { key: 'PCIe RX Traffic (MB/s)', label: 'PCIe RX', unit: 'MB/s', description: 'PCIe receive traffic' },
+  { key: 'PCIe TX Traffic (MB/s)', label: 'PCIe TX', unit: 'MB/s', description: 'PCIe transmit traffic' },
+  { key: 'PCIe Replay Count (max)', label: 'PCIe Replays', unit: '', description: 'Total number of PCIe replay events (max)' },
 ] as const;
 
 const TIME_RANGE_OPTIONS = [

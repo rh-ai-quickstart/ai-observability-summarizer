@@ -1166,15 +1166,37 @@ def discover_openshift_metrics():
             # Units:
             # - power: mW → W
             # - memory: bytes → GiB
+            # - PCIe throughput/traffic: bytes → MB
             "Device Count": "sum(habana_hpu_count)",
+
+            # Core / compute
+            "Energy (J)": "avg(habanalabs_energy)",
             "Utilization Avg (%)": "avg(habanalabs_utilization)",
             "Utilization Max (%)": "max(habanalabs_utilization)",
-            "Memory Used Avg (GiB)": "avg(habanalabs_memory_used_bytes) / (1024*1024*1024)",
-            "Memory Used Max (GiB)": "max(habanalabs_memory_used_bytes) / (1024*1024*1024)",
-            "Temperature Avg (°C)": "avg(habanalabs_temperature_onchip)",
-            "Temperature Max (°C)": "max(habanalabs_temperature_onchip)",
+            "Power Cap (W)": "avg(habanalabs_power_default_limit_mW) / 1000",
             "Power Avg (W)": "avg(habanalabs_power_mW) / 1000",
             "Power Max (W)": "max(habanalabs_power_mW) / 1000",
+            "Board Temp Avg (°C)": "avg(habanalabs_temperature_onboard)",
+            "Board Temp Max (°C)": "max(habanalabs_temperature_onboard)",
+            "ASIC Temp Avg (°C)": "avg(habanalabs_temperature_onchip)",
+            "ASIC Temp Max (°C)": "max(habanalabs_temperature_onchip)",
+            "ASIC Temp Threshold Avg (°C)": "avg(habanalabs_temperature_threshold_gpu)",
+            "Memory Temp Threshold Avg (°C)": "avg(habanalabs_temperature_threshold_memory)",
+
+            # Memory (HBM)
+            "Memory Free Avg (GiB)": "avg(habanalabs_memory_free_bytes) / (1024*1024*1024)",
+            "Memory Total Avg (GiB)": "avg(habanalabs_memory_total_bytes) / (1024*1024*1024)",
+            "Memory Used Avg (GiB)": "avg(habanalabs_memory_used_bytes) / (1024*1024*1024)",
+            "Memory Used Max (GiB)": "max(habanalabs_memory_used_bytes) / (1024*1024*1024)",
+
+            # Interconnect (PCIe / link)
+            "PCIe Link Speed": "avg(habanalabs_pci_link_speed)",
+            "PCIe Link Width": "avg(habanalabs_pci_link_width)",
+            "PCIe RX Throughput (MB/s)": "avg(habanalabs_pcie_receive_throughput) / (1024*1024)",
+            "PCIe TX Throughput (MB/s)": "avg(habanalabs_pcie_transmit_throughput) / (1024*1024)",
+            "PCIe RX Traffic (MB/s)": "avg(habanalabs_pcie_rx) / (1024*1024)",
+            "PCIe TX Traffic (MB/s)": "avg(habanalabs_pcie_tx) / (1024*1024)",
+            "PCIe Replay Count (max)": "max(habanalabs_pcie_replay_count)",
         },
         "Autoscaling & Scheduling": {
             # Autoscaling and scheduling metrics
