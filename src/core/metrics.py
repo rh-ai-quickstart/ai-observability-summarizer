@@ -852,25 +852,8 @@ def discover_vllm_metrics():
             metric_mapping["Num Requests Waiting"] = "vllm:num_requests_waiting"
 
         # Phase 1: Networking & API metrics
-        # HTTP errors - filter HTTP metrics from all_metrics list (already fetched above)
-        http_metrics = set(m for m in all_metrics if m.startswith("http_"))
-
-        # HTTP request errors (non-2xx status codes)
-        if "http_requests_total" in http_metrics:
-            metric_mapping["Http Requests Total Status Not 2Xx"] = (
-                'sum(rate(http_requests_total{status!~"2.."}[5m]))'
-            )
-
-        # HTTP request latency
-        if "http_server_request_duration_seconds_bucket" in http_metrics:
-            metric_mapping["Http Server Request Duration Seconds"] = (
-                "histogram_quantile(0.95, sum(rate(http_server_request_duration_seconds_bucket[5m])) by (le))"
-            )
-        elif "http_server_request_duration_seconds_sum" in http_metrics and "http_server_request_duration_seconds_count" in http_metrics:
-            metric_mapping["Http Server Request Duration Seconds"] = (
-                "sum(rate(http_server_request_duration_seconds_sum[5m])) / "
-                "sum(rate(http_server_request_duration_seconds_count[5m]))"
-            )
+        # Note: HTTP metrics removed - they don't have model_name labels and show global cluster stats
+        # May reconsider adding them back with namespace filtering later
 
         # RPC metrics
         if "vllm:rpc_server_error_count" in vllm_metrics:
@@ -922,9 +905,7 @@ def discover_vllm_metrics():
             "Requests Total": "sum(increase(vllm:request_success_total[5m]))",  # Fallback: success count during time window
             "Request Errors Total": "sum(increase(vllm:request_errors_total[5m]))",
             "Num Requests Waiting": "vllm:num_requests_waiting",
-            # Phase 1: Networking
-            "Http Requests Total Status Not 2Xx": 'sum(rate(http_requests_total{status!~"2.."}[5m]))',
-            "Http Server Request Duration Seconds": "histogram_quantile(0.95, sum(rate(http_server_request_duration_seconds_bucket[5m])) by (le))",
+            # Phase 1: RPC metrics (HTTP metrics removed - will reconsider with namespace filtering)
             "Vllm Rpc Server Error Count": "vllm:rpc_server_error_count",
             "Vllm Rpc Server Connection Total": "vllm:rpc_server_connection_total",
         }
