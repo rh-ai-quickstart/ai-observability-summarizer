@@ -822,18 +822,30 @@ def discover_vllm_metrics():
             )
 
         # Phase 1: Request Tracking & Throughput metrics
-        # Total requests counter
+        # Total requests counter with fallback logic
+        # Priority 1: Use num_requests_total if available (use increase for time range)
+        # Priority 2: Calculate from success + errors if both available
+        # Priority 3: Use success_total as minimum count
+        # Note: These are counters, so use increase() to get count during selected time window
+        # Note: request_success_total has multiple time series (by finished_reason), so we sum() them
+        # The [5m] placeholder will be replaced with actual time range (e.g., [1h], [6h]) by fetch_vllm_metrics_data
         if "vllm:num_requests_total" in vllm_metrics:
-            metric_mapping["Requests Total"] = "vllm:num_requests_total"
+            metric_mapping["Requests Total"] = "sum(increase(vllm:num_requests_total[5m]))"
+        elif "vllm:request_errors_total" in vllm_metrics and "vllm:request_success_total" in vllm_metrics:
+            metric_mapping["Requests Total"] = "sum(increase(vllm:request_success_total[5m])) + sum(increase(vllm:request_errors_total[5m]))"
+        elif "vllm:request_success_total" in vllm_metrics:
+            metric_mapping["Requests Total"] = "sum(increase(vllm:request_success_total[5m]))"
 
         # Request errors
+        # Note: These are counters, so use increase() to get errors during selected time window
+        # Note: Both metrics can have multiple time series (by finished_reason, error_code, etc.)
         if "vllm:request_success_total" in vllm_metrics and "vllm:num_requests_total" in vllm_metrics:
-            # Calculate error rate as total - success
+            # Calculate error count as total - success during the time window
             metric_mapping["Request Errors Total"] = (
-                "vllm:num_requests_total - vllm:request_success_total"
+                "sum(increase(vllm:num_requests_total[5m])) - sum(increase(vllm:request_success_total[5m]))"
             )
         elif "vllm:request_errors_total" in vllm_metrics:
-            metric_mapping["Request Errors Total"] = "vllm:request_errors_total"
+            metric_mapping["Request Errors Total"] = "sum(increase(vllm:request_errors_total[5m]))"
 
         # Waiting requests (queue depth)
         if "vllm:num_requests_waiting" in vllm_metrics:
@@ -906,9 +918,9 @@ def discover_vllm_metrics():
             "Requests Running": "vllm:num_requests_running",
             "P95 Latency (s)": "histogram_quantile(0.95, sum(rate(vllm:e2e_request_latency_seconds_bucket[5m])) by (le))",
             "Inference Time (s)": "sum(rate(vllm:request_inference_time_seconds_sum[5m])) / sum(rate(vllm:request_inference_time_seconds_count[5m]))",
-            # Phase 1: Request tracking
-            "Requests Total": "vllm:num_requests_total",
-            "Request Errors Total": "vllm:request_errors_total",
+            # Phase 1: Request tracking (fallbacks use most commonly available metrics)
+            "Requests Total": "sum(increase(vllm:request_success_total[5m]))",  # Fallback: success count during time window
+            "Request Errors Total": "sum(increase(vllm:request_errors_total[5m]))",
             "Num Requests Waiting": "vllm:num_requests_waiting",
             # Phase 1: Networking
             "Http Requests Total Status Not 2Xx": 'sum(rate(http_requests_total{status!~"2.."}[5m]))',
