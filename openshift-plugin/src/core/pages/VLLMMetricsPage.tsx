@@ -40,6 +40,7 @@ import {
   AngleRightIcon,
   ChartLineIcon,
   NetworkIcon,
+  ListIcon,
 } from '@patternfly/react-icons';
 import { listModels, listNamespaces, ModelInfo, NamespaceInfo, fetchVLLMMetrics, analyzeVLLM, getSessionConfig, AnalysisResult } from '../services/mcpClient';
 import { ConfigurationRequiredAlert } from '../components/ConfigurationRequiredAlert';
@@ -64,6 +65,7 @@ const METRIC_CATEGORIES = {
       { key: 'Requests Total', label: 'Total Requests', unit: '', description: 'Total inference requests processed' },
       { key: 'Requests Running', label: 'In-Progress', unit: '', description: 'Active ongoing requests' },
       { key: 'Request Errors Total', label: 'Request Errors', unit: '', description: 'Total failed inference requests' },
+      { key: 'Oom Errors Total', label: 'OOM Errors', unit: '', description: 'Out-of-memory errors' },
       { key: 'Num Requests Waiting', label: 'Waiting', unit: '', description: 'Requests waiting in queue' },
       { key: 'Scheduler Pending Requests', label: 'Pending', unit: '', description: 'Requests pending in scheduler queue' },
     ]
@@ -105,12 +107,25 @@ const METRIC_CATEGORIES = {
       { key: 'Kv Cache Usage Perc', label: 'KV Cache', unit: '%', description: 'Key-Value cache utilization' },
       { key: 'Gpu Cache Usage Perc', label: 'GPU Cache', unit: '%', description: 'GPU cache utilization' },
       { key: 'Cache Fragmentation Ratio', label: 'Fragmentation', unit: '%', description: 'KV cache fragmentation ratio (lower is better)' },
+      { key: 'Kv Cache Usage Bytes', label: 'Cache Used', unit: 'GB', description: 'KV cache memory used (GB)' },
+      { key: 'Kv Cache Capacity Bytes', label: 'Cache Capacity', unit: 'GB', description: 'Total KV cache capacity (GB)' },
+      { key: 'Kv Cache Free Bytes', label: 'Cache Free', unit: 'GB', description: 'KV cache memory free (GB)' },
       { key: 'Prefix Cache Hits Total', label: 'Cache Hits', unit: '', description: 'Total prefix cache hits' },
       { key: 'Prefix Cache Queries Total', label: 'Cache Queries', unit: '', description: 'Total cache queries' },
       { key: 'Gpu Prefix Cache Hits Total', label: 'GPU Hits', unit: '', description: 'GPU prefix cache hits' },
       { key: 'Gpu Prefix Cache Queries Total', label: 'GPU Queries', unit: '', description: 'GPU cache queries' },
       { key: 'Gpu Prefix Cache Hits Created', label: 'GPU Hit Rate', unit: '/s', description: 'GPU cache hit rate' },
       { key: 'Gpu Prefix Cache Queries Created', label: 'GPU Query Rate', unit: '/s', description: 'GPU cache query rate' },
+    ]
+  },
+  'Scheduling & Queueing': {
+    icon: ListIcon,
+    priority: 4.5,
+    description: 'Scheduler performance and batching efficiency',
+    metrics: [
+      { key: 'Batch Size', label: 'Batch Size', unit: '', description: 'Current batch size' },
+      { key: 'Num Scheduled Requests', label: 'Scheduled', unit: '', description: 'Number of scheduled requests' },
+      { key: 'Batching Idle Time Seconds', label: 'Idle Time', unit: 's', description: 'Average batching idle time' },
     ]
   },
   'RPC Monitoring': {
@@ -120,6 +135,7 @@ const METRIC_CATEGORIES = {
     metrics: [
       { key: 'Vllm Rpc Server Error Count', label: 'RPC Errors', unit: '', description: 'RPC server errors' },
       { key: 'Vllm Rpc Server Connection Total', label: 'RPC Connections', unit: '', description: 'Total RPC connections' },
+      { key: 'Vllm Rpc Server Request Count', label: 'RPC Requests', unit: '', description: 'Total RPC requests processed' },
     ]
   },
   'GPU Hardware': {
