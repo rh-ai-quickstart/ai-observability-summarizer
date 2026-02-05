@@ -100,11 +100,32 @@ spec:
         - urn:alm:descriptor:com.tectonic.ui:fieldGroup:More Models
         - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
         - urn:alm:descriptor:com.tectonic.ui:advanced
-      - description: Largest model, best quality but requires 4 GPUs
+      - description: Largest model, best quality but requires 4 GPUs (140GB+ VRAM)
         displayName: Llama 3.3 70B Instruct
         path: rag.global.models.llama-3-3-70b-instruct.enabled
         x-descriptors:
         - urn:alm:descriptor:com.tectonic.ui:fieldGroup:More Models
+        - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: Quantized 1B model for optimized inference (lower memory usage)
+        displayName: Llama 3.2 1B Quantized (w8a8)
+        path: rag.global.models.llama-3-2-1b-instruct-quantized.enabled
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:fieldGroup:More Models
+        - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: Small safety model for content moderation (2GB GPU)
+        displayName: Llama Guard 3 1B (Safety)
+        path: rag.global.models.llama-guard-3-1b.enabled
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:fieldGroup:Safety Models
+        - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: Larger safety model for better content moderation (16GB GPU)
+        displayName: Llama Guard 3 8B (Safety)
+        path: rag.global.models.llama-guard-3-8b.enabled
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:fieldGroup:Safety Models
         - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
         - urn:alm:descriptor:com.tectonic.ui:advanced
       - description: Runs a CronJob to analyze and summarize alerts using the LLM

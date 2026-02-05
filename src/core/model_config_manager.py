@@ -3,6 +3,8 @@ Dynamic model configuration manager.
 
 Manages model configuration with ConfigMap as source of truth,
 using MODEL_CONFIG env var as template for initialization.
+
+Also discovers internal models at runtime by querying InferenceServices.
 """
 
 import os
@@ -11,7 +13,7 @@ import logging
 import threading
 import requests
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +24,27 @@ if not K8S_API_URL.startswith("http"):
 K8S_SA_TOKEN_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/token"
 K8S_SA_CA_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
 CONFIGMAP_NAME = "ai-model-config"
+
+# InferenceService API configuration
+INFERENCE_SERVICE_API_GROUP = "serving.kserve.io"
+INFERENCE_SERVICE_API_VERSION = "v1beta1"
+
+# Model ID mapping: InferenceService name -> HuggingFace model ID
+# This maps the InferenceService name (as deployed by llama-stack/llm-service charts)
+# to the full HuggingFace model ID used in MODEL_CONFIG
+# https://github.com/rh-ai-quickstart/ai-architecture-charts/blob/main/llama-stack/helm/values.yaml
+MODEL_ID_MAP = {
+    # Llama 3.x Instruct models (recommended)
+    "llama-3-2-1b-instruct": "meta-llama/Llama-3.2-1B-Instruct",
+    "llama-3-2-3b-instruct": "meta-llama/Llama-3.2-3B-Instruct",
+    "llama-3-1-8b-instruct": "meta-llama/Llama-3.1-8B-Instruct",
+    "llama-3-3-70b-instruct": "meta-llama/Llama-3.3-70B-Instruct",
+    # Llama Guard models (safety/moderation)
+    "llama-guard-3-1b": "meta-llama/Llama-Guard-3-1B",
+    "llama-guard-3-8b": "meta-llama/Llama-Guard-3-8B",
+    # Quantized models (optimized for inference)
+    "llama-3-2-1b-instruct-quantized": "RedHatAI/Llama-3.2-1B-Instruct-quantized.w8a8",
+}
 
 # Runtime configuration cache
 _runtime_config: Optional[Dict[str, Any]] = None
@@ -61,6 +84,96 @@ def _get_k8s_headers() -> Dict[str, str]:
     except Exception as e:
         logger.error(f"Failed to read service account token: {e}")
         return {'Content-Type': 'application/json'}
+
+
+def discover_inference_services() -> Dict[str, Any]:
+    """
+    Discover internal models by querying InferenceServices in the namespace.
+    
+    This enables runtime discovery of deployed LLM models without requiring
+    them to be statically configured in MODEL_CONFIG.
+    
+    Returns:
+        Dict of discovered models in MODEL_CONFIG format:
+        {
+            "meta-llama/Llama-3.1-8B-Instruct": {
+                "external": false,
+                "requiresApiKey": false,
+                "serviceName": "llama-3-1-8b-instruct"
+            }
+        }
+    """
+    discovered_models = {}
+    
+    try:
+        ns = os.getenv("NAMESPACE", "")
+        if not ns:
+            logger.debug("NAMESPACE not set, skipping InferenceService discovery")
+            return {}
+        
+        # Query InferenceServices in the namespace
+        url = (
+            f"{K8S_API_URL}/apis/{INFERENCE_SERVICE_API_GROUP}/"
+            f"{INFERENCE_SERVICE_API_VERSION}/namespaces/{ns}/inferenceservices"
+        )
+        headers = _get_k8s_headers()
+        verify = K8S_SA_CA_PATH if os.path.exists(K8S_SA_CA_PATH) else True
+        
+        r = requests.get(url, headers=headers, timeout=10, verify=verify)
+        
+        if r.status_code == 404:
+            # InferenceService CRD not installed or no access
+            logger.debug("InferenceService API not available or no resources found")
+            return {}
+        
+        if r.status_code == 403:
+            logger.warning("No permission to list InferenceServices - check RBAC")
+            return {}
+        
+        if r.status_code != 200:
+            logger.warning(f"Failed to list InferenceServices: {r.status_code}")
+            return {}
+        
+        data = r.json()
+        items = data.get("items", [])
+        
+        for isvc in items:
+            metadata = isvc.get("metadata", {})
+            status = isvc.get("status", {})
+            
+            name = metadata.get("name", "")
+            if not name:
+                continue
+            
+            # Check if InferenceService is ready
+            conditions = status.get("conditions", [])
+            is_ready = any(
+                c.get("type") == "Ready" and c.get("status") == "True"
+                for c in conditions
+            )
+            
+            if not is_ready:
+                logger.debug(f"InferenceService {name} is not ready, skipping")
+                continue
+            
+            # Map service name to HuggingFace model ID
+            model_id = MODEL_ID_MAP.get(name, name)
+            
+            # Add to discovered models
+            discovered_models[model_id] = {
+                "external": False,
+                "requiresApiKey": False,
+                "serviceName": name
+            }
+            
+            logger.debug(f"Discovered InferenceService: {name} -> {model_id}")
+        
+        logger.info(f"Discovered {len(discovered_models)} internal models from InferenceServices")
+        return discovered_models
+        
+    except Exception as e:
+        logger.error(f"Error discovering InferenceServices: {e}")
+        return {}
 
 
 def load_model_config_from_configmap() -> Optional[Dict[str, Any]]:
@@ -165,15 +278,16 @@ def create_configmap_from_defaults(default_config: Dict[str, Any]) -> bool:
 
 def load_runtime_model_config() -> Dict[str, Any]:
     """
-    Load model configuration with ConfigMap-first priority.
+    Load model configuration with ConfigMap-first priority + runtime discovery.
 
     Loading strategy:
     1. Try to load from ConfigMap (user-managed, persists across Helm upgrades)
     2. If ConfigMap doesn't exist, create it from MODEL_CONFIG defaults
     3. If creation fails, fall back to defaults from env var
+    4. Discover internal models from InferenceServices and merge them
 
     Returns:
-        Model configuration dict
+        Model configuration dict (external + discovered internal models)
     """
     # Load defaults from environment variable
     default_config = load_model_config_from_env()
@@ -184,7 +298,7 @@ def load_runtime_model_config() -> Dict[str, Any]:
     if configmap_config is not None:
         # ConfigMap exists, use it as source of truth
         logger.debug(f"Using ConfigMap as model config source ({len(configmap_config)} models)")
-        return configmap_config
+        base_config = configmap_config
     else:
         # ConfigMap doesn't exist, try to create it from defaults
         logger.info("ConfigMap not found, creating from defaults")
@@ -192,11 +306,26 @@ def load_runtime_model_config() -> Dict[str, Any]:
 
         if success:
             # Return the newly created config
-            return default_config
+            base_config = default_config
         else:
             # Fall back to env var defaults if creation failed
             logger.warning("ConfigMap creation failed, using env var defaults")
-            return default_config
+            base_config = default_config
+
+    # Discover internal models from InferenceServices
+    discovered_models = discover_inference_services()
+    
+    # Merge: discovered models are added/updated, base_config is preserved
+    # Discovered models take precedence for internal model entries
+    merged_config = {**base_config, **discovered_models}
+    
+    if discovered_models:
+        logger.info(
+            f"Model config: {len(base_config)} from config + "
+            f"{len(discovered_models)} discovered = {len(merged_config)} total"
+        )
+    
+    return merged_config
 
 
 def get_model_config(force_refresh: bool = False) -> Dict[str, Any]:
