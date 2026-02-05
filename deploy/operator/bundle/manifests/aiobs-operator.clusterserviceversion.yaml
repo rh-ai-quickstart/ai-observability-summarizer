@@ -138,14 +138,14 @@ spec:
         displayName: Llama Guard 3 1B (Safety)
         path: rag.global.models.llama-guard-3-1b.enabled
         x-descriptors:
-        - urn:alm:descriptor:com.tectonic.ui:fieldGroup:Safety Models
+        - urn:alm:descriptor:com.tectonic.ui:fieldGroup:More Models
         - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
         - urn:alm:descriptor:com.tectonic.ui:advanced
       - description: Larger safety model for better content moderation (16GB GPU)
         displayName: Llama Guard 3 8B (Safety)
         path: rag.global.models.llama-guard-3-8b.enabled
         x-descriptors:
-        - urn:alm:descriptor:com.tectonic.ui:fieldGroup:Safety Models
+        - urn:alm:descriptor:com.tectonic.ui:fieldGroup:More Models
         - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
         - urn:alm:descriptor:com.tectonic.ui:advanced
       - description: Runs a CronJob to analyze and summarize alerts using the LLM
