@@ -625,21 +625,3 @@ def chat_openshift(
         return err.to_mcp_response()
 
 
-def detect_device_vendors() -> List[Dict[str, Any]]:
-    """Detect available device vendors based on metric prefixes.
-
-    Business logic:
-    - NVIDIA: any `DCGM_*` metric present
-    - Intel: any `habanalabs_*` metric present
-    """
-    try:
-        vendors = core_metrics.detect_device_vendors()
-        return make_mcp_text_response(json.dumps(vendors))
-    except Exception as e:
-        err = MCPException(
-            message=f"Failed to detect device vendors: {str(e)}",
-            error_code=MCPErrorCode.PROMETHEUS_ERROR,
-            recovery_suggestion="Please check Prometheus/Thanos connectivity."
-        )
-        return err.to_mcp_response()
-

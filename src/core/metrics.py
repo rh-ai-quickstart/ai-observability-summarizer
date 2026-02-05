@@ -1079,31 +1079,6 @@ def discover_intel_gaudi_metrics():
         return {}
 
 
-def detect_device_vendors() -> Dict[str, bool]:
-    """Detect which device vendor metrics are present in Prometheus/Thanos.
-
-    Business logic:
-    - NVIDIA is considered available when any metric with prefix 'DCGM_' exists.
-    - Intel is considered available when any metric with prefix 'habanalabs_' exists.
-    """
-    try:
-        headers = {"Authorization": f"Bearer {THANOS_TOKEN}"}
-        response = requests.get(
-            f"{PROMETHEUS_URL}/api/v1/label/__name__/values",
-            headers=headers,
-            verify=VERIFY_SSL,
-            timeout=30,
-        )
-        response.raise_for_status()
-        all_metrics = response.json().get("data", []) or []
-
-        has_nvidia = any(m.startswith("DCGM_") for m in all_metrics)
-        has_intel = any(m.startswith("habanalabs_") for m in all_metrics)
-
-        return {"nvidia": has_nvidia, "intel": has_intel}
-    except Exception as e:
-        logger.error("Error detecting device vendors", exc_info=e)
-        return {"nvidia": False, "intel": False}
 
 
 def discover_openshift_metrics():

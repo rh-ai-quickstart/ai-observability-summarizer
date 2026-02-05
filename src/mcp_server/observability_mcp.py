@@ -45,7 +45,6 @@ class ObservabilityMCPServer:
             list_openshift_metric_groups,
             list_openshift_namespace_metric_groups,
             chat_openshift,
-            detect_device_vendors,
         )
         from .tools.prometheus_tools import (
             search_metrics,                    # Search metrics by pattern
@@ -57,6 +56,9 @@ class ObservabilityMCPServer:
             select_best_metric,               # Select best metric
             find_best_metric_with_metadata_v2,  # Smart metric selection v2
             find_best_metric_with_metadata,   # Smart metric selection v1
+        )
+        from .tools.metric_catalog_tools import (
+            search_metric_catalog,
         )
         from .tools.tempo_tools import (
             query_tempo_tool,
@@ -92,7 +94,6 @@ class ObservabilityMCPServer:
         self.mcp.tool()(list_openshift_metric_groups)
         self.mcp.tool()(list_openshift_namespace_metric_groups)
         self.mcp.tool()(chat_openshift)
-        self.mcp.tool()(detect_device_vendors)
 
         # Register Prometheus tools one by one
         self.mcp.tool()(search_metrics)                    # Search metrics by pattern
@@ -104,6 +105,7 @@ class ObservabilityMCPServer:
         self.mcp.tool()(select_best_metric)               # Select best metric
         self.mcp.tool()(find_best_metric_with_metadata_v2)  # Smart metric selection v2
         self.mcp.tool()(find_best_metric_with_metadata)   # Smart metric selection v1
+        self.mcp.tool()(search_metric_catalog)            # Curated metric catalog (top-20 knowledge bank)
 
         # Register Tempo query tools
         self.mcp.tool()(query_tempo_tool)

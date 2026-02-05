@@ -433,38 +433,6 @@ export interface OpenShiftMetricsDataResponse {
   metrics: Record<string, OpenShiftMetricValue>;
 }
 
-export interface DeviceVendorsResponse {
-  nvidia: boolean;
-  intel: boolean;
-}
-
-export async function detectDeviceVendors(): Promise<DeviceVendorsResponse> {
-  try {
-    // Preferred: dedicated MCP tool (newer servers)
-    const text = await callMcpToolText('detect_device_vendors', {});
-    return JSON.parse(text) as DeviceVendorsResponse;
-  } catch (e) {
-    // Fallback: use existing search tool (older servers / tool not registered yet)
-    try {
-      const [dcgmText, intelText] = await Promise.all([
-        callMcpToolText('search_metrics', { pattern: 'DCGM_', limit: 5 }),
-        callMcpToolText('search_metrics', { pattern: 'habanalabs_', limit: 5 }),
-      ]);
-
-      const dcgm = JSON.parse(dcgmText) as { metrics?: Array<{ name?: string }> };
-      const intel = JSON.parse(intelText) as { metrics?: Array<{ name?: string }> };
-
-      const hasNvidia = (dcgm.metrics || []).some((m) => (m.name || '').startsWith('DCGM_'));
-      const hasIntel = (intel.metrics || []).some((m) => (m.name || '').startsWith('habanalabs_'));
-
-      return { nvidia: hasNvidia, intel: hasIntel };
-    } catch {
-      console.warn('[detectDeviceVendors] vendor detection failed:', e);
-      return { nvidia: false, intel: false };
-    }
-  }
-}
-
 export async function fetchOpenShiftMetrics(
   category: string,
   scope: 'cluster_wide' | 'namespace_scoped',
@@ -638,6 +606,7 @@ export async function chat(
     scope?: string;
     apiKey?: string;
     conversationHistory?: Array<{ role: string; content: string }>;
+    timeRange?: string;
   }
 ): Promise<{ response: string; progressLog: Array<{ timestamp: string; message: string }> }> {
   try {
@@ -648,6 +617,7 @@ export async function chat(
       scope: options?.scope,
       api_key: options?.apiKey,
       conversation_history: options?.conversationHistory,
+      time_range: options?.timeRange,
     });
 
     // The backend returns a JSON response with {response, progress_log, model, iterations}
