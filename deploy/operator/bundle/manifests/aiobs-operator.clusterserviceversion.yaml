@@ -65,7 +65,7 @@ metadata:
     capabilities: Basic Install
     categories: AI/Machine Learning, Monitoring
     containerImage: quay.io/ecosystem-appeng/aiobs-operator:v1.0.14-feature
-    createdAt: "2026-02-02T20:57:38Z"
+    createdAt: "2026-02-05T14:15:14Z"
     description: Deploy AI-powered observability summarization for OpenShift
     operatorframework.io/suggested-namespace: ai-observability
     operators.operatorframework.io/builder: operator-sdk-v1.37.0
@@ -120,11 +120,32 @@ spec:
         - urn:alm:descriptor:com.tectonic.ui:fieldGroup:More Models
         - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
         - urn:alm:descriptor:com.tectonic.ui:advanced
-      - description: Largest model, best quality but requires 4 GPUs
+      - description: Largest model, best quality but requires 4 GPUs (140GB+ VRAM)
         displayName: Llama 3.3 70B Instruct
         path: rag.global.models.llama-3-3-70b-instruct.enabled
         x-descriptors:
         - urn:alm:descriptor:com.tectonic.ui:fieldGroup:More Models
+        - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: Quantized 1B model for optimized inference (lower memory usage)
+        displayName: Llama 3.2 1B Quantized (w8a8)
+        path: rag.global.models.llama-3-2-1b-instruct-quantized.enabled
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:fieldGroup:More Models
+        - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: Small safety model for content moderation (2GB GPU)
+        displayName: Llama Guard 3 1B (Safety)
+        path: rag.global.models.llama-guard-3-1b.enabled
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:fieldGroup:Safety Models
+        - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: Larger safety model for better content moderation (16GB GPU)
+        displayName: Llama Guard 3 8B (Safety)
+        path: rag.global.models.llama-guard-3-8b.enabled
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:fieldGroup:Safety Models
         - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
         - urn:alm:descriptor:com.tectonic.ui:advanced
       - description: Runs a CronJob to analyze and summarize alerts using the LLM
