@@ -269,7 +269,7 @@ const DeviceMetricsPage: React.FC = () => {
   return (
     <Page>
       <Helmet>
-        <title>Device Metrics - AI Observability</title>
+        <title>Hardware Accelerators - AI Observability</title>
       </Helmet>
 
       {/* Header */}
@@ -285,9 +285,9 @@ const DeviceMetricsPage: React.FC = () => {
           <FlexItem>
             <Title headingLevel="h1" style={{ color: 'white' }}>
               <CubesIcon style={{ marginRight: '12px' }} />
-              Devices
+              Hardware Accelerators
             </Title>
-            <Text style={{ color: 'rgba(255,255,255,0.8)', marginTop: '8px' }}>Device fleet view</Text>
+            <Text style={{ color: 'rgba(255,255,255,0.8)', marginTop: '8px' }}>Accelerator fleet view</Text>
           </FlexItem>
         </Flex>
       </PageSection>

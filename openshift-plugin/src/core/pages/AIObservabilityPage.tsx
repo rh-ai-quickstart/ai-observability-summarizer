@@ -257,7 +257,7 @@ const OverviewDashboard: React.FC<OverviewDashboardProps> = ({ onNavigate }) => 
           </GridItem>
           <GridItem md={6} sm={12}>
             <QuickActionCard
-              title="Devices"
+              title="Hardware Accelerators"
               description="View GPU/accelerator utilization, memory, temperature, and power"
               icon={<CubeIcon style={{ fontSize: '20px' }} />}
               iconColor="#111827"
@@ -413,10 +413,10 @@ const AIObservabilityPage: React.FC = () => {
             title={
               <>
                 <TabTitleIcon><CubeIcon /></TabTitleIcon>
-                <TabTitleText>Devices</TabTitleText>
+                <TabTitleText>Hardware Accelerators</TabTitleText>
               </>
             }
-            aria-label="Device Metrics"
+            aria-label="Hardware Accelerators"
           />
           <Tab
             eventKey={3}

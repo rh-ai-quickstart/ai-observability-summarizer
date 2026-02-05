@@ -28,7 +28,7 @@ const Navigation: React.FC = () => {
     },
     {
       id: 'devices',
-      title: 'Devices',
+      title: 'Hardware Accelerators',
       path: '/devices',
       icon: <CubeIcon />,
     },
