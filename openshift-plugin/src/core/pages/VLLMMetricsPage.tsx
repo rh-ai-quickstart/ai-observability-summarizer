@@ -145,7 +145,6 @@ const METRIC_CATEGORIES = {
     metrics: [
       // GPU Temperature, GPU Power Usage, GPU Usage removed - shown in Key Metrics
       { key: 'GPU Energy Consumption (Joules)', label: 'Energy', unit: 'J', description: 'Total energy consumed' },
-      { key: 'GPU Utilization (%)', label: 'Utilization', unit: '%', description: 'GPU compute utilization' },
       { key: 'GPU Memory Usage (GB)', label: 'Memory', unit: 'GB', description: 'GPU memory used' },
       { key: 'GPU Memory Temperature (°C)', label: 'Mem Temp', unit: '°C', description: 'GPU memory temperature' },
     ]

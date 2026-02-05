@@ -295,19 +295,39 @@ def get_vllm_metrics_tool() -> List[Dict[str, Any]]:
 
 def _inject_labels_into_query(query: str, label_clause: str) -> str:
     """Inject labels into a Prometheus query at the correct position.
-    
+
     Handles:
     - vllm:simple_metric -> vllm:simple_metric{labels}
     - vllm:metric[5m] -> vllm:metric{labels}[5m]
     - avg(vllm:metric) -> avg(vllm:metric{labels})
     - histogram_quantile(0.95, sum(rate(vllm:metric[5m])) by (le))
-    
-    DCGM metrics are skipped (they're global GPU metrics without model labels).
+
+    Global metrics (DCGM, Habana, cluster-wide) are skipped - they don't have model/namespace labels.
+    Only vLLM metrics support model_name and namespace label filtering.
+
+    Safety: Only injects labels into queries containing vLLM metrics (vllm: prefix).
+    This prevents accidentally adding labels to global cluster metrics.
     """
     result = query
-    
-    # Skip DCGM/GPU metrics - they don't have model_name labels
-    if 'DCGM_' in query or 'habana' in query:
+
+    # Skip global GPU/cluster metrics - they don't have model_name/namespace labels
+    # These metrics are shared across the entire cluster or node
+    global_metric_patterns = [
+        'DCGM_',           # NVIDIA DCGM metrics (node-level)
+        'habana',          # Habana Gaudi metrics (node-level)
+        'nvidia_smi_',     # nvidia-smi exporter (node-level)
+        'nvml_',           # NVML metrics (node-level)
+        'kube_',           # Kubernetes metrics (cluster-wide)
+        'node_',           # Node exporter metrics (node-level)
+        'container_',      # cAdvisor metrics (may or may not have namespace)
+    ]
+
+    if any(pattern in query for pattern in global_metric_patterns):
+        return result
+
+    # Only inject labels if query contains vLLM metrics
+    # This ensures we don't accidentally modify non-vLLM queries
+    if 'vllm:' not in query:
         return result
     
     # Pattern 1: vllm:metric_name followed by [ (time range)
@@ -417,19 +437,77 @@ def fetch_vllm_metrics_data(
         # Calculate lookback window for rate() queries
         lookback_window = calculate_histogram_quantile_optimal_lookback(duration_hours)
 
-        # Replace hardcoded [5m] with appropriate time range in queries
+        # ========================================================================
+        # Dynamic Time Range Adjustment Logic
+        # ========================================================================
+        # Adjust query time ranges based on metric type to ensure correct semantics
+        # and prevent data quality issues (sparse data, overlapping windows).
+        #
+        # Three types of queries require different time range handling:
+        #
+        # 1. COUNTER metrics with increase():
+        #    Purpose: Show total count during the selected time window
+        #    Time range: Use full selected duration (e.g., [1h] for 1-hour window)
+        #    Example: increase(vllm:request_success_total[1h])
+        #             Returns: 1000 requests during that specific 1-hour period
+        #    Why: Each time point in a range query shows increase over the SAME
+        #         duration window, causing overlaps. For instant queries, we want
+        #         the increase during the user's selected window, not a fixed 5min.
+        #    Note: Sparkline points will overlap (14:00-15:00, 14:04-15:04, etc.)
+        #          but latest_value shows the correct total for the full window.
+        #
+        # 2. SUMMARY/HISTOGRAM metrics with rate():
+        #    Purpose: Show average rate or percentile over time
+        #    Time range: Use calculated lookback window (proportional to duration)
+        #    Example: rate(vllm:request_generation_tokens_sum[5m]) for 1h window
+        #             rate(vllm:request_generation_tokens_sum[30m]) for 6h window
+        #    Why: Prevents sparse data in long time ranges. A 5min lookback over
+        #         24 hours would create gaps. Proportional lookback (e.g., 2h for
+        #         24h window) ensures smooth, continuous data with enough samples.
+        #    Calculation: See calculate_histogram_quantile_optimal_lookback()
+        #
+        # 3. GAUGE metrics (no time range):
+        #    Purpose: Show instantaneous value at query time
+        #    Time range: None (gauges don't have [Xm] suffix in queries)
+        #    Example: vllm:num_requests_running
+        #             Returns: Current number of running requests
+        #    Why: Gauges are point-in-time snapshots, not cumulative.
+        #    Note: .replace('[5m]', ...) is a no-op for these queries.
+        #
+        # Detection method:
+        # - String matching on 'increase(' to identify counter metrics
+        # - All others assumed to be rate()/histogram_quantile() or gauges
+        # - Gauges naturally skip adjustment (no '[5m]' to replace)
+        # ========================================================================
+
         adjusted_queries = {}
         for label, query in prepared_queries.items():
-            # For increase() queries: use full duration to show tokens during time window
-            # For rate()/histogram_quantile(): use lookback window for smooth data
+            # Get metric type from registry for validation and logging
+            from core.metrics import get_metric_type
+            metric_type = get_metric_type(label)
+
+            # Validate that query function matches metric type
+            # This helps catch misclassifications early
+            if metric_type == 'COUNTER' and 'increase(' not in query:
+                logger.warning(
+                    f"Metric '{label}' is registered as COUNTER but query doesn't use increase(): {query}"
+                )
+            elif metric_type == 'GAUGE' and ('rate(' in query or 'increase(' in query):
+                logger.warning(
+                    f"Metric '{label}' is registered as GAUGE but query uses rate/increase: {query}"
+                )
+
             if 'increase(' in query:
+                # COUNTER: Use full selected duration to show total during window
                 adjusted_query = query.replace('[5m]', f'[{duration_str}]')
                 if '[5m]' in query and query != adjusted_query:
-                    logger.debug(f"Adjusted increase duration for '{label}': [5m] -> [{duration_str}]")
+                    logger.debug(f"Adjusted COUNTER '{label}' ({metric_type}): [5m] -> [{duration_str}]")
             else:
+                # SUMMARY/HISTOGRAM: Use lookback window for smooth data
+                # GAUGE: No-op (no '[5m]' to replace)
                 adjusted_query = query.replace('[5m]', f'[{lookback_window}]')
                 if '[5m]' in query and query != adjusted_query:
-                    logger.debug(f"Adjusted lookback for '{label}': [5m] -> [{lookback_window}]")
+                    logger.debug(f"Adjusted {metric_type} '{label}': [5m] -> [{lookback_window}]")
 
             adjusted_queries[label] = adjusted_query
 
