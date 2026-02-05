@@ -65,6 +65,7 @@ const METRIC_CATEGORIES = {
       { key: 'Requests Running', label: 'In-Progress', unit: '', description: 'Active ongoing requests' },
       { key: 'Request Errors Total', label: 'Request Errors', unit: '', description: 'Total failed inference requests' },
       { key: 'Num Requests Waiting', label: 'Waiting', unit: '', description: 'Requests waiting in queue' },
+      { key: 'Scheduler Pending Requests', label: 'Pending', unit: '', description: 'Requests pending in scheduler queue' },
     ]
   },
   'Token Throughput': {
@@ -73,6 +74,7 @@ const METRIC_CATEGORIES = {
     description: 'Token processing performance and rates',
     metrics: [
       // Prompt Tokens Created and Output Tokens Created removed - shown in Key Metrics
+      { key: 'Tokens Generated Per Second', label: 'Token Rate', unit: 't/s', description: 'Token generation rate (tokens/second)' },
       { key: 'Prompt Tokens Total', label: 'Prompt Tokens', unit: '', description: 'Total prompt tokens processed' },
       { key: 'Generation Tokens Total', label: 'Gen Tokens', unit: '', description: 'Total generated tokens' },
       { key: 'Request Prompt Tokens Sum', label: 'Avg Prompt', unit: '', description: 'Average prompt tokens per request' },
@@ -86,6 +88,7 @@ const METRIC_CATEGORIES = {
     metrics: [
       // P95 Latency removed - shown in Key Metrics
       { key: 'Inference Time (s)', label: 'Avg Inference', unit: 's', description: 'Average inference time' },
+      { key: 'Streaming Ttft Seconds', label: 'Streaming TTFT', unit: 's', description: 'Average time to first token for streaming' },
       { key: 'Time To First Token Seconds Sum', label: 'TTFT Sum', unit: 's', description: 'Time to first token (total)' },
       { key: 'Time Per Output Token Seconds Sum', label: 'TPOT Sum', unit: 's', description: 'Time per output token (total)' },
       { key: 'Request Prefill Time Seconds Sum', label: 'Prefill', unit: 's', description: 'Prompt processing time' },
@@ -101,6 +104,7 @@ const METRIC_CATEGORIES = {
     metrics: [
       { key: 'Kv Cache Usage Perc', label: 'KV Cache', unit: '%', description: 'Key-Value cache utilization' },
       { key: 'Gpu Cache Usage Perc', label: 'GPU Cache', unit: '%', description: 'GPU cache utilization' },
+      { key: 'Cache Fragmentation Ratio', label: 'Fragmentation', unit: '%', description: 'KV cache fragmentation ratio (lower is better)' },
       { key: 'Prefix Cache Hits Total', label: 'Cache Hits', unit: '', description: 'Total prefix cache hits' },
       { key: 'Prefix Cache Queries Total', label: 'Cache Queries', unit: '', description: 'Total cache queries' },
       { key: 'Gpu Prefix Cache Hits Total', label: 'GPU Hits', unit: '', description: 'GPU prefix cache hits' },
