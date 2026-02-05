@@ -39,6 +39,155 @@ NAMESPACE_SCOPED = "namespace_scoped"
 CLUSTER_WIDE = "cluster_wide"
 
 
+# ============================================================================
+# Metric Type Registry
+# ============================================================================
+# Explicit classification of metric types for proper query handling.
+# This registry ensures correct time range adjustments and prevents
+# misclassification based on string matching.
+#
+# COUNTER: Monotonically increasing values (requests, tokens, errors)
+#          - Use increase() to show total during time window
+#          - Time range adjustment: use full selected duration
+#
+# GAUGE: Instantaneous values (queue depth, cache %, temperature)
+#        - No time range needed, shows current value
+#        - Time range adjustment: none (gauges have no [Xm] suffix)
+#
+# HISTOGRAM: Distribution metrics with buckets
+#            - Use histogram_quantile() with rate()
+#            - Time range adjustment: use calculated lookback window
+#
+# SUMMARY: Average metrics from sum/count pairs
+#          - Use rate(sum) / rate(count)
+#          - Time range adjustment: use calculated lookback window
+# ============================================================================
+
+METRIC_TYPES = {
+    'COUNTER': {
+        # Request tracking counters
+        'Requests Total',
+        'Request Errors Total',
+        'Oom Errors Total',
+
+        # Token counters
+        'Prompt Tokens Created',
+        'Output Tokens Created',
+        'Prompt Tokens Total',
+        'Generation Tokens Total',
+
+        # Latency sum counters (total time accumulated)
+        'Time To First Token Seconds Sum',
+        'Time Per Output Token Seconds Sum',
+        'Request Prefill Time Seconds Sum',
+        'Request Decode Time Seconds Sum',
+        'Request Queue Time Seconds Sum',
+        'E2E Request Latency Seconds Sum',
+
+        # Request parameter counters
+        'Request Prompt Tokens Sum',
+        'Request Prompt Tokens Count',
+        'Request Generation Tokens Sum',
+        'Request Generation Tokens Count',
+        'Request Max Num Generation Tokens Sum',
+        'Request Max Num Generation Tokens Count',
+        'Request Params Max Tokens Sum',
+        'Request Params Max Tokens Count',
+        'Request Params N Sum',
+        'Request Params N Count',
+        'Iteration Tokens Total Sum',
+        'Iteration Tokens Total Count',
+
+        # Cache counters
+        'Prefix Cache Hits Total',
+        'Prefix Cache Queries Total',
+        'Gpu Prefix Cache Hits Total',
+        'Gpu Prefix Cache Queries Total',
+
+        # RPC counters
+        'Vllm Rpc Server Request Count',
+    },
+
+    'GAUGE': {
+        # Request queue metrics
+        'Requests Running',
+        'Num Requests Waiting',
+        'Scheduler Pending Requests',
+
+        # Scheduling metrics
+        'Batch Size',
+        'Num Scheduled Requests',
+
+        # Cache usage percentages
+        'Kv Cache Usage Perc',
+        'Gpu Cache Usage Perc',
+        'Cache Fragmentation Ratio',
+
+        # Cache memory metrics (bytes converted to GB)
+        'Kv Cache Usage Bytes',
+        'Kv Cache Capacity Bytes',
+        'Kv Cache Free Bytes',
+
+        # RPC connection metrics
+        'Vllm Rpc Server Error Count',
+        'Vllm Rpc Server Connection Total',
+
+        # GPU hardware metrics (consolidated - single metric for utilization)
+        'GPU Usage (%)',
+        'GPU Temperature (°C)',
+        'GPU Power Usage (Watts)',
+        'GPU Memory Usage (GB)',
+        'GPU Energy Consumption (Joules)',
+        'GPU Memory Temperature (°C)',
+    },
+
+    'HISTOGRAM': {
+        # Latency percentiles from histogram buckets
+        'P95 Latency (s)',
+        'P99 Latency (s)',
+    },
+
+    'SUMMARY': {
+        # Average metrics calculated from sum/count pairs
+        'Inference Time (s)',
+        'Streaming Ttft Seconds',
+        'Batching Idle Time Seconds',
+
+        # Rate metrics (tokens per second)
+        'Tokens Generated Per Second',
+        'Gpu Prefix Cache Hits Created',
+        'Gpu Prefix Cache Queries Created',
+    },
+}
+
+
+def get_metric_type(metric_label: str) -> str:
+    """Get the Prometheus metric type for a given metric label.
+
+    Args:
+        metric_label: The friendly metric name (e.g., "Requests Total")
+
+    Returns:
+        Metric type: 'COUNTER', 'GAUGE', 'HISTOGRAM', 'SUMMARY', or 'UNKNOWN'
+    """
+    for mtype, labels in METRIC_TYPES.items():
+        if metric_label in labels:
+            return mtype
+    return 'UNKNOWN'
+
+
+def get_metrics_by_type(metric_type: str) -> set:
+    """Get all metric labels of a specific type.
+
+    Args:
+        metric_type: One of 'COUNTER', 'GAUGE', 'HISTOGRAM', 'SUMMARY'
+
+    Returns:
+        Set of metric labels, or empty set if type not found
+    """
+    return METRIC_TYPES.get(metric_type, set())
+
+
 def execute_instant_query(query: str, timeout: int = 10) -> Dict[str, Any]:
     """Execute a Prometheus instant query (fast, single point in time).
     
@@ -152,9 +301,12 @@ def execute_range_queries_parallel(
     # These metrics show instantaneous values, so we want the max during each step interval
     # This is critical for metrics like GPU utilization where brief spikes (e.g., 10s of activity
     # in a 1-hour window with 4-minute sampling) would otherwise be missed
+    #
+    # Note: "GPU Usage (%)" is the consolidated metric name for GPU compute utilization.
+    # Internal discovery may find vendor-specific names (DCGM_FI_DEV_GPU_UTIL, habanalabs_utilization)
+    # but these are all mapped to the single "GPU Usage (%)" metric for consistency.
     GAUGE_METRICS = [
-        "GPU Usage (%)",
-        "GPU Utilization (%)",
+        "GPU Usage (%)",  # Consolidated GPU compute utilization (NVIDIA, AMD, Habana, etc.)
         "GPU Temperature (°C)",
         "GPU Power Usage (Watts)",
         "GPU Memory Usage (GB)",
