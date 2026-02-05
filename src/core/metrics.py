@@ -851,6 +851,13 @@ def discover_vllm_metrics():
         if "vllm:num_requests_waiting" in vllm_metrics:
             metric_mapping["Num Requests Waiting"] = "vllm:num_requests_waiting"
 
+        # Phase 2: Scheduler pending requests (queue depth)
+        # This may be different from num_requests_waiting depending on vLLM version
+        if "vllm:scheduler_pending_requests" in vllm_metrics:
+            metric_mapping["Scheduler Pending Requests"] = "vllm:scheduler_pending_requests"
+        elif "vllm:num_scheduler_pending" in vllm_metrics:
+            metric_mapping["Scheduler Pending Requests"] = "vllm:num_scheduler_pending"
+
         # Phase 1: Networking & API metrics
         # Note: HTTP metrics removed - they don't have model_name labels and show global cluster stats
         # May reconsider adding them back with namespace filtering later
@@ -861,6 +868,38 @@ def discover_vllm_metrics():
 
         if "vllm:rpc_server_connection_total" in vllm_metrics:
             metric_mapping["Vllm Rpc Server Connection Total"] = "vllm:rpc_server_connection_total"
+
+        # Phase 2: Token generation rate (tokens/second)
+        # Calculate rate from token counters
+        if "vllm:request_generation_tokens_sum" in vllm_metrics:
+            metric_mapping["Tokens Generated Per Second"] = (
+                "rate(vllm:request_generation_tokens_sum[5m])"
+            )
+        elif "vllm:generation_tokens_total" in vllm_metrics:
+            metric_mapping["Tokens Generated Per Second"] = (
+                "rate(vllm:generation_tokens_total[5m])"
+            )
+
+        # Phase 2: KV Cache fragmentation
+        if "vllm:gpu_cache_usage_perc" in vllm_metrics:
+            # Fragmentation can be inferred from cache usage patterns
+            # High fragmentation = lower effective cache usage
+            metric_mapping["Kv Cache Fragmentation"] = "vllm:gpu_cache_usage_perc"
+
+        # Check for explicit fragmentation metric
+        if "vllm:cache_config_total_gpu_memory" in vllm_metrics and "vllm:gpu_cache_usage_perc" in vllm_metrics:
+            # Fragmentation ratio (if available)
+            metric_mapping["Cache Fragmentation Ratio"] = (
+                "100 - vllm:gpu_cache_usage_perc"
+            )
+
+        # Phase 2: Streaming time to first token
+        if "vllm:time_to_first_token_seconds_sum" in vllm_metrics and "vllm:time_to_first_token_seconds_count" in vllm_metrics:
+            # Average TTFT for streaming requests
+            metric_mapping["Streaming Ttft Seconds"] = (
+                "sum(rate(vllm:time_to_first_token_seconds_sum[5m])) / "
+                "sum(rate(vllm:time_to_first_token_seconds_count[5m]))"
+            )
 
         # Add any other vLLM metrics with a generic friendly name if not already mapped
         for metric in vllm_metrics:
@@ -877,8 +916,17 @@ def discover_vllm_metrics():
                 "vllm:request_success_total",
                 "vllm:request_errors_total",
                 "vllm:num_requests_waiting",
+                "vllm:scheduler_pending_requests",
+                "vllm:num_scheduler_pending",
                 "vllm:rpc_server_error_count",
                 "vllm:rpc_server_connection_total",
+                # Phase 2 metrics
+                "vllm:request_generation_tokens_sum",
+                "vllm:generation_tokens_total",
+                "vllm:gpu_cache_usage_perc",
+                "vllm:cache_config_total_gpu_memory",
+                "vllm:time_to_first_token_seconds_sum",
+                "vllm:time_to_first_token_seconds_count",
             ):
                 continue
             friendly_name = metric.replace("vllm:", "").replace("_", " ").title()
@@ -905,9 +953,14 @@ def discover_vllm_metrics():
             "Requests Total": "sum(increase(vllm:request_success_total[5m]))",  # Fallback: success count during time window
             "Request Errors Total": "sum(increase(vllm:request_errors_total[5m]))",
             "Num Requests Waiting": "vllm:num_requests_waiting",
+            "Scheduler Pending Requests": "vllm:scheduler_pending_requests",
             # Phase 1: RPC metrics (HTTP metrics removed - will reconsider with namespace filtering)
             "Vllm Rpc Server Error Count": "vllm:rpc_server_error_count",
             "Vllm Rpc Server Connection Total": "vllm:rpc_server_connection_total",
+            # Phase 2: Token generation rate and advanced metrics
+            "Tokens Generated Per Second": "rate(vllm:request_generation_tokens_sum[5m])",
+            "Streaming Ttft Seconds": "sum(rate(vllm:time_to_first_token_seconds_sum[5m])) / sum(rate(vllm:time_to_first_token_seconds_count[5m]))",
+            "Cache Fragmentation Ratio": "100 - vllm:gpu_cache_usage_perc",
         }
 
 
