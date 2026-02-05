@@ -109,13 +109,11 @@ const METRIC_CATEGORIES = {
       { key: 'Gpu Prefix Cache Queries Created', label: 'GPU Query Rate', unit: '/s', description: 'GPU cache query rate' },
     ]
   },
-  'Networking & API': {
+  'RPC Monitoring': {
     icon: NetworkIcon,
     priority: 5,
-    description: 'HTTP/RPC monitoring and API performance',
+    description: 'RPC server monitoring (HTTP metrics removed - will reconsider with namespace filtering)',
     metrics: [
-      { key: 'Http Requests Total Status Not 2Xx', label: 'HTTP Errors', unit: '', description: 'Non-2xx HTTP response errors' },
-      { key: 'Http Server Request Duration Seconds', label: 'HTTP Latency', unit: 's', description: 'HTTP request latency' },
       { key: 'Vllm Rpc Server Error Count', label: 'RPC Errors', unit: '', description: 'RPC server errors' },
       { key: 'Vllm Rpc Server Connection Total', label: 'RPC Connections', unit: '', description: 'Total RPC connections' },
     ]
