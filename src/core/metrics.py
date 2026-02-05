@@ -160,6 +160,9 @@ def execute_range_queries_parallel(
         "GPU Memory Usage (GB)",
         "GPU Memory Temperature (°C)",
         "GPU Energy Consumption (Joules)",
+        # Cache metrics (also gauges that can spike briefly)
+        "Kv Cache Usage Perc",
+        "Gpu Cache Usage Perc",
     ]
 
     def fetch_range(label: str, query: str) -> Tuple[str, List[Dict[str, Any]]]:
@@ -887,6 +890,70 @@ def discover_vllm_metrics():
                 "rate(vllm:generation_tokens_total[5m])"
             )
 
+        # Phase 2: Total token counts (COUNTER - use increase() to show total during time window)
+        # These are separate from "Prompt/Output Tokens Created" shown in Key Metrics
+        if "vllm:prompt_tokens_total" in vllm_metrics:
+            metric_mapping["Prompt Tokens Total"] = "sum(increase(vllm:prompt_tokens_total[5m]))"
+        elif "vllm:request_prompt_tokens_sum" in vllm_metrics:
+            # If prompt_tokens_total doesn't exist, use the _sum metric with increase()
+            metric_mapping["Prompt Tokens Total"] = "sum(increase(vllm:request_prompt_tokens_sum[5m]))"
+
+        if "vllm:generation_tokens_total" in vllm_metrics:
+            metric_mapping["Generation Tokens Total"] = "sum(increase(vllm:generation_tokens_total[5m]))"
+        elif "vllm:request_generation_tokens_sum" in vllm_metrics:
+            # If generation_tokens_total doesn't exist, use the _sum metric with increase()
+            metric_mapping["Generation Tokens Total"] = "sum(increase(vllm:request_generation_tokens_sum[5m]))"
+
+        # Phase 2: Latency breakdown metrics (COUNTER _sum - use increase() for total time during window)
+        if "vllm:time_to_first_token_seconds_sum" in vllm_metrics:
+            metric_mapping["Time To First Token Seconds Sum"] = "sum(increase(vllm:time_to_first_token_seconds_sum[5m]))"
+
+        if "vllm:time_per_output_token_seconds_sum" in vllm_metrics:
+            metric_mapping["Time Per Output Token Seconds Sum"] = "sum(increase(vllm:time_per_output_token_seconds_sum[5m]))"
+
+        if "vllm:request_prefill_time_seconds_sum" in vllm_metrics:
+            metric_mapping["Request Prefill Time Seconds Sum"] = "sum(increase(vllm:request_prefill_time_seconds_sum[5m]))"
+
+        if "vllm:request_decode_time_seconds_sum" in vllm_metrics:
+            metric_mapping["Request Decode Time Seconds Sum"] = "sum(increase(vllm:request_decode_time_seconds_sum[5m]))"
+
+        if "vllm:request_queue_time_seconds_sum" in vllm_metrics:
+            metric_mapping["Request Queue Time Seconds Sum"] = "sum(increase(vllm:request_queue_time_seconds_sum[5m]))"
+
+        if "vllm:e2e_request_latency_seconds_sum" in vllm_metrics:
+            metric_mapping["E2E Request Latency Seconds Sum"] = "sum(increase(vllm:e2e_request_latency_seconds_sum[5m]))"
+
+        # Phase 2: Request Parameters metrics (COUNTER _sum/_count - use increase() for totals during window)
+        if "vllm:request_prompt_tokens_sum" in vllm_metrics:
+            metric_mapping["Request Prompt Tokens Sum"] = "sum(increase(vllm:request_prompt_tokens_sum[5m]))"
+        if "vllm:request_prompt_tokens_count" in vllm_metrics:
+            metric_mapping["Request Prompt Tokens Count"] = "sum(increase(vllm:request_prompt_tokens_count[5m]))"
+
+        if "vllm:request_generation_tokens_sum" in vllm_metrics:
+            metric_mapping["Request Generation Tokens Sum"] = "sum(increase(vllm:request_generation_tokens_sum[5m]))"
+        if "vllm:request_generation_tokens_count" in vllm_metrics:
+            metric_mapping["Request Generation Tokens Count"] = "sum(increase(vllm:request_generation_tokens_count[5m]))"
+
+        if "vllm:request_max_num_generation_tokens_sum" in vllm_metrics:
+            metric_mapping["Request Max Num Generation Tokens Sum"] = "sum(increase(vllm:request_max_num_generation_tokens_sum[5m]))"
+        if "vllm:request_max_num_generation_tokens_count" in vllm_metrics:
+            metric_mapping["Request Max Num Generation Tokens Count"] = "sum(increase(vllm:request_max_num_generation_tokens_count[5m]))"
+
+        if "vllm:request_params_max_tokens_sum" in vllm_metrics:
+            metric_mapping["Request Params Max Tokens Sum"] = "sum(increase(vllm:request_params_max_tokens_sum[5m]))"
+        if "vllm:request_params_max_tokens_count" in vllm_metrics:
+            metric_mapping["Request Params Max Tokens Count"] = "sum(increase(vllm:request_params_max_tokens_count[5m]))"
+
+        if "vllm:request_params_n_sum" in vllm_metrics:
+            metric_mapping["Request Params N Sum"] = "sum(increase(vllm:request_params_n_sum[5m]))"
+        if "vllm:request_params_n_count" in vllm_metrics:
+            metric_mapping["Request Params N Count"] = "sum(increase(vllm:request_params_n_count[5m]))"
+
+        if "vllm:iteration_tokens_total_sum" in vllm_metrics:
+            metric_mapping["Iteration Tokens Total Sum"] = "sum(increase(vllm:iteration_tokens_total_sum[5m]))"
+        if "vllm:iteration_tokens_total_count" in vllm_metrics:
+            metric_mapping["Iteration Tokens Total Count"] = "sum(increase(vllm:iteration_tokens_total_count[5m]))"
+
         # Phase 2: KV Cache fragmentation
         if "vllm:gpu_cache_usage_perc" in vllm_metrics:
             # Fragmentation can be inferred from cache usage patterns
@@ -949,6 +1016,46 @@ def discover_vllm_metrics():
         elif "vllm:gpu_cache_free_bytes" in vllm_metrics:
             metric_mapping["Kv Cache Free Bytes"] = "vllm:gpu_cache_free_bytes / (1024*1024*1024)"
 
+        # KV cache usage percentage (GAUGE)
+        if "vllm:kv_cache_usage_perc" in vllm_metrics:
+            metric_mapping["Kv Cache Usage Perc"] = "vllm:kv_cache_usage_perc"
+
+        # GPU cache usage percentage (GAUGE)
+        if "vllm:gpu_cache_usage_perc" in vllm_metrics:
+            metric_mapping["Gpu Cache Usage Perc"] = "vllm:gpu_cache_usage_perc"
+
+        # Phase 3: Prefix cache metrics (counters - use increase() for totals during window)
+        if "vllm:prefix_cache_hit_total" in vllm_metrics:
+            metric_mapping["Prefix Cache Hits Total"] = "sum(increase(vllm:prefix_cache_hit_total[5m]))"
+        elif "vllm:cache_prefix_hits_total" in vllm_metrics:
+            metric_mapping["Prefix Cache Hits Total"] = "sum(increase(vllm:cache_prefix_hits_total[5m]))"
+
+        if "vllm:prefix_cache_query_total" in vllm_metrics:
+            metric_mapping["Prefix Cache Queries Total"] = "sum(increase(vllm:prefix_cache_query_total[5m]))"
+        elif "vllm:cache_prefix_queries_total" in vllm_metrics:
+            metric_mapping["Prefix Cache Queries Total"] = "sum(increase(vllm:cache_prefix_queries_total[5m]))"
+
+        if "vllm:gpu_prefix_cache_hit_total" in vllm_metrics:
+            metric_mapping["Gpu Prefix Cache Hits Total"] = "sum(increase(vllm:gpu_prefix_cache_hit_total[5m]))"
+        elif "vllm:gpu_cache_prefix_hits_total" in vllm_metrics:
+            metric_mapping["Gpu Prefix Cache Hits Total"] = "sum(increase(vllm:gpu_cache_prefix_hits_total[5m]))"
+
+        if "vllm:gpu_prefix_cache_query_total" in vllm_metrics:
+            metric_mapping["Gpu Prefix Cache Queries Total"] = "sum(increase(vllm:gpu_prefix_cache_query_total[5m]))"
+        elif "vllm:gpu_cache_prefix_queries_total" in vllm_metrics:
+            metric_mapping["Gpu Prefix Cache Queries Total"] = "sum(increase(vllm:gpu_cache_prefix_queries_total[5m]))"
+
+        # Cache hit/query rates (per second)
+        if "vllm:gpu_prefix_cache_hit_total" in vllm_metrics:
+            metric_mapping["Gpu Prefix Cache Hits Created"] = "rate(vllm:gpu_prefix_cache_hit_total[5m])"
+        elif "vllm:gpu_cache_prefix_hits_total" in vllm_metrics:
+            metric_mapping["Gpu Prefix Cache Hits Created"] = "rate(vllm:gpu_cache_prefix_hits_total[5m])"
+
+        if "vllm:gpu_prefix_cache_query_total" in vllm_metrics:
+            metric_mapping["Gpu Prefix Cache Queries Created"] = "rate(vllm:gpu_prefix_cache_query_total[5m])"
+        elif "vllm:gpu_cache_prefix_queries_total" in vllm_metrics:
+            metric_mapping["Gpu Prefix Cache Queries Created"] = "rate(vllm:gpu_cache_prefix_queries_total[5m])"
+
         # Phase 3: RPC request count (counter)
         if "vllm:rpc_server_request_count" in vllm_metrics:
             metric_mapping["Vllm Rpc Server Request Count"] = "sum(increase(vllm:rpc_server_request_count[5m]))"
@@ -958,14 +1065,19 @@ def discover_vllm_metrics():
         # Add any other vLLM metrics with a generic friendly name if not already mapped
         for metric in vllm_metrics:
             if metric in (
+                # Base token metrics
                 "vllm:request_prompt_tokens_created",
                 "vllm:request_prompt_tokens_total",
+                "vllm:request_prompt_tokens_sum",
+                "vllm:request_prompt_tokens_count",
+                "vllm:prompt_tokens_total",
                 "vllm:request_generation_tokens_created",
                 "vllm:request_generation_tokens_total",
+                "vllm:request_generation_tokens_sum",
+                "vllm:request_generation_tokens_count",
+                "vllm:generation_tokens_total",
+                # Request tracking
                 "vllm:num_requests_running",
-                "vllm:e2e_request_latency_seconds_bucket",
-                "vllm:request_inference_time_seconds_sum",
-                "vllm:request_inference_time_seconds_count",
                 "vllm:num_requests_total",
                 "vllm:request_success_total",
                 "vllm:request_errors_total",
@@ -974,16 +1086,49 @@ def discover_vllm_metrics():
                 "vllm:num_requests_waiting",
                 "vllm:scheduler_pending_requests",
                 "vllm:num_scheduler_pending",
-                "vllm:rpc_server_error_count",
-                "vllm:rpc_server_connection_total",
-                # Phase 2 metrics
-                "vllm:request_generation_tokens_sum",
-                "vllm:generation_tokens_total",
-                "vllm:gpu_cache_usage_perc",
-                "vllm:cache_config_total_gpu_memory",
+                # Latency metrics
+                "vllm:e2e_request_latency_seconds_bucket",
+                "vllm:e2e_request_latency_seconds_sum",
+                "vllm:request_inference_time_seconds_sum",
+                "vllm:request_inference_time_seconds_count",
                 "vllm:time_to_first_token_seconds_sum",
                 "vllm:time_to_first_token_seconds_count",
-                # Phase 3 metrics
+                "vllm:time_per_output_token_seconds_sum",
+                "vllm:request_prefill_time_seconds_sum",
+                "vllm:request_decode_time_seconds_sum",
+                "vllm:request_queue_time_seconds_sum",
+                # Request parameters
+                "vllm:request_max_num_generation_tokens_sum",
+                "vllm:request_max_num_generation_tokens_count",
+                "vllm:request_params_max_tokens_sum",
+                "vllm:request_params_max_tokens_count",
+                "vllm:request_params_n_sum",
+                "vllm:request_params_n_count",
+                "vllm:iteration_tokens_total_sum",
+                "vllm:iteration_tokens_total_count",
+                # RPC metrics
+                "vllm:rpc_server_error_count",
+                "vllm:rpc_server_connection_total",
+                "vllm:rpc_server_request_count",
+                "vllm:rpc_requests_total",
+                # Cache metrics
+                "vllm:kv_cache_usage_perc",
+                "vllm:gpu_cache_usage_perc",
+                "vllm:cache_config_total_gpu_memory",
+                "vllm:kv_cache_usage_bytes",
+                "vllm:gpu_cache_usage_bytes",
+                "vllm:kv_cache_capacity_bytes",
+                "vllm:kv_cache_free_bytes",
+                "vllm:gpu_cache_free_bytes",
+                "vllm:prefix_cache_hit_total",
+                "vllm:prefix_cache_query_total",
+                "vllm:cache_prefix_hits_total",
+                "vllm:cache_prefix_queries_total",
+                "vllm:gpu_prefix_cache_hit_total",
+                "vllm:gpu_prefix_cache_query_total",
+                "vllm:gpu_cache_prefix_hits_total",
+                "vllm:gpu_cache_prefix_queries_total",
+                # Scheduling metrics
                 "vllm:batch_size",
                 "vllm:avg_batch_size",
                 "vllm:num_scheduled_requests",
@@ -991,13 +1136,6 @@ def discover_vllm_metrics():
                 "vllm:batching_idle_time_seconds_sum",
                 "vllm:batching_idle_time_seconds_count",
                 "vllm:scheduler_idle_time_seconds",
-                "vllm:kv_cache_usage_bytes",
-                "vllm:gpu_cache_usage_bytes",
-                "vllm:kv_cache_capacity_bytes",
-                "vllm:kv_cache_free_bytes",
-                "vllm:gpu_cache_free_bytes",
-                "vllm:rpc_server_request_count",
-                "vllm:rpc_requests_total",
             ):
                 continue
             friendly_name = metric.replace("vllm:", "").replace("_", " ").title()
