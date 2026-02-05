@@ -847,6 +847,13 @@ def discover_vllm_metrics():
         elif "vllm:request_errors_total" in vllm_metrics:
             metric_mapping["Request Errors Total"] = "sum(increase(vllm:request_errors_total[5m]))"
 
+        # Phase 1 (missed): OOM Errors - out of memory errors
+        # Counter metric, use increase() for time window
+        if "vllm:oom_errors_total" in vllm_metrics:
+            metric_mapping["Oom Errors Total"] = "sum(increase(vllm:oom_errors_total[5m]))"
+        elif "vllm:request_oom_total" in vllm_metrics:
+            metric_mapping["Oom Errors Total"] = "sum(increase(vllm:request_oom_total[5m]))"
+
         # Waiting requests (queue depth)
         if "vllm:num_requests_waiting" in vllm_metrics:
             metric_mapping["Num Requests Waiting"] = "vllm:num_requests_waiting"
@@ -901,6 +908,53 @@ def discover_vllm_metrics():
                 "sum(rate(vllm:time_to_first_token_seconds_count[5m]))"
             )
 
+        # Phase 3: Scheduling & Queueing metrics
+        # Batch size - current batch size (gauge)
+        if "vllm:batch_size" in vllm_metrics:
+            metric_mapping["Batch Size"] = "vllm:batch_size"
+        elif "vllm:avg_batch_size" in vllm_metrics:
+            metric_mapping["Batch Size"] = "vllm:avg_batch_size"
+
+        # Number of scheduled requests (gauge)
+        if "vllm:num_scheduled_requests" in vllm_metrics:
+            metric_mapping["Num Scheduled Requests"] = "vllm:num_scheduled_requests"
+        elif "vllm:scheduler_scheduled_count" in vllm_metrics:
+            metric_mapping["Num Scheduled Requests"] = "vllm:scheduler_scheduled_count"
+
+        # Batching idle time (average from histogram/summary)
+        if "vllm:batching_idle_time_seconds_sum" in vllm_metrics and "vllm:batching_idle_time_seconds_count" in vllm_metrics:
+            metric_mapping["Batching Idle Time Seconds"] = (
+                "sum(rate(vllm:batching_idle_time_seconds_sum[5m])) / "
+                "sum(rate(vllm:batching_idle_time_seconds_count[5m]))"
+            )
+        elif "vllm:scheduler_idle_time_seconds" in vllm_metrics:
+            metric_mapping["Batching Idle Time Seconds"] = "vllm:scheduler_idle_time_seconds"
+
+        # Phase 3: KV Cache memory metrics (all gauges)
+        # KV cache usage in bytes
+        if "vllm:kv_cache_usage_bytes" in vllm_metrics:
+            metric_mapping["Kv Cache Usage Bytes"] = "vllm:kv_cache_usage_bytes / (1024*1024*1024)"  # Convert to GB
+        elif "vllm:gpu_cache_usage_bytes" in vllm_metrics:
+            metric_mapping["Kv Cache Usage Bytes"] = "vllm:gpu_cache_usage_bytes / (1024*1024*1024)"
+
+        # KV cache capacity in bytes
+        if "vllm:kv_cache_capacity_bytes" in vllm_metrics:
+            metric_mapping["Kv Cache Capacity Bytes"] = "vllm:kv_cache_capacity_bytes / (1024*1024*1024)"  # Convert to GB
+        elif "vllm:cache_config_total_gpu_memory" in vllm_metrics:
+            metric_mapping["Kv Cache Capacity Bytes"] = "vllm:cache_config_total_gpu_memory / (1024*1024*1024)"
+
+        # KV cache free bytes
+        if "vllm:kv_cache_free_bytes" in vllm_metrics:
+            metric_mapping["Kv Cache Free Bytes"] = "vllm:kv_cache_free_bytes / (1024*1024*1024)"  # Convert to GB
+        elif "vllm:gpu_cache_free_bytes" in vllm_metrics:
+            metric_mapping["Kv Cache Free Bytes"] = "vllm:gpu_cache_free_bytes / (1024*1024*1024)"
+
+        # Phase 3: RPC request count (counter)
+        if "vllm:rpc_server_request_count" in vllm_metrics:
+            metric_mapping["Vllm Rpc Server Request Count"] = "sum(increase(vllm:rpc_server_request_count[5m]))"
+        elif "vllm:rpc_requests_total" in vllm_metrics:
+            metric_mapping["Vllm Rpc Server Request Count"] = "sum(increase(vllm:rpc_requests_total[5m]))"
+
         # Add any other vLLM metrics with a generic friendly name if not already mapped
         for metric in vllm_metrics:
             if metric in (
@@ -915,6 +969,8 @@ def discover_vllm_metrics():
                 "vllm:num_requests_total",
                 "vllm:request_success_total",
                 "vllm:request_errors_total",
+                "vllm:oom_errors_total",
+                "vllm:request_oom_total",
                 "vllm:num_requests_waiting",
                 "vllm:scheduler_pending_requests",
                 "vllm:num_scheduler_pending",
@@ -927,6 +983,21 @@ def discover_vllm_metrics():
                 "vllm:cache_config_total_gpu_memory",
                 "vllm:time_to_first_token_seconds_sum",
                 "vllm:time_to_first_token_seconds_count",
+                # Phase 3 metrics
+                "vllm:batch_size",
+                "vllm:avg_batch_size",
+                "vllm:num_scheduled_requests",
+                "vllm:scheduler_scheduled_count",
+                "vllm:batching_idle_time_seconds_sum",
+                "vllm:batching_idle_time_seconds_count",
+                "vllm:scheduler_idle_time_seconds",
+                "vllm:kv_cache_usage_bytes",
+                "vllm:gpu_cache_usage_bytes",
+                "vllm:kv_cache_capacity_bytes",
+                "vllm:kv_cache_free_bytes",
+                "vllm:gpu_cache_free_bytes",
+                "vllm:rpc_server_request_count",
+                "vllm:rpc_requests_total",
             ):
                 continue
             friendly_name = metric.replace("vllm:", "").replace("_", " ").title()
@@ -961,6 +1032,15 @@ def discover_vllm_metrics():
             "Tokens Generated Per Second": "rate(vllm:request_generation_tokens_sum[5m])",
             "Streaming Ttft Seconds": "sum(rate(vllm:time_to_first_token_seconds_sum[5m])) / sum(rate(vllm:time_to_first_token_seconds_count[5m]))",
             "Cache Fragmentation Ratio": "100 - vllm:gpu_cache_usage_perc",
+            # Phase 3: Scheduling, memory capacity, and RPC metrics
+            "Oom Errors Total": "sum(increase(vllm:oom_errors_total[5m]))",
+            "Batch Size": "vllm:batch_size",
+            "Num Scheduled Requests": "vllm:num_scheduled_requests",
+            "Batching Idle Time Seconds": "sum(rate(vllm:batching_idle_time_seconds_sum[5m])) / sum(rate(vllm:batching_idle_time_seconds_count[5m]))",
+            "Kv Cache Usage Bytes": "vllm:kv_cache_usage_bytes / (1024*1024*1024)",
+            "Kv Cache Capacity Bytes": "vllm:kv_cache_capacity_bytes / (1024*1024*1024)",
+            "Kv Cache Free Bytes": "vllm:kv_cache_free_bytes / (1024*1024*1024)",
+            "Vllm Rpc Server Request Count": "sum(increase(vllm:rpc_server_request_count[5m]))",
         }
 
 
