@@ -442,7 +442,7 @@ install-mcp-server: namespace
 			--set rbac.createGrafanaRole=false \
 			--set LLM_PREDICTOR=$(LLM)-predictor \
 			--set env.DEV_MODE=$(DEV_MODE) \
-			--set env.KORREL8R_ENABLED=$(ENABLE_KORREL8R) \
+			--set-string env.KORREL8R_ENABLED=$(ENABLE_KORREL8R) \
 			$(if $(MCP_SERVER_ROUTE_HOST),--set route.host='$(MCP_SERVER_ROUTE_HOST)',) \
 			$(if $(LLAMA_STACK_URL),--set llm.url='$(LLAMA_STACK_URL)',) \
 			-f $(GEN_MODEL_CONFIG_PREFIX)-for_helm.yaml; \
@@ -454,7 +454,7 @@ install-mcp-server: namespace
 			--set rbac.createGrafanaRole=true \
 			--set LLM_PREDICTOR=$(LLM)-predictor \
 			--set env.DEV_MODE=$(DEV_MODE) \
-			--set env.KORREL8R_ENABLED=$(ENABLE_KORREL8R) \
+			--set-string env.KORREL8R_ENABLED=$(ENABLE_KORREL8R) \
 			$(if $(MCP_SERVER_ROUTE_HOST),--set route.host='$(MCP_SERVER_ROUTE_HOST)',) \
 			$(if $(LLAMA_STACK_URL),--set llm.url='$(LLAMA_STACK_URL)',) \
 			-f $(GEN_MODEL_CONFIG_PREFIX)-for_helm.yaml; \
