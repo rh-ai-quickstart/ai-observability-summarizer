@@ -1079,8 +1079,6 @@ def discover_intel_gaudi_metrics():
         return {}
 
 
-
-
 def discover_openshift_metrics():
     """Return comprehensive OpenShift/Kubernetes metrics organized by category"""
     return {

@@ -116,6 +116,10 @@ interface MetricCardProps {
 const MetricCard: React.FC<MetricCardProps> = ({ label, value, unit, description, timeSeries }) => {
   const formatValue = (val: number | null): string => {
     if (val === null || val === undefined || isNaN(val)) return '—';
+    // Show a bit more precision for values where small changes matter
+    // (e.g., GiB memory averages across a long window).
+    if (unit === 'GiB') return val.toFixed(3);
+    if (unit === 'MB/s') return (val < 1 && val > -1) ? val.toFixed(3) : val.toFixed(2);
     if (val >= 1000000000) return `${(val / 1000000000).toFixed(2)}B`;
     if (val >= 1000000) return `${(val / 1000000).toFixed(2)}M`;
     if (val >= 1000) return `${(val / 1000).toFixed(1)}K`;
@@ -236,6 +240,41 @@ const DeviceMetricsPage: React.FC = () => {
   const [intelData, setIntelData] = React.useState<Record<string, MetricDataValue>>({});
   const [loading, setLoading] = React.useState<boolean>(false);
   const [error, setError] = React.useState<string | null>(null);
+
+  // By default, the MCP response provides `latest_value` (instant query at "now") plus a
+  // time series for sparklines across the selected window. For metrics labeled as "Avg"/"Max"
+  // on this page, SREs usually expect the value to reflect the selected time window.
+  // So we derive the displayed value from the time series when available.
+  const getWindowValue = (metricKey: string, metricData?: MetricDataValue): number | null => {
+    if (!metricData) return null;
+
+    const ts = metricData.time_series || [];
+    const values = ts
+      .map((p) => p.value)
+      .filter((v) => v !== null && v !== undefined && !isNaN(v) && isFinite(v));
+
+    if (values.length === 0) {
+      return metricData.latest_value ?? null;
+    }
+
+    // Don’t reinterpret explicit fleet-wide aggregates like "(max)" / "(any)".
+    // Only apply window-aggregation to keys that literally contain "Avg" or "Max".
+    const isExplicitAggregate = metricKey.includes('(max)') || metricKey.includes('(any)');
+    if (isExplicitAggregate) {
+      return metricData.latest_value ?? null;
+    }
+
+    if (metricKey.includes(' Avg')) {
+      const avg = values.reduce((sum, v) => sum + v, 0) / values.length;
+      return avg;
+    }
+
+    if (metricKey.includes(' Max')) {
+      return Math.max(...values);
+    }
+
+    return metricData.latest_value ?? null;
+  };
 
   const loadMetrics = async () => {
     setLoading(true);
@@ -397,7 +436,7 @@ const DeviceMetricsPage: React.FC = () => {
                     <GridItem key={m.key} md={2} sm={4}>
                       <MetricCard
                         label={m.label}
-                        value={metricData?.latest_value ?? null}
+                        value={getWindowValue(m.key, metricData)}
                         unit={m.unit}
                         description={m.description}
                         timeSeries={metricData?.time_series}
@@ -421,7 +460,7 @@ const DeviceMetricsPage: React.FC = () => {
                     <GridItem key={m.key} md={2} sm={4}>
                       <MetricCard
                         label={m.label}
-                        value={metricData?.latest_value ?? null}
+                        value={getWindowValue(m.key, metricData)}
                         unit={m.unit}
                         description={m.description}
                         timeSeries={metricData?.time_series}
