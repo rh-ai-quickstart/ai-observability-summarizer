@@ -33,6 +33,14 @@ This operator provides a single Custom Resource (`AIObservabilitySummarizer`) to
 - Cluster admin access
 - GPU node (for LLM deployment with RAG enabled)
 
+### Automatic Configuration
+
+The operator automatically configures the following cluster-level settings:
+
+- **User Workload Monitoring**: Enables `enableUserWorkload: true` in the `cluster-monitoring-config` ConfigMap (required for PrometheusRules and alerting)
+  - Checks if already enabled before applying (idempotent)
+  - Skips if user workload monitoring is already configured
+
 ### Required Operators (Auto-Installed by OLM)
 
 These operators are declared as OLM dependencies and will be **automatically installed** when this operator is installed:
