@@ -17,6 +17,7 @@ IMAGE_PREFIX ?= aiobs
 VERSION ?= 1.1.0-feature
 PLATFORM ?= linux/amd64
 DEV_MODE ?= false
+ENABLE_KORREL8R ?= true
 
 # Container image names
 METRICS_UI_IMAGE = $(REGISTRY)/$(ORG)/$(IMAGE_PREFIX)-metrics-ui
@@ -219,8 +220,8 @@ help:
 	@echo "  install-korrel8r   - Install Korrel8r via UIPlugin then patch resources"
 	@echo ""
 	@echo "Observability Stack:"
-	@echo "  install-observability-stack - Install complete observability stack (MinIO + TempoStack + LokiStack + OTEL + tracing + logging + drift check)"
-	@echo "  uninstall-observability-stack - Uninstall complete observability stack (tracing + logging + TempoStack + LokiStack + OTEL + MinIO)"
+	@echo "  install-observability-stack - Install complete observability stack (MinIO + TempoStack + LokiStack + OTEL + Korrel8r + tracing + logging + drift check)"
+	@echo "  uninstall-observability-stack - Uninstall complete observability stack (tracing + logging + Korrel8r + TempoStack + LokiStack + OTEL + MinIO)"
 	@echo ""
 	@echo "Operators:"
 	@echo "  install-operators - Install all mandatory operators (observability, otel, tempo, logging, loki)"
@@ -286,6 +287,7 @@ help:
 	@echo "  BUILD_TOOL         - Build tool: docker or podman (auto-detected)"
 	@echo "  NAMESPACE          - OpenShift namespace for deployment"
 	@echo "  DEV_MODE           - Set to 'true' to deploy React UI only, 'false' for Console Plugin only (default: false)"
+	@echo "  ENABLE_KORREL8R    - Set to 'true' to install Korrel8r with observability stack (default: true)"
 	@echo "  HF_TOKEN           - Hugging Face Token (will prompt if not provided and LLM_URL not set)"
 	@echo "  DEVICE             - Deploy models on cpu or gpu (default)"
 	@echo "  LLM                - Model id (eg. llama-3-1-8b-instruct)"
@@ -440,6 +442,7 @@ install-mcp-server: namespace
 			--set rbac.createGrafanaRole=false \
 			--set LLM_PREDICTOR=$(LLM)-predictor \
 			--set env.DEV_MODE=$(DEV_MODE) \
+			--set env.KORREL8R_ENABLED=$(ENABLE_KORREL8R) \
 			$(if $(MCP_SERVER_ROUTE_HOST),--set route.host='$(MCP_SERVER_ROUTE_HOST)',) \
 			$(if $(LLAMA_STACK_URL),--set llm.url='$(LLAMA_STACK_URL)',) \
 			-f $(GEN_MODEL_CONFIG_PREFIX)-for_helm.yaml; \
@@ -451,6 +454,7 @@ install-mcp-server: namespace
 			--set rbac.createGrafanaRole=true \
 			--set LLM_PREDICTOR=$(LLM)-predictor \
 			--set env.DEV_MODE=$(DEV_MODE) \
+			--set env.KORREL8R_ENABLED=$(ENABLE_KORREL8R) \
 			$(if $(MCP_SERVER_ROUTE_HOST),--set route.host='$(MCP_SERVER_ROUTE_HOST)',) \
 			$(if $(LLAMA_STACK_URL),--set llm.url='$(LLAMA_STACK_URL)',) \
 			-f $(GEN_MODEL_CONFIG_PREFIX)-for_helm.yaml; \
@@ -540,7 +544,6 @@ install: namespace enable-user-workload-monitoring depend validate-llm install-o
 		echo "→ DEV_MODE=false: Installing OpenShift Console Plugin only"; \
 		$(MAKE) install-console-plugin NAMESPACE=$(NAMESPACE); \
 	fi
-	@$(MAKE) install-korrel8r
 	@if [ "$(ENABLE_RAG)" != "false" ]; then \
 		echo "Installing RAG backend services (set ENABLE_RAG=false to skip)..."; \
 		$(MAKE) install-rag NAMESPACE=$(NAMESPACE); \
@@ -621,8 +624,6 @@ uninstall:
 	@echo "Uninstalling UI components (both Console Plugin and React UI if they exist)"
 	@$(MAKE) uninstall-console-plugin NAMESPACE=$(NAMESPACE) || true
 	@$(MAKE) uninstall-react-ui NAMESPACE=$(NAMESPACE) || true
-	@echo "Uninstalling Korrel8r helm-managed resources (if installed)"
-	@$(MAKE) uninstall-korrel8r || true
 
 	@echo ""
 	@echo "Checking if observability stack should be uninstalled..."
@@ -928,6 +929,7 @@ install-observability-stack:
 	@$(MAKE) install-observability
 	@$(MAKE) check-observability-drift
 	@$(MAKE) enable-tracing-ui
+	@$(MAKE) install-korrel8r
 
 .PHONY: setup-tracing
 setup-tracing: namespace
@@ -1024,11 +1026,12 @@ uninstall-observability:
 .PHONY: uninstall-observability-stack
 uninstall-observability-stack:
 	@if [ "$(UNINSTALL_OBSERVABILITY)" = "true" ]; then \
-		echo "🗑️  Uninstalling observability stack (includes tracing, logging, and MinIO)"; \
+		echo "🗑️  Uninstalling observability stack (includes tracing, logging, Korrel8r, and MinIO)"; \
 		echo ""; \
 		echo "⚠️  WARNING: This will remove the following components:"; \
 		echo "  → Auto-instrumentation for tracing in namespace $(NAMESPACE)"; \
 		echo "  → TempoStack, LokiStack, and OTEL Collector in namespace $(OBSERVABILITY_NAMESPACE)"; \
+		echo "  → Korrel8r in namespace $(KORREL8R_NAMESPACE)"; \
 		echo "  → MinIO observability storage in namespace $(MINIO_NAMESPACE)"; \
 		echo "  → Distributed Tracing Console Plugin (Observe → Traces menu)"; \
 		echo "  → Logging Console Plugin (Observe → Logs menu)"; \
@@ -1036,6 +1039,7 @@ uninstall-observability-stack:
 		echo "This infrastructure is shared by multiple applications."; \
 		echo ""; \
 		$(MAKE) remove-tracing NAMESPACE=$(NAMESPACE); \
+		$(MAKE) uninstall-korrel8r; \
 		$(MAKE) uninstall-observability; \
 		$(MAKE) uninstall-minio; \
 		$(MAKE) disable-tracing-ui; \
@@ -1045,7 +1049,7 @@ uninstall-observability-stack:
 	else \
 		echo "❌ WARNING: UNINSTALL_OBSERVABILITY is not set to 'true'"; \
 		echo "   Skipping removal of shared observability infrastructure to protect other teams."; \
-		echo "   This infrastructure (TempoStack, LokiStack, OTel Collector) is shared by multiple applications."; \
+		echo "   This infrastructure (TempoStack, LokiStack, OTel Collector, Korrel8r) is shared by multiple applications."; \
 		echo ""; \
 		echo "   To remove observability infrastructure, run:"; \
 		echo "     → make uninstall NAMESPACE=$(NAMESPACE) UNINSTALL_OBSERVABILITY=true"; \
@@ -1184,30 +1188,21 @@ install-minio:
 	@echo "  → Broken upstream routes cleaned up"
 
 
-# Korrel8r installation via UIPlugin then patch
+# Korrel8r installation via Helm
 .PHONY: install-korrel8r
 install-korrel8r:
-	@bash -c '\
-		MCS_NS="$${NAMESPACE:-$$(oc project -q 2>/dev/null)}"; \
-		echo "→ Checking KORREL8R_ENABLED in Helm release $(MCP_SERVER_RELEASE_NAME) (namespace=$$MCS_NS)"; \
-		if ! helm list -n "$$MCS_NS" -q 2>/dev/null | grep -q "^$(MCP_SERVER_RELEASE_NAME)$$"; then \
-		  echo "  → $(MCP_SERVER_RELEASE_NAME) not found in $$MCS_NS; skipping Korrel8r install"; \
-		  exit 0; \
-		fi; \
-		ENABLED=$$(helm get values $(MCP_SERVER_RELEASE_NAME) -n "$$MCS_NS" --all -o json 2>/dev/null | jq -r ".env.KORREL8R_ENABLED // \"\"" | tr "[:upper:]" "[:lower:]"); \
-		if [ "$$ENABLED" != "true" ]; then \
-		  echo "  → KORREL8R_ENABLED=$$ENABLED; skipping Korrel8r install"; \
-		  exit 0; \
-		fi; \
-		echo "  → KORREL8R_ENABLED=true; deploying Korrel8r directly via Helm"; \
-		cd deploy/helm && helm upgrade --install $(KORREL8R_RELEASE_NAME) $(KORREL8R_CHART_PATH) \
-			--namespace $(KORREL8R_NAMESPACE) \
-			--create-namespace \
-			--set global.namespace=$(KORREL8R_NAMESPACE); \
-		echo "→ Waiting for rollout of deployment/$(KORREL8R_RELEASE_NAME)"; \
-		oc rollout status -n $(KORREL8R_NAMESPACE) deployment/$(KORREL8R_RELEASE_NAME) --timeout=10m || true; \
-		echo "✅ Korrel8r installed successfully" \
-	'
+	@if [ "$(ENABLE_KORREL8R)" != "true" ]; then \
+		echo "→ ENABLE_KORREL8R is not set to 'true'; skipping Korrel8r install"; \
+		exit 0; \
+	fi
+	@echo "→ ENABLE_KORREL8R=true; deploying Korrel8r via Helm"
+	@cd deploy/helm && helm upgrade --install $(KORREL8R_RELEASE_NAME) $(KORREL8R_CHART_PATH) \
+		--namespace $(KORREL8R_NAMESPACE) \
+		--create-namespace \
+		--set global.namespace=$(KORREL8R_NAMESPACE)
+	@echo "→ Waiting for rollout of deployment/$(KORREL8R_RELEASE_NAME)"
+	@oc rollout status -n $(KORREL8R_NAMESPACE) deployment/$(KORREL8R_RELEASE_NAME) --timeout=10m || true
+	@echo "✅ Korrel8r installed successfully"
 
 .PHONY: uninstall-korrel8r
 uninstall-korrel8r:
