@@ -303,8 +303,8 @@ const DeviceMetricsPage: React.FC = () => {
       const nvidiaCount = dcgmMetrics['GPU Count']?.latest_value ?? 0;
       const intelCount = intelMetrics['Device Count']?.latest_value ?? 0;
 
-      setHasNvidia(Number(nvidiaCount) > 0);
-      setHasIntel(Number(intelCount) > 0);
+      setHasNvidia(nvidiaCount > 0);
+      setHasIntel(intelCount > 0);
       setNvidiaData(dcgmMetrics);
       setIntelData(intelMetrics);
     } catch (err) {
