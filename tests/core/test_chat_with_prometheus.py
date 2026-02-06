@@ -291,12 +291,16 @@ class TestErrorHandling:
     def test_find_best_metric_no_candidates(self):
         """Test handling when no metrics are found."""
         from core.chat_with_prometheus import find_best_metric_with_metadata
-        
-        with patch('core.chat_with_prometheus.make_prometheus_request') as mock_request:
-            mock_request.return_value = {"data": []}  # No metrics available
-            
-            with pytest.raises(ValueError, match="No relevant metrics found"):
-                find_best_metric_with_metadata("test question")
+        from core.metrics_catalog import MetricsCatalog
+
+        # Ensure catalog is not available so we test the fallback path
+        with patch('core.metrics_catalog._catalog_instance', None):
+            with patch.object(MetricsCatalog, '_get_default_catalog_path', side_effect=FileNotFoundError("Catalog not found")):
+                with patch('core.chat_with_prometheus.make_prometheus_request') as mock_request:
+                    mock_request.return_value = {"data": []}  # No metrics available
+
+                    with pytest.raises(ValueError, match="No relevant metrics found"):
+                        find_best_metric_with_metadata("test question")
 
 
 if __name__ == "__main__":

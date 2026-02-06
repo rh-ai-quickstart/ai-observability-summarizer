@@ -1075,6 +1075,13 @@ ${report.analysis}
     }
   };
 
+  // HTML escaping helper to prevent XSS
+  const escapeHtml = (text: string): string => {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  };
+
   const downloadHTML = () => {
     try {
       const report = generateReportContent();
@@ -1083,7 +1090,7 @@ ${report.analysis}
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${report.title}</title>
+    <title>${escapeHtml(report.title)}</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; }
         h1 { color: #1f2937; border-bottom: 2px solid #3b82f6; padding-bottom: 10px; }
@@ -1100,13 +1107,13 @@ ${report.analysis}
     </style>
 </head>
 <body>
-    <h1>${report.title}</h1>
+    <h1>${escapeHtml(report.title)}</h1>
     
     <div class="metadata">
-        <strong>Category:</strong> ${report.category}<br>
-        <strong>Scope:</strong> ${report.scope}<br>
-        <strong>Time Range:</strong> ${report.timeRange}<br>
-        <strong>Generated:</strong> ${new Date(report.timestamp).toLocaleString()}
+        <strong>Category:</strong> ${escapeHtml(report.category)}<br>
+        <strong>Scope:</strong> ${escapeHtml(report.scope)}<br>
+        <strong>Time Range:</strong> ${escapeHtml(report.timeRange)}<br>
+        <strong>Generated:</strong> ${escapeHtml(new Date(report.timestamp).toLocaleString())}
     </div>
 
     <h2>Metrics Summary</h2>
@@ -1121,9 +1128,9 @@ ${report.analysis}
         <tbody>
             ${report.metrics.map(metric => `
                 <tr>
-                    <td><strong>${metric.name}</strong></td>
-                    <td>${metric.value}</td>
-                    <td>${metric.description}</td>
+                    <td><strong>${escapeHtml(metric.name)}</strong></td>
+                    <td>${escapeHtml(metric.value)}</td>
+                    <td>${escapeHtml(metric.description)}</td>
                 </tr>
             `).join('')}
         </tbody>
@@ -1131,7 +1138,7 @@ ${report.analysis}
 
     <h2>AI Analysis</h2>
     <div class="analysis">
-        ${report.analysis.replace(/\n/g, '<br>')}
+        ${escapeHtml(report.analysis).replace(/\n/g, '<br>')}
     </div>
 
     <div class="footer">

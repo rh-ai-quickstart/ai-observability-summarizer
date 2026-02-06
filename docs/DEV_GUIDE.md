@@ -55,6 +55,7 @@ summarizer/
 │   ├── core/              # Core logic tests
 │   └── alerting/          # Alerting tests
 ├── scripts/               # Development and deployment scripts
+│   └── metrics/           # Metrics CLI tool for catalog management
 └── docs/                  # Documentation
 ```
 
@@ -430,6 +431,27 @@ make install NAMESPACE=your-ns LLM=llama-3.1-8b-instruct
 2. Implement business logic in appropriate `src/core/` module
 3. Add MCP tool in `src/mcp_server/tools/`
 4. Add corresponding tests
+
+### Managing the Metrics Catalog
+
+The `scripts/metrics/metrics_cli.py` tool manages the optimized metrics catalog used by AI Chat for intelligent metric discovery.
+
+```bash
+# Regenerate the metrics catalog (requires Prometheus access)
+python scripts/metrics/metrics_cli.py -a              # Run all: fetch → categorize → optimize
+
+# Individual steps
+python scripts/metrics/metrics_cli.py -f              # Fetch from Prometheus
+python scripts/metrics/metrics_cli.py -c              # Categorize by priority
+python scripts/metrics/metrics_cli.py -m              # Optimize with keywords
+
+# Options
+python scripts/metrics/metrics_cli.py -h              # Show all options
+python scripts/metrics/metrics_cli.py -a -v           # Verbose output
+python scripts/metrics/metrics_cli.py -m -o out.json  # Custom output path
+```
+
+**Output**: `src/mcp_server/data/openshift-metrics-optimized.json` - Contains categorized metrics with keywords for AI-powered search.
 
 ### Error Handling
 - API endpoints use HTTPException for user-facing errors
