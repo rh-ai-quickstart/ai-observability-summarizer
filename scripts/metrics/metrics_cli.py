@@ -636,19 +636,58 @@ class MetricsCategorizer:
     def _init_priority_patterns(self):
         """Initialize priority assignment patterns."""
         self.high_priority_patterns = [
+            # Cluster health
             r"^cluster_(operator|version|infrastructure)",
+            r"^up$",
+
+            # Node hardware
             r"^node_(cpu|memory|disk|network)_",
+            r"^kube_node_status",
+
+            # Pod/container
             r"^container_(cpu|memory|fs)_",
             r"^pod_status_",
-            r"^kube_node_status",
             r"^kube_pod_(status|container_status)",
+
+            # etcd
             r"^etcd_(server|disk|network)_",
+
+            # API server
             r"^apiserver_(request|storage|cache)_",
-            r"^up$",
-            r"^kubelet_node_(name|status)",
+
+            # GPU/AI
             r"^DCGM_FI_DEV_(GPU_UTIL|GPU_TEMP|MEMORY_TEMP|POWER_USAGE)",
             r"^vllm:.*_(latency|throughput|errors)",
-            r"^kubelet_volume_stats_(available|capacity|used)",
+
+            # Kubelet
+            r"^kubelet_(node_|running_|volume_stats_|pleg_)",
+
+            # Networking - CoreDNS, OVN
+            r"^coredns_dns_(requests_total|request_duration|responses_total)",
+            r"^coredns_forward_(requests_total|responses_total|healthcheck)",
+            r"^ovn_controller_(southbound|northbound)",
+
+            # Scheduler
+            r"^scheduler_(pending_pods|scheduling_duration|queue_)",
+
+            # Controller Manager
+            r"^controller_runtime_reconcile_(total|errors_total)",
+
+            # Observability - Alertmanager, Prometheus
+            r"^alertmanager_alerts$",
+            r"^alertmanager_notifications_total",
+            r"^prometheus_tsdb_(head_|compactions_)",
+
+            # Security
+            r"^authentication_(attempts|duration)",
+            r"^authorization_(attempts|duration)",
+
+            # Image Registry
+            r"^imageregistry_http_requests_total",
+
+            # OpenShift specific
+            r"^csv_(count|succeeded|abnormal)",
+            r"^openshift_apps_deploymentconfigs_",
         ]
 
         self.medium_priority_patterns = [

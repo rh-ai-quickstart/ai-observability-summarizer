@@ -1,8 +1,8 @@
 {
   "metadata": {
-    "generated": "2026-02-06 16:56:08",
-    "source_file": "openshift-metrics-categories-20260206_165608.json",
-    "total_metrics": 1974,
+    "generated": "2026-02-07 17:33:05",
+    "source_file": "openshift-metrics-categories-20260207_173305.json",
+    "total_metrics": 1992,
     "description": "Optimized OpenShift metrics with keywords for AI Chat"
   },
   "categories": [
@@ -2661,6 +2661,18 @@
             "type": "gauge",
             "help": "[STABLE] Describes the unschedulable status for the pod.",
             "keywords": ["current", "value", "pod", "pods", "kube", "status", "unschedulable", "describes", "stable"]
+          },
+          {
+            "name": "kubelet_running_containers",
+            "type": "gauge",
+            "help": "[ALPHA] Number of containers currently running",
+            "keywords": ["current", "value", "kubelet", "node agent", "containers", "running", "alpha", "currently", "number"]
+          },
+          {
+            "name": "kubelet_running_pods",
+            "type": "gauge",
+            "help": "[ALPHA] Number of pods that have a running pod sandbox",
+            "keywords": ["current", "value", "kubelet", "node agent", "pods", "running", "alpha", "number", "pod", "sandbox"]
           }
         ],
         "Medium": [
@@ -3033,18 +3045,6 @@
             "type": "gauge",
             "help": "Information about the pod tolerations",
             "keywords": ["current", "value", "pod", "pods", "kube", "tolerations", "about", "information"]
-          },
-          {
-            "name": "kubelet_running_containers",
-            "type": "gauge",
-            "help": "[ALPHA] Number of containers currently running",
-            "keywords": ["current", "value", "kubelet", "node agent", "containers", "running", "alpha", "currently", "number"]
-          },
-          {
-            "name": "kubelet_running_pods",
-            "type": "gauge",
-            "help": "[ALPHA] Number of pods that have a running pod sandbox",
-            "keywords": ["current", "value", "kubelet", "node agent", "pods", "running", "alpha", "number", "pod", "sandbox"]
           },
           {
             "name": "pod_interface_network:container_network_receive_bytes:irate5m",
@@ -3585,7 +3585,44 @@
       "purpose": "Network traffic, service mesh, load balancing, DNS",
       "keywords": ["network", "traffic", "service", "ingress", "egress", "dns"],
       "metrics": {
-        "High": [],
+        "High": [
+          {
+            "name": "coredns_dns_request_duration_seconds_bucket",
+            "keywords": ["delay", "duration", "latency", "p50", "p90", "p95", "p99", "percentile", "req", "requests", "response time", "slow"]
+          },
+          {
+            "name": "coredns_dns_request_duration_seconds_count",
+            "keywords": ["delay", "duration", "latency", "req", "requests", "response time", "slow", "time", "coredns", "count", "dns", "request"]
+          },
+          {
+            "name": "coredns_dns_request_duration_seconds_sum",
+            "keywords": ["delay", "duration", "latency", "req", "requests", "response time", "slow", "time", "coredns", "dns", "request", "sum"]
+          },
+          {
+            "name": "coredns_dns_requests_total",
+            "type": "counter",
+            "help": "Counter of DNS requests made per zone, protocol and family.",
+            "keywords": ["count", "rate", "total", "cumulative", "req", "requests", "coredns", "dns", "counter", "family", "made", "protocol"]
+          },
+          {
+            "name": "coredns_dns_responses_total",
+            "type": "counter",
+            "help": "Counter of response status codes.",
+            "keywords": ["count", "rate", "total", "cumulative", "coredns", "dns", "responses", "codes", "counter", "response", "status"]
+          },
+          {
+            "name": "coredns_forward_healthcheck_broken_total",
+            "type": "counter",
+            "help": "Counter of the number of complete failures of the healthchecks.",
+            "keywords": ["count", "rate", "total", "cumulative", "error", "failed", "failure", "health", "healthy", "liveness", "ready", "broken"]
+          },
+          {
+            "name": "ovn_controller_southbound_database_connected",
+            "type": "gauge",
+            "help": "Specifies if OVN controller is connected to OVN southbound database (1) or not (0)",
+            "keywords": ["current", "value", "connected", "controller", "database", "ovn", "southbound", "specifies"]
+          }
+        ],
         "Medium": [
           {
             "name": "coredns_cache_hits_total",
@@ -3606,34 +3643,12 @@
             "keywords": ["count", "rate", "total", "cumulative", "req", "requests", "cache", "coredns"]
           },
           {
-            "name": "coredns_dns_request_duration_seconds_count",
-            "keywords": ["delay", "duration", "latency", "req", "requests", "response time", "slow", "time", "coredns", "count", "dns", "request"]
-          },
-          {
             "name": "coredns_dns_request_size_bytes_count",
             "keywords": ["req", "requests", "size", "storage", "coredns", "count", "dns", "request"]
           },
           {
-            "name": "coredns_dns_requests_total",
-            "type": "counter",
-            "help": "Counter of DNS requests made per zone, protocol and family.",
-            "keywords": ["count", "rate", "total", "cumulative", "req", "requests", "coredns", "dns", "counter", "family", "made", "protocol"]
-          },
-          {
             "name": "coredns_dns_response_size_bytes_count",
             "keywords": ["size", "storage", "coredns", "count", "dns", "response"]
-          },
-          {
-            "name": "coredns_dns_responses_total",
-            "type": "counter",
-            "help": "Counter of response status codes.",
-            "keywords": ["count", "rate", "total", "cumulative", "coredns", "dns", "responses", "codes", "counter", "response", "status"]
-          },
-          {
-            "name": "coredns_forward_healthcheck_broken_total",
-            "type": "counter",
-            "help": "Counter of the number of complete failures of the healthchecks.",
-            "keywords": ["count", "rate", "total", "cumulative", "error", "failed", "failure", "health", "healthy", "liveness", "ready", "broken"]
           },
           {
             "name": "coredns_forward_max_concurrent_rejects_total",
@@ -4416,6 +4431,24 @@
             "keywords": ["current", "value", "disk", "kubelet", "node agent", "size", "storage", "volume", "capacity", "stats", "alpha"]
           },
           {
+            "name": "kubelet_volume_stats_inodes",
+            "type": "gauge",
+            "help": "[ALPHA] Maximum number of inodes in the volume",
+            "keywords": ["current", "value", "disk", "kubelet", "node agent", "storage", "volume", "inodes", "stats", "alpha", "maximum", "number"]
+          },
+          {
+            "name": "kubelet_volume_stats_inodes_free",
+            "type": "gauge",
+            "help": "[ALPHA] Number of free inodes in the volume",
+            "keywords": ["current", "value", "disk", "kubelet", "node agent", "storage", "volume", "free", "inodes", "stats", "alpha", "number"]
+          },
+          {
+            "name": "kubelet_volume_stats_inodes_used",
+            "type": "gauge",
+            "help": "[ALPHA] Number of used inodes in the volume",
+            "keywords": ["current", "value", "disk", "kubelet", "node agent", "storage", "volume", "inodes", "stats", "used", "alpha", "number"]
+          },
+          {
             "name": "kubelet_volume_stats_used_bytes",
             "type": "gauge",
             "help": "[ALPHA] Number of used bytes in the volume",
@@ -4459,14 +4492,155 @@
       "purpose": "Prometheus, Alertmanager, Thanos metrics",
       "keywords": ["prometheus", "metrics", "monitoring", "alerts", "thanos"],
       "metrics": {
-        "High": [],
-        "Medium": [
+        "High": [
           {
             "name": "alertmanager_alerts",
             "type": "gauge",
             "help": "How many alerts by state.",
             "keywords": ["current", "value", "alert", "alerting", "firing", "alertmanager", "alerts", "many", "state"]
           },
+          {
+            "name": "alertmanager_notifications_total",
+            "type": "counter",
+            "help": "The total number of attempted notifications.",
+            "keywords": ["count", "rate", "total", "alert", "alerting", "cumulative", "firing", "heat", "overheating", "temperature", "thermal", "alertmanager"]
+          },
+          {
+            "name": "prometheus_tsdb_compactions_failed_total",
+            "type": "counter",
+            "help": "Total number of compactions that failed for the partition.",
+            "keywords": ["count", "rate", "total", "cumulative", "error", "failed", "failure", "metrics", "monitoring", "prometheus", "compactions", "tsdb"]
+          },
+          {
+            "name": "prometheus_tsdb_compactions_skipped_total",
+            "type": "counter",
+            "help": "Total number of skipped compactions due to disabled auto compaction.",
+            "keywords": ["count", "rate", "total", "cumulative", "metrics", "monitoring", "prometheus", "compactions", "skipped", "tsdb", "auto", "compaction"]
+          },
+          {
+            "name": "prometheus_tsdb_compactions_total",
+            "type": "counter",
+            "help": "Total number of compactions that were executed for the partition.",
+            "keywords": ["count", "rate", "total", "cumulative", "metrics", "monitoring", "prometheus", "compactions", "tsdb", "executed", "number", "partition"]
+          },
+          {
+            "name": "prometheus_tsdb_compactions_triggered_total",
+            "type": "counter",
+            "help": "Total number of triggered compactions for the partition.",
+            "keywords": ["count", "rate", "total", "cumulative", "metrics", "monitoring", "prometheus", "compactions", "triggered", "tsdb", "number", "partition"]
+          },
+          {
+            "name": "prometheus_tsdb_head_active_appenders",
+            "type": "gauge",
+            "help": "Number of currently active appender transactions",
+            "keywords": ["current", "value", "metrics", "monitoring", "prometheus", "active", "appenders", "head", "tsdb", "appender", "currently", "number"]
+          },
+          {
+            "name": "prometheus_tsdb_head_chunks",
+            "type": "gauge",
+            "help": "Total number of chunks in the head block.",
+            "keywords": ["current", "value", "metrics", "monitoring", "prometheus", "chunks", "head", "tsdb", "block", "number", "total"]
+          },
+          {
+            "name": "prometheus_tsdb_head_chunks_created_total",
+            "type": "counter",
+            "help": "Total number of chunks created in the head",
+            "keywords": ["count", "rate", "total", "cumulative", "metrics", "monitoring", "prometheus", "chunks", "created", "head", "tsdb", "number"]
+          },
+          {
+            "name": "prometheus_tsdb_head_chunks_removed_total",
+            "type": "counter",
+            "help": "Total number of chunks removed in the head",
+            "keywords": ["count", "rate", "total", "cumulative", "metrics", "monitoring", "prometheus", "chunks", "head", "removed", "tsdb", "number"]
+          },
+          {
+            "name": "prometheus_tsdb_head_chunks_storage_size_bytes",
+            "type": "gauge",
+            "help": "Size of the chunks_head directory.",
+            "keywords": ["current", "value", "metrics", "monitoring", "prometheus", "size", "storage", "chunks", "head", "tsdb", "directory"]
+          },
+          {
+            "name": "prometheus_tsdb_head_gc_duration_seconds_count",
+            "keywords": ["delay", "duration", "latency", "metrics", "monitoring", "prometheus", "response time", "slow", "time", "count", "gc", "head"]
+          },
+          {
+            "name": "prometheus_tsdb_head_gc_duration_seconds_sum",
+            "keywords": ["delay", "duration", "latency", "metrics", "monitoring", "prometheus", "response time", "slow", "time", "gc", "head", "sum"]
+          },
+          {
+            "name": "prometheus_tsdb_head_max_time",
+            "type": "gauge",
+            "help": "Maximum timestamp of the head block. The unit is decided by the library consumer.",
+            "keywords": ["current", "value", "delay", "duration", "latency", "metrics", "monitoring", "prometheus", "response time", "slow", "head", "max"]
+          },
+          {
+            "name": "prometheus_tsdb_head_max_time_seconds",
+            "type": "gauge",
+            "help": "Maximum timestamp of the head block.",
+            "keywords": ["current", "value", "delay", "duration", "latency", "metrics", "monitoring", "prometheus", "response time", "slow", "time", "head"]
+          },
+          {
+            "name": "prometheus_tsdb_head_min_time",
+            "type": "gauge",
+            "help": "Minimum time bound of the head block. The unit is decided by the library consumer.",
+            "keywords": ["current", "value", "delay", "duration", "latency", "metrics", "monitoring", "prometheus", "response time", "slow", "head", "min"]
+          },
+          {
+            "name": "prometheus_tsdb_head_min_time_seconds",
+            "type": "gauge",
+            "help": "Minimum time bound of the head block.",
+            "keywords": ["current", "value", "delay", "duration", "latency", "metrics", "monitoring", "prometheus", "response time", "slow", "time", "head"]
+          },
+          {
+            "name": "prometheus_tsdb_head_out_of_order_samples_appended_total",
+            "type": "counter",
+            "help": "Total number of appended out of order samples.",
+            "keywords": ["count", "rate", "total", "cumulative", "metrics", "monitoring", "prometheus", "appended", "head", "order", "out", "samples"]
+          },
+          {
+            "name": "prometheus_tsdb_head_samples_appended_total",
+            "type": "counter",
+            "help": "Total number of appended samples.",
+            "keywords": ["count", "rate", "total", "cumulative", "metrics", "monitoring", "prometheus", "appended", "head", "samples", "tsdb", "number"]
+          },
+          {
+            "name": "prometheus_tsdb_head_series",
+            "type": "gauge",
+            "help": "Total number of series in the head block.",
+            "keywords": ["current", "value", "metrics", "monitoring", "prometheus", "head", "series", "tsdb", "block", "number", "total"]
+          },
+          {
+            "name": "prometheus_tsdb_head_series_created_total",
+            "type": "counter",
+            "help": "Total number of series created in the head",
+            "keywords": ["count", "rate", "total", "cumulative", "metrics", "monitoring", "prometheus", "created", "head", "series", "tsdb", "number"]
+          },
+          {
+            "name": "prometheus_tsdb_head_series_not_found_total",
+            "type": "counter",
+            "help": "Total number of requests for series that were not found.",
+            "keywords": ["count", "rate", "total", "cumulative", "metrics", "monitoring", "prometheus", "req", "requests", "found", "head", "series"]
+          },
+          {
+            "name": "prometheus_tsdb_head_series_removed_total",
+            "type": "counter",
+            "help": "Total number of series removed in the head",
+            "keywords": ["count", "rate", "total", "cumulative", "metrics", "monitoring", "prometheus", "head", "removed", "series", "tsdb", "number"]
+          },
+          {
+            "name": "prometheus_tsdb_head_truncations_failed_total",
+            "type": "counter",
+            "help": "Total number of head truncations that failed.",
+            "keywords": ["count", "rate", "total", "cumulative", "error", "failed", "failure", "metrics", "monitoring", "prometheus", "head", "truncations"]
+          },
+          {
+            "name": "prometheus_tsdb_head_truncations_total",
+            "type": "counter",
+            "help": "Total number of head truncations attempted.",
+            "keywords": ["count", "rate", "total", "cumulative", "heat", "metrics", "monitoring", "overheating", "prometheus", "temperature", "thermal", "head"]
+          }
+        ],
+        "Medium": [
           {
             "name": "alertmanager_alerts_invalid_total",
             "type": "counter",
@@ -4654,12 +4828,6 @@
             "type": "counter",
             "help": "The total number of failed notifications.",
             "keywords": ["count", "rate", "total", "alert", "alerting", "cumulative", "error", "failed", "failure", "firing", "alertmanager", "notifications"]
-          },
-          {
-            "name": "alertmanager_notifications_total",
-            "type": "counter",
-            "help": "The total number of attempted notifications.",
-            "keywords": ["count", "rate", "total", "alert", "alerting", "cumulative", "firing", "heat", "overheating", "temperature", "thermal", "alertmanager"]
           },
           {
             "name": "alertmanager_oversize_gossip_message_duration_seconds_count",
@@ -5564,30 +5732,6 @@
             "keywords": ["current", "value", "disk", "metrics", "monitoring", "prometheus", "storage", "volume", "block", "compaction", "populating", "tsdb"]
           },
           {
-            "name": "prometheus_tsdb_compactions_failed_total",
-            "type": "counter",
-            "help": "Total number of compactions that failed for the partition.",
-            "keywords": ["count", "rate", "total", "cumulative", "error", "failed", "failure", "metrics", "monitoring", "prometheus", "compactions", "tsdb"]
-          },
-          {
-            "name": "prometheus_tsdb_compactions_skipped_total",
-            "type": "counter",
-            "help": "Total number of skipped compactions due to disabled auto compaction.",
-            "keywords": ["count", "rate", "total", "cumulative", "metrics", "monitoring", "prometheus", "compactions", "skipped", "tsdb", "auto", "compaction"]
-          },
-          {
-            "name": "prometheus_tsdb_compactions_total",
-            "type": "counter",
-            "help": "Total number of compactions that were executed for the partition.",
-            "keywords": ["count", "rate", "total", "cumulative", "metrics", "monitoring", "prometheus", "compactions", "tsdb", "executed", "number", "partition"]
-          },
-          {
-            "name": "prometheus_tsdb_compactions_triggered_total",
-            "type": "counter",
-            "help": "Total number of triggered compactions for the partition.",
-            "keywords": ["count", "rate", "total", "cumulative", "metrics", "monitoring", "prometheus", "compactions", "triggered", "tsdb", "number", "partition"]
-          },
-          {
             "name": "prometheus_tsdb_data_replay_duration_seconds",
             "type": "gauge",
             "help": "Time taken to replay the data on disk.",
@@ -5628,116 +5772,6 @@
             "type": "gauge",
             "help": "Number of series with exemplars currently in circular storage.",
             "keywords": ["current", "value", "metrics", "monitoring", "prometheus", "exemplar", "exemplars", "series", "storage", "tsdb", "circular", "currently"]
-          },
-          {
-            "name": "prometheus_tsdb_head_active_appenders",
-            "type": "gauge",
-            "help": "Number of currently active appender transactions",
-            "keywords": ["current", "value", "metrics", "monitoring", "prometheus", "active", "appenders", "head", "tsdb", "appender", "currently", "number"]
-          },
-          {
-            "name": "prometheus_tsdb_head_chunks",
-            "type": "gauge",
-            "help": "Total number of chunks in the head block.",
-            "keywords": ["current", "value", "metrics", "monitoring", "prometheus", "chunks", "head", "tsdb", "block", "number", "total"]
-          },
-          {
-            "name": "prometheus_tsdb_head_chunks_created_total",
-            "type": "counter",
-            "help": "Total number of chunks created in the head",
-            "keywords": ["count", "rate", "total", "cumulative", "metrics", "monitoring", "prometheus", "chunks", "created", "head", "tsdb", "number"]
-          },
-          {
-            "name": "prometheus_tsdb_head_chunks_removed_total",
-            "type": "counter",
-            "help": "Total number of chunks removed in the head",
-            "keywords": ["count", "rate", "total", "cumulative", "metrics", "monitoring", "prometheus", "chunks", "head", "removed", "tsdb", "number"]
-          },
-          {
-            "name": "prometheus_tsdb_head_chunks_storage_size_bytes",
-            "type": "gauge",
-            "help": "Size of the chunks_head directory.",
-            "keywords": ["current", "value", "metrics", "monitoring", "prometheus", "size", "storage", "chunks", "head", "tsdb", "directory"]
-          },
-          {
-            "name": "prometheus_tsdb_head_gc_duration_seconds_count",
-            "keywords": ["delay", "duration", "latency", "metrics", "monitoring", "prometheus", "response time", "slow", "time", "count", "gc", "head"]
-          },
-          {
-            "name": "prometheus_tsdb_head_gc_duration_seconds_sum",
-            "keywords": ["delay", "duration", "latency", "metrics", "monitoring", "prometheus", "response time", "slow", "time", "gc", "head", "sum"]
-          },
-          {
-            "name": "prometheus_tsdb_head_max_time",
-            "type": "gauge",
-            "help": "Maximum timestamp of the head block. The unit is decided by the library consumer.",
-            "keywords": ["current", "value", "delay", "duration", "latency", "metrics", "monitoring", "prometheus", "response time", "slow", "head", "max"]
-          },
-          {
-            "name": "prometheus_tsdb_head_max_time_seconds",
-            "type": "gauge",
-            "help": "Maximum timestamp of the head block.",
-            "keywords": ["current", "value", "delay", "duration", "latency", "metrics", "monitoring", "prometheus", "response time", "slow", "time", "head"]
-          },
-          {
-            "name": "prometheus_tsdb_head_min_time",
-            "type": "gauge",
-            "help": "Minimum time bound of the head block. The unit is decided by the library consumer.",
-            "keywords": ["current", "value", "delay", "duration", "latency", "metrics", "monitoring", "prometheus", "response time", "slow", "head", "min"]
-          },
-          {
-            "name": "prometheus_tsdb_head_min_time_seconds",
-            "type": "gauge",
-            "help": "Minimum time bound of the head block.",
-            "keywords": ["current", "value", "delay", "duration", "latency", "metrics", "monitoring", "prometheus", "response time", "slow", "time", "head"]
-          },
-          {
-            "name": "prometheus_tsdb_head_out_of_order_samples_appended_total",
-            "type": "counter",
-            "help": "Total number of appended out of order samples.",
-            "keywords": ["count", "rate", "total", "cumulative", "metrics", "monitoring", "prometheus", "appended", "head", "order", "out", "samples"]
-          },
-          {
-            "name": "prometheus_tsdb_head_samples_appended_total",
-            "type": "counter",
-            "help": "Total number of appended samples.",
-            "keywords": ["count", "rate", "total", "cumulative", "metrics", "monitoring", "prometheus", "appended", "head", "samples", "tsdb", "number"]
-          },
-          {
-            "name": "prometheus_tsdb_head_series",
-            "type": "gauge",
-            "help": "Total number of series in the head block.",
-            "keywords": ["current", "value", "metrics", "monitoring", "prometheus", "head", "series", "tsdb", "block", "number", "total"]
-          },
-          {
-            "name": "prometheus_tsdb_head_series_created_total",
-            "type": "counter",
-            "help": "Total number of series created in the head",
-            "keywords": ["count", "rate", "total", "cumulative", "metrics", "monitoring", "prometheus", "created", "head", "series", "tsdb", "number"]
-          },
-          {
-            "name": "prometheus_tsdb_head_series_not_found_total",
-            "type": "counter",
-            "help": "Total number of requests for series that were not found.",
-            "keywords": ["count", "rate", "total", "cumulative", "metrics", "monitoring", "prometheus", "req", "requests", "found", "head", "series"]
-          },
-          {
-            "name": "prometheus_tsdb_head_series_removed_total",
-            "type": "counter",
-            "help": "Total number of series removed in the head",
-            "keywords": ["count", "rate", "total", "cumulative", "metrics", "monitoring", "prometheus", "head", "removed", "series", "tsdb", "number"]
-          },
-          {
-            "name": "prometheus_tsdb_head_truncations_failed_total",
-            "type": "counter",
-            "help": "Total number of head truncations that failed.",
-            "keywords": ["count", "rate", "total", "cumulative", "error", "failed", "failure", "metrics", "monitoring", "prometheus", "head", "truncations"]
-          },
-          {
-            "name": "prometheus_tsdb_head_truncations_total",
-            "type": "counter",
-            "help": "Total number of head truncations attempted.",
-            "keywords": ["count", "rate", "total", "cumulative", "heat", "metrics", "monitoring", "overheating", "prometheus", "temperature", "thermal", "head"]
           },
           {
             "name": "prometheus_tsdb_isolation_high_watermark",
@@ -6782,7 +6816,20 @@
       "purpose": "Scheduler decisions, queue depth, preemption",
       "keywords": ["scheduler", "scheduling", "pending", "preemption"],
       "metrics": {
-        "High": [],
+        "High": [
+          {
+            "name": "scheduler_pending_pods",
+            "type": "gauge",
+            "help": "[STABLE] Number of pending pods, by the queue type. 'active' means number of pods in activeQ; 'backoff' means number of pods in backoffQ; 'unschedulable' means number of pods in unschedulablePods that the scheduler attempted to schedule and failed; 'gated' is the number of unschedulable pods that the scheduler never attempted to schedule because they are gated.",
+            "keywords": ["current", "value", "backlog", "error", "failed", "failure", "heat", "overheating", "pending", "queue", "scheduler", "scheduling"]
+          },
+          {
+            "name": "scheduler_queue_incoming_pods_total",
+            "type": "counter",
+            "help": "[STABLE] Number of pods added to scheduling queues by event and queue type.",
+            "keywords": ["count", "rate", "total", "backlog", "cumulative", "pending", "queue", "scheduler", "scheduling", "waiting", "incoming", "pods"]
+          }
+        ],
         "Medium": [
           {
             "name": "scheduler_cache_size",
@@ -6817,12 +6864,6 @@
             "type": "gauge",
             "help": "[ALPHA] Number of events currently tracked in the scheduling queue.",
             "keywords": ["current", "value", "backlog", "pending", "queue", "scheduler", "scheduling", "waiting", "events", "inflight", "alpha", "currently"]
-          },
-          {
-            "name": "scheduler_pending_pods",
-            "type": "gauge",
-            "help": "[STABLE] Number of pending pods, by the queue type. 'active' means number of pods in activeQ; 'backoff' means number of pods in backoffQ; 'unschedulable' means number of pods in unschedulablePods that the scheduler attempted to schedule and failed; 'gated' is the number of unschedulable pods that the scheduler never attempted to schedule because they are gated.",
-            "keywords": ["current", "value", "backlog", "error", "failed", "failure", "heat", "overheating", "pending", "queue", "scheduler", "scheduling"]
           },
           {
             "name": "scheduler_plugin_evaluation_total",
@@ -6883,12 +6924,6 @@
             "keywords": ["pending", "scheduler", "scheduling", "preemption", "sum", "victims"]
           },
           {
-            "name": "scheduler_queue_incoming_pods_total",
-            "type": "counter",
-            "help": "[STABLE] Number of pods added to scheduling queues by event and queue type.",
-            "keywords": ["count", "rate", "total", "backlog", "cumulative", "pending", "queue", "scheduler", "scheduling", "waiting", "incoming", "pods"]
-          },
-          {
             "name": "scheduler_queueing_hint_execution_duration_seconds_count",
             "keywords": ["backlog", "delay", "duration", "latency", "pending", "queue", "response time", "scheduler", "scheduling", "slow", "time", "waiting"]
           },
@@ -6946,12 +6981,45 @@
       "purpose": "Authentication, authorization, certificates",
       "keywords": ["security", "auth", "oauth", "rbac", "identity"],
       "metrics": {
-        "High": [],
-        "Medium": [
+        "High": [
+          {
+            "name": "authentication_attempts",
+            "type": "counter",
+            "help": "[ALPHA] Counter of authenticated attempts.",
+            "keywords": ["count", "rate", "total", "heat", "overheating", "temperature", "thermal", "attempts", "authentication", "alpha", "authenticated", "counter"]
+          },
+          {
+            "name": "authentication_duration_seconds_bucket",
+            "keywords": ["delay", "duration", "latency", "p50", "p90", "p95", "p99", "percentile", "response time", "slow", "time", "authentication"]
+          },
           {
             "name": "authentication_duration_seconds_count",
             "keywords": ["delay", "duration", "latency", "response time", "slow", "time", "authentication", "count"]
           },
+          {
+            "name": "authentication_duration_seconds_sum",
+            "keywords": ["delay", "duration", "latency", "response time", "slow", "time", "authentication", "sum"]
+          },
+          {
+            "name": "authorization_attempts_total",
+            "type": "counter",
+            "help": "[ALPHA] Counter of authorization attempts broken down by result. It can be either 'allowed', 'denied', 'no-opinion' or 'error'.",
+            "keywords": ["count", "rate", "total", "available", "cumulative", "down", "error", "failed", "failure", "heat", "overheating", "temperature"]
+          },
+          {
+            "name": "authorization_duration_seconds_bucket",
+            "keywords": ["delay", "duration", "latency", "p50", "p90", "p95", "p99", "percentile", "response time", "slow", "time", "authorization"]
+          },
+          {
+            "name": "authorization_duration_seconds_count",
+            "keywords": ["delay", "duration", "latency", "response time", "slow", "time", "authorization", "count"]
+          },
+          {
+            "name": "authorization_duration_seconds_sum",
+            "keywords": ["delay", "duration", "latency", "response time", "slow", "time", "authorization", "sum"]
+          }
+        ],
+        "Medium": [
           {
             "name": "authentication_token_cache_active_fetch_count",
             "type": "gauge",
@@ -6973,16 +7041,6 @@
             "type": "counter",
             "help": "[ALPHA] ",
             "keywords": ["count", "rate", "total", "cumulative", "req", "requests", "tokenization", "tokens", "authentication", "cache", "request", "token"]
-          },
-          {
-            "name": "authorization_attempts_total",
-            "type": "counter",
-            "help": "[ALPHA] Counter of authorization attempts broken down by result. It can be either 'allowed', 'denied', 'no-opinion' or 'error'.",
-            "keywords": ["count", "rate", "total", "available", "cumulative", "down", "error", "failed", "failure", "heat", "overheating", "temperature"]
-          },
-          {
-            "name": "authorization_duration_seconds_count",
-            "keywords": ["delay", "duration", "latency", "response time", "slow", "time", "authorization", "count"]
           }
         ]
       }
@@ -7637,7 +7695,14 @@
       "purpose": "Image registry operations, build pipelines",
       "keywords": ["registry", "image", "build", "container image"],
       "metrics": {
-        "High": [],
+        "High": [
+          {
+            "name": "imageregistry_http_requests_total",
+            "type": "counter",
+            "help": "A counter for requests to the registry.",
+            "keywords": ["count", "rate", "total", "cumulative", "req", "requests", "http", "imageregistry", "counter", "registry"]
+          }
+        ],
         "Medium": [
           {
             "name": "imageregistry_digest_cache_requests_total",
@@ -7670,12 +7735,6 @@
           {
             "name": "imageregistry_http_request_size_bytes_count",
             "keywords": ["req", "requests", "size", "storage", "count", "http", "imageregistry", "request"]
-          },
-          {
-            "name": "imageregistry_http_requests_total",
-            "type": "counter",
-            "help": "A counter for requests to the registry.",
-            "keywords": ["count", "rate", "total", "cumulative", "req", "requests", "http", "imageregistry", "counter", "registry"]
           },
           {
             "name": "imageregistry_http_response_size_bytes",
@@ -7739,6 +7798,72 @@
             "type": "gauge",
             "help": "[ALPHA] The node's name. The count is always 1.",
             "keywords": ["current", "value", "kubelet", "node agent", "name", "node", "alpha", "always", "count"]
+          },
+          {
+            "name": "kubelet_node_startup_duration_seconds",
+            "type": "gauge",
+            "help": "[ALPHA] Duration in seconds of node startup in total.",
+            "keywords": ["current", "value", "available", "delay", "down", "duration", "kubelet", "latency", "node agent", "response time", "slow", "time"]
+          },
+          {
+            "name": "kubelet_node_startup_post_registration_duration_seconds",
+            "type": "gauge",
+            "help": "[ALPHA] Duration in seconds of node startup after registration.",
+            "keywords": ["current", "value", "available", "delay", "down", "duration", "kubelet", "latency", "node agent", "response time", "slow", "time"]
+          },
+          {
+            "name": "kubelet_node_startup_pre_kubelet_duration_seconds",
+            "type": "gauge",
+            "help": "[ALPHA] Duration in seconds of node startup before kubelet starts.",
+            "keywords": ["current", "value", "available", "delay", "down", "duration", "kubelet", "latency", "node agent", "response time", "slow", "time"]
+          },
+          {
+            "name": "kubelet_node_startup_pre_registration_duration_seconds",
+            "type": "gauge",
+            "help": "[ALPHA] Duration in seconds of node startup before registration.",
+            "keywords": ["current", "value", "available", "delay", "down", "duration", "kubelet", "latency", "node agent", "response time", "slow", "time"]
+          },
+          {
+            "name": "kubelet_node_startup_registration_duration_seconds",
+            "type": "gauge",
+            "help": "[ALPHA] Duration in seconds of node startup during registration.",
+            "keywords": ["current", "value", "available", "delay", "down", "duration", "kubelet", "latency", "node agent", "response time", "slow", "time"]
+          },
+          {
+            "name": "kubelet_pleg_discard_events",
+            "type": "counter",
+            "help": "[ALPHA] The number of discard events in PLEG.",
+            "keywords": ["count", "rate", "total", "kubelet", "node agent", "discard", "events", "pleg", "alpha", "number"]
+          },
+          {
+            "name": "kubelet_pleg_last_seen_seconds",
+            "type": "gauge",
+            "help": "[ALPHA] Timestamp in seconds when PLEG was last seen active.",
+            "keywords": ["current", "value", "delay", "duration", "kubelet", "latency", "node agent", "response time", "slow", "time", "last", "pleg"]
+          },
+          {
+            "name": "kubelet_pleg_relist_duration_seconds_bucket",
+            "keywords": ["delay", "duration", "kubelet", "latency", "node agent", "p50", "p90", "p95", "p99", "percentile", "response time", "slow"]
+          },
+          {
+            "name": "kubelet_pleg_relist_duration_seconds_count",
+            "keywords": ["delay", "duration", "kubelet", "latency", "node agent", "response time", "slow", "time", "count", "pleg", "relist"]
+          },
+          {
+            "name": "kubelet_pleg_relist_duration_seconds_sum",
+            "keywords": ["delay", "duration", "kubelet", "latency", "node agent", "response time", "slow", "time", "pleg", "relist", "sum"]
+          },
+          {
+            "name": "kubelet_pleg_relist_interval_seconds_bucket",
+            "keywords": ["duration", "kubelet", "latency", "node agent", "p50", "p90", "p95", "p99", "percentile", "time", "bucket", "interval"]
+          },
+          {
+            "name": "kubelet_pleg_relist_interval_seconds_count",
+            "keywords": ["duration", "kubelet", "latency", "node agent", "time", "count", "interval", "pleg", "relist"]
+          },
+          {
+            "name": "kubelet_pleg_relist_interval_seconds_sum",
+            "keywords": ["duration", "kubelet", "latency", "node agent", "time", "interval", "pleg", "relist", "sum"]
           }
         ],
         "Medium": [
@@ -7885,54 +8010,10 @@
             "keywords": ["count", "rate", "total", "cumulative", "kubelet", "memory", "node agent", "ram", "req", "requests", "manager", "pinning"]
           },
           {
-            "name": "kubelet_node_startup_duration_seconds",
-            "type": "gauge",
-            "help": "[ALPHA] Duration in seconds of node startup in total.",
-            "keywords": ["current", "value", "available", "delay", "down", "duration", "kubelet", "latency", "node agent", "response time", "slow", "time"]
-          },
-          {
-            "name": "kubelet_node_startup_post_registration_duration_seconds",
-            "type": "gauge",
-            "help": "[ALPHA] Duration in seconds of node startup after registration.",
-            "keywords": ["current", "value", "available", "delay", "down", "duration", "kubelet", "latency", "node agent", "response time", "slow", "time"]
-          },
-          {
-            "name": "kubelet_node_startup_pre_kubelet_duration_seconds",
-            "type": "gauge",
-            "help": "[ALPHA] Duration in seconds of node startup before kubelet starts.",
-            "keywords": ["current", "value", "available", "delay", "down", "duration", "kubelet", "latency", "node agent", "response time", "slow", "time"]
-          },
-          {
-            "name": "kubelet_node_startup_pre_registration_duration_seconds",
-            "type": "gauge",
-            "help": "[ALPHA] Duration in seconds of node startup before registration.",
-            "keywords": ["current", "value", "available", "delay", "down", "duration", "kubelet", "latency", "node agent", "response time", "slow", "time"]
-          },
-          {
-            "name": "kubelet_node_startup_registration_duration_seconds",
-            "type": "gauge",
-            "help": "[ALPHA] Duration in seconds of node startup during registration.",
-            "keywords": ["current", "value", "available", "delay", "down", "duration", "kubelet", "latency", "node agent", "response time", "slow", "time"]
-          },
-          {
             "name": "kubelet_orphaned_runtime_pods_total",
             "type": "counter",
             "help": "[ALPHA] Number of pods that have been detected in the container runtime without being already known to the pod worker. This typically indicates the kubelet was restarted while a pod was force deleted in the API or in the local configuration, which is unusual.",
             "keywords": ["count", "rate", "total", "crash", "crashloop", "cumulative", "delay", "duration", "health", "healthy", "kubelet", "latency"]
-          },
-          {
-            "name": "kubelet_pleg_last_seen_seconds",
-            "type": "gauge",
-            "help": "[ALPHA] Timestamp in seconds when PLEG was last seen active.",
-            "keywords": ["current", "value", "delay", "duration", "kubelet", "latency", "node agent", "response time", "slow", "time", "last", "pleg"]
-          },
-          {
-            "name": "kubelet_pleg_relist_duration_seconds_count",
-            "keywords": ["delay", "duration", "kubelet", "latency", "node agent", "response time", "slow", "time", "count", "pleg", "relist"]
-          },
-          {
-            "name": "kubelet_pleg_relist_interval_seconds_count",
-            "keywords": ["duration", "kubelet", "latency", "node agent", "time", "count", "interval", "pleg", "relist"]
           },
           {
             "name": "kubelet_pod_resources_endpoint_requests_total",
@@ -8052,19 +8133,26 @@
       "purpose": "Controller manager operations and reconciliation",
       "keywords": ["controller", "reconcile", "workqueue"],
       "metrics": {
-        "High": [],
+        "High": [
+          {
+            "name": "controller_runtime_reconcile_errors_total",
+            "type": "counter",
+            "help": "Total number of reconciliation errors per controller",
+            "keywords": ["count", "rate", "total", "cumulative", "delay", "duration", "error", "failed", "failure", "latency", "response time", "slow"]
+          },
+          {
+            "name": "controller_runtime_reconcile_total",
+            "type": "counter",
+            "help": "Total number of reconciliations per controller",
+            "keywords": ["count", "rate", "total", "cumulative", "delay", "duration", "latency", "response time", "slow", "controller", "reconcile", "runtime"]
+          }
+        ],
         "Medium": [
           {
             "name": "controller_runtime_conversion_webhook_panics_total",
             "type": "counter",
             "help": "Total number of conversion webhook panics",
             "keywords": ["count", "rate", "total", "cumulative", "delay", "duration", "latency", "response time", "slow", "controller", "conversion", "panics"]
-          },
-          {
-            "name": "controller_runtime_reconcile_errors_total",
-            "type": "counter",
-            "help": "Total number of reconciliation errors per controller",
-            "keywords": ["count", "rate", "total", "cumulative", "delay", "duration", "error", "failed", "failure", "latency", "response time", "slow"]
           },
           {
             "name": "controller_runtime_reconcile_panics_total",
@@ -8075,12 +8163,6 @@
           {
             "name": "controller_runtime_reconcile_time_seconds_count",
             "keywords": ["delay", "duration", "latency", "response time", "slow", "time", "controller", "count", "reconcile", "runtime"]
-          },
-          {
-            "name": "controller_runtime_reconcile_total",
-            "type": "counter",
-            "help": "Total number of reconciliations per controller",
-            "keywords": ["count", "rate", "total", "cumulative", "delay", "duration", "latency", "response time", "slow", "controller", "reconcile", "runtime"]
           },
           {
             "name": "controller_runtime_terminal_reconcile_errors_total",
@@ -8126,14 +8208,37 @@
       "purpose": "OpenShift-specific features and operators",
       "keywords": ["openshift", "route", "scc", "oauth"],
       "metrics": {
-        "High": [],
-        "Medium": [
+        "High": [
+          {
+            "name": "csv_abnormal",
+            "keywords": ["abnormal", "csv"]
+          },
           {
             "name": "csv_count",
             "type": "gauge",
             "help": "Number of CSVs successfully registered",
             "keywords": ["current", "value", "count", "csv", "csvs", "number", "registered", "successfully"]
           },
+          {
+            "name": "csv_succeeded",
+            "type": "gauge",
+            "help": "Successful CSV install",
+            "keywords": ["current", "value", "csv", "succeeded", "install", "successful"]
+          },
+          {
+            "name": "openshift_apps_deploymentconfigs_complete_rollouts_total",
+            "type": "gauge",
+            "help": "Counts total complete rollouts",
+            "keywords": ["current", "value", "count", "cumulative", "rate", "total", "apps", "complete", "deploymentconfigs", "openshift", "rollouts", "counts"]
+          },
+          {
+            "name": "openshift_apps_deploymentconfigs_strategy_total",
+            "type": "gauge",
+            "help": "Counts strategy usage",
+            "keywords": ["current", "value", "count", "cumulative", "per second", "rate", "throughput", "total", "apps", "deploymentconfigs", "openshift", "strategy"]
+          }
+        ],
+        "Medium": [
           {
             "name": "csv_upgrade_count",
             "type": "counter",
@@ -8149,18 +8254,6 @@
           {
             "name": "olm_resolution_duration_seconds_count",
             "keywords": ["delay", "duration", "latency", "response time", "slow", "time", "count", "olm", "resolution"]
-          },
-          {
-            "name": "openshift_apps_deploymentconfigs_complete_rollouts_total",
-            "type": "gauge",
-            "help": "Counts total complete rollouts",
-            "keywords": ["current", "value", "count", "cumulative", "rate", "total", "apps", "complete", "deploymentconfigs", "openshift", "rollouts", "counts"]
-          },
-          {
-            "name": "openshift_apps_deploymentconfigs_strategy_total",
-            "type": "gauge",
-            "help": "Counts strategy usage",
-            "keywords": ["current", "value", "count", "cumulative", "per second", "rate", "throughput", "total", "apps", "deploymentconfigs", "openshift", "strategy"]
           },
           {
             "name": "openshift_auth_basic_password_count",
@@ -12914,11 +13007,11 @@
     },
     "kubelet_running_containers": {
       "category_id": "pod_container",
-      "priority": "Medium"
+      "priority": "High"
     },
     "kubelet_running_pods": {
       "category_id": "pod_container",
-      "priority": "Medium"
+      "priority": "High"
     },
     "pod_interface_network:container_network_receive_bytes:irate5m": {
       "category_id": "pod_container",
@@ -13340,9 +13433,17 @@
       "category_id": "networking",
       "priority": "Medium"
     },
+    "coredns_dns_request_duration_seconds_bucket": {
+      "category_id": "networking",
+      "priority": "High"
+    },
     "coredns_dns_request_duration_seconds_count": {
       "category_id": "networking",
-      "priority": "Medium"
+      "priority": "High"
+    },
+    "coredns_dns_request_duration_seconds_sum": {
+      "category_id": "networking",
+      "priority": "High"
     },
     "coredns_dns_request_size_bytes_count": {
       "category_id": "networking",
@@ -13350,7 +13451,7 @@
     },
     "coredns_dns_requests_total": {
       "category_id": "networking",
-      "priority": "Medium"
+      "priority": "High"
     },
     "coredns_dns_response_size_bytes_count": {
       "category_id": "networking",
@@ -13358,11 +13459,11 @@
     },
     "coredns_dns_responses_total": {
       "category_id": "networking",
-      "priority": "Medium"
+      "priority": "High"
     },
     "coredns_forward_healthcheck_broken_total": {
       "category_id": "networking",
-      "priority": "Medium"
+      "priority": "High"
     },
     "coredns_forward_max_concurrent_rejects_total": {
       "category_id": "networking",
@@ -13623,6 +13724,10 @@
     "ovn_controller_remote_probe_interval_seconds": {
       "category_id": "networking",
       "priority": "Medium"
+    },
+    "ovn_controller_southbound_database_connected": {
+      "category_id": "networking",
+      "priority": "High"
     },
     "ovn_db_db_size_bytes": {
       "category_id": "networking",
@@ -13944,6 +14049,18 @@
       "category_id": "storage",
       "priority": "High"
     },
+    "kubelet_volume_stats_inodes": {
+      "category_id": "storage",
+      "priority": "High"
+    },
+    "kubelet_volume_stats_inodes_free": {
+      "category_id": "storage",
+      "priority": "High"
+    },
+    "kubelet_volume_stats_inodes_used": {
+      "category_id": "storage",
+      "priority": "High"
+    },
     "kubelet_volume_stats_used_bytes": {
       "category_id": "storage",
       "priority": "High"
@@ -13958,7 +14075,7 @@
     },
     "alertmanager_alerts": {
       "category_id": "observability",
-      "priority": "Medium"
+      "priority": "High"
     },
     "alertmanager_alerts_invalid_total": {
       "category_id": "observability",
@@ -14098,7 +14215,7 @@
     },
     "alertmanager_notifications_total": {
       "category_id": "observability",
-      "priority": "Medium"
+      "priority": "High"
     },
     "alertmanager_oversize_gossip_message_duration_seconds_count": {
       "category_id": "observability",
@@ -14750,19 +14867,19 @@
     },
     "prometheus_tsdb_compactions_failed_total": {
       "category_id": "observability",
-      "priority": "Medium"
+      "priority": "High"
     },
     "prometheus_tsdb_compactions_skipped_total": {
       "category_id": "observability",
-      "priority": "Medium"
+      "priority": "High"
     },
     "prometheus_tsdb_compactions_total": {
       "category_id": "observability",
-      "priority": "Medium"
+      "priority": "High"
     },
     "prometheus_tsdb_compactions_triggered_total": {
       "category_id": "observability",
-      "priority": "Medium"
+      "priority": "High"
     },
     "prometheus_tsdb_data_replay_duration_seconds": {
       "category_id": "observability",
@@ -14794,79 +14911,79 @@
     },
     "prometheus_tsdb_head_active_appenders": {
       "category_id": "observability",
-      "priority": "Medium"
+      "priority": "High"
     },
     "prometheus_tsdb_head_chunks": {
       "category_id": "observability",
-      "priority": "Medium"
+      "priority": "High"
     },
     "prometheus_tsdb_head_chunks_created_total": {
       "category_id": "observability",
-      "priority": "Medium"
+      "priority": "High"
     },
     "prometheus_tsdb_head_chunks_removed_total": {
       "category_id": "observability",
-      "priority": "Medium"
+      "priority": "High"
     },
     "prometheus_tsdb_head_chunks_storage_size_bytes": {
       "category_id": "observability",
-      "priority": "Medium"
+      "priority": "High"
     },
     "prometheus_tsdb_head_gc_duration_seconds_count": {
       "category_id": "observability",
-      "priority": "Medium"
+      "priority": "High"
     },
     "prometheus_tsdb_head_gc_duration_seconds_sum": {
       "category_id": "observability",
-      "priority": "Medium"
+      "priority": "High"
     },
     "prometheus_tsdb_head_max_time": {
       "category_id": "observability",
-      "priority": "Medium"
+      "priority": "High"
     },
     "prometheus_tsdb_head_max_time_seconds": {
       "category_id": "observability",
-      "priority": "Medium"
+      "priority": "High"
     },
     "prometheus_tsdb_head_min_time": {
       "category_id": "observability",
-      "priority": "Medium"
+      "priority": "High"
     },
     "prometheus_tsdb_head_min_time_seconds": {
       "category_id": "observability",
-      "priority": "Medium"
+      "priority": "High"
     },
     "prometheus_tsdb_head_out_of_order_samples_appended_total": {
       "category_id": "observability",
-      "priority": "Medium"
+      "priority": "High"
     },
     "prometheus_tsdb_head_samples_appended_total": {
       "category_id": "observability",
-      "priority": "Medium"
+      "priority": "High"
     },
     "prometheus_tsdb_head_series": {
       "category_id": "observability",
-      "priority": "Medium"
+      "priority": "High"
     },
     "prometheus_tsdb_head_series_created_total": {
       "category_id": "observability",
-      "priority": "Medium"
+      "priority": "High"
     },
     "prometheus_tsdb_head_series_not_found_total": {
       "category_id": "observability",
-      "priority": "Medium"
+      "priority": "High"
     },
     "prometheus_tsdb_head_series_removed_total": {
       "category_id": "observability",
-      "priority": "Medium"
+      "priority": "High"
     },
     "prometheus_tsdb_head_truncations_failed_total": {
       "category_id": "observability",
-      "priority": "Medium"
+      "priority": "High"
     },
     "prometheus_tsdb_head_truncations_total": {
       "category_id": "observability",
-      "priority": "Medium"
+      "priority": "High"
     },
     "prometheus_tsdb_isolation_high_watermark": {
       "category_id": "observability",
@@ -15702,7 +15819,7 @@
     },
     "scheduler_pending_pods": {
       "category_id": "scheduler",
-      "priority": "Medium"
+      "priority": "High"
     },
     "scheduler_plugin_evaluation_total": {
       "category_id": "scheduler",
@@ -15758,7 +15875,7 @@
     },
     "scheduler_queue_incoming_pods_total": {
       "category_id": "scheduler",
-      "priority": "Medium"
+      "priority": "High"
     },
     "scheduler_queueing_hint_execution_duration_seconds_count": {
       "category_id": "scheduler",
@@ -15800,9 +15917,21 @@
       "category_id": "scheduler",
       "priority": "Medium"
     },
+    "authentication_attempts": {
+      "category_id": "security",
+      "priority": "High"
+    },
+    "authentication_duration_seconds_bucket": {
+      "category_id": "security",
+      "priority": "High"
+    },
     "authentication_duration_seconds_count": {
       "category_id": "security",
-      "priority": "Medium"
+      "priority": "High"
+    },
+    "authentication_duration_seconds_sum": {
+      "category_id": "security",
+      "priority": "High"
     },
     "authentication_token_cache_active_fetch_count": {
       "category_id": "security",
@@ -15822,11 +15951,19 @@
     },
     "authorization_attempts_total": {
       "category_id": "security",
-      "priority": "Medium"
+      "priority": "High"
+    },
+    "authorization_duration_seconds_bucket": {
+      "category_id": "security",
+      "priority": "High"
     },
     "authorization_duration_seconds_count": {
       "category_id": "security",
-      "priority": "Medium"
+      "priority": "High"
+    },
+    "authorization_duration_seconds_sum": {
+      "category_id": "security",
+      "priority": "High"
     },
     "DCGM_FI_DEV_CORRECTABLE_REMAPPED_ROWS": {
       "category_id": "gpu_ai",
@@ -16314,7 +16451,7 @@
     },
     "imageregistry_http_requests_total": {
       "category_id": "image_registry",
-      "priority": "Medium"
+      "priority": "High"
     },
     "imageregistry_http_response_size_bytes": {
       "category_id": "image_registry",
@@ -16462,39 +16599,59 @@
     },
     "kubelet_node_startup_duration_seconds": {
       "category_id": "kubelet",
-      "priority": "Medium"
+      "priority": "High"
     },
     "kubelet_node_startup_post_registration_duration_seconds": {
       "category_id": "kubelet",
-      "priority": "Medium"
+      "priority": "High"
     },
     "kubelet_node_startup_pre_kubelet_duration_seconds": {
       "category_id": "kubelet",
-      "priority": "Medium"
+      "priority": "High"
     },
     "kubelet_node_startup_pre_registration_duration_seconds": {
       "category_id": "kubelet",
-      "priority": "Medium"
+      "priority": "High"
     },
     "kubelet_node_startup_registration_duration_seconds": {
       "category_id": "kubelet",
-      "priority": "Medium"
+      "priority": "High"
     },
     "kubelet_orphaned_runtime_pods_total": {
       "category_id": "kubelet",
       "priority": "Medium"
     },
+    "kubelet_pleg_discard_events": {
+      "category_id": "kubelet",
+      "priority": "High"
+    },
     "kubelet_pleg_last_seen_seconds": {
       "category_id": "kubelet",
-      "priority": "Medium"
+      "priority": "High"
+    },
+    "kubelet_pleg_relist_duration_seconds_bucket": {
+      "category_id": "kubelet",
+      "priority": "High"
     },
     "kubelet_pleg_relist_duration_seconds_count": {
       "category_id": "kubelet",
-      "priority": "Medium"
+      "priority": "High"
+    },
+    "kubelet_pleg_relist_duration_seconds_sum": {
+      "category_id": "kubelet",
+      "priority": "High"
+    },
+    "kubelet_pleg_relist_interval_seconds_bucket": {
+      "category_id": "kubelet",
+      "priority": "High"
     },
     "kubelet_pleg_relist_interval_seconds_count": {
       "category_id": "kubelet",
-      "priority": "Medium"
+      "priority": "High"
+    },
+    "kubelet_pleg_relist_interval_seconds_sum": {
+      "category_id": "kubelet",
+      "priority": "High"
     },
     "kubelet_pod_resources_endpoint_requests_total": {
       "category_id": "kubelet",
@@ -16586,7 +16743,7 @@
     },
     "controller_runtime_reconcile_errors_total": {
       "category_id": "controller_manager",
-      "priority": "Medium"
+      "priority": "High"
     },
     "controller_runtime_reconcile_panics_total": {
       "category_id": "controller_manager",
@@ -16598,7 +16755,7 @@
     },
     "controller_runtime_reconcile_total": {
       "category_id": "controller_manager",
-      "priority": "Medium"
+      "priority": "High"
     },
     "controller_runtime_terminal_reconcile_errors_total": {
       "category_id": "controller_manager",
@@ -16628,9 +16785,17 @@
       "category_id": "controller_manager",
       "priority": "Medium"
     },
+    "csv_abnormal": {
+      "category_id": "openshift_specific",
+      "priority": "High"
+    },
     "csv_count": {
       "category_id": "openshift_specific",
-      "priority": "Medium"
+      "priority": "High"
+    },
+    "csv_succeeded": {
+      "category_id": "openshift_specific",
+      "priority": "High"
     },
     "csv_upgrade_count": {
       "category_id": "openshift_specific",
@@ -16646,11 +16811,11 @@
     },
     "openshift_apps_deploymentconfigs_complete_rollouts_total": {
       "category_id": "openshift_specific",
-      "priority": "Medium"
+      "priority": "High"
     },
     "openshift_apps_deploymentconfigs_strategy_total": {
       "category_id": "openshift_specific",
-      "priority": "Medium"
+      "priority": "High"
     },
     "openshift_auth_basic_password_count": {
       "category_id": "openshift_specific",
