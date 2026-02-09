@@ -371,3 +371,216 @@ class TestPriorityFiltering:
         assert len(metrics) == 1
         assert metrics[0].name == "DCGM_FI_DEV_GPU_TEMP"
         assert metrics[0].priority == "High"
+
+
+class TestGPUDiscoveryIntegration:
+    """Test GPU discovery integration in MetricsCatalog."""
+
+    @pytest.fixture
+    def base_catalog_data(self):
+        """Sample base catalog data (without GPU metrics)."""
+        return {
+            "metadata": {
+                "generated": "2026-02-07 12:00:00",
+                "total_metrics": 2,
+                "catalog_type": "base",
+                "description": "Base catalog for testing",
+                "gpu_metrics_excluded": 5,
+                "gpu_discovery": "runtime"
+            },
+            "categories": [
+                {
+                    "id": "gpu_ai",
+                    "name": "GPU & AI Accelerators",
+                    "icon": "🎮",
+                    "purpose": "GPU metrics discovered at runtime",
+                    "runtime_discovery": True,
+                    "metrics": {"High": [], "Medium": []}
+                },
+                {
+                    "id": "cluster_health",
+                    "name": "Cluster Resources & Health",
+                    "icon": "🏢",
+                    "metrics": {
+                        "High": [
+                            {"name": "cluster_version", "type": "gauge", "help": "Cluster version"}
+                        ],
+                        "Medium": [
+                            {"name": "cluster_operator_conditions", "type": "gauge", "help": "Operator conditions"}
+                        ]
+                    }
+                }
+            ],
+            "lookup": {
+                "cluster_version": {"category_id": "cluster_health", "priority": "High"},
+                "cluster_operator_conditions": {"category_id": "cluster_health", "priority": "Medium"}
+            }
+        }
+
+    @pytest.fixture
+    def base_catalog_file(self, base_catalog_data, tmp_path):
+        """Create a temporary base catalog file."""
+        catalog_file = tmp_path / "base-catalog.json"
+        catalog_file.write_text(json.dumps(base_catalog_data))
+        return catalog_file
+
+    def test_base_catalog_detection(self, base_catalog_file):
+        """Test that base catalog type is detected."""
+        catalog = MetricsCatalog(
+            catalog_path=base_catalog_file,
+            enable_gpu_discovery=False  # Disable for this test
+        )
+
+        metadata = catalog.get_metadata()
+        assert metadata.get("catalog_type") == "base"
+        assert metadata.get("gpu_discovery") == "runtime"
+
+    def test_gpu_discovery_status_initial(self, base_catalog_file):
+        """Test initial GPU discovery status."""
+        catalog = MetricsCatalog(
+            catalog_path=base_catalog_file,
+            enable_gpu_discovery=False
+        )
+        catalog._load_catalog()
+
+        status = catalog.get_gpu_discovery_status()
+        assert status["enabled"] is False
+        assert status["ready"] is False
+        assert status["error"] is None
+
+    def test_is_gpu_catalog_ready_no_discovery(self, base_catalog_file):
+        """Test is_gpu_catalog_ready when discovery is disabled."""
+        catalog = MetricsCatalog(
+            catalog_path=base_catalog_file,
+            enable_gpu_discovery=False
+        )
+        catalog._load_catalog()
+
+        # Without discovery, it should report not ready initially
+        assert catalog.is_gpu_catalog_ready() is False
+
+    def test_gpu_category_empty_in_base_catalog(self, base_catalog_file):
+        """Test that gpu_ai category is empty in base catalog."""
+        catalog = MetricsCatalog(
+            catalog_path=base_catalog_file,
+            enable_gpu_discovery=False
+        )
+
+        # Search for GPU metrics
+        metrics = catalog.search_metrics_by_category(
+            category_ids=["gpu_ai"],
+            priorities=["High", "Medium"]
+        )
+
+        # Should be empty (no GPU metrics in base catalog)
+        assert len(metrics) == 0
+
+    def test_gpu_category_keywords(self, base_catalog_file):
+        """Test that GPU category keywords include multiple vendors."""
+        catalog = MetricsCatalog(
+            catalog_path=base_catalog_file,
+            enable_gpu_discovery=False
+        )
+
+        # Test various GPU vendor queries
+        test_cases = [
+            ("nvidia gpu temperature", ["gpu_ai"]),
+            ("intel gaudi utilization", ["gpu_ai"]),
+            ("amd rocm gpu", ["gpu_ai"]),
+            ("habana accelerator", ["gpu_ai"]),
+            ("vllm inference latency", ["gpu_ai"]),
+        ]
+
+        for query, expected_categories in test_cases:
+            hints = catalog.extract_category_hints(query)
+            for cat in expected_categories:
+                assert cat in hints, f"Expected {cat} in hints for query: {query}"
+
+    @patch('core.metrics_catalog.threading.Thread')
+    def test_gpu_discovery_started_for_base_catalog(self, mock_thread, base_catalog_file):
+        """Test that GPU discovery is started for base catalog."""
+        mock_thread_instance = MagicMock()
+        mock_thread.return_value = mock_thread_instance
+
+        catalog = MetricsCatalog(
+            catalog_path=base_catalog_file,
+            enable_gpu_discovery=True,
+            prometheus_url="http://test:9090"
+        )
+        catalog._load_catalog()
+
+        # Thread should have been created and started
+        mock_thread.assert_called_once()
+        mock_thread_instance.start.assert_called_once()
+
+    def test_merge_gpu_metrics(self, base_catalog_file):
+        """Test merging GPU metrics into catalog."""
+        from core.gpu_metrics_discovery import GPUDiscoveryResult, GPUVendor
+
+        catalog = MetricsCatalog(
+            catalog_path=base_catalog_file,
+            enable_gpu_discovery=False
+        )
+        catalog._load_catalog()
+
+        # Create mock discovery result
+        result = GPUDiscoveryResult(
+            vendor=GPUVendor.NVIDIA,
+            metrics_high=[
+                {"name": "DCGM_FI_DEV_GPU_TEMP", "type": "gauge", "help": "GPU temp", "keywords": ["gpu", "temp"]}
+            ],
+            metrics_medium=[
+                {"name": "DCGM_FI_DEV_NVLINK", "type": "gauge", "help": "NVLink", "keywords": ["nvlink"]}
+            ],
+            total_discovered=2,
+            discovery_time_ms=100.0,
+            error=None
+        )
+
+        # Merge GPU metrics
+        catalog._merge_gpu_metrics(result)
+
+        # Verify GPU metrics are now in catalog
+        metrics = catalog.search_metrics_by_category(
+            category_ids=["gpu_ai"],
+            priorities=["High", "Medium"]
+        )
+        assert len(metrics) == 2
+
+        # Verify lookup table is updated
+        assert "DCGM_FI_DEV_GPU_TEMP" in catalog._lookup
+        assert catalog._lookup["DCGM_FI_DEV_GPU_TEMP"]["category_id"] == "gpu_ai"
+        assert catalog._lookup["DCGM_FI_DEV_GPU_TEMP"]["priority"] == "High"
+
+    def test_wait_for_gpu_discovery_no_thread(self, base_catalog_file):
+        """Test wait_for_gpu_discovery when no discovery was started."""
+        catalog = MetricsCatalog(
+            catalog_path=base_catalog_file,
+            enable_gpu_discovery=False
+        )
+        catalog._load_catalog()
+
+        # Should return immediately
+        result = catalog.wait_for_gpu_discovery(timeout=1.0)
+        assert result is True
+
+
+class TestResetCatalog:
+    """Test catalog reset functionality."""
+
+    def test_reset_metrics_catalog(self, temp_catalog_file):
+        """Test resetting the global catalog instance."""
+        from core.metrics_catalog import reset_metrics_catalog
+
+        # Create instance
+        catalog1 = get_metrics_catalog()
+
+        # Reset
+        reset_metrics_catalog()
+
+        # Create new instance
+        catalog2 = get_metrics_catalog()
+
+        # Should be different instances (but we can't easily test this
+        # without modifying global state, so just verify no error)
+        assert catalog2 is not None

@@ -5,7 +5,8 @@ OpenShift Metrics CLI - Unified tool for fetching, categorizing, and optimizing 
 Usage:
     python scripts/metrics/metrics_cli.py -f              # Fetch from Prometheus
     python scripts/metrics/metrics_cli.py -c              # Categorize metrics
-    python scripts/metrics/metrics_cli.py -m              # Optimize with keywords
+    python scripts/metrics/metrics_cli.py -m              # Optimize with keywords (full catalog)
+    python scripts/metrics/metrics_cli.py -m --exclude-gpu # Create base catalog (no GPU)
     python scripts/metrics/metrics_cli.py -a              # Run all steps
     python scripts/metrics/metrics_cli.py -a -o out.json  # Custom output path
 
@@ -15,9 +16,18 @@ Options:
     -m, --optimize    Create optimized JSON with keywords
     -a, --all         Run all steps (fetch → categorize → optimize)
     -o, --output      Output path for optimized JSON
+    --exclude-gpu     Exclude GPU/AI metrics (creates base catalog for hybrid mode)
     --url             Prometheus/Thanos URL (default: http://localhost:9090)
     -v, --verbose     Verbose output
     -h, --help        Show this help message
+
+Hybrid Catalog Mode (--exclude-gpu):
+    Creates a base catalog without GPU/AI metrics. GPU metrics are then
+    discovered at runtime by the MCP server, supporting any GPU vendor
+    (NVIDIA, Intel, AMD) without rebuilding the container.
+
+    Excluded patterns: DCGM_*, gpu_*, nvidia_*, vllm:*, habana_*, xpu_*,
+                       intel_gpu_*, amdgpu_*, rocm_*
 """
 
 import argparse
@@ -800,12 +810,36 @@ class MetricsCategorizer:
 class MetricsOptimizer:
     """Creates optimized metrics file with keywords."""
 
-    def __init__(self, verbose: bool = False):
+    # GPU/AI metric patterns to exclude when creating base catalog
+    GPU_PATTERNS = [
+        r"^DCGM_",       # NVIDIA Data Center GPU Manager
+        r"^gpu_",        # Generic GPU metrics
+        r"^nvidia_",     # NVIDIA specific
+        r"^vllm:",       # vLLM inference framework
+        r"^habana_",     # Intel Gaudi/Habana
+        r"^xpu_",        # Intel XPU
+        r"^intel_gpu_",  # Intel GPU specific
+        r"^amdgpu_",     # AMD GPU
+        r"^rocm_",       # AMD ROCm
+    ]
+
+    def __init__(self, verbose: bool = False, exclude_gpu: bool = False):
         self.verbose = verbose
+        self.exclude_gpu = exclude_gpu
+        if exclude_gpu:
+            self._gpu_regex = re.compile("|".join(self.GPU_PATTERNS))
+        else:
+            self._gpu_regex = None
 
     def _log(self, msg: str):
         if self.verbose:
             print(f"  [optimize] {msg}")
+
+    def _is_gpu_metric(self, metric_name: str) -> bool:
+        """Check if a metric is GPU/AI related."""
+        if self._gpu_regex is None:
+            return False
+        return bool(self._gpu_regex.match(metric_name))
 
     def find_latest_categories(self, metrics_dir: Path) -> Path:
         """Find the most recent categories file."""
@@ -833,9 +867,31 @@ class MetricsOptimizer:
         lookup = {}
         total_metrics = 0
         keywords_added = 0
+        gpu_metrics_excluded = 0
 
         for category in categories:
             category_id = category.get("id", "other")
+
+            # For base catalog: keep gpu_ai category structure but empty
+            # This allows runtime GPU discovery to populate it later
+            if self.exclude_gpu and category_id == "gpu_ai":
+                # Add empty gpu_ai category as placeholder for runtime discovery
+                cat_entry = {
+                    "id": category_id,
+                    "name": category.get("name", ""),
+                    "icon": category.get("icon", ""),
+                    "purpose": "GPU metrics discovered at runtime (vendor-agnostic)",
+                    "runtime_discovery": True,  # Flag for runtime population
+                    "metrics": {"High": [], "Medium": []}
+                }
+                cat_keywords = get_category_keywords(category_id)
+                if cat_keywords:
+                    cat_entry["keywords"] = cat_keywords
+                optimized_categories.append(cat_entry)
+                gpu_metrics_excluded += len(category.get("metrics", []))
+                self._log(f"Excluded gpu_ai category ({gpu_metrics_excluded} metrics) - will be discovered at runtime")
+                continue
+
             metrics_by_priority = {"High": [], "Medium": []}
 
             for metric in category.get("metrics", []):
@@ -843,6 +899,12 @@ class MetricsOptimizer:
                 priority = metric.get("priority", "Medium")
 
                 if priority == "Low":
+                    continue
+
+                # For base catalog: skip GPU metrics in any category
+                if self.exclude_gpu and self._is_gpu_metric(name):
+                    gpu_metrics_excluded += 1
+                    self._log(f"Excluded GPU metric: {name}")
                     continue
 
                 help_text = ""
@@ -884,14 +946,27 @@ class MetricsOptimizer:
 
         print(f"  Metrics: {total_metrics} (High + Medium)")
         print(f"  Keywords added: {keywords_added}")
+        if self.exclude_gpu:
+            print(f"  GPU metrics excluded: {gpu_metrics_excluded} (will be discovered at runtime)")
+
+        # Build metadata
+        metadata = {
+            "generated": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "source_file": categories_file.name,
+            "total_metrics": total_metrics,
+        }
+
+        if self.exclude_gpu:
+            metadata["catalog_type"] = "base"
+            metadata["description"] = "Base OpenShift metrics catalog (GPU metrics discovered at runtime)"
+            metadata["gpu_metrics_excluded"] = gpu_metrics_excluded
+            metadata["gpu_discovery"] = "runtime"
+        else:
+            metadata["catalog_type"] = "full"
+            metadata["description"] = "Optimized OpenShift metrics with keywords for AI Chat"
 
         optimized = {
-            "metadata": {
-                "generated": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "source_file": categories_file.name,
-                "total_metrics": total_metrics,
-                "description": "Optimized OpenShift metrics with keywords for AI Chat"
-            },
+            "metadata": metadata,
             "categories": optimized_categories,
             "lookup": lookup
         }
@@ -970,6 +1045,8 @@ Examples:
                         help=f"Metrics data directory (default: {DEFAULT_METRICS_DIR})")
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="Verbose output")
+    parser.add_argument("--exclude-gpu", action="store_true",
+                        help="Exclude GPU/AI metrics (creates base catalog for hybrid mode)")
 
     args = parser.parse_args()
 
@@ -982,7 +1059,14 @@ Examples:
     # Setup paths
     metrics_dir = Path(args.metrics_dir)
     metrics_dir.mkdir(parents=True, exist_ok=True)  # Create temp dir if needed
-    output_file = Path(args.output) if args.output else DEFAULT_OUTPUT_DIR / "openshift-metrics-optimized.json"
+
+    # Determine output filename based on --exclude-gpu flag
+    if args.output:
+        output_file = Path(args.output)
+    elif args.exclude_gpu:
+        output_file = DEFAULT_OUTPUT_DIR / "openshift-metrics-base.json"
+    else:
+        output_file = DEFAULT_OUTPUT_DIR / "openshift-metrics-optimized.json"
 
     print("=" * 70)
     print("🚀 OpenShift Metrics CLI")
@@ -1011,7 +1095,9 @@ Examples:
         if args.all or args.optimize:
             print("\n⚡ Step 3: Optimize Metrics")
             print("-" * 40)
-            optimizer = MetricsOptimizer(args.verbose)
+            if args.exclude_gpu:
+                print("  Mode: BASE CATALOG (excluding GPU/AI metrics)")
+            optimizer = MetricsOptimizer(args.verbose, exclude_gpu=args.exclude_gpu)
             categories_file = optimizer.find_latest_categories(metrics_dir)
             print(f"  Using: {categories_file.name}")
             optimizer.optimize(categories_file, output_file)

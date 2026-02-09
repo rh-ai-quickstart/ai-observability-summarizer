@@ -38,6 +38,10 @@ env:
   MAX_NUM_TRACE_SPANS: 10
   KORREL8R_TIMEOUT_SECONDS: 8
   LLM_TIMEOUT_SECONDS: 180
+  # GPU Metrics Discovery - custom prefix overrides (comma-separated, additive to defaults)
+  GPU_METRICS_PREFIX_NVIDIA: ""
+  GPU_METRICS_PREFIX_INTEL: ""
+  GPU_METRICS_PREFIX_AMD: ""
 
 # Name of the LLM used
 LLM_PREDICTOR: "llama-3-1-8b-instruct-predictor"

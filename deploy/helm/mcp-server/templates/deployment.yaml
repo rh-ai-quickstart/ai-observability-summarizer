@@ -83,6 +83,18 @@ spec:
             - name: LLAMA_STACK_URL
               value: "http://llamastack.{{ .Release.Namespace }}.svc.cluster.local:8321/v1/openai/v1"
             {{- end }}
+            {{- if .Values.env.GPU_METRICS_PREFIX_NVIDIA }}
+            - name: GPU_METRICS_PREFIX_NVIDIA
+              value: "{{ .Values.env.GPU_METRICS_PREFIX_NVIDIA }}"
+            {{- end }}
+            {{- if .Values.env.GPU_METRICS_PREFIX_INTEL }}
+            - name: GPU_METRICS_PREFIX_INTEL
+              value: "{{ .Values.env.GPU_METRICS_PREFIX_INTEL }}"
+            {{- end }}
+            {{- if .Values.env.GPU_METRICS_PREFIX_AMD }}
+            - name: GPU_METRICS_PREFIX_AMD
+              value: "{{ .Values.env.GPU_METRICS_PREFIX_AMD }}"
+            {{- end }}
             - name: MODEL_CONFIG
               {{- if .Values.modelConfig }}
               value: '{{ .Values.modelConfig | toJson }}'

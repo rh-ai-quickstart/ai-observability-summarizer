@@ -5,13 +5,16 @@ Provides centralized access to the optimized metrics catalog with:
 - Category-aware metric discovery
 - Priority-based filtering (High, Medium, Low)
 - Fast in-memory caching
+- Runtime GPU discovery for vendor-agnostic GPU support
 - Backward compatibility with dynamic Prometheus API discovery
 """
 
 import json
 import logging
+import os
+import threading
 from pathlib import Path
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, Callable
 from functools import lru_cache
 from dataclasses import dataclass
 
@@ -47,19 +50,30 @@ class MetricsCatalog:
     Centralized catalog for OpenShift metrics with smart priority filtering.
 
     Features:
-    - Loads optimized metrics from bundled JSON (2,037 High+Medium priority metrics)
+    - Loads base metrics from bundled JSON (~1,800 metrics)
+    - Runtime GPU discovery for vendor-agnostic support (NVIDIA, Intel, AMD)
     - Category-aware filtering
     - Priority-based selection
     - In-memory caching for fast access
     - Graceful fallback to dynamic discovery
     """
 
-    def __init__(self, catalog_path: Optional[Path] = None):
+    def __init__(
+        self,
+        catalog_path: Optional[Path] = None,
+        prometheus_url: Optional[str] = None,
+        enable_gpu_discovery: bool = True,
+        gpu_discovery_timeout: float = 10.0
+    ):
         """
         Initialize metrics catalog.
 
         Args:
             catalog_path: Optional path to catalog JSON. If None, uses bundled default.
+            prometheus_url: URL for Prometheus/Thanos (for GPU discovery).
+                           Defaults to PROMETHEUS_URL env var or http://localhost:9090.
+            enable_gpu_discovery: If True, discover GPU metrics at startup (async).
+            gpu_discovery_timeout: Timeout for GPU discovery in seconds.
         """
         self._catalog_path = catalog_path
         self._catalog: Optional[Dict] = None
@@ -67,11 +81,28 @@ class MetricsCatalog:
         self._categories: Optional[List[Dict]] = None
         self._loaded = False
 
+        # GPU discovery settings
+        self._prometheus_url = prometheus_url or os.environ.get(
+            "PROMETHEUS_URL", "http://localhost:9090"
+        )
+        self._enable_gpu_discovery = enable_gpu_discovery
+        self._gpu_discovery_timeout = gpu_discovery_timeout
+
+        # GPU discovery state
+        self._gpu_catalog_loaded = False
+        self._gpu_discovery_error: Optional[str] = None
+        self._gpu_discovery_thread: Optional[threading.Thread] = None
+        self._catalog_lock = threading.RLock()
+
     def _get_default_catalog_path(self) -> Path:
         """Get default path to bundled metrics catalog."""
-        # Try multiple potential locations
+        # Try base catalog first (hybrid mode), then fall back to full catalog
         potential_paths = [
-            Path("/app/mcp_server/data/openshift-metrics-optimized.json"),  # Production (container)
+            # Base catalog (hybrid mode - GPU discovered at runtime)
+            Path("/app/mcp_server/data/openshift-metrics-base.json"),  # Production
+            Path(__file__).parent.parent / "mcp_server/data/openshift-metrics-base.json",  # Development
+            # Full catalog (legacy mode - all metrics included)
+            Path("/app/mcp_server/data/openshift-metrics-optimized.json"),  # Production
             Path(__file__).parent.parent / "mcp_server/data/openshift-metrics-optimized.json",  # Development
         ]
 
@@ -93,40 +124,187 @@ class MetricsCatalog:
         if self._loaded:
             return True
 
-        try:
-            # Determine catalog path
-            if self._catalog_path is None:
-                self._catalog_path = self._get_default_catalog_path()
+        with self._catalog_lock:
+            # Double-check after acquiring lock
+            if self._loaded:
+                return True
 
-            logger.info(f"Loading metrics catalog from {self._catalog_path}")
+            try:
+                # Determine catalog path
+                if self._catalog_path is None:
+                    self._catalog_path = self._get_default_catalog_path()
 
-            # Load JSON
-            with open(self._catalog_path, 'r') as f:
-                self._catalog = json.load(f)
+                logger.info(f"Loading metrics catalog from {self._catalog_path}")
 
-            # Extract components
-            self._lookup = self._catalog.get("lookup", {})
-            self._categories = self._catalog.get("categories", [])
+                # Load JSON
+                with open(self._catalog_path, 'r') as f:
+                    self._catalog = json.load(f)
 
-            # Log stats
-            metadata = self._catalog.get("metadata", {})
-            logger.info(
-                f"Loaded metrics catalog: {metadata.get('total_metrics', 0)} metrics, "
-                f"{metadata.get('categories', 0)} categories"
-            )
+                # Extract components
+                self._lookup = self._catalog.get("lookup", {})
+                self._categories = self._catalog.get("categories", [])
 
-            self._loaded = True
-            return True
+                # Log stats
+                metadata = self._catalog.get("metadata", {})
+                catalog_type = metadata.get("catalog_type", "full")
+                logger.info(
+                    f"Loaded metrics catalog ({catalog_type}): "
+                    f"{metadata.get('total_metrics', 0)} metrics, "
+                    f"{len(self._categories)} categories"
+                )
 
-        except FileNotFoundError:
-            logger.warning(
-                f"Metrics catalog not found at {self._catalog_path}. "
-                "Falling back to dynamic discovery."
-            )
-            return False
-        except Exception as e:
-            logger.error(f"Error loading metrics catalog: {e}", exc_info=True)
-            return False
+                self._loaded = True
+
+                # Start GPU discovery if this is a base catalog
+                if catalog_type == "base" and self._enable_gpu_discovery:
+                    self._start_gpu_discovery()
+
+                return True
+
+            except FileNotFoundError:
+                logger.warning(
+                    f"Metrics catalog not found at {self._catalog_path}. "
+                    "Falling back to dynamic discovery."
+                )
+                return False
+            except Exception as e:
+                logger.error(f"Error loading metrics catalog: {e}", exc_info=True)
+                return False
+
+    def _start_gpu_discovery(self) -> None:
+        """Start background GPU metrics discovery."""
+        if self._gpu_discovery_thread is not None:
+            return  # Already started
+
+        logger.info(f"Starting GPU discovery from {self._prometheus_url}")
+
+        def _discover():
+            try:
+                from core.gpu_metrics_discovery import GPUMetricsDiscovery
+
+                discovery = GPUMetricsDiscovery(self._prometheus_url)
+                result = discovery.discover(timeout_seconds=self._gpu_discovery_timeout)
+
+                if result.error:
+                    self._gpu_discovery_error = result.error
+                    logger.warning(f"GPU discovery failed: {result.error}")
+                    return
+
+                if result.total_discovered == 0:
+                    logger.info("GPU discovery: no GPU metrics found (cluster may not have GPUs)")
+                    self._gpu_catalog_loaded = True
+                    return
+
+                # Merge GPU metrics into catalog
+                self._merge_gpu_metrics(result)
+                self._gpu_catalog_loaded = True
+
+                logger.info(
+                    f"GPU discovery complete: {len(result.metrics_high)} High, "
+                    f"{len(result.metrics_medium)} Medium, "
+                    f"vendor={result.vendor.value}, "
+                    f"time={result.discovery_time_ms:.1f}ms"
+                )
+
+            except ImportError as e:
+                self._gpu_discovery_error = f"GPU discovery module not available: {e}"
+                logger.warning(self._gpu_discovery_error)
+            except Exception as e:
+                self._gpu_discovery_error = str(e)
+                logger.error(f"GPU discovery error: {e}", exc_info=True)
+
+        self._gpu_discovery_thread = threading.Thread(target=_discover, daemon=True)
+        self._gpu_discovery_thread.start()
+
+    def _merge_gpu_metrics(self, result) -> None:
+        """
+        Merge discovered GPU metrics into the catalog.
+
+        Args:
+            result: GPUDiscoveryResult from gpu_metrics_discovery
+        """
+        with self._catalog_lock:
+            # Find gpu_ai category
+            gpu_category = None
+            for cat in self._categories:
+                if cat["id"] == "gpu_ai":
+                    gpu_category = cat
+                    break
+
+            if gpu_category is None:
+                logger.warning("gpu_ai category not found in catalog, cannot merge GPU metrics")
+                return
+
+            # Update metrics
+            gpu_category["metrics"]["High"] = result.metrics_high
+            gpu_category["metrics"]["Medium"] = result.metrics_medium
+            gpu_category["runtime_discovery"] = False  # Mark as populated
+            gpu_category["gpu_vendor"] = result.vendor.value
+
+            # Update lookup table
+            for metric in result.metrics_high:
+                self._lookup[metric["name"]] = {
+                    "category_id": "gpu_ai",
+                    "priority": "High"
+                }
+            for metric in result.metrics_medium:
+                self._lookup[metric["name"]] = {
+                    "category_id": "gpu_ai",
+                    "priority": "Medium"
+                }
+
+            # Update metadata
+            if self._catalog and "metadata" in self._catalog:
+                self._catalog["metadata"]["gpu_metrics_discovered"] = result.total_discovered
+                self._catalog["metadata"]["gpu_vendor"] = result.vendor.value
+                self._catalog["metadata"]["total_metrics"] = (
+                    self._catalog["metadata"].get("total_metrics", 0) + result.total_discovered
+                )
+
+            logger.info(f"Merged {result.total_discovered} GPU metrics into catalog")
+
+    def is_gpu_catalog_ready(self) -> bool:
+        """
+        Check if GPU metrics have been discovered and merged.
+
+        Returns:
+            True if GPU discovery is complete (success or no GPUs found).
+            False if discovery is still in progress.
+        """
+        return self._gpu_catalog_loaded
+
+    def get_gpu_discovery_status(self) -> Dict:
+        """
+        Get detailed GPU discovery status.
+
+        Returns:
+            Dict with status information.
+        """
+        return {
+            "enabled": self._enable_gpu_discovery,
+            "ready": self._gpu_catalog_loaded,
+            "error": self._gpu_discovery_error,
+            "in_progress": (
+                self._gpu_discovery_thread is not None and
+                self._gpu_discovery_thread.is_alive()
+            ),
+        }
+
+    def wait_for_gpu_discovery(self, timeout: float = None) -> bool:
+        """
+        Wait for GPU discovery to complete.
+
+        Args:
+            timeout: Maximum time to wait in seconds. None = wait indefinitely.
+
+        Returns:
+            True if GPU discovery completed, False if timed out.
+        """
+        if self._gpu_discovery_thread is None:
+            return True  # No discovery started
+
+        self._gpu_discovery_thread.join(timeout)
+        return not self._gpu_discovery_thread.is_alive()
 
     def is_available(self) -> bool:
         """Check if catalog is loaded and available."""
@@ -307,9 +485,14 @@ class MetricsCatalog:
         """
         query_lower = query.lower()
 
-        # Category keyword mapping
+        # Category keyword mapping (supports multiple GPU vendors)
         category_keywords = {
-            "gpu_ai": ["gpu", "nvidia", "cuda", "gaudi", "habana", "accelerator", "ai", "ml"],
+            "gpu_ai": [
+                "gpu", "nvidia", "cuda", "dcgm",  # NVIDIA
+                "gaudi", "habana", "intel", "xpu",  # Intel
+                "amd", "rocm", "amdgpu",  # AMD
+                "accelerator", "ai", "ml", "vllm", "inference"  # General AI/ML
+            ],
             "cluster_health": ["cluster", "capacity", "quota", "resource"],
             "node_hardware": ["node", "cpu", "memory", "disk", "hardware"],
             "pod_container": ["pod", "container", "restart", "oom", "deploy"],
@@ -407,14 +590,36 @@ class MetricsCatalog:
 _catalog_instance: Optional[MetricsCatalog] = None
 
 
-def get_metrics_catalog() -> MetricsCatalog:
+def get_metrics_catalog(
+    prometheus_url: Optional[str] = None,
+    enable_gpu_discovery: bool = True
+) -> MetricsCatalog:
     """
     Get global metrics catalog instance (singleton pattern).
+
+    Args:
+        prometheus_url: Optional Prometheus URL for GPU discovery.
+                       Only used when creating the singleton.
+        enable_gpu_discovery: Whether to enable GPU discovery.
+                             Only used when creating the singleton.
 
     Returns:
         Shared MetricsCatalog instance.
     """
     global _catalog_instance
     if _catalog_instance is None:
-        _catalog_instance = MetricsCatalog()
+        _catalog_instance = MetricsCatalog(
+            prometheus_url=prometheus_url,
+            enable_gpu_discovery=enable_gpu_discovery
+        )
     return _catalog_instance
+
+
+def reset_metrics_catalog() -> None:
+    """
+    Reset the global catalog instance.
+
+    Useful for testing or when configuration changes.
+    """
+    global _catalog_instance
+    _catalog_instance = None
