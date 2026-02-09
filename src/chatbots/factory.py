@@ -15,7 +15,7 @@ from .google_bot import GoogleChatBot
 from .llama_bot import LlamaChatBot
 from .deterministic_bot import DeterministicChatBot
 from common.pylogger import get_python_logger
-from core.config import RAG_AVAILABLE
+from core.config import is_rag_available
 
 logger = get_python_logger()
 
@@ -143,8 +143,8 @@ def create_chatbot(
             logger.warning(f"Unknown external provider {provider}, using OpenAI as fallback")
             return OpenAIChatBot(model_name, api_key, api_url, tool_executor)
     else:
-        # Check if RAG (local models) infrastructure is available
-        if not RAG_AVAILABLE:
+        # Check if RAG (local models) infrastructure is available (dynamic check with caching)
+        if not is_rag_available():
             logger.error(f"Local model {model_name} requested but RAG infrastructure not available")
             raise ValueError(
                 f"Local model '{model_name}' is not available. "
