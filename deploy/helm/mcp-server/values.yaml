@@ -65,7 +65,10 @@ trustedCA:
 
 # RBAC setup similar to metrics-api
 rbac:
-  createGrafanaRole: false
+  # Creates a ClusterRole with access to Prometheus and Alertmanager APIs
+  createGrafanaRole: true
+  # Bind to openshift-cluster-monitoring-view if it exists (some clusters may not have it)
+  bindOpenshiftClusterMonitoringView: false
 
 
 resources:

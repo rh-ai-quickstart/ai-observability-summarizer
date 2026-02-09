@@ -25,6 +25,7 @@ subjects:
     name: mcp-analyzer
     namespace: {{ .Release.Namespace }}
 ---
+{{- if .Values.rbac.bindOpenshiftClusterMonitoringView }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
@@ -37,6 +38,7 @@ subjects:
   - kind: ServiceAccount
     name: mcp-analyzer
     namespace: {{ .Release.Namespace }}
+{{- end }}
 ---
 {{- if .Values.rbac.createGrafanaRole }}
 apiVersion: rbac.authorization.k8s.io/v1
@@ -48,10 +50,20 @@ rules:
   resources:
     - "prometheuses"
     - "prometheuses/*"
+    - "alertmanagers"
+    - "alertmanagers/*"
   verbs:
     - "get"
     - "list"
     - "watch"
+- apiGroups: ["monitoring.coreos.com"]
+  resources:
+    - "prometheuses/api"
+    - "alertmanagers/api"
+  verbs:
+    - "get"
+    - "create"
+    - "update"
 {{- end }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
