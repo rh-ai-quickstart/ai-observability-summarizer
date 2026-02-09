@@ -43,15 +43,17 @@ The operator automatically configures the following cluster-level settings:
 
 ### Required Operators (Auto-Installed by OLM)
 
-These operators are declared as OLM dependencies and will be **automatically installed** when this operator is installed:
+These operators are declared as OLM dependencies with **pinned versions** and will be **automatically installed** when this operator is installed:
 
-| Operator | Required API | Auto-Installed |
-|----------|--------------|----------------|
-| **Cluster Observability Operator** | `UIPlugin`, `Korrel8r` | ✅ Yes |
-| **OpenTelemetry Operator** | `OpenTelemetryCollector` | ✅ Yes |
-| **Tempo Operator** | `TempoStack` | ✅ Yes |
-| **Loki Operator** | `LokiStack` | ✅ Yes |
-| **Cluster Logging Operator** | `ClusterLogForwarder` | ✅ Yes |
+| Operator | Package Name | Version Constraint | Required API |
+|----------|--------------|-------------------|--------------|
+| **Cluster Observability Operator** | `cluster-observability-operator` | `>=0.2.0 <1.0.0` | `UIPlugin`, `Korrel8r` |
+| **OpenTelemetry Operator** | `opentelemetry-product` | `>=0.108.0 <1.0.0` | `OpenTelemetryCollector` |
+| **Tempo Operator** | `tempo-product` | `0.16.0-2` (pinned)* | `TempoStack` |
+| **Cluster Logging Operator** | `cluster-logging` | `>=6.3.0 <6.4.0` | `ClusterLogForwarder` |
+| **Loki Operator** | `loki-operator` | `>=6.3.0 <6.4.0` | `LokiStack` |
+
+> **\*Note on Tempo:** Pinned to v0.16.0-2 due to container crash issue in v0.18.0-x ([APPENG-3916](https://issues.redhat.com/browse/APPENG-3916))
 
 > **Note:** OpenShift AI (RHOAI) for KServe/InferenceService is NOT auto-installed and must be installed separately if using RAG with local LLM deployment.
 

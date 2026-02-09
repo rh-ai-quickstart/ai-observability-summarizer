@@ -6,6 +6,7 @@ metadata:
 spec:
   sourceType: grpc
   image: quay.io/ecosystem-appeng/aiobs-operator-catalog:v1.1.0-feature
+  imagePullPolicy: Always
   displayName: AI Observability Operator
   publisher: RH AI Quickstart
   # Lower priority than redhat-operators (-100) so OLM resolves dependencies from there
