@@ -227,16 +227,6 @@ const AIObservabilityPage: React.FC = () => {
             eventKey={3}
             title={
               <>
-                <TabTitleIcon><CubeIcon /></TabTitleIcon>
-                <TabTitleText>Hardware Accelerators</TabTitleText>
-              </>
-            }
-            aria-label="Hardware Accelerators"
-          />
-          <Tab
-            eventKey={3}
-            title={
-              <>
                 <TabTitleIcon>
                   <CubesIcon />
                 </TabTitleIcon>

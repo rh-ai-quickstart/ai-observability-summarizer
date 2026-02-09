@@ -6,6 +6,8 @@ import {
   Card,
   CardBody,
   CardTitle,
+  Flex,
+  FlexItem,
   Grid,
   GridItem,
   Spinner,
@@ -254,9 +256,38 @@ export const ModelInsightsSection: React.FC<ModelInsightsSectionProps> = ({
 
   if (loading || metricsLoading) {
     return (
-      <Bullseye style={{ minHeight: '240px' }}>
-        <Spinner size="lg" />
-      </Bullseye>
+      <div style={{ marginTop: '32px' }}>
+        <Title headingLevel="h2" size="lg" style={{ marginBottom: '16px' }}>
+          Model Insights
+        </Title>
+        <Card isCompact>
+          <CardBody>
+            <Bullseye style={{ minHeight: '240px' }}>
+              <TextContent style={{ textAlign: 'center' }}>
+                <Flex
+                  alignItems={{ default: 'alignItemsCenter' }}
+                  justifyContent={{ default: 'justifyContentCenter' }}
+                >
+                  <FlexItem>
+                    <Spinner size="lg" />
+                  </FlexItem>
+                  <FlexItem>
+                    <Text component={TextVariants.h3} style={{ marginBottom: 0 }}>
+                      Loading model insights
+                    </Text>
+                  </FlexItem>
+                </Flex>
+                <Text
+                  component={TextVariants.small}
+                  style={{ color: 'var(--pf-v5-global--Color--200)', marginTop: '8px' }}
+                >
+                  Charts will appear once data is available.
+                </Text>
+              </TextContent>
+            </Bullseye>
+          </CardBody>
+        </Card>
+      </div>
     );
   }
 
@@ -287,7 +318,7 @@ export const ModelInsightsSection: React.FC<ModelInsightsSectionProps> = ({
         <GridItem lg={4} md={6} sm={12}>
           <InsightDonutCard
             title="Model Performance"
-            subtitle="Inferred health based on availability"
+            subtitle="Inferred health based on performance metrics"
             data={performanceData}
             totalLabel={totalModelsLabel}
             colorScale={['#3e8635', '#f0ab00', '#c9190b', '#6a6e73']}
@@ -295,7 +326,7 @@ export const ModelInsightsSection: React.FC<ModelInsightsSectionProps> = ({
         </GridItem>
         <GridItem lg={4} md={6} sm={12}>
           <InsightDonutCard
-            title="Models by Department"
+            title="Models by Namespace"
             subtitle="Namespaces with vLLM deployments"
             data={departmentData}
             totalLabel={totalModelsLabel}
