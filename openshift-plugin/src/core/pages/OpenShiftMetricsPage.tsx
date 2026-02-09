@@ -28,20 +28,36 @@ import {
   ToggleGroupItem,
   Toolbar,
   ToolbarContent,
-  ToolbarItem,
+  Dropdown,
+  DropdownItem,
+  DropdownList,
+  MenuToggle,
+  MenuToggleElement,
 } from '@patternfly/react-core';
-import { 
-  SyncIcon, 
-  OutlinedLightbulbIcon, 
-  ClusterIcon, 
+import {
+  SyncIcon,
+  OutlinedLightbulbIcon,
+  ClusterIcon,
   CubeIcon,
   ServerIcon,
   NetworkIcon,
   DatabaseIcon,
   CubesIcon,
   RunningIcon,
+  ChartLineIcon,
+  DownloadIcon,
+  RobotIcon,
+  TimesIcon,
+  CalendarAltIcon,
 } from '@patternfly/react-icons';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { AlertList } from '../components/AlertList';
+import { MetricChartModal } from '../components/MetricChartModal';
+import { MetricsChatPanel } from '../components/MetricsChatPanel';
+import { CustomRangePickerModal } from '../components/CustomRangePickerModal';
+import { ConfigurationRequiredAlert } from '../components/ConfigurationRequiredAlert';
+import { formatValue, GPU_THRESHOLDS } from '../utils/formatValue';
 import {
   fetchOpenShiftMetrics,
   listOpenShiftNamespaces,
@@ -51,6 +67,7 @@ import {
   type OpenShiftAnalysisResult,
   type AlertInfo,
 } from '../services/mcpClient';
+import { useSettings } from '../hooks/useSettings';
 
 // Metric categories with icons - matching MCP server categories exactly
 const CLUSTER_WIDE_CATEGORIES = {
@@ -58,140 +75,139 @@ const CLUSTER_WIDE_CATEGORIES = {
     icon: ClusterIcon,
     description: 'Cluster-wide pod, deployment, and service metrics',
     metrics: [
-      { key: 'Total Pods Running', label: 'Pods Running', unit: '', description: 'Running pods' },
-      { key: 'Total Pods Failed', label: 'Pods Failed', unit: '', description: 'Failed pods' },
-      { key: 'Pods Pending', label: 'Pods Pending', unit: '', description: 'Pending pods' },
-      { key: 'Total Deployments', label: 'Deployments', unit: '', description: 'Ready deployments' },
-      { key: 'Cluster CPU Usage (%)', label: 'CPU %', unit: '%', description: 'Cluster CPU usage' },
-      { key: 'Cluster Memory Usage (%)', label: 'Memory %', unit: '%', description: 'Cluster memory usage' },
-      { key: 'Total Services', label: 'Services', unit: '', description: 'Total services' },
-      { key: 'Total Nodes', label: 'Nodes', unit: '', description: 'Total nodes' },
-      { key: 'Total Namespaces', label: 'Namespaces', unit: '', description: 'Active namespaces' },
+      { key: 'Total Pods Running', label: 'Pods Running', unit: '', description: 'Currently running across cluster' },
+      { key: 'Total Pods Failed', label: 'Pods Failed', unit: '', description: 'Pods requiring attention' },
+      { key: 'Pods Pending', label: 'Pods Pending', unit: '', description: 'Waiting for scheduling' },
+      { key: 'Total Deployments', label: 'Deployments', unit: '', description: 'Active across all namespaces' },
+      { key: 'Cluster CPU Usage (%)', label: 'CPU %', unit: '%', description: 'Current cluster utilization' },
+      { key: 'Cluster Memory Usage (%)', label: 'Memory %', unit: '%', description: 'Current cluster utilization' },
+      { key: 'Total Services', label: 'Services', unit: '', description: 'LoadBalancer and ClusterIP' },
+      { key: 'Total Nodes', label: 'Nodes', unit: '', description: 'Available cluster nodes' },
+      { key: 'Total Namespaces', label: 'Namespaces', unit: '', description: 'Active project namespaces' },
     ]
   },
   'Jobs & Workloads': {
     icon: RunningIcon,
     description: 'Job execution and workload status',
     metrics: [
-      { key: 'Jobs Running', label: 'Jobs Active', unit: '', description: 'Currently running jobs' },
-      { key: 'Jobs Completed', label: 'Jobs Done', unit: '', description: 'Completed jobs' },
-      { key: 'Jobs Failed', label: 'Jobs Failed', unit: '', description: 'Failed jobs' },
-      { key: 'CronJobs', label: 'CronJobs', unit: '', description: 'CronJob count' },
-      { key: 'DaemonSets Ready', label: 'DaemonSets', unit: '', description: 'Ready daemon sets' },
-      { key: 'StatefulSets Ready', label: 'StatefulSets', unit: '', description: 'Ready stateful sets' },
-      { key: 'ReplicaSets Ready', label: 'ReplicaSets', unit: '', description: 'Ready replica sets' },
+      { key: 'Jobs Running', label: 'Jobs Active', unit: '', description: 'Currently executing' },
+      { key: 'Jobs Completed', label: 'Jobs Done', unit: '', description: 'Successfully finished' },
+      { key: 'Jobs Failed', label: 'Jobs Failed', unit: '', description: 'Require investigation' },
+      { key: 'CronJobs', label: 'CronJobs', unit: '', description: 'Scheduled job definitions' },
+      { key: 'DaemonSets Ready', label: 'DaemonSets', unit: '', description: 'Running on all nodes' },
+      { key: 'StatefulSets Ready', label: 'StatefulSets', unit: '', description: 'Persistent workloads ready' },
+      { key: 'ReplicaSets Ready', label: 'ReplicaSets', unit: '', description: 'Scalable workloads ready' },
     ]
   },
   'Storage & Config': {
     icon: DatabaseIcon,
     description: 'Storage volumes and configuration resources',
     metrics: [
-      { key: 'Persistent Volumes', label: 'PVs', unit: '', description: 'Persistent volumes' },
-      { key: 'PV Claims', label: 'PVCs', unit: '', description: 'Persistent volume claims' },
-      { key: 'PVC Bound', label: 'PVC Bound', unit: '', description: 'Bound PVCs' },
-      { key: 'PVC Pending', label: 'PVC Pending', unit: '', description: 'Pending PVCs' },
-      { key: 'ConfigMaps', label: 'ConfigMaps', unit: '', description: 'Configuration maps' },
-      { key: 'Secrets', label: 'Secrets', unit: '', description: 'Secret objects' },
-      { key: 'Storage Classes', label: 'StorageClasses', unit: '', description: 'Storage class count' },
+      { key: 'Persistent Volumes', label: 'PVs', unit: '', description: 'Available storage volumes' },
+      { key: 'PV Claims', label: 'PVCs', unit: '', description: 'Storage requests by pods' },
+      { key: 'PVC Bound', label: 'PVC Bound', unit: '', description: 'Successfully attached' },
+      { key: 'PVC Pending', label: 'PVC Pending', unit: '', description: 'Waiting for provisioning' },
+      { key: 'ConfigMaps', label: 'ConfigMaps', unit: '', description: 'Non-secret configuration' },
+      { key: 'Secrets', label: 'Secrets', unit: '', description: 'Encrypted configuration' },
+      { key: 'Storage Classes', label: 'StorageClasses', unit: '', description: 'Storage tier definitions' },
     ]
   },
   'Node Metrics': {
     icon: ServerIcon,
     description: 'Node-level resource and health metrics',
     metrics: [
-      { key: 'Node CPU Usage (%)', label: 'CPU %', unit: '%', description: 'Node CPU usage' },
-      { key: 'Node Memory Available (GB)', label: 'Mem Avail', unit: 'GB', description: 'Available memory' },
-      { key: 'Node Memory Total (GB)', label: 'Mem Total', unit: 'GB', description: 'Total memory' },
-      { key: 'Node Disk Reads', label: 'Disk Reads', unit: '/s', description: 'Disk read IOPS' },
-      { key: 'Node Disk Writes', label: 'Disk Writes', unit: '/s', description: 'Disk write IOPS' },
-      { key: 'Nodes Ready', label: 'Ready', unit: '', description: 'Nodes in Ready state' },
-      { key: 'Nodes Not Ready', label: 'Not Ready', unit: '', description: 'Nodes not ready' },
-      { key: 'Memory Pressure', label: 'MemPressure', unit: '', description: 'Nodes with memory pressure' },
-      { key: 'Disk Pressure', label: 'DiskPressure', unit: '', description: 'Nodes with disk pressure' },
-      { key: 'PID Pressure', label: 'PIDPressure', unit: '', description: 'Nodes with PID pressure' },
+      { key: 'Node CPU Usage (%)', label: 'CPU %', unit: '%', description: 'Average across all nodes' },
+      { key: 'Node Memory Available (GB)', label: 'Mem Avail', unit: 'GB', description: 'Free memory across nodes' },
+      { key: 'Node Memory Total (GB)', label: 'Mem Total', unit: 'GB', description: 'Cluster memory capacity' },
+      { key: 'Node Disk Reads', label: 'Disk Reads', unit: '/s', description: 'Read operations per second' },
+      { key: 'Node Disk Writes', label: 'Disk Writes', unit: '/s', description: 'Write operations per second' },
+      { key: 'Nodes Ready', label: 'Ready', unit: '', description: 'Available for workloads' },
+      { key: 'Nodes Not Ready', label: 'Not Ready', unit: '', description: 'Require investigation' },
+      { key: 'Memory Pressure', label: 'MemPressure', unit: '', description: 'Low memory warnings' },
+      { key: 'Disk Pressure', label: 'DiskPressure', unit: '', description: 'Low disk space warnings' },
+      { key: 'PID Pressure', label: 'PIDPressure', unit: '', description: 'Process limit warnings' },
     ]
   },
   'GPU & Accelerators': {
     icon: CubesIcon,
     description: 'GPU and accelerator metrics (NVIDIA/Intel Gaudi)',
     metrics: [
-      { key: 'GPU Temperature (°C)', label: 'Temp', unit: '°C', description: 'GPU temperature' },
-      { key: 'GPU Power Usage (W)', label: 'Power', unit: 'W', description: 'GPU power usage' },
-      { key: 'GPU Utilization (%)', label: 'Util %', unit: '%', description: 'GPU utilization' },
-      { key: 'GPU Memory Used (GB)', label: 'Mem Used', unit: 'GB', description: 'GPU memory used' },
-      { key: 'GPU Count', label: 'GPU Count', unit: '', description: 'Total GPUs' },
-      { key: 'GPU Memory Temp (°C)', label: 'Mem Temp', unit: '°C', description: 'GPU memory temperature' },
+      { key: 'GPU Temperature (°C)', label: 'Temp', unit: '°C', description: 'Average GPU core temp' },
+      { key: 'GPU Power Usage (W)', label: 'Power', unit: 'W', description: 'Current power consumption' },
+      { key: 'GPU Utilization (%)', label: 'Util %', unit: '%', description: 'Compute utilization' },
+      { key: 'GPU Memory Used (GB)', label: 'Mem Used', unit: 'GB', description: 'VRAM currently allocated' },
+      { key: 'GPU Count', label: 'GPU Count', unit: '', description: 'Available accelerators' },
+      { key: 'GPU Memory Temp (°C)', label: 'Mem Temp', unit: '°C', description: 'VRAM temperature' },
+      { key: 'GPU Clock Speed', label: 'Clock', unit: 'MHz', description: 'Core clock frequency' },
+      { key: 'GPU Energy Usage', label: 'Energy', unit: 'J', description: 'Cumulative energy consumed' },
     ]
   },
   'Autoscaling & Scheduling': {
     icon: NetworkIcon,
     description: 'Autoscaling and pod scheduling metrics',
     metrics: [
-      { key: 'Pending Pods', label: 'Pending', unit: '', description: 'Pods waiting to schedule' },
-      { key: 'Scheduler Latency (s)', label: 'Sched Latency', unit: 's', description: 'P99 scheduling latency' },
-      { key: 'CPU Requests Total', label: 'CPU Req', unit: 'cores', description: 'Total CPU requested' },
-      { key: 'CPU Limits Total', label: 'CPU Lim', unit: 'cores', description: 'Total CPU limits' },
-      { key: 'Memory Requests (GB)', label: 'Mem Req', unit: 'GB', description: 'Total memory requested' },
-      { key: 'Memory Limits (GB)', label: 'Mem Lim', unit: 'GB', description: 'Total memory limits' },
-      { key: 'HPA Active', label: 'HPA Current', unit: '', description: 'HPA current replicas' },
-      { key: 'HPA Desired', label: 'HPA Desired', unit: '', description: 'HPA desired replicas' },
+      { key: 'Pending Pods', label: 'Pending', unit: '', description: 'Awaiting node placement' },
+      { key: 'Scheduler Latency (s)', label: 'Sched Latency', unit: 's', description: '99th percentile delay' },
+      { key: 'CPU Requests Total', label: 'CPU Req', unit: 'cores', description: 'Reserved CPU across pods' },
+      { key: 'CPU Limits Total', label: 'CPU Lim', unit: 'cores', description: 'Maximum CPU allowed' },
+      { key: 'Memory Requests (GB)', label: 'Mem Req', unit: 'GB', description: 'Reserved memory across pods' },
+      { key: 'Memory Limits (GB)', label: 'Mem Lim', unit: 'GB', description: 'Maximum memory allowed' },
+      { key: 'HPA Active', label: 'HPA Current', unit: '', description: 'Auto-scaled replicas' },
+      { key: 'HPA Desired', label: 'HPA Desired', unit: '', description: 'Target replica count' },
     ]
   },
-};
-
-const NAMESPACE_SCOPED_CATEGORIES = {
   'Pod & Container Metrics': {
     icon: CubesIcon,
     description: 'Pod and container resource usage',
     metrics: [
-      { key: 'Pod CPU Usage (cores)', label: 'CPU', unit: 'cores', description: 'CPU usage' },
-      { key: 'CPU Throttled (%)', label: 'Throttled', unit: '%', description: 'CPU throttling' },
-      { key: 'Pod Memory (GB)', label: 'Memory', unit: 'GB', description: 'Working set memory' },
-      { key: 'RSS Memory (GB)', label: 'RSS', unit: 'GB', description: 'Resident memory' },
-      { key: 'Container Restarts', label: 'Restarts', unit: '', description: 'Total restarts' },
-      { key: 'Pods Ready', label: 'Ready', unit: '', description: 'Ready pods' },
-      { key: 'Pods Not Ready', label: 'Not Ready', unit: '', description: 'Not ready pods' },
-      { key: 'Container OOM Killed', label: 'OOM Killed', unit: '', description: 'OOM killed containers' },
+      { key: 'Pod CPU Usage (cores)', label: 'CPU', unit: 'cores', description: 'Current CPU usage' },
+      { key: 'CPU Throttled (%)', label: 'Throttled', unit: '%', description: 'Containers hitting limits' },
+      { key: 'Pod Memory (GB)', label: 'Memory', unit: 'GB', description: 'Active memory usage' },
+      { key: 'RSS Memory (GB)', label: 'RSS', unit: 'GB', description: 'Physical memory used' },
+      { key: 'Container Restarts', label: 'Restarts', unit: '', description: 'Container restart count' },
+      { key: 'Pods Ready', label: 'Ready', unit: '', description: 'Running pods' },
+      { key: 'Pods Not Ready', label: 'Not Ready', unit: '', description: 'Need investigation' },
+      { key: 'Container OOM Killed', label: 'OOM Killed', unit: '', description: 'Memory limit exceeded' },
     ]
   },
   'Network Metrics': {
     icon: NetworkIcon,
-    description: 'Pod network I/O metrics',
+    description: 'Network I/O metrics',
     metrics: [
-      { key: 'Network RX (MB/s)', label: 'RX', unit: 'MB/s', description: 'Network receive rate' },
-      { key: 'Network TX (MB/s)', label: 'TX', unit: 'MB/s', description: 'Network transmit rate' },
-      { key: 'Network RX Packets', label: 'RX Pkts', unit: '/s', description: 'Packets received' },
-      { key: 'Network TX Packets', label: 'TX Pkts', unit: '/s', description: 'Packets transmitted' },
-      { key: 'Network RX Errors', label: 'RX Errors', unit: '/s', description: 'Receive errors' },
-      { key: 'Network TX Errors', label: 'TX Errors', unit: '/s', description: 'Transmit errors' },
-      { key: 'Network RX Dropped', label: 'RX Dropped', unit: '/s', description: 'Packets dropped (RX)' },
-      { key: 'Network TX Dropped', label: 'TX Dropped', unit: '/s', description: 'Packets dropped (TX)' },
+      { key: 'Network RX (MB/s)', label: 'RX', unit: 'MB/s', description: 'Incoming data rate' },
+      { key: 'Network TX (MB/s)', label: 'TX', unit: 'MB/s', description: 'Outgoing data rate' },
+      { key: 'Network RX Packets', label: 'RX Pkts', unit: '/s', description: 'Incoming packets per sec' },
+      { key: 'Network TX Packets', label: 'TX Pkts', unit: '/s', description: 'Outgoing packets per sec' },
+      { key: 'Network RX Errors', label: 'RX Errors', unit: '/s', description: 'Incoming error rate' },
+      { key: 'Network TX Errors', label: 'TX Errors', unit: '/s', description: 'Outgoing error rate' },
+      { key: 'Network RX Dropped', label: 'RX Dropped', unit: '/s', description: 'Incoming packets dropped' },
+      { key: 'Network TX Dropped', label: 'TX Dropped', unit: '/s', description: 'Outgoing packets dropped' },
     ]
   },
   'Storage I/O': {
     icon: DatabaseIcon,
     description: 'Storage and filesystem metrics',
     metrics: [
-      { key: 'Disk Read (MB/s)', label: 'Read', unit: 'MB/s', description: 'Disk read rate' },
-      { key: 'Disk Write (MB/s)', label: 'Write', unit: 'MB/s', description: 'Disk write rate' },
-      { key: 'Disk Read IOPS', label: 'Read IOPS', unit: '/s', description: 'Read operations' },
-      { key: 'Disk Write IOPS', label: 'Write IOPS', unit: '/s', description: 'Write operations' },
-      { key: 'Filesystem Usage (GB)', label: 'FS Used', unit: 'GB', description: 'Filesystem used' },
-      { key: 'Filesystem Limit (GB)', label: 'FS Limit', unit: 'GB', description: 'Filesystem limit' },
-      { key: 'PVC Used (GB)', label: 'PVC Used', unit: 'GB', description: 'PVC space used' },
-      { key: 'PVC Capacity (GB)', label: 'PVC Cap', unit: 'GB', description: 'PVC capacity' },
+      { key: 'Disk Read (MB/s)', label: 'Read', unit: 'MB/s', description: 'Storage read throughput' },
+      { key: 'Disk Write (MB/s)', label: 'Write', unit: 'MB/s', description: 'Storage write throughput' },
+      { key: 'Disk Read IOPS', label: 'Read IOPS', unit: '/s', description: 'Read operations per sec' },
+      { key: 'Disk Write IOPS', label: 'Write IOPS', unit: '/s', description: 'Write operations per sec' },
+      { key: 'Filesystem Usage (GB)', label: 'FS Used', unit: 'GB', description: 'Container filesystem used' },
+      { key: 'Filesystem Limit (GB)', label: 'FS Limit', unit: 'GB', description: 'Container filesystem cap' },
+      { key: 'PVC Used (GB)', label: 'PVC Used', unit: 'GB', description: 'Persistent storage used' },
+      { key: 'PVC Capacity (GB)', label: 'PVC Cap', unit: 'GB', description: 'Persistent storage limit' },
     ]
   },
   'Services & Networking': {
     icon: ServerIcon,
     description: 'Services and ingress metrics',
     metrics: [
-      { key: 'Services Running', label: 'Services', unit: '', description: 'Running services' },
-      { key: 'Service Endpoints', label: 'Endpoints', unit: '', description: 'Service endpoints' },
-      { key: 'Ingress Rules', label: 'Ingresses', unit: '', description: 'Ingress rules' },
-      { key: 'Network Policies', label: 'NetPolicies', unit: '', description: 'Network policies' },
-      { key: 'Load Balancer Services', label: 'LB Svcs', unit: '', description: 'LoadBalancer services' },
-      { key: 'ClusterIP Services', label: 'ClusterIP', unit: '', description: 'ClusterIP services' },
+      { key: 'Services Running', label: 'Services', unit: '', description: 'Active services' },
+      { key: 'Service Endpoints', label: 'Endpoints', unit: '', description: 'Backend pod targets' },
+      { key: 'Ingress Rules', label: 'Ingresses', unit: '', description: 'HTTP routing rules' },
+      { key: 'Network Policies', label: 'NetPolicies', unit: '', description: 'Traffic access controls' },
+      { key: 'Load Balancer Services', label: 'LB Svcs', unit: '', description: 'External load balancers' },
+      { key: 'ClusterIP Services', label: 'ClusterIP', unit: '', description: 'Internal cluster services' },
     ]
   },
   'Application Services': {
@@ -208,13 +224,22 @@ const NAMESPACE_SCOPED_CATEGORIES = {
   },
 };
 
+// All categories are now available for both cluster-wide and namespace-scoped views
+// The scope only affects data aggregation, not which categories are shown
+
 const TIME_RANGE_OPTIONS = [
   { value: '15m', label: '15 minutes' },
   { value: '1h', label: '1 hour' },
   { value: '6h', label: '6 hours' },
   { value: '24h', label: '24 hours' },
   { value: '7d', label: '7 days' },
+  { value: 'custom', label: 'Custom Range...' },
 ];
+
+// Grid layout constants
+const GRID_SPAN_FULL = 12;
+const GRID_SPAN_METRICS_WITH_CHAT = 8;
+const GRID_SPAN_CHAT = 4;
 
 type ScopeType = 'cluster_wide' | 'namespace_scoped';
 
@@ -231,18 +256,13 @@ interface MetricCardProps {
   unit?: string;
   description?: string;
   timeSeries?: TimeSeriesPoint[];
+  metricKey: string;
+  onViewChart?: (metricKey: string) => void;
+  icon?: React.ComponentType;
+  secondaryInfo?: React.ReactNode; // For custom secondary metrics (e.g., GPU utilization/temperature)
 }
 
-const MetricCard: React.FC<MetricCardProps> = ({ label, value, unit, description, timeSeries }) => {
-  const formatValue = (val: number | null): string => {
-    if (val === null || val === undefined || isNaN(val)) return '—';
-    if (val >= 1000000000) return `${(val / 1000000000).toFixed(2)}B`;
-    if (val >= 1000000) return `${(val / 1000000).toFixed(2)}M`;
-    if (val >= 1000) return `${(val / 1000).toFixed(1)}K`;
-    if (val < 0.01 && val > 0) return val.toExponential(2);
-    if (Number.isInteger(val)) return val.toString();
-    return val.toFixed(2);
-  };
+const MetricCard: React.FC<MetricCardProps> = ({ label, value, unit, description, timeSeries, metricKey, onViewChart, icon, secondaryInfo }) => {
 
   // Calculate trend from time series
   const getTrend = (): { direction: 'up' | 'down' | 'flat'; percent: number } | null => {
@@ -292,51 +312,107 @@ const MetricCard: React.FC<MetricCardProps> = ({ label, value, unit, description
     );
   };
 
-  const displayValue = formatValue(value);
+  // Calculate average from time series data
+  const calculateAverage = (timeSeries?: TimeSeriesPoint[]): number | null => {
+    if (!timeSeries || timeSeries.length === 0) return null;
+    const sum = timeSeries.reduce((acc, pt) => acc + pt.value, 0);
+    return sum / timeSeries.length;
+  };
+
+  const { value: displayValue, unit: displayUnit } = formatValue(value, unit);
+  const avgValue = calculateAverage(timeSeries);
+  const avgFormatted = avgValue !== null ? formatValue(avgValue, unit) : null;
   const isZero = value === 0;
   const isNull = value === null;
 
   return (
     <Card isCompact style={{ height: '100%' }}>
       <CardBody style={{ padding: '12px' }}>
-        <TextContent>
-          <Text component={TextVariants.small} style={{ color: 'var(--pf-v5-global--Color--200)', marginBottom: '4px' }}>
-            {label}
-          </Text>
-        </TextContent>
-        <Flex alignItems={{ default: 'alignItemsCenter' }}>
-          <FlexItem>
-            <Text 
-              component={TextVariants.h2} 
-              style={{ 
-                color: isNull ? 'var(--pf-v5-global--Color--200)' : isZero ? 'var(--pf-v5-global--success-color--100)' : 'inherit',
-                marginBottom: '2px',
-                fontSize: '1.5rem',
-              }}
-            >
-              {displayValue}{unit && value !== null ? ` ${unit}` : ''}
-            </Text>
+        <Flex justifyContent={{ default: 'justifyContentSpaceBetween' }} alignItems={{ default: 'alignItemsFlexStart' }}>
+          <FlexItem flex={{ default: 'flex_1' }}>
+            <TextContent>
+              <Text component={TextVariants.small} style={{ color: 'var(--pf-v5-global--Color--200)', marginBottom: '4px' }}>
+                {label}
+              </Text>
+            </TextContent>
+            <Flex alignItems={{ default: 'alignItemsCenter' }}>
+              <FlexItem>
+                <div>
+                  <Text
+                    component={TextVariants.h2}
+                    style={{
+                      color: isNull ? 'var(--pf-v5-global--Color--200)' : isZero ? 'var(--pf-v5-global--success-color--100)' : 'inherit',
+                      marginBottom: '2px',
+                      fontSize: '1.5rem',
+                    }}
+                  >
+                    {displayValue}{displayUnit && value !== null ? ` ${displayUnit}` : ''}
+                  </Text>
+                  {avgFormatted && (
+                    <Text
+                      component={TextVariants.small}
+                      style={{
+                        color: '#666',
+                        fontSize: '0.85rem',
+                        display: 'block',
+                        marginTop: '2px'
+                      }}
+                    >
+                      Avg: {avgFormatted.value}{avgFormatted.unit ? ` ${avgFormatted.unit}` : ''}
+                    </Text>
+                  )}
+                  {secondaryInfo && avgValue === null && (
+                    <div style={{ marginTop: '2px' }}>
+                      {secondaryInfo}
+                    </div>
+                  )}
+                </div>
+              </FlexItem>
+              <FlexItem>
+                {renderSparkline() || <div style={{ width: '60px', height: '20px' }} />}
+              </FlexItem>
+              {icon && (
+                <FlexItem>
+                  <div style={{
+                    color: 'var(--pf-v5-global--primary-color--100)',
+                    fontSize: '20px',
+                    marginLeft: '8px'
+                  }}>
+                    {React.createElement(icon, {})}
+                  </div>
+                </FlexItem>
+              )}
+              {trend && trend.direction !== 'flat' && (
+                <FlexItem>
+                  <span style={{
+                    fontSize: '0.7rem',
+                    color: trend.direction === 'up' ? '#3e8635' : '#c9190b',
+                    marginLeft: '4px',
+                  }}>
+                    {trend.direction === 'up' ? '↑' : '↓'} {trend.percent.toFixed(0)}%
+                  </span>
+                </FlexItem>
+              )}
+            </Flex>
+            {description && (
+              <Text component={TextVariants.small} style={{ color: 'var(--pf-v5-global--Color--200)', fontSize: '0.75rem' }}>
+                {description}
+              </Text>
+            )}
           </FlexItem>
-          <FlexItem>
-            {renderSparkline()}
-          </FlexItem>
-          {trend && trend.direction !== 'flat' && (
+          {timeSeries && timeSeries.length > 0 && onViewChart && (
             <FlexItem>
-              <span style={{ 
-                fontSize: '0.7rem', 
-                color: trend.direction === 'up' ? '#3e8635' : '#c9190b',
-                marginLeft: '4px',
-              }}>
-                {trend.direction === 'up' ? '↑' : '↓'} {trend.percent.toFixed(0)}%
-              </span>
+              <Button
+                variant="secondary"
+                size="sm"
+                aria-label="View full chart"
+                onClick={() => onViewChart(metricKey)}
+              >
+                <ChartLineIcon />
+              </Button>
             </FlexItem>
           )}
         </Flex>
-        {description && (
-          <Text component={TextVariants.small} style={{ color: 'var(--pf-v5-global--Color--200)', fontSize: '0.75rem' }}>
-            {description}
-          </Text>
-        )}
       </CardBody>
     </Card>
   );
@@ -348,6 +424,149 @@ interface MetricDataValue {
   time_series?: TimeSeriesPoint[];
 }
 
+// GPU Fleet Summary Component
+interface GPUFleetSummaryProps {
+  metricsData: Record<string, MetricDataValue>;
+}
+
+const GPUFleetSummary: React.FC<GPUFleetSummaryProps> = ({ metricsData }) => {
+  // Calculate fleet-wide GPU statistics
+  const totalGPUs = metricsData['GPU Count']?.latest_value || 0;
+  const avgUtil = (() => {
+    const utilSeries = metricsData['GPU Utilization (%)']?.time_series;
+    if (!utilSeries || utilSeries.length === 0) return null;
+    const sum = utilSeries.reduce((acc, pt) => acc + pt.value, 0);
+    return sum / utilSeries.length;
+  })();
+  
+  const avgTemp = (() => {
+    const tempSeries = metricsData['GPU Temperature (°C)']?.time_series;
+    if (!tempSeries || tempSeries.length === 0) return null;
+    const sum = tempSeries.reduce((acc, pt) => acc + pt.value, 0);
+    return sum / tempSeries.length;
+  })();
+  
+  const totalPower = metricsData['GPU Power Usage (W)']?.latest_value || 0;
+  
+  // Health alerts based on thresholds
+  const hotGPUs = avgTemp && avgTemp > GPU_THRESHOLDS.TEMPERATURE_CRITICAL ? Math.ceil(totalGPUs * 0.2) : 0; // Estimate based on temp
+  const overloadedGPUs = avgUtil && avgUtil > GPU_THRESHOLDS.UTILIZATION_CRITICAL ? Math.ceil(totalGPUs * 0.1) : 0; // Estimate
+  
+
+  return (
+    <Card style={{ marginBottom: '16px', background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)', border: '1px solid #0891b2' }}>
+      <CardTitle>
+        <Flex alignItems={{ default: 'alignItemsCenter' }}>
+          <FlexItem>
+            <CubesIcon style={{ color: '#0891b2', marginRight: '8px' }} />
+            GPU Fleet Overview
+          </FlexItem>
+          <FlexItem align={{ default: 'alignRight' }}>
+            <Text component={TextVariants.small} style={{ color: '#0891b2', fontWeight: 600 }}>
+              Cluster-wide Summary
+            </Text>
+          </FlexItem>
+        </Flex>
+      </CardTitle>
+      <CardBody>
+        <Grid hasGutter>
+          <GridItem sm={6} md={3}>
+            <div style={{ textAlign: 'center', padding: '12px', background: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+              <Text component={TextVariants.small} style={{ color: '#666', display: 'block', marginBottom: '4px' }}>
+                Total GPUs
+              </Text>
+              <Text component={TextVariants.h2} style={{ color: '#0891b2', fontWeight: 700 }}>
+                {totalGPUs}
+              </Text>
+              <Text component={TextVariants.small} style={{ color: '#666' }}>
+                accelerators
+              </Text>
+            </div>
+          </GridItem>
+          
+          <GridItem sm={6} md={3}>
+            <div style={{ textAlign: 'center', padding: '12px', background: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+              <Text component={TextVariants.small} style={{ color: '#666', display: 'block', marginBottom: '4px' }}>
+                Avg Utilization
+              </Text>
+              <Text component={TextVariants.h2} style={{ 
+                color: avgUtil && avgUtil > GPU_THRESHOLDS.UTILIZATION_WARNING ? '#dc2626' : avgUtil && avgUtil > GPU_THRESHOLDS.UTILIZATION_HIGH ? '#ea580c' : '#059669',
+                fontWeight: 700 
+              }}>
+                {formatValue(avgUtil, '%').value}%
+              </Text>
+              <Text component={TextVariants.small} style={{ color: '#666' }}>
+                compute usage
+              </Text>
+            </div>
+          </GridItem>
+          
+          <GridItem sm={6} md={3}>
+            <div style={{ textAlign: 'center', padding: '12px', background: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+              <Text component={TextVariants.small} style={{ color: '#666', display: 'block', marginBottom: '4px' }}>
+                Avg Temperature
+              </Text>
+              <Text component={TextVariants.h2} style={{ 
+                color: avgTemp && avgTemp > GPU_THRESHOLDS.TEMPERATURE_DANGER ? '#dc2626' : avgTemp && avgTemp > GPU_THRESHOLDS.TEMPERATURE_WARNING ? '#ea580c' : '#059669',
+                fontWeight: 700 
+              }}>
+                {avgTemp !== null ? Math.round(avgTemp) : '—'}°C
+              </Text>
+              <Text component={TextVariants.small} style={{ color: '#666' }}>
+                thermal status
+              </Text>
+            </div>
+          </GridItem>
+          
+          <GridItem sm={6} md={3}>
+            <div style={{ textAlign: 'center', padding: '12px', background: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+              <Text component={TextVariants.small} style={{ color: '#666', display: 'block', marginBottom: '4px' }}>
+                Fleet Power
+              </Text>
+              <Text component={TextVariants.h2} style={{ color: '#0891b2', fontWeight: 700 }}>
+                {(() => {
+                  const formatted = formatValue(totalPower, 'W');
+                  return `${formatted.value}${formatted.unit}`;
+                })()}
+              </Text>
+              <Text component={TextVariants.small} style={{ color: '#666' }}>
+                total consumption
+              </Text>
+            </div>
+          </GridItem>
+        </Grid>
+        
+        {/* Health Status */}
+        {(hotGPUs > 0 || overloadedGPUs > 0) && (
+          <div style={{ marginTop: '16px', padding: '12px', background: '#fef3c7', borderRadius: '8px', border: '1px solid #f59e0b' }}>
+            <Flex alignItems={{ default: 'alignItemsCenter' }}>
+              <FlexItem>
+                <Text component={TextVariants.small} style={{ color: '#92400e', fontWeight: 600 }}>
+                  ⚠️ Fleet Health Alerts:
+                </Text>
+              </FlexItem>
+              {hotGPUs > 0 && (
+                <FlexItem style={{ marginLeft: '12px' }}>
+                  <Text component={TextVariants.small} style={{ color: '#92400e' }}>
+                    {hotGPUs} GPUs running hot (&gt;{GPU_THRESHOLDS.TEMPERATURE_CRITICAL}°C)
+                  </Text>
+                </FlexItem>
+              )}
+              {overloadedGPUs > 0 && (
+                <FlexItem style={{ marginLeft: '12px' }}>
+                  <Text component={TextVariants.small} style={{ color: '#92400e' }}>
+                    {overloadedGPUs} GPUs overloaded (&gt;{GPU_THRESHOLDS.UTILIZATION_CRITICAL}%)
+                  </Text>
+                </FlexItem>
+              )}
+            </Flex>
+          </div>
+        )}
+      </CardBody>
+    </Card>
+  );
+};
+
 // Category Section Component
 interface CategorySectionProps {
   categoryKey: string;
@@ -357,11 +576,47 @@ interface CategorySectionProps {
     metrics: Array<{ key: string; label: string; unit?: string; description?: string }>;
   };
   metricsData: Record<string, MetricDataValue>;
+  onViewChart?: (metricKey: string) => void;
 }
 
-const CategorySection: React.FC<CategorySectionProps> = ({ categoryKey, categoryDef, metricsData }) => {
+const CategorySection: React.FC<CategorySectionProps> = ({ categoryKey, categoryDef, metricsData, onViewChart }) => {
   const IconComponent = categoryDef.icon;
+
+  // Check if GPUs are available for Fleet Overview category
+  const gpuCount = metricsData['GPU Count']?.latest_value ?? 0;
+  const hasGPUMetrics = 
+    (metricsData['GPU Utilization (%)']?.latest_value !== null) ||
+    (metricsData['GPU Temperature (°C)']?.latest_value !== null) ||
+    (metricsData['GPU Power Usage (W)']?.latest_value !== null) ||
+    (metricsData['GPU Memory Used (GB)']?.latest_value !== null);
   
+  const hasGPUs = categoryKey === 'Fleet Overview' && (gpuCount > 0 || hasGPUMetrics);
+
+  // Create GPU summary data for Fleet Overview  
+  // Use GPU Count if available and > 0, otherwise try to estimate from power consumption
+  let estimatedCount = gpuCount;
+  if (estimatedCount === 0 && hasGPUMetrics) {
+    // Try to estimate based on total power
+    const totalPower = metricsData['GPU Power Usage (W)']?.latest_value ?? 0;
+    if (totalPower > 0) {
+      estimatedCount = Math.max(1, Math.round(totalPower / GPU_THRESHOLDS.POWER_ESTIMATE_PER_GPU));
+    } else {
+      // Fallback: if we have GPU metrics but no power data, assume at least 1 GPU
+      estimatedCount = 1;
+    }
+  }
+  const gpuSummaryData = hasGPUs ? {
+    count: estimatedCount,
+    utilization: metricsData['GPU Utilization (%)']?.latest_value ?? null,
+    temperature: metricsData['GPU Temperature (°C)']?.latest_value ?? null,
+    power: metricsData['GPU Power Usage (W)']?.latest_value ?? null,
+  } : null;
+
+  const formatValue = (val: number | null): string => {
+    if (val === null || val === undefined || isNaN(val)) return '—';
+    return val.toString();
+  };
+
   return (
     <Card style={{ marginBottom: '16px' }}>
       <CardTitle>
@@ -381,6 +636,7 @@ const CategorySection: React.FC<CategorySectionProps> = ({ categoryKey, category
       </CardTitle>
       <CardBody>
         <Grid hasGutter>
+          {/* Regular metrics */}
           {categoryDef.metrics.map((metric) => {
             const metricData = metricsData[metric.key];
             return (
@@ -391,10 +647,58 @@ const CategorySection: React.FC<CategorySectionProps> = ({ categoryKey, category
                   unit={metric.unit}
                   description={metric.description}
                   timeSeries={metricData?.time_series}
+                  metricKey={metric.key}
+                  onViewChart={onViewChart}
                 />
               </GridItem>
             );
           })}
+          
+          {/* Conditional GPU Summary Card for Fleet Overview */}
+          {hasGPUs && gpuSummaryData && (
+            <GridItem key="gpu-summary" md={2} sm={4}>
+              <MetricCard
+                label="GPU Fleet"
+                value={gpuSummaryData.count}
+                unit="GPUs"
+                description={gpuCount > 0 ? 'AI/ML accelerators available' : 'GPU metrics detected'}
+                metricKey="gpu-fleet-summary"
+                icon={CubesIcon}
+                secondaryInfo={
+                  <>
+                    {gpuSummaryData.utilization !== null && (
+                      <Text
+                        component={TextVariants.small}
+                        style={{
+                          color: gpuSummaryData.utilization > GPU_THRESHOLDS.UTILIZATION_WARNING ? '#dc2626' :
+                                 gpuSummaryData.utilization > GPU_THRESHOLDS.UTILIZATION_HIGH ? '#ea580c' : '#666',
+                          fontSize: '0.85rem',
+                          display: 'block',
+                          marginTop: '2px'
+                        }}
+                      >
+                        Util: {formatValue(gpuSummaryData.utilization)}%
+                      </Text>
+                    )}
+                    {gpuSummaryData.temperature !== null && (
+                      <Text
+                        component={TextVariants.small}
+                        style={{
+                          color: gpuSummaryData.temperature > GPU_THRESHOLDS.TEMPERATURE_DANGER ? '#dc2626' :
+                                 gpuSummaryData.temperature > GPU_THRESHOLDS.TEMPERATURE_WARNING ? '#ea580c' : '#666',
+                          fontSize: '0.85rem',
+                          display: 'block',
+                          marginTop: '2px'
+                        }}
+                      >
+                        Temp: {formatValue(gpuSummaryData.temperature)}°C
+                      </Text>
+                    )}
+                  </>
+                }
+              />
+            </GridItem>
+          )}
         </Grid>
       </CardBody>
     </Card>
@@ -403,6 +707,7 @@ const CategorySection: React.FC<CategorySectionProps> = ({ categoryKey, category
 
 export const OpenShiftMetricsPage: React.FC = () => {
   const { t } = useTranslation('plugin__openshift-ai-observability');
+  const { useAIConfigWarningDismissal, AI_CONFIG_WARNING } = useSettings();
 
   // Scope and filters
   const [scope, setScope] = React.useState<ScopeType>('cluster_wide');
@@ -410,21 +715,53 @@ export const OpenShiftMetricsPage: React.FC = () => {
   const [selectedNamespace, setSelectedNamespace] = React.useState<string>('');
   const [selectedCategory, setSelectedCategory] = React.useState<string>('Fleet Overview');
   const [timeRange, setTimeRange] = React.useState<string>('1h');
-  
+
   // Data
   const [metricsData, setMetricsData] = React.useState<Record<string, MetricDataValue>>({});
   const [alerts, setAlerts] = React.useState<AlertInfo[]>([]);
   const [analysis, setAnalysis] = React.useState<OpenShiftAnalysisResult | null>(null);
-  
+
+  // Chart modal state
+  const [selectedMetricForChart, setSelectedMetricForChart] = React.useState<string | null>(null);
+
+  // Chat panel state
+  const [chatPanelOpen, setChatPanelOpen] = React.useState(false);
+
+  // Custom date range state
+  const [showCustomRangePicker, setShowCustomRangePicker] = React.useState(false);
+  const [customRangeStart, setCustomRangeStart] = React.useState<Date | null>(null);
+  const [customRangeEnd, setCustomRangeEnd] = React.useState<Date | null>(null);
+  const [customRangeLabel, setCustomRangeLabel] = React.useState<string>('');
+
   // Loading states
   const [loadingNamespaces, setLoadingNamespaces] = React.useState(true);
   const [loadingMetrics, setLoadingMetrics] = React.useState(false);
   const [loadingAnalysis, setLoadingAnalysis] = React.useState(false);
   
-  const [error, setError] = React.useState<string | null>(null);
+  // Analysis cancellation
+  const [analysisController, setAnalysisController] = React.useState<AbortController | null>(null);
 
-  // Get categories based on scope
-  const categories = scope === 'cluster_wide' ? CLUSTER_WIDE_CATEGORIES : NAMESPACE_SCOPED_CATEGORIES;
+  const [error, setError] = React.useState<string | null>(null);
+  const [errorType, setErrorType] = React.useState<string | null>(null);
+  
+  // Download dropdown state
+  const [downloadDropdownOpen, setDownloadDropdownOpen] = React.useState(false);
+
+  // Auto-dismiss AI configuration warnings when settings are closed
+  useAIConfigWarningDismissal(errorType, setError, setErrorType);
+
+  // Cleanup abort controller on unmount
+  React.useEffect(() => {
+    return () => {
+      if (analysisController) {
+        analysisController.abort();
+      }
+    };
+  }, [analysisController]);
+
+
+  // All categories are now available for both scopes
+  const categories = CLUSTER_WIDE_CATEGORIES;
   const categoryNames = Object.keys(categories);
 
   React.useEffect(() => {
@@ -446,28 +783,36 @@ export const OpenShiftMetricsPage: React.FC = () => {
     loadNamespaces();
   }, []);
 
-  // Update category when scope changes
+  // Ensure selected category is valid (categories no longer change with scope)
   React.useEffect(() => {
-    const newCategories = Object.keys(scope === 'cluster_wide' ? CLUSTER_WIDE_CATEGORIES : NAMESPACE_SCOPED_CATEGORIES);
-    if (!newCategories.includes(selectedCategory)) {
-      setSelectedCategory(newCategories[0]);
+    const categoryNames = Object.keys(CLUSTER_WIDE_CATEGORIES);
+    if (!categoryNames.includes(selectedCategory)) {
+      setSelectedCategory(categoryNames[0]);
     }
-  }, [scope, selectedCategory]);
+  }, [selectedCategory]);
 
-  // Load metrics when filters change
-  React.useEffect(() => {
-    if (scope === 'namespace_scoped' && !selectedNamespace) return;
-    loadMetrics();
-  }, [scope, selectedNamespace, selectedCategory, timeRange]);
+  // Convert custom date range to the format expected by MCP server
+  const getTimeRangeForAPI = React.useCallback(() => {
+    if (timeRange === 'custom' && customRangeStart && customRangeEnd) {
+      // Convert to a custom format that the MCP server can understand
+      // Format: "custom:START_ISO:END_ISO"
+      const startISO = customRangeStart.toISOString();
+      const endISO = customRangeEnd.toISOString();
+      return `custom:${startISO}:${endISO}`;
+    }
+    // Return the preset time range string
+    return timeRange;
+  }, [timeRange, customRangeStart, customRangeEnd]);
 
-  const loadMetrics = async () => {
+  const loadMetrics = React.useCallback(async () => {
     setLoadingMetrics(true);
     setError(null);
     try {
       const namespace = scope === 'namespace_scoped' ? selectedNamespace : undefined;
       
+      const apiTimeRange = getTimeRangeForAPI();
       const [metricsResponse, alertsData] = await Promise.all([
-        fetchOpenShiftMetrics(selectedCategory, scope, timeRange, namespace),
+        fetchOpenShiftMetrics(selectedCategory, scope, apiTimeRange, namespace),
         getAlerts(namespace),
       ]);
       
@@ -484,61 +829,449 @@ export const OpenShiftMetricsPage: React.FC = () => {
     } finally {
       setLoadingMetrics(false);
     }
-  };
+  }, [scope, selectedNamespace, selectedCategory, getTimeRangeForAPI]);
+
+  // Load metrics when filters change
+  React.useEffect(() => {
+    if (scope === 'namespace_scoped' && !selectedNamespace) return;
+    loadMetrics();
+  }, [scope, selectedNamespace, selectedCategory, loadMetrics]);
 
   const handleAnalyze = async () => {
+    // Cancel any existing analysis
+    if (analysisController) {
+      analysisController.abort();
+    }
+    
+    // Create new abort controller
+    const controller = new AbortController();
+    setAnalysisController(controller);
+    
     setLoadingAnalysis(true);
     setAnalysis(null);
     setError(null);
+    setErrorType(null);
     
     try {
+      // Check configuration at the moment of click
       const config = getSessionConfig();
-      console.log('[OpenShift] Session config:', config);
       
       if (!config.ai_model) {
-        setError('Please configure an AI model in Settings first');
+        setError('CONFIGURATION_REQUIRED');
+        setErrorType(AI_CONFIG_WARNING);
         setLoadingAnalysis(false);
+        setAnalysisController(null);
         return;
       }
       // Let MCP server resolve provider secret if api_key is not present in session
       const apiKey = (config.api_key as string | undefined) || undefined;
       
-      console.log('[OpenShift] Calling analyzeOpenShift:', { 
-        category: selectedCategory, 
-        scope, 
-        namespace: selectedNamespace,
-        aiModel: config.ai_model,
-        timeRange 
-      });
-      
+      const apiTimeRange = getTimeRangeForAPI();
       const result = await analyzeOpenShift(
         selectedCategory,
         scope,
         scope === 'namespace_scoped' ? selectedNamespace : undefined,
         config.ai_model,
         apiKey,
-        timeRange
+        apiTimeRange
       );
       
-      console.log('[OpenShift] Analysis result:', result);
+      // Check if request was cancelled
+      if (controller.signal.aborted) {
+        return;
+      }
       
       if (result && result.summary) {
         setAnalysis(result);
       } else {
+        console.error('[OpenShift] Analysis returned empty or invalid response:', result);
         setError('Analysis returned empty response. Check browser console for details.');
       }
     } catch (err) {
+      // Don't show error if request was cancelled
+      if (err instanceof Error && err.name === 'AbortError') {
+        return;
+      }
+      
       console.error('[OpenShift] Analysis failed:', err);
       setError(`Analysis failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
-      setLoadingAnalysis(false);
+      if (!controller.signal.aborted) {
+        setLoadingAnalysis(false);
+        setAnalysisController(null);
+      }
     }
+  };
+
+  const handleCancelAnalysis = () => {
+    if (analysisController) {
+      analysisController.abort();
+      setAnalysisController(null);
+    }
+    setLoadingAnalysis(false);
+    setAnalysis(null);
   };
 
   const handleScopeChange = (newScope: ScopeType) => {
     setScope(newScope);
     setAnalysis(null);
     setMetricsData({});
+  };
+
+  const handleViewChart = (metricKey: string) => {
+    setSelectedMetricForChart(metricKey);
+  };
+
+  const handleCloseChart = () => {
+    setSelectedMetricForChart(null);
+  };
+
+  // Custom date range handlers - implementing clean algorithm
+  const handleTimeRangeChange = (_event: any, value: string) => {
+    // Step 7: User selected predefined value → use it directly  
+    setTimeRange(value);
+    setCustomRangeStart(null);
+    setCustomRangeEnd(null);
+    setCustomRangeLabel('');
+  };
+
+  const handleCustomRangeApply = React.useCallback((startDate: Date, endDate: Date) => {
+    // Step 4: User closed picker accepting values → apply them
+    const formatDate = (date: Date) => {
+      return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    };
+    
+    const label = `${formatDate(startDate)} - ${formatDate(endDate)}`;
+    
+    // Set custom range state - useEffect will handle metrics refresh
+    setCustomRangeStart(startDate);
+    setCustomRangeEnd(endDate);
+    setCustomRangeLabel(label);
+    setShowCustomRangePicker(false);
+    
+    // Note: timeRange is already 'custom' from handleTimeRangeChange
+  }, []);
+
+  const handleCustomRangeClose = () => {
+    setShowCustomRangePicker(false);
+    
+    // Step 4: If timeRange is 'custom' (user clicked Custom Range...) but no custom dates set,
+    // apply the picker's default values (1 hour ago to now)
+    if (timeRange === 'custom' && (!customRangeStart || !customRangeEnd)) {
+      const now = new Date();
+      const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+      
+      const formatDate = (date: Date) => {
+        return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      };
+      
+      const label = `${formatDate(oneHourAgo)} - ${formatDate(now)}`;
+      
+      // Apply the default picker values as the custom range
+      setCustomRangeStart(oneHourAgo);
+      setCustomRangeEnd(now);
+      setCustomRangeLabel(label);
+      
+      // timeRange stays 'custom' - this will trigger metrics refresh via useEffect
+    }
+    // If timeRange is not 'custom', or we already have custom dates, do nothing
+  };
+
+  // Prepare metric data for chart modal
+  const selectedMetricData = React.useMemo(() => {
+    if (!selectedMetricForChart) return null;
+    
+    const categories = CLUSTER_WIDE_CATEGORIES;
+    let metricDef = null;
+
+    for (const [, categoryDef] of Object.entries(categories)) {
+      const found = categoryDef.metrics.find(m => m.key === selectedMetricForChart);
+      if (found) {
+        metricDef = found;
+        break;
+      }
+    }
+
+    const metricData = metricsData[selectedMetricForChart];
+
+    if (metricDef && metricData) {
+      return {
+        key: selectedMetricForChart,
+        label: metricDef.label,
+        unit: metricDef.unit,
+        description: metricDef.description,
+        timeSeries: metricData.time_series || [],
+      };
+    }
+    return null;
+  }, [selectedMetricForChart, metricsData, scope]);
+
+  // Memoize expensive metrics section computation
+  const metricsSection = React.useMemo(() => {
+    return Object.entries(metricsData).map(([key, val]) => {
+      const categoryDef = categories[selectedCategory as keyof typeof categories];
+      const metricDef = categoryDef?.metrics?.find((m) => m.key === key);
+      const unit = metricDef?.unit || '';
+      return {
+        name: key,
+        value: val.latest_value !== null ? `${val.latest_value}${unit ? ` ${unit}` : ''}` : 'N/A',
+        description: metricDef?.description || ''
+      };
+    });
+  }, [metricsData, selectedCategory]);
+
+  // Generate report content - timestamp generated fresh on each call
+  const generateReportContent = () => {
+    const timestamp = new Date().toISOString();
+    const timeRangeLabel = timeRange === 'custom' && customRangeLabel
+      ? customRangeLabel
+      : TIME_RANGE_OPTIONS.find(o => o.value === timeRange)?.label || timeRange;
+
+    return {
+      title: 'OpenShift Metrics Report',
+      category: selectedCategory,
+      scope: scope === 'cluster_wide' ? 'Cluster-wide' : selectedNamespace,
+      timeRange: timeRangeLabel,
+      timestamp,
+      metrics: metricsSection,
+      analysis: analysis?.summary || 'No analysis available. Click "Analyze with AI" to generate insights.'
+    };
+  };
+
+  const downloadMarkdown = () => {
+    try {
+      const report = generateReportContent();
+      const content = `# ${report.title}
+
+**Category**: ${report.category}
+**Scope**: ${report.scope}
+**Time Range**: ${report.timeRange}
+**Generated**: ${report.timestamp}
+
+## Metrics Summary
+
+${report.metrics.map(metric => `- **${metric.name}**: ${metric.value}`).join('\n')}
+
+## AI Analysis
+
+${report.analysis}
+
+---
+*Generated by OpenShift AI Observability Plugin*
+`;
+
+      const blob = new Blob([content], { type: 'text/markdown' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `openshift-metrics-${selectedCategory.replace(/\s+/g, '_')}-${Date.now()}.md`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Failed to download markdown report:', error);
+      setError('Failed to download report. Please try again.');
+    }
+  };
+
+  const downloadHTML = () => {
+    try {
+      const report = generateReportContent();
+      const content = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${report.title}</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; }
+        h1 { color: #1f2937; border-bottom: 2px solid #3b82f6; padding-bottom: 10px; }
+        h2 { color: #374151; margin-top: 30px; }
+        .metadata { background: #f3f4f6; padding: 15px; border-radius: 8px; margin: 20px 0; }
+        .metadata strong { color: #1f2937; }
+        .metrics-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        .metrics-table th, .metrics-table td { 
+            border: 1px solid #d1d5db; padding: 12px; text-align: left; 
+        }
+        .metrics-table th { background-color: #f9fafb; font-weight: bold; }
+        .analysis { background: #f0f9ff; padding: 20px; border-radius: 8px; margin: 20px 0; }
+        .footer { margin-top: 40px; text-align: center; color: #6b7280; font-style: italic; }
+    </style>
+</head>
+<body>
+    <h1>${report.title}</h1>
+    
+    <div class="metadata">
+        <strong>Category:</strong> ${report.category}<br>
+        <strong>Scope:</strong> ${report.scope}<br>
+        <strong>Time Range:</strong> ${report.timeRange}<br>
+        <strong>Generated:</strong> ${new Date(report.timestamp).toLocaleString()}
+    </div>
+
+    <h2>Metrics Summary</h2>
+    <table class="metrics-table">
+        <thead>
+            <tr>
+                <th>Metric</th>
+                <th>Value</th>
+                <th>Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            ${report.metrics.map(metric => `
+                <tr>
+                    <td><strong>${metric.name}</strong></td>
+                    <td>${metric.value}</td>
+                    <td>${metric.description}</td>
+                </tr>
+            `).join('')}
+        </tbody>
+    </table>
+
+    <h2>AI Analysis</h2>
+    <div class="analysis">
+        ${report.analysis.replace(/\n/g, '<br>')}
+    </div>
+
+    <div class="footer">
+        Generated by OpenShift AI Observability Plugin
+    </div>
+</body>
+</html>`;
+
+      const blob = new Blob([content], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `openshift-metrics-${selectedCategory.replace(/\s+/g, '_')}-${Date.now()}.html`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Failed to download HTML report:', error);
+      setError('Failed to download report. Please try again.');
+    }
+  };
+
+  const downloadPDF = () => {
+    try {
+      // For PDF generation, we'll use print-optimized HTML and trigger browser's print-to-PDF
+      const report = generateReportContent();
+      const printContent = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>${report.title}</title>
+    <style>
+        @media print {
+            body { margin: 0; }
+            .no-print { display: none; }
+        }
+        body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.4; }
+        h1 { color: #1f2937; border-bottom: 2px solid #3b82f6; padding-bottom: 10px; page-break-after: avoid; }
+        h2 { color: #374151; margin-top: 25px; page-break-after: avoid; }
+        .metadata { background: #f8f9fa; padding: 15px; border: 1px solid #dee2e6; margin: 15px 0; }
+        .metadata strong { color: #1f2937; }
+        .metrics-table { width: 100%; border-collapse: collapse; margin: 15px 0; page-break-inside: avoid; }
+        .metrics-table th, .metrics-table td { 
+            border: 1px solid #666; padding: 8px; text-align: left; font-size: 12px;
+        }
+        .metrics-table th { background-color: #f0f0f0; font-weight: bold; }
+        .analysis { border: 1px solid #ccc; padding: 15px; margin: 15px 0; }
+        .footer { margin-top: 30px; text-align: center; color: #666; font-size: 10px; }
+        .print-button { margin: 20px 0; text-align: center; }
+    </style>
+</head>
+<body>
+    <div class="no-print print-button">
+        <button onclick="window.print()" style="padding: 10px 20px; background: #3b82f6; color: white; border: none; border-radius: 5px; cursor: pointer;">
+            Print to PDF
+        </button>
+        <p><small>Use your browser's print function and select "Save as PDF" as the destination.</small></p>
+    </div>
+    
+    <h1>${report.title}</h1>
+    
+    <div class="metadata">
+        <strong>Category:</strong> ${report.category}<br>
+        <strong>Scope:</strong> ${report.scope}<br>
+        <strong>Time Range:</strong> ${report.timeRange}<br>
+        <strong>Generated:</strong> ${new Date(report.timestamp).toLocaleString()}
+    </div>
+
+    <h2>Metrics Summary</h2>
+    <table class="metrics-table">
+        <thead>
+            <tr>
+                <th>Metric</th>
+                <th>Value</th>
+                <th>Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            ${report.metrics.map(metric => `
+                <tr>
+                    <td><strong>${metric.name}</strong></td>
+                    <td>${metric.value}</td>
+                    <td>${metric.description}</td>
+                </tr>
+            `).join('')}
+        </tbody>
+    </table>
+
+    <h2>AI Analysis</h2>
+    <div class="analysis">
+        ${report.analysis.replace(/\n/g, '<br>')}
+    </div>
+
+    <div class="footer">
+        Generated by OpenShift AI Observability Plugin
+    </div>
+</body>
+</html>`;
+
+      // Open in a new window for printing
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write(printContent);
+        printWindow.document.close();
+        printWindow.focus();
+      } else {
+        // Fallback: create a blob and download as HTML
+        const blob = new Blob([printContent], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `openshift-metrics-${selectedCategory.replace(/\s+/g, '_')}-${Date.now()}-print.html`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+    } catch (error) {
+      console.error('Failed to generate PDF report:', error);
+      setError('Failed to generate PDF report. Please try again.');
+    }
+  };
+
+  // Handle download format selection
+  const handleDownloadFormat = (format: string) => {
+    setDownloadDropdownOpen(false);
+    switch (format) {
+      case 'html':
+        downloadHTML();
+        break;
+      case 'pdf':
+        downloadPDF();
+        break;
+      case 'markdown':
+        downloadMarkdown();
+        break;
+      default:
+        console.warn('Unknown download format:', format);
+    }
   };
 
   if (loadingNamespaces) {
@@ -608,95 +1341,179 @@ export const OpenShiftMetricsPage: React.FC = () => {
       <PageSection variant="light" style={{ paddingTop: '16px', paddingBottom: '16px' }}>
         <Toolbar>
           <ToolbarContent>
-            {/* Namespace Selector (only for namespace scope) */}
-            <ToolbarItem>
-              <FormGroup label="Namespace" fieldId="namespace-select">
-                <FormSelect
-                  id="namespace-select"
-                  value={selectedNamespace}
-                  onChange={(_event, value) => setSelectedNamespace(value)}
-                  aria-label="Select namespace"
-                  isDisabled={scope === 'cluster_wide'}
-                  style={{ minWidth: '200px' }}
-                >
-                  {scope === 'cluster_wide' ? (
-                    <FormSelectOption value="" label="All Namespaces (Cluster-wide)" />
-                  ) : namespaces.length === 0 ? (
-                    <FormSelectOption value="" label="No namespaces available" isDisabled />
-                  ) : (
-                    namespaces.map((ns) => (
-                      <FormSelectOption key={ns} value={ns} label={ns} />
-                    ))
-                  )}
-                </FormSelect>
-              </FormGroup>
-            </ToolbarItem>
-
-            {/* Category Selector */}
-            <ToolbarItem>
-              <FormGroup label="Metric Category" fieldId="category-select">
-                <FormSelect
-                  id="category-select"
-                  value={selectedCategory}
-                  onChange={(_event, value) => setSelectedCategory(value)}
-                  aria-label="Select category"
-                  style={{ minWidth: '180px' }}
-                >
-                  {categoryNames.map((cat) => (
-                    <FormSelectOption key={cat} value={cat} label={cat} />
-                  ))}
-                </FormSelect>
-              </FormGroup>
-            </ToolbarItem>
-
-            {/* Time Range Selector */}
-            <ToolbarItem>
-              <FormGroup label="Time Range" fieldId="time-range-select">
-                <FormSelect
-                  id="time-range-select"
-                  value={timeRange}
-                  onChange={(_event, value) => setTimeRange(value)}
-                  aria-label="Select time range"
-                  style={{ minWidth: '120px' }}
-                >
-                  {TIME_RANGE_OPTIONS.map((opt) => (
-                    <FormSelectOption key={opt.value} value={opt.value} label={opt.label} />
-                  ))}
-                </FormSelect>
-              </FormGroup>
-            </ToolbarItem>
-
-            {/* Action Buttons */}
-            <ToolbarItem align={{ default: 'alignRight' }}>
-              <Flex>
-                <FlexItem>
-                  <Button
-                    variant="secondary"
-                    icon={<SyncIcon />}
-                    onClick={loadMetrics}
-                    isDisabled={loadingMetrics}
-                    isLoading={loadingMetrics}
+            <Flex 
+              alignItems={{ default: 'alignItemsFlexEnd' }}
+              spaceItems={{ default: 'spaceItemsLg' }}
+              style={{ width: '100%' }}
+            >
+              {/* Namespace Selector (only for namespace scope) */}
+              <FlexItem>
+                <FormGroup label="Namespace" fieldId="namespace-select">
+                  <FormSelect
+                    id="namespace-select"
+                    value={selectedNamespace}
+                    onChange={(_event, value) => setSelectedNamespace(value)}
+                    aria-label="Select namespace"
+                    isDisabled={scope === 'cluster_wide'}
+                    style={{ minWidth: '200px' }}
                   >
-                    Refresh
-                  </Button>
-                </FlexItem>
-                <FlexItem style={{ marginLeft: '8px' }}>
-                  <Button
-                    variant="primary"
-                    icon={<OutlinedLightbulbIcon />}
-                    onClick={handleAnalyze}
-                    isDisabled={loadingAnalysis || (scope === 'namespace_scoped' && !selectedNamespace)}
-                    isLoading={loadingAnalysis}
-                    style={{
-                      background: 'linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%)',
-                      border: 'none',
-                    }}
+                    {scope === 'cluster_wide' ? (
+                      <FormSelectOption value="" label="All Namespaces (Cluster-wide)" />
+                    ) : namespaces.length === 0 ? (
+                      <FormSelectOption value="" label="No namespaces available" isDisabled />
+                    ) : (
+                      namespaces.map((ns) => (
+                        <FormSelectOption key={ns} value={ns} label={ns} />
+                      ))
+                    )}
+                  </FormSelect>
+                </FormGroup>
+              </FlexItem>
+
+              {/* Category Selector */}
+              <FlexItem>
+                <FormGroup label="Metric Category" fieldId="category-select">
+                  <FormSelect
+                    id="category-select"
+                    value={selectedCategory}
+                    onChange={(_event, value) => setSelectedCategory(value)}
+                    aria-label="Select category"
+                    style={{ minWidth: '180px' }}
                   >
-                    Analyze with AI
-                  </Button>
-                </FlexItem>
-              </Flex>
-            </ToolbarItem>
+                    {categoryNames.map((cat) => (
+                      <FormSelectOption key={cat} value={cat} label={cat} />
+                    ))}
+                  </FormSelect>
+                </FormGroup>
+              </FlexItem>
+
+              {/* Time Range Selector */}
+              <FlexItem>
+                <FormGroup label="Time Range" fieldId="time-range-select">
+                  <Flex alignItems={{ default: 'alignItemsCenter' }} spaceItems={{ default: 'spaceItemsXs' }}>
+                    <FlexItem>
+                      <FormSelect
+                        id="time-range-select"
+                        value={timeRange === 'custom' ? '1h' : timeRange}
+                        onChange={handleTimeRangeChange}
+                        aria-label="Select time range"
+                        style={{ minWidth: '120px' }}
+                      >
+                        {TIME_RANGE_OPTIONS.filter(opt => opt.value !== 'custom').map((opt) => (
+                          <FormSelectOption
+                            key={opt.value}
+                            value={opt.value}
+                            label={opt.label}
+                          />
+                        ))}
+                      </FormSelect>
+                    </FlexItem>
+                    <FlexItem>
+                      <Button
+                        variant={timeRange === 'custom' ? 'primary' : 'secondary'}
+                        size="sm"
+                        onClick={() => {
+                          setTimeRange('custom');
+                          setShowCustomRangePicker(true);
+                        }}
+                        aria-label="Select custom date range"
+                        title="Custom date range"
+                      >
+                        <CalendarAltIcon />
+                      </Button>
+                    </FlexItem>
+                  </Flex>
+                </FormGroup>
+              </FlexItem>
+
+              {/* Action Buttons */}
+              <FlexItem align={{ default: 'alignRight' }}>
+                <Flex spaceItems={{ default: 'spaceItemsXs' }} alignItems={{ default: 'alignItemsCenter' }}>
+                  <FlexItem>
+                    <Button
+                      variant="secondary"
+                      onClick={loadMetrics}
+                      isDisabled={loadingMetrics}
+                      isLoading={loadingMetrics}
+                      aria-label="Refresh metrics"
+                      title="Refresh metrics"
+                    >
+                      <SyncIcon />
+                    </Button>
+                  </FlexItem>
+                  <FlexItem>
+                    <Button
+                      variant="primary"
+                      icon={<OutlinedLightbulbIcon />}
+                      onClick={handleAnalyze}
+                      isDisabled={loadingAnalysis || (scope === 'namespace_scoped' && !selectedNamespace)}
+                      isLoading={loadingAnalysis}
+                      style={{
+                        background: 'linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%)',
+                        border: 'none',
+                      }}
+                    >
+                      Analyze with AI
+                    </Button>
+                  </FlexItem>
+                  <FlexItem>
+                    <Button
+                      variant={chatPanelOpen ? 'primary' : 'secondary'}
+                      icon={chatPanelOpen ? <TimesIcon /> : <RobotIcon />}
+                      onClick={() => setChatPanelOpen(!chatPanelOpen)}
+                      style={chatPanelOpen ? {
+                        background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+                        border: 'none',
+                      } : {}}
+                    >
+                      {chatPanelOpen ? 'Close Assistant' : 'AI Assistant'}
+                    </Button>
+                  </FlexItem>
+                  <FlexItem>
+                    <Dropdown
+                      isOpen={downloadDropdownOpen}
+                      onSelect={() => {}}
+                      onOpenChange={(isOpen: boolean) => setDownloadDropdownOpen(isOpen)}
+                      toggle={(toggleRef: React.Ref<MenuToggleElement>) => (
+                        <MenuToggle
+                          ref={toggleRef}
+                          onClick={() => setDownloadDropdownOpen(!downloadDropdownOpen)}
+                          isExpanded={downloadDropdownOpen}
+                          isDisabled={Object.keys(metricsData).length === 0}
+                          icon={<DownloadIcon />}
+                        >
+                          Report
+                        </MenuToggle>
+                      )}
+                    >
+                      <DropdownList>
+                        <DropdownItem 
+                          value="html"
+                          key="html" 
+                          onClick={() => handleDownloadFormat('html')}
+                        >
+                          HTML
+                        </DropdownItem>
+                        <DropdownItem 
+                          value="pdf"
+                          key="pdf" 
+                          onClick={() => handleDownloadFormat('pdf')}
+                        >
+                          PDF
+                        </DropdownItem>
+                        <DropdownItem 
+                          value="markdown"
+                          key="markdown" 
+                          onClick={() => handleDownloadFormat('markdown')}
+                        >
+                          Markdown
+                        </DropdownItem>
+                      </DropdownList>
+                    </Dropdown>
+                  </FlexItem>
+                </Flex>
+              </FlexItem>
+            </Flex>
           </ToolbarContent>
         </Toolbar>
       </PageSection>
@@ -714,14 +1531,18 @@ export const OpenShiftMetricsPage: React.FC = () => {
       {/* Error */}
       {error && (
         <PageSection style={{ paddingTop: '8px', paddingBottom: '8px' }}>
-          <Alert 
-            variant={AlertVariant.danger} 
-            title="Error" 
-            isInline
-            actionClose={<Button variant="plain" onClick={() => setError(null)}>✕</Button>}
-          >
-            {error}
-          </Alert>
+          {error === 'CONFIGURATION_REQUIRED' ? (
+            <ConfigurationRequiredAlert onClose={() => setError(null)} />
+          ) : (
+            <Alert 
+              variant={AlertVariant.danger} 
+              title="Error" 
+              isInline
+              actionClose={<Button variant="plain" onClick={() => setError(null)}>✕</Button>}
+            >
+              {error}
+            </Alert>
+          )}
         </PageSection>
       )}
 
@@ -734,6 +1555,18 @@ export const OpenShiftMetricsPage: React.FC = () => {
                 <FlexItem>
                   <OutlinedLightbulbIcon style={{ color: '#7c3aed', marginRight: '8px' }} />
                   AI Analysis
+                  {analysis && (
+                    <Text component={TextVariants.small} style={{ 
+                      color: '#7c3aed', 
+                      marginLeft: '8px',
+                      fontWeight: 'normal'
+                    }}>
+                      • {analysis.category} ({analysis.scope === 'cluster_wide' ? 'Cluster-wide' : analysis.namespace || 'Namespace'}) 
+                      • {timeRange === 'custom' && customRangeLabel 
+                          ? customRangeLabel 
+                          : TIME_RANGE_OPTIONS.find(o => o.value === timeRange)?.label}
+                    </Text>
+                  )}
                 </FlexItem>
                 <FlexItem align={{ default: 'alignRight' }}>
                   <Button variant="plain" onClick={() => setAnalysis(null)}>✕</Button>
@@ -748,11 +1581,28 @@ export const OpenShiftMetricsPage: React.FC = () => {
                     <Text component={TextVariants.p} style={{ marginTop: '12px', color: 'var(--pf-v5-global--Color--200)' }}>
                       Analyzing {selectedCategory}...
                     </Text>
+                    <Button 
+                      variant="link" 
+                      onClick={handleCancelAnalysis}
+                      style={{ marginTop: '16px', color: 'var(--pf-v5-global--danger-color--100)' }}
+                    >
+                      Cancel Analysis
+                    </Button>
                   </div>
                 </Bullseye>
               ) : analysis ? (
-                <div style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', margin: 0, lineHeight: 1.6 }}>
-                  {analysis.summary}
+                <div style={{ fontFamily: 'inherit', margin: 0, lineHeight: 1.6 }}>
+                  <ReactMarkdown 
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                      p: ({ children }) => <p style={{ marginBottom: '16px' }}>{children}</p>,
+                      h1: ({ children }) => <h1 style={{ marginBottom: '12px', marginTop: '24px' }}>{children}</h1>,
+                      h2: ({ children }) => <h2 style={{ marginBottom: '12px', marginTop: '24px' }}>{children}</h2>,
+                      h3: ({ children }) => <h3 style={{ marginBottom: '8px', marginTop: '20px' }}>{children}</h3>,
+                    }}
+                  >
+                    {analysis.summary}
+                  </ReactMarkdown>
                 </div>
               ) : null}
             </CardBody>
@@ -761,8 +1611,26 @@ export const OpenShiftMetricsPage: React.FC = () => {
       )}
 
       {/* Main Content */}
-      <PageSection>
-        {/* Current Selection Labels */}
+      <PageSection style={{ paddingLeft: 0, paddingRight: 0 }}>
+        <div style={{
+          height: 'calc(100vh - 550px)',
+          minHeight: '400px',
+          width: '100%',
+          maxWidth: '100%',
+          overflow: 'hidden'
+        }}>
+          <Grid hasGutter span={GRID_SPAN_FULL} style={{ height: '100%' }}>
+            {/* Metrics Panel */}
+            <GridItem span={chatPanelOpen ? GRID_SPAN_METRICS_WITH_CHAT : GRID_SPAN_FULL}>
+              <div style={{
+                paddingLeft: 'var(--pf-v5-global--spacer--lg)',
+                paddingRight: chatPanelOpen ? '8px' : 'var(--pf-v5-global--spacer--lg)',
+                paddingBottom: 'var(--pf-v5-global--spacer--lg)',
+                overflowY: 'auto',
+                overflowX: 'hidden',
+                height: '100%'
+              }}>
+            {/* Current Selection Labels */}
         <Flex style={{ marginBottom: '16px' }}>
           <FlexItem>
             <Label color="blue" icon={scope === 'cluster_wide' ? <ClusterIcon /> : <CubeIcon />}>
@@ -776,7 +1644,9 @@ export const OpenShiftMetricsPage: React.FC = () => {
           </FlexItem>
           <FlexItem>
             <Label color="grey">
-              Last {TIME_RANGE_OPTIONS.find(o => o.value === timeRange)?.label}
+              {timeRange === 'custom' && customRangeLabel 
+                ? customRangeLabel 
+                : `Last ${TIME_RANGE_OPTIONS.find(o => o.value === timeRange)?.label}`}
             </Label>
           </FlexItem>
         </Flex>
@@ -800,22 +1670,69 @@ export const OpenShiftMetricsPage: React.FC = () => {
           </Bullseye>
         )}
         
+        {/* GPU Fleet Summary - Only for GPU category + cluster-wide scope */}
+        {!loadingMetrics && selectedCategory === 'GPU & Accelerators' && scope === 'cluster_wide' && Object.keys(metricsData).length > 0 && (
+          <GPUFleetSummary metricsData={metricsData} />
+        )}
+
         {/* Metrics Display */}
         {!loadingMetrics && currentCategoryDef && (
           <CategorySection
             categoryKey={selectedCategory}
             categoryDef={currentCategoryDef}
             metricsData={metricsData}
+            onViewChart={handleViewChart}
           />
         )}
 
-        {/* No data message */}
-        {!loadingMetrics && Object.keys(metricsData).length === 0 && (
-          <Alert variant={AlertVariant.warning} title="No metrics data" isInline>
-            No metrics data available for {selectedCategory}. This may be expected if there are no resources in this category.
-          </Alert>
-        )}
+            {/* No data message */}
+            {!loadingMetrics && Object.keys(metricsData).length === 0 && (
+              <Alert variant={AlertVariant.warning} title="No metrics data" isInline>
+                No metrics data available for {selectedCategory}. This may be expected if there are no resources in this category.
+              </Alert>
+            )}
+              </div>
+            </GridItem>
+
+            {/* Chat Panel */}
+            {chatPanelOpen && (
+              <GridItem span={GRID_SPAN_CHAT}>
+                <div style={{
+                  paddingLeft: '8px',
+                  paddingRight: 'var(--pf-v5-global--spacer--lg)',
+                  paddingBottom: 'var(--pf-v5-global--spacer--lg)',
+                  overflowY: 'auto',
+                  overflowX: 'hidden',
+                  height: '100%'
+                }}>
+                  <MetricsChatPanel
+                    scope={scope}
+                    namespace={scope === 'namespace_scoped' ? selectedNamespace : undefined}
+                    category={selectedCategory}
+                    timeRange={timeRange === 'custom' && customRangeLabel ? customRangeLabel : timeRange}
+                    isOpen={chatPanelOpen}
+                    onClose={() => setChatPanelOpen(false)}
+                  />
+                </div>
+              </GridItem>
+            )}
+          </Grid>
+        </div>
       </PageSection>
+
+      {/* Metric Chart Modal */}
+      <MetricChartModal
+        metric={selectedMetricData}
+        isOpen={selectedMetricForChart !== null}
+        onClose={handleCloseChart}
+      />
+
+      {/* Custom Date Range Picker Modal */}
+      <CustomRangePickerModal
+        isOpen={showCustomRangePicker}
+        onClose={handleCustomRangeClose}
+        onApply={handleCustomRangeApply}
+      />
     </>
   );
 };

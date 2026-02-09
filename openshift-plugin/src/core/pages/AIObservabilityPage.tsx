@@ -18,11 +18,13 @@ import {
 import {
   TachometerAltIcon,
   ServerIcon,
+  CubeIcon,
   CubesIcon,
   CommentIcon,
   CogIcon,
 } from '@patternfly/react-icons';
 import VLLMMetricsPage from './VLLMMetricsPage';
+import DeviceMetricsPage from './DeviceMetricsPage';
 import { OpenShiftMetricsPage } from './OpenShiftMetricsPage';
 import { AIChatPage } from './AIChatPage';
 import { SettingsModal } from '../components/SettingsModal';
@@ -215,6 +217,26 @@ const AIObservabilityPage: React.FC = () => {
             eventKey={2}
             title={
               <>
+                <TabTitleIcon><CubeIcon /></TabTitleIcon>
+                <TabTitleText>Hardware Accelerators</TabTitleText>
+              </>
+            }
+            aria-label="Hardware Accelerators"
+          />
+          <Tab
+            eventKey={3}
+            title={
+              <>
+                <TabTitleIcon><CubeIcon /></TabTitleIcon>
+                <TabTitleText>Hardware Accelerators</TabTitleText>
+              </>
+            }
+            aria-label="Hardware Accelerators"
+          />
+          <Tab
+            eventKey={3}
+            title={
+              <>
                 <TabTitleIcon>
                   <CubesIcon />
                 </TabTitleIcon>
@@ -224,7 +246,7 @@ const AIObservabilityPage: React.FC = () => {
             aria-label="OpenShift Metrics"
           />
           <Tab
-            eventKey={3}
+            eventKey={4}
             title={
               <>
                 <TabTitleIcon>
@@ -241,8 +263,9 @@ const AIObservabilityPage: React.FC = () => {
       <PageSection>
         {activeTabKey === 0 && <OverviewDashboard />}
         {activeTabKey === 1 && <VLLMMetricsPage />}
-        {activeTabKey === 2 && <OpenShiftMetricsPage />}
-        {activeTabKey === 3 && <AIChatPage />}
+        {activeTabKey === 2 && <DeviceMetricsPage />}
+        {activeTabKey === 3 && <OpenShiftMetricsPage />}
+        {activeTabKey === 4 && <AIChatPage />}
       </PageSection>
     </Page>
   );

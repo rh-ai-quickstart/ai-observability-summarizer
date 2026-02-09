@@ -4,6 +4,7 @@ import { Nav, NavList, NavItem } from '@patternfly/react-core';
 import {
   TachometerAltIcon,
   ServerIcon,
+  CubeIcon,
   CubesIcon,
   CommentIcon,
 } from '@patternfly/react-icons';
@@ -24,6 +25,12 @@ const Navigation: React.FC = () => {
       title: 'vLLM Metrics',
       path: '/vllm',
       icon: <ServerIcon />,
+    },
+    {
+      id: 'devices',
+      title: 'Hardware Accelerators',
+      path: '/devices',
+      icon: <CubeIcon />,
     },
     {
       id: 'openshift',

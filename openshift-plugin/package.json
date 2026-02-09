@@ -22,9 +22,10 @@
     "lint": "eslint src --ext .ts,.tsx",
     "typecheck": "tsc --noEmit",
     "i18n": "i18next 'src/**/*.{js,jsx,ts,tsx}' [-oc] -c i18next-parser.config.js",
-    "test": "jest",
+    "test": "jest --silent",
     "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage"
+    "test:coverage": "jest --coverage",
+    "test:verbose": "jest"
   },
   "devDependencies": {
     "@cypress/webpack-preprocessor": "^5.15.5",
@@ -36,8 +37,8 @@
     "@testing-library/user-event": "^14.5.1",
     "@types/jest": "^29.5.11",
     "@types/node": "^18.0.0",
-    "@types/react": "^17.0.0",
-    "@types/react-dom": "^17.0.0",
+    "@types/react": "^17.0.2",
+    "@types/react-dom": "^17.0.2",
     "@types/react-router-dom": "^5.3.3",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
@@ -92,5 +93,11 @@
     "dependencies": {
       "@console/pluginAPI": "*"
     }
+  },
+  "resolutions": {
+    "react": "^17.0.2",
+    "react-dom": "^17.0.2",
+    "@types/react": "^17.0.2",
+    "@types/react-dom": "^17.0.2"
   }
 }

@@ -14,7 +14,6 @@ import {
   Divider,
   Alert,
   AlertVariant,
-  AlertActionLink,
   Label,
   Popover,
 } from '@patternfly/react-core';
@@ -39,17 +38,21 @@ import { chat, getSessionConfig } from '../services/mcpClient';
 import { useChatHistory, Message } from '../hooks/useChatHistory';
 import { useProgressIndicator } from '../hooks/useProgressIndicator';
 import { useChatSettings } from '../hooks/useChatSettings';
+import { useSettings } from '../hooks/useSettings';
 import { SuggestedQuestions } from '../components/SuggestedQuestions';
 import { SuggestedQuestionsPopover } from '../components/SuggestedQuestionsPopover';
+import { ConfigurationRequiredAlert } from '../components/ConfigurationRequiredAlert';
 import '../styles/chat-markdown.css';
 
 const AIChatPage: React.FC = () => {
   const { messages, setMessages, clearHistory, exportToMarkdown } = useChatHistory();
   const { progressMessage, startProgress, stopProgress } = useProgressIndicator();
   const { settings: chatSettings } = useChatSettings();
+  const { useAIConfigWarningDismissal, AI_CONFIG_WARNING } = useSettings();
   const [inputValue, setInputValue] = React.useState('');
   const [isLoading, setIsLoading] = React.useState(false);
   const [configError, setConfigError] = React.useState<string | null>(null);
+  const [configErrorType, setConfigErrorType] = React.useState<string | null>(null);
   const [replayMessage, setReplayMessage] = React.useState<string>('');
   const [questionsExpanded, setQuestionsExpanded] = React.useState(chatSettings.suggestedQuestionsExpanded);
   const [collapsedMessages, setCollapsedMessages] = React.useState<Set<string>>(new Set());
@@ -133,40 +136,31 @@ const AIChatPage: React.FC = () => {
     };
   }, [isLoading, chatSettings.enableKeyboardShortcuts]);
 
-  // Check configuration on mount and when settings are closed
+  // Auto-dismiss AI configuration warnings when settings are closed
+  useAIConfigWarningDismissal(configErrorType, setConfigError, setConfigErrorType);
+
+  // Check configuration on mount and after browser refresh
   React.useEffect(() => {
-    const checkConfig = () => {
-      const config = getSessionConfig();
-      if (!config.ai_model) {
-        setConfigError('No AI model configured');
-      } else {
-        setConfigError(null);
-      }
-    };
-
-    // Check immediately
-    checkConfig();
-
-    // Listen for settings-closed event to re-check configuration
-    const handleSettingsClosed = () => {
-      checkConfig();
-    };
-
-    window.addEventListener('settings-closed', handleSettingsClosed);
-
-    return () => {
-      window.removeEventListener('settings-closed', handleSettingsClosed);
-    };
+    const config = getSessionConfig();
+    if (!config.ai_model) {
+      setConfigError('Please configure an AI model in Settings first');
+      setConfigErrorType(AI_CONFIG_WARNING);
+    } else {
+      setConfigError(null);
+      setConfigErrorType(null);
+    }
   }, []);
 
   const handleSend = async (messageText?: string) => {
     const textToSend = messageText || inputValue.trim();
     if (!textToSend || isLoading) return;
 
-    // Check configuration
+    // Check configuration at the moment of sending
     const config = getSessionConfig();
+    
     if (!config.ai_model) {
-      setConfigError('Please configure an AI model in settings');
+      setConfigError('Please configure an AI model in Settings first');
+      setConfigErrorType(AI_CONFIG_WARNING);
       return;
     }
 
@@ -221,8 +215,6 @@ const AIChatPage: React.FC = () => {
 
       // Replay progress log entries (show what the chatbot actually did)
       if (progressLog && progressLog.length > 0) {
-        console.log(`[Chat] Replaying ${progressLog.length} progress entries`);
-
         for (const entry of progressLog) {
           if (!isMountedRef.current) return;
           setReplayMessage(entry.message);
@@ -294,11 +286,6 @@ const AIChatPage: React.FC = () => {
 
   const handleClear = () => {
     clearHistory();
-  };
-
-  const handleOpenSettings = () => {
-    // Dispatch event to open settings modal
-    window.dispatchEvent(new CustomEvent('open-settings'));
   };
 
   const toggleProgressLog = (messageId: string) => {
@@ -440,24 +427,12 @@ const AIChatPage: React.FC = () => {
 
       {/* Configuration Error Banner */}
       {configError && (
-        <Alert
-          variant={AlertVariant.warning}
-          title="Configuration Required"
-          isInline
-          style={{ marginBottom: '16px' }}
-          actionLinks={
-            <>
-              <AlertActionLink onClick={handleOpenSettings}>
-                Open Settings
-              </AlertActionLink>
-              <AlertActionLink onClick={() => setConfigError(null)}>
-                Dismiss
-              </AlertActionLink>
-            </>
-          }
-        >
-          {configError}. Click "Open Settings" to configure your AI model.
-        </Alert>
+        <div style={{ marginBottom: '16px' }}>
+          <ConfigurationRequiredAlert 
+            onClose={() => setConfigError(null)}
+            message={`${configError}. Click "Open Settings" to configure your AI model.`}
+          />
+        </div>
       )}
 
       {/* Copy Success Banner */}

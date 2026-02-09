@@ -69,10 +69,7 @@ class AISecretManager {
     }
 
     // DEV MODE: Save to browser cache
-    const devMode = isDevMode();
-    console.log(`[SecretManager] saveProviderSecret - devMode: ${devMode}`);
-
-    if (devMode) {
+    if (isDevMode()) {
       console.log(`[SecretManager] Saving ${config.provider} API key to browser session`);
       saveDevCredential(config.provider, config.apiKey, config.modelId);
       return `dev-${config.provider}-credentials`;

@@ -191,7 +191,29 @@ Settings are stored in browser localStorage.
 
 ## Development Notes
 
-- Uses **React 17** (required by OpenShift Console)
+### React Version Constraint
+
+**This plugin MUST use React 17 - DO NOT upgrade to React 18+**
+
+The OpenShift Console Platform itself runs on React 17, and console plugins must use the same React version as the host console to avoid runtime conflicts. Attempting to use React 18 will cause the plugin to fail when loaded in OpenShift Console.
+
+**Why React 18 doesn't work** (see commit `81a63ef`):
+
+1. **Platform Dependency**: The `@openshift-console/dynamic-plugin-sdk` requires React 17. Console plugins share the React instance with the host OCP console - version mismatches cause loading/rendering failures.
+
+2. **Breaking API Changes**: React 18 introduced the `createRoot` API, incompatible with React 17's `ReactDOM.render` used by the console platform.
+
+3. **Dependency Cascade**: React 18 requires different versions of:
+   - `@testing-library/react` (12.x for React 17 vs 14.x for React 18)
+   - `@testing-library/react-hooks` (only needed for React 17)
+   - Component libraries like `react-resizable-panels` may not support React 17
+
+4. **Resolution Enforcement**: The `package.json` includes `resolutions` to force React 17 across all dependencies and prevent accidental upgrades.
+
+**The plugin must remain on React 17 until OpenShift Console itself upgrades to React 18.**
+
+### Other Technical Details
+
 - Uses **PatternFly 5** for UI components
 - TypeScript strict mode enabled
 - Webpack module federation for dynamic loading

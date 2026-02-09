@@ -626,7 +626,13 @@ You are a Senior Site Reliability Engineer (SRE) analyzing OpenShift/Kubernetes 
 User Question: {question}
 
 Provide a concise technical analysis focusing on operational insights and recommendations using only the metrics and data provided.
-Respond with JSON format: {{"promql": "relevant_query_if_applicable", "summary": "your_analysis"}}.
+
+**Response Format Requirements:**
+- Respond with COMPACT JSON (single line, no pretty-printing): {{"promql": "relevant_query_if_applicable", "summary": "your_analysis"}}
+- The "summary" field MUST be a markdown-formatted string (NOT a nested JSON object)
+- Use markdown formatting in the summary: bold text (**text**), bullet lists (- item), numbered lists (1. item), emojis for visual clarity
+- Use \\n for line breaks within the summary string (properly escaped for JSON)
+- DO NOT pretty-print the JSON response - return it as a single line
 
 """.strip()
 

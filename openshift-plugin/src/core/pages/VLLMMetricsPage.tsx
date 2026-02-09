@@ -40,6 +40,7 @@ import {
   AngleRightIcon,
 } from '@patternfly/react-icons';
 import { listModels, listNamespaces, ModelInfo, NamespaceInfo, fetchVLLMMetrics, analyzeVLLM, getSessionConfig, AnalysisResult } from '../services/mcpClient';
+import { ConfigurationRequiredAlert } from '../components/ConfigurationRequiredAlert';
 
 // Key Metrics - Priority metrics from Streamlit (displayed prominently at top)
 const KEY_METRICS_CONFIG = [
@@ -1065,9 +1066,15 @@ const VLLMMetricsPage: React.FC = () => {
 
         {/* Error Alert */}
         {error && (
-          <Alert variant={AlertVariant.warning} title="Warning" isInline style={{ marginBottom: '16px' }}>
-            {error}
-          </Alert>
+          <div style={{ marginBottom: '16px' }}>
+            {error === 'Please configure an AI model in Settings first' ? (
+              <ConfigurationRequiredAlert onClose={() => setError(null)} />
+            ) : (
+              <Alert variant={AlertVariant.warning} title="Warning" isInline>
+                {error}
+              </Alert>
+            )}
+          </div>
         )}
 
         {/* AI Analysis Result */}

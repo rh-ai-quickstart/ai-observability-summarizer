@@ -151,13 +151,13 @@ describe('AIChatPage', () => {
       expect(screen.queryByText('Configuration Required')).not.toBeInTheDocument();
     });
 
-    it('should dismiss configuration error when dismiss button clicked', () => {
+    it('should dismiss configuration error when close button clicked', () => {
       mockGetSessionConfig.mockReturnValue({ ai_model: '' });
 
       render(<AIChatPage />);
 
-      const dismissButton = screen.getByText('Dismiss');
-      fireEvent.click(dismissButton);
+      const closeButton = screen.getByRole('button', { name: /✕/ });
+      fireEvent.click(closeButton);
 
       expect(screen.queryByText('Configuration Required')).not.toBeInTheDocument();
     });
