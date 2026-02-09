@@ -63,11 +63,11 @@ const METRIC_CATEGORIES = {
     description: 'Monitor request volume, status, and reliability',
     metrics: [
       { key: 'Requests Total', label: 'Total Requests', unit: '', description: 'Total inference requests processed' },
-      { key: 'Requests Running', label: 'In-Progress', unit: '', description: 'Active ongoing requests' },
+      { key: 'Requests Running', label: 'In-Progress Requests', unit: '', description: 'Active ongoing requests' },
       { key: 'Request Errors Total', label: 'Request Errors', unit: '', description: 'Total failed inference requests' },
-      { key: 'Oom Errors Total', label: 'OOM Errors', unit: '', description: 'Out-of-memory errors' },
-      { key: 'Num Requests Waiting', label: 'Waiting', unit: '', description: 'Requests waiting in queue' },
-      { key: 'Scheduler Pending Requests', label: 'Pending', unit: '', description: 'Requests pending in scheduler queue' },
+      { key: 'Oom Errors Total', label: 'OOM Request Errors', unit: '', description: 'Out-of-memory errors' },
+      { key: 'Num Requests Waiting', label: 'Waiting Requests', unit: '', description: 'Requests waiting in queue' },
+      { key: 'Scheduler Pending Requests', label: 'Pending Requests', unit: '', description: 'Requests pending in scheduler queue' },
     ]
   },
   'Token Throughput': {
@@ -79,8 +79,8 @@ const METRIC_CATEGORIES = {
       { key: 'Tokens Generated Per Second', label: 'Token Rate', unit: 't/s', description: 'Token generation rate (tokens/second)' },
       { key: 'Prompt Tokens Total', label: 'Prompt Tokens', unit: '', description: 'Total prompt tokens processed' },
       { key: 'Generation Tokens Total', label: 'Gen Tokens', unit: '', description: 'Total generated tokens' },
-      { key: 'Request Prompt Tokens Sum', label: 'Avg Prompt', unit: '', description: 'Average prompt tokens per request' },
-      { key: 'Request Generation Tokens Sum', label: 'Avg Gen', unit: '', description: 'Average generated tokens per request' },
+      { key: 'Request Prompt Tokens Sum', label: 'Avg Prompt Tokens', unit: '', description: 'Average prompt tokens per request' },
+      { key: 'Request Generation Tokens Sum', label: 'Avg Generated Tokens', unit: '', description: 'Average generated tokens per request' },
     ]
   },
   'Latency & Timing': {
@@ -93,10 +93,10 @@ const METRIC_CATEGORIES = {
       { key: 'Streaming Ttft Seconds', label: 'Streaming TTFT', unit: 's', description: 'Average time to first token for streaming' },
       { key: 'Time To First Token Seconds Sum', label: 'TTFT Sum', unit: 's', description: 'Time to first token (total)' },
       { key: 'Time Per Output Token Seconds Sum', label: 'TPOT Sum', unit: 's', description: 'Time per output token (total)' },
-      { key: 'Request Prefill Time Seconds Sum', label: 'Prefill', unit: 's', description: 'Prompt processing time' },
-      { key: 'Request Decode Time Seconds Sum', label: 'Decode', unit: 's', description: 'Token generation time' },
+      { key: 'Request Prefill Time Seconds Sum', label: 'Prompt Processing Time', unit: 's', description: 'Prompt processing time' },
+      { key: 'Request Decode Time Seconds Sum', label: 'Token Generation Time', unit: 's', description: 'Token generation time' },
       { key: 'Request Queue Time Seconds Sum', label: 'Queue Time', unit: 's', description: 'Time spent in queue' },
-      { key: 'E2E Request Latency Seconds Sum', label: 'E2E Total', unit: 's', description: 'End-to-end latency sum' },
+      { key: 'E2E Request Latency Seconds Sum', label: 'E2E Latency', unit: 's', description: 'End-to-end latency sum' },
     ]
   },
   'Memory & Cache': {
