@@ -17,7 +17,6 @@ IMAGE_PREFIX ?= aiobs
 VERSION ?= 1.1.4-feature
 PLATFORM ?= linux/amd64
 DEV_MODE ?= false
-ENABLE_KORREL8R ?= true
 
 # Container image names
 METRICS_UI_IMAGE = $(REGISTRY)/$(ORG)/$(IMAGE_PREFIX)-metrics-ui
@@ -287,7 +286,6 @@ help:
 	@echo "  BUILD_TOOL         - Build tool: docker or podman (auto-detected)"
 	@echo "  NAMESPACE          - OpenShift namespace for deployment"
 	@echo "  DEV_MODE           - Set to 'true' to deploy React UI only, 'false' for Console Plugin only (default: false)"
-	@echo "  ENABLE_KORREL8R    - Set to 'true' to install Korrel8r with observability stack (default: true)"
 	@echo "  HF_TOKEN           - Hugging Face Token (will prompt if not provided and LLM_URL not set)"
 	@echo "  DEVICE             - Deploy models on cpu or gpu (default)"
 	@echo "  LLM                - Model id (eg. llama-3-1-8b-instruct)"
@@ -442,7 +440,6 @@ install-mcp-server: namespace
 			--set rbac.createGrafanaRole=false \
 			--set LLM_PREDICTOR=$(LLM)-predictor \
 			--set env.DEV_MODE=$(DEV_MODE) \
-			--set-string env.KORREL8R_ENABLED=$(ENABLE_KORREL8R) \
 			$(if $(MCP_SERVER_ROUTE_HOST),--set route.host='$(MCP_SERVER_ROUTE_HOST)',) \
 			$(if $(LLAMA_STACK_URL),--set llm.url='$(LLAMA_STACK_URL)',) \
 			-f $(GEN_MODEL_CONFIG_PREFIX)-for_helm.yaml; \
@@ -454,7 +451,6 @@ install-mcp-server: namespace
 			--set rbac.createGrafanaRole=true \
 			--set LLM_PREDICTOR=$(LLM)-predictor \
 			--set env.DEV_MODE=$(DEV_MODE) \
-			--set-string env.KORREL8R_ENABLED=$(ENABLE_KORREL8R) \
 			$(if $(MCP_SERVER_ROUTE_HOST),--set route.host='$(MCP_SERVER_ROUTE_HOST)',) \
 			$(if $(LLAMA_STACK_URL),--set llm.url='$(LLAMA_STACK_URL)',) \
 			-f $(GEN_MODEL_CONFIG_PREFIX)-for_helm.yaml; \
@@ -1191,11 +1187,7 @@ install-minio:
 # Korrel8r installation via Helm
 .PHONY: install-korrel8r
 install-korrel8r:
-	@if [ "$(ENABLE_KORREL8R)" != "true" ]; then \
-		echo "→ ENABLE_KORREL8R is not set to 'true'; skipping Korrel8r install"; \
-		exit 0; \
-	fi
-	@echo "→ ENABLE_KORREL8R=true; deploying Korrel8r via Helm"
+	@echo "→ Deploying Korrel8r via Helm"
 	@cd deploy/helm && helm upgrade --install $(KORREL8R_RELEASE_NAME) $(KORREL8R_CHART_PATH) \
 		--namespace $(KORREL8R_NAMESPACE) \
 		--create-namespace \

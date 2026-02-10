@@ -5,9 +5,6 @@ import logging
 from common.pylogger import get_python_logger
 from core.korrel8r_client import Korrel8rClient
 from core.korrel8r_service import fetch_goal_query_objects
-from core.config import (
-    KORREL8R_ENABLED,
-)
 from core.response_utils import make_mcp_text_response
 from mcp_server.exceptions import MCPException, MCPErrorCode
 

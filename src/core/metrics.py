@@ -33,7 +33,6 @@ from .llm_client import (
     build_openshift_metrics_context,
     build_openshift_chat_prompt,
 )
-from .config import KORREL8R_ENABLED
 from .korrel8r_service import fetch_goal_query_objects
 NAMESPACE_SCOPED = "namespace_scoped"
 CLUSTER_WIDE = "cluster_wide"
@@ -1947,17 +1946,16 @@ def analyze_openshift_metrics(
     if scope == NAMESPACE_SCOPED and namespace:
         scope_description += f" ({namespace})"
 
-    # Build correlated log/trace context for OpenShift analysis (only when relevant)
+    # Build correlated log/trace context for OpenShift analysis
     log_trace_data: str = ""
-    if KORREL8R_ENABLED:
-        log_trace_data = build_log_trace_context_for_pod_issues(
-            namespace_for_query=namespace_for_query,
-            namespace_label=namespace,
-            start_ts=start_ts,
-            end_ts=end_ts,
-            metrics_to_fetch=metrics_to_fetch,
-        )
-        logger.debug("In analyze_openshift_metrics: log_trace_data=%s", log_trace_data)
+    log_trace_data = build_log_trace_context_for_pod_issues(
+        namespace_for_query=namespace_for_query,
+        namespace_label=namespace,
+        start_ts=start_ts,
+        end_ts=end_ts,
+        metrics_to_fetch=metrics_to_fetch,
+    )
+    logger.debug("In analyze_openshift_metrics: log_trace_data=%s", log_trace_data)
     # Build OpenShift metrics prompt (including optional log/trace context)
     prompt = build_openshift_prompt(
         metric_dfs, metric_category, namespace_for_query, scope_description, log_trace_data
@@ -2038,17 +2036,16 @@ def chat_openshift_metrics(
     if scope == NAMESPACE_SCOPED and namespace:
         scope_description += f" ({namespace})"
 
-    # Build correlated log/trace context for chat_openshift_metrics prompt (only when relevant)
+    # Build correlated log/trace context for chat_openshift_metrics prompt
     log_trace_data: str = ""
-    if KORREL8R_ENABLED:
-        log_trace_data = build_log_trace_context_for_pod_issues(
-            namespace_for_query=namespace_for_query,
-            namespace_label=namespace,
-            start_ts=start_ts,
-            end_ts=end_ts,
-            metrics_to_fetch=metrics_to_fetch,
-        )
-        logger.debug("In chat_openshift_metrics: log_trace_data=%s", log_trace_data)
+    log_trace_data = build_log_trace_context_for_pod_issues(
+        namespace_for_query=namespace_for_query,
+        namespace_label=namespace,
+        start_ts=start_ts,
+        end_ts=end_ts,
+        metrics_to_fetch=metrics_to_fetch,
+    )
+    logger.debug("In chat_openshift_metrics: log_trace_data=%s", log_trace_data)
 
     metrics_data_summary = build_openshift_metrics_context(
         metric_dfs, metric_category, namespace_for_query, scope_description
@@ -2585,8 +2582,6 @@ def build_correlated_context_from_metrics(
 
     Each line includes: pod, container, level, and the log message.
     """
-    if not KORREL8R_ENABLED:
-        return ""
     try:
         # Gather all unique (namespace, pod) pairs from metrics
         pairs = extract_namespace_pod_pairs_from_metrics(model_name, metric_dfs)

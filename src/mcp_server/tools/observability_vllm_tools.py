@@ -48,7 +48,7 @@ from core.metrics import (
 )
 from core.llm_client import build_prompt, summarize_with_llm, extract_time_range_with_info
 from core.response_validator import ResponseType
-from core.config import DEFAULT_TIME_RANGE_DAYS, KORREL8R_ENABLED
+from core.config import DEFAULT_TIME_RANGE_DAYS
 from common.pylogger import get_python_logger
 from core.response_utils import make_mcp_text_response
 
@@ -624,17 +624,16 @@ def analyze_vllm(
                 for label, query in vllm_metrics.items()
         }
 
-        # --- Phase 1: Optional Korrel8r enrichment (logs only) ---
+        # --- Phase 1: Korrel8r enrichment (logs only) ---
         korrel8r_section: Dict[str, Any] = {}
         korrel8r_prompt_note: str = ""
         log_trace_data: str = ""
-        if KORREL8R_ENABLED:
-            log_trace_data = build_correlated_context_from_metrics(
-                metric_dfs=metric_dfs,
-                model_name=model_name,
-                start_ts=resolved_start,
-                end_ts=resolved_end,
-            )
+        log_trace_data = build_correlated_context_from_metrics(
+            metric_dfs=metric_dfs,
+            model_name=model_name,
+            start_ts=resolved_start,
+            end_ts=resolved_end,
+        )
 
         # Build prompt base and summarize (Korrel8r enrichment may augment prompt later)
         prompt = build_prompt(metric_dfs, model_name, log_trace_data)
