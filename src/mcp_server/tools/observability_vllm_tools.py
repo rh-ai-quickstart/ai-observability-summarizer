@@ -49,6 +49,7 @@ from core.metrics import (
 from core.llm_client import build_prompt, summarize_with_llm, extract_time_range_with_info
 from core.response_validator import ResponseType
 from core.config import DEFAULT_TIME_RANGE_DAYS
+from core.api_key_manager import resolve_api_key
 from common.pylogger import get_python_logger
 from core.response_utils import make_mcp_text_response
 
@@ -638,11 +639,15 @@ def analyze_vllm(
         # Build prompt base and summarize (Korrel8r enrichment may augment prompt later)
         prompt = build_prompt(metric_dfs, model_name, log_trace_data)
 
+        # Resolve API key with fallback logic (same as analyze_openshift and chat)
+        # Priority: 1) Provided api_key (from UI), 2) Kubernetes secret
+        resolved_api_key = resolve_api_key(api_key=api_key, model_id=summarize_model_id)
+
         summary = summarize_with_llm(
             prompt,
             summarize_model_id,
             ResponseType.VLLM_ANALYSIS,
-            api_key,
+            resolved_api_key,
         )
 
         # Return only the AI summary - metrics data comes from fetch_vllm_metrics_data
@@ -896,19 +901,23 @@ def chat_vllm(
     try:
         # Import here to avoid circular dependencies
         from core.llm_client import build_chat_prompt, _clean_llm_summary_string
-        
+
         # Build the chat prompt
         prompt = build_chat_prompt(
             user_question=question,
             metrics_summary=prompt_summary
         )
-        
+
+        # Resolve API key with fallback logic (same as analyze_vllm, analyze_openshift, and chat)
+        # Priority: 1) Provided api_key (from UI), 2) Kubernetes secret
+        resolved_api_key = resolve_api_key(api_key=api_key, model_id=summarize_model_id)
+
         # Get LLM response
         response = summarize_with_llm(
             prompt,
             summarize_model_id,
             ResponseType.GENERAL_CHAT,
-            api_key,
+            resolved_api_key,
             max_tokens=1500
         )
         
