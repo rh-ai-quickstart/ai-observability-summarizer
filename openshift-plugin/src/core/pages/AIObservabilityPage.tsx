@@ -264,7 +264,7 @@ const OverviewDashboard: React.FC<OverviewDashboardProps> = ({ onNavigate }) => 
           </GridItem>
           <GridItem md={6} sm={12}>
             <QuickActionCard
-              title="AI Chat"
+              title="Chat with Prometheus"
               description="Ask questions about your metrics and get AI-powered insights"
               icon={<CommentIcon style={{ fontSize: '20px' }} />}
               iconColor="#7c3aed"
@@ -412,10 +412,10 @@ const AIObservabilityPage: React.FC = () => {
             title={
               <>
                 <TabTitleIcon><CommentIcon /></TabTitleIcon>
-                <TabTitleText>AI Chat</TabTitleText>
+                <TabTitleText>Chat with Prometheus</TabTitleText>
               </>
             }
-            aria-label="AI Chat"
+            aria-label="Chat with Prometheus"
           />
         </Tabs>
       </PageSection>

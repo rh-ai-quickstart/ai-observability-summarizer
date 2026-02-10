@@ -963,7 +963,7 @@ class MetricsOptimizer:
             metadata["gpu_discovery"] = "runtime"
         else:
             metadata["catalog_type"] = "full"
-            metadata["description"] = "Optimized OpenShift metrics with keywords for AI Chat"
+            metadata["description"] = "Optimized OpenShift metrics with keywords for Chat with Prometheus"
 
         optimized = {
             "metadata": metadata,

@@ -47,8 +47,8 @@ describe('useProgressIndicator', () => {
       result.current.startProgress();
     });
 
-    // Collect messages over 25 seconds (5 rotations at 5 second intervals)
-    for (let i = 0; i < 5; i++) {
+    // Collect messages over 15 seconds (3 rotations at 5 second intervals)
+    for (let i = 0; i < 3; i++) {
       observedMessages.add(result.current.progressMessage);
       act(() => {
         jest.advanceTimersByTime(5000);
@@ -58,15 +58,13 @@ describe('useProgressIndicator', () => {
     // Should have seen multiple different messages
     expect(observedMessages.size).toBeGreaterThan(1);
 
-    // Check for expected message patterns (updated for new messages)
+    // Check for expected message patterns
     const messagesArray = Array.from(observedMessages);
     const hasExpectedPatterns = messagesArray.some(
       (msg) =>
         msg.includes('Analyzing') ||
-        msg.includes('Connecting') ||
         msg.includes('Processing') ||
-        msg.includes('Working') ||
-        msg.includes('Preparing')
+        msg.includes('Working')
     );
     expect(hasExpectedPatterns).toBe(true);
   });

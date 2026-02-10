@@ -42,7 +42,7 @@ export const ChatSettingsTab: React.FC<ChatSettingsTabProps> = ({
       <TextContent style={{ marginBottom: '24px' }}>
         <Text component={TextVariants.h3}>Chat Interface Settings</Text>
         <Text component={TextVariants.p}>
-          Customize how the AI Chat interface behaves and displays information.
+          Customize how the Chat with Prometheus interface behaves and displays information.
         </Text>
       </TextContent>
 

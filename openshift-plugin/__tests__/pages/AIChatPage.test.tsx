@@ -110,7 +110,7 @@ describe('AIChatPage', () => {
     it('should render the chat page with header', () => {
       render(<AIChatPage />);
 
-      expect(screen.getByText('AI Chat Assistant')).toBeInTheDocument();
+      expect(screen.getByText('Chat with Prometheus')).toBeInTheDocument();
       expect(screen.getByText(/Ask questions about your metrics/i)).toBeInTheDocument();
       expect(screen.getByPlaceholderText('Ask about your metrics...')).toBeInTheDocument();
     });
@@ -501,7 +501,7 @@ describe('AIChatPage', () => {
     });
   });
 
-  describe('AI Chat Integration', () => {
+  describe('Chat with Prometheus Integration', () => {
     it('should add user and assistant messages after successful chat', async () => {
       mockChat.mockResolvedValue({
         response: 'AI response text',

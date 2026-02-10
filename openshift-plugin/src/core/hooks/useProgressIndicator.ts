@@ -2,10 +2,8 @@ import * as React from 'react';
 
 const PROGRESS_MESSAGES = [
   '🔍 Analyzing your request...',
-  '📡 Connecting to services...',
   '🤖 Processing with AI...',
   '💭 Working on your request...',
-  '⏳ Preparing response...',
 ];
 
 const ROTATION_INTERVAL = 5000; // 5 seconds

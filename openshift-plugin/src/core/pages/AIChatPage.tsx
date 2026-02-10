@@ -403,7 +403,7 @@ const AIChatPage: React.FC = () => {
           <FlexItem>
             <Title headingLevel="h2" size="xl">
               <RobotIcon style={{ marginRight: '8px', color: '#7c3aed' }} />
-              AI Chat Assistant
+              Chat with Prometheus
             </Title>
             <TextContent>
               <Text component={TextVariants.small} style={{ color: 'var(--pf-v5-global--Color--200)' }}>
