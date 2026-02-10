@@ -85,6 +85,52 @@ class TestSemanticAnalysis:
         assert "pod" in concepts["components"]
 
 
+    def test_extract_key_concepts_new_intents(self):
+        """Test new intent types: top_n, comparison, trend, rate."""
+        from core.chat_with_prometheus import extract_key_concepts
+
+        concepts = extract_key_concepts("Show the top GPU consumers")
+        assert concepts["intent_type"] == "top_n"
+
+        concepts = extract_key_concepts("Compare model latency")
+        assert concepts["intent_type"] == "comparison"
+
+        concepts = extract_key_concepts("How has usage changed over time?")
+        assert concepts["intent_type"] == "trend"
+
+        concepts = extract_key_concepts("What is the request rate?")
+        assert concepts["intent_type"] == "rate"
+
+    def test_extract_key_concepts_vllm_measurements(self):
+        """Test vLLM-specific measurement detection."""
+        from core.chat_with_prometheus import extract_key_concepts
+
+        concepts = extract_key_concepts("What is the TTFT?")
+        assert "ttft" in concepts["measurements"]
+
+        concepts = extract_key_concepts("Show the KV cache usage")
+        assert "cache" in concepts["measurements"]
+
+        concepts = extract_key_concepts("How many tokens generated?")
+        assert "tokens" in concepts["measurements"]
+
+    def test_semantic_score_vllm_patterns(self):
+        """Test vLLM-specific semantic scoring."""
+        from core.chat_with_prometheus import calculate_semantic_score
+
+        # vLLM intent + vLLM metric
+        score = calculate_semantic_score("vllm latency", "vllm:e2e_request_latency_seconds")
+        assert score >= 15
+
+        # TTFT abbreviation
+        score = calculate_semantic_score("ttft", "vllm:time_to_first_token_seconds")
+        assert score >= 20
+
+        # Token patterns
+        score = calculate_semantic_score("token throughput", "vllm:generation_tokens_total")
+        assert score >= 12
+
+
 class TestMetricRanking:
     """Test metric ranking and selection functions."""
     

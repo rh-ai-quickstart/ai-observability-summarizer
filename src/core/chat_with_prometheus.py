@@ -427,7 +427,6 @@ def find_best_metric_with_metadata(
             catalog_metrics = catalog.get_smart_metric_list(
                 query=user_question,
                 max_metrics=max_candidates * 3,  # Get more candidates for better ranking
-                include_low_priority=False
             )
 
             if catalog_metrics:
@@ -512,7 +511,8 @@ def find_best_metric_with_metadata(
 def calculate_semantic_score(intent: str, metric: str) -> int:
     """Calculate semantic relevance score between user intent and metric name."""
     score = 0
-    
+    metric_lower = metric.lower()
+
     # GPU/Hardware patterns
     if any(gpu_term in intent for gpu_term in ["gpu", "graphics", "cuda", "nvidia"]):
         if any(gpu_term in metric.lower() for gpu_term in ["gpu", "dcgm", "nvidia", "cuda"]):
@@ -552,7 +552,30 @@ def calculate_semantic_score(intent: str, metric: str) -> int:
     if any(k8s_term in intent for k8s_term in ["pod", "container", "node", "deployment", "service"]):
         if any(k8s_term in metric for k8s_term in ["pod", "container", "node", "kube_", "deployment"]):
             score += 8
-    
+
+    # vLLM / inference patterns
+    if any(vllm_term in intent for vllm_term in ["vllm", "inference", "model serving", "llm"]):
+        if "vllm:" in metric_lower:
+            score += 15
+
+    # Token patterns
+    if any(tok_term in intent for tok_term in ["token", "tokens", "throughput"]):
+        if any(tok_term in metric_lower for tok_term in ["token", "throughput", "generation", "prompt"]):
+            score += 12
+
+    # Cache patterns
+    if any(cache_term in intent for cache_term in ["cache", "kv cache", "prefix cache"]):
+        if any(cache_term in metric_lower for cache_term in ["cache", "kv_cache", "prefix_cache"]):
+            score += 12
+
+    # TTFT / TPOT exact abbreviation matches
+    if "ttft" in intent:
+        if "time_to_first_token" in metric_lower or "ttft" in metric_lower:
+            score += 20
+    if "tpot" in intent or "itl" in intent:
+        if "inter_token_latency" in metric_lower or "tpot" in metric_lower:
+            score += 20
+
     return score
 
 
@@ -625,9 +648,17 @@ def extract_key_concepts(question: str) -> Dict[str, Any]:
         concepts["intent_type"] = "average"
     elif any(word in question_lower for word in ["p95", "p99", "percentile", "distribution"]):
         concepts["intent_type"] = "percentile"
+    elif any(word in question_lower for word in ["top", "highest", "lowest", "most", "busiest", "ranking"]):
+        concepts["intent_type"] = "top_n"
+    elif any(word in question_lower for word in ["compare", " vs ", "versus", "difference between"]):
+        concepts["intent_type"] = "comparison"
+    elif any(word in question_lower for word in ["over time", "changed", "increasing", "decreasing", "show trend", "trend"]):
+        concepts["intent_type"] = "trend"
+    elif any(word in question_lower for word in ["rate", "per second", "throughput", "tokens per second"]):
+        concepts["intent_type"] = "rate"
     elif any(word in question_lower for word in ["current", "now", "latest", "what is"]):
         concepts["intent_type"] = "current_value"
-    
+
     # Measurement types
     measurement_patterns = {
         "temperature": ["temperature", "temp", "heat", "thermal"],
@@ -636,13 +667,18 @@ def extract_key_concepts(question: str) -> Dict[str, Any]:
         "gpu": ["gpu", "graphics", "cuda", "nvidia"],
         "network": ["network", "bandwidth", "traffic"],
         "latency": ["latency", "response time", "duration"],
-        "usage": ["usage", "utilization", "percent"]
+        "usage": ["usage", "utilization", "percent"],
+        "tokens": ["token", "tokens", "throughput"],
+        "cache": ["cache", "kv cache", "prefix cache"],
+        "queue": ["queue", "waiting", "pending"],
+        "ttft": ["ttft", "time to first token"],
+        "tpot": ["tpot", "time per output token"],
     }
-    
+
     for measurement, patterns in measurement_patterns.items():
-        if any(pattern in question for pattern in patterns):
+        if any(pattern in question_lower for pattern in patterns):
             concepts["measurements"].add(measurement)
-    
+
     # Component detection
     component_patterns = {
         "pod": ["pod", "pods"],
@@ -651,11 +687,11 @@ def extract_key_concepts(question: str) -> Dict[str, Any]:
         "namespace": ["namespace", "namespaces"],
         "service": ["service", "services"]
     }
-    
+
     for component, patterns in component_patterns.items():
-        if any(pattern in question for pattern in patterns):
+        if any(pattern in question_lower for pattern in patterns):
             concepts["components"].add(component)
-    
+
     return concepts
 
 
@@ -788,9 +824,43 @@ def generate_metadata_driven_promql(
 
     elif intent == 'percentile':
         if metric_type == 'histogram':
-            query = f"histogram_quantile(0.95, {metric_name}_bucket)"
+            query = f"histogram_quantile(0.95, rate({metric_name}_bucket[5m]))"
         else:
             query = f"quantile(0.95, {metric_name})"
+        return apply_boolean_filter(query)
+
+    elif intent == 'rate':
+        if metric_type == 'counter':
+            query = f"sum(rate({metric_name}[5m]))"
+        elif metric_type == 'histogram':
+            query = f"histogram_quantile(0.95, rate({metric_name}_bucket[5m]))"
+        else:
+            query = f"rate({metric_name}[5m])"
+        return apply_boolean_filter(query)
+
+    elif intent == 'trend':
+        if metric_type == 'counter':
+            query = f"rate({metric_name}[5m])"
+        elif metric_type == 'gauge':
+            query = f"avg_over_time({metric_name}[1h])"
+        else:
+            query = f"{metric_name}"
+        return apply_boolean_filter(query)
+
+    elif intent == 'top_n':
+        if metric_type == 'counter':
+            query = f"topk(5, rate({metric_name}[5m]))"
+        else:
+            query = f"topk(5, {metric_name})"
+        return apply_boolean_filter(query)
+
+    elif intent == 'comparison':
+        if metric_type == 'counter':
+            query = f"sum by (model_name) (rate({metric_name}[5m]))"
+        elif metric_type == 'histogram':
+            query = f"histogram_quantile(0.95, sum by (model_name, le) (rate({metric_name}_bucket[5m])))"
+        else:
+            query = f"avg by (model_name) ({metric_name})"
         return apply_boolean_filter(query)
 
     else:

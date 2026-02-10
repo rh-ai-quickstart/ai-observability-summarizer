@@ -560,7 +560,7 @@ describe('AIChatPage', () => {
       });
     });
 
-    it('should replay progress log entries', async () => {
+    it('should handle progress log entries without replay delay', async () => {
       mockChat.mockResolvedValue({
         response: 'AI response',
         progressLog: [
@@ -1466,7 +1466,7 @@ describe('AIChatPage', () => {
       fireEvent.click(screen.getByText('Save & Resend'));
 
       await waitFor(() => {
-        // Should truncate messages before the edited one
+        // Should append the edited message as a new message (history preserved)
         expect(mockSetMessages).toHaveBeenCalled();
         // Should send the edited message
         expect(mockChat).toHaveBeenCalledWith(

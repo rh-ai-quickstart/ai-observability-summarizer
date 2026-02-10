@@ -100,6 +100,13 @@ class GPUMetricsDiscovery:
         # vLLM high priority
         r"^vllm:.*_(latency|throughput|errors|running|waiting)",
         r"^vllm:(num_requests|e2e_request_latency|time_to_first_token)",
+        r"^vllm:(kv_cache_usage|gpu_cache_usage|cpu_cache_usage)",
+        r"^vllm:(prompt_tokens|generation_tokens)",
+        r"^vllm:num_preemptions",
+        r"^vllm:request_success",
+        r"^vllm:(request_queue_time|request_prefill_time|request_decode_time)",
+        r"^vllm:inter_token_latency",
+        r"^vllm:prefix_cache",
     ]
 
     # Keywords by vendor
@@ -117,10 +124,23 @@ class GPUMetricsDiscovery:
         "DCGM_FI_DEV_POWER_USAGE": ["gpu power", "power usage", "watts", "power consumption"],
         "DCGM_FI_DEV_FB_USED": ["gpu memory", "vram", "framebuffer", "fb used"],
         "DCGM_FI_DEV_FB_FREE": ["gpu memory free", "vram available", "framebuffer free"],
-        "vllm:e2e_request_latency_seconds": ["latency", "response time", "slow", "p95", "p99"],
-        "vllm:num_requests_running": ["requests running", "inflight", "concurrency"],
-        "vllm:num_requests_waiting": ["queue", "waiting", "backlog"],
-        "vllm:num_requests_total": ["throughput", "rps", "request rate"],
+        "vllm:e2e_request_latency_seconds": ["latency", "response time", "slow", "p95", "p99", "e2e latency", "end to end"],
+        "vllm:num_requests_running": ["requests running", "inflight", "concurrency", "active requests"],
+        "vllm:num_requests_waiting": ["queue", "waiting", "backlog", "pending requests"],
+        "vllm:num_requests_total": ["throughput", "rps", "request rate", "total requests"],
+        "vllm:time_to_first_token_seconds": ["ttft", "time to first token", "first token latency", "first token"],
+        "vllm:inter_token_latency_seconds": ["tpot", "time per output token", "inter-token", "itl", "inter token latency"],
+        "vllm:gpu_cache_usage_perc": ["kv cache", "cache utilization", "cache full", "gpu cache", "cache usage"],
+        "vllm:cpu_cache_usage_perc": ["cpu cache", "cpu kv cache"],
+        "vllm:prefix_cache_hits_total": ["prefix cache", "cache hit rate", "prefix cache hit"],
+        "vllm:prefix_cache_queries_total": ["prefix cache queries", "cache queries"],
+        "vllm:request_queue_time_seconds": ["queue time", "wait time", "queueing", "queue latency"],
+        "vllm:request_prefill_time_seconds": ["prefill phase", "prompt processing", "prefill time", "prefill latency"],
+        "vllm:request_decode_time_seconds": ["decode phase", "generation phase", "decode time", "decode latency"],
+        "vllm:prompt_tokens_total": ["prompt throughput", "prompt tokens", "input tokens", "tokens per second"],
+        "vllm:generation_tokens_total": ["generation throughput", "output tokens", "generation tokens", "tokens generated"],
+        "vllm:num_preemptions_total": ["preemption", "eviction", "preemptions", "scheduling pressure"],
+        "vllm:request_success_total": ["success rate", "successful requests", "completion rate"],
     }
 
     def __init__(self, prometheus_url: str = "http://localhost:9090"):

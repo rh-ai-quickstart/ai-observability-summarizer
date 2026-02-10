@@ -361,6 +361,47 @@ You have access to monitoring tools and should provide focused, targeted respons
 
 **CRITICAL: ANSWER ONLY WHAT THE USER ASKS - DON'T EXPLORE EVERYTHING**
 
+**🔧 vLLM / Model-Serving Domain Knowledge:**
+
+vLLM is the most common LLM inference engine on OpenShift AI. Its Prometheus metrics
+use the `vllm:` prefix and live in the `gpu_ai` category. Key concepts:
+
+- **Latency phases** (all histograms, use `histogram_quantile`):
+  - `vllm:e2e_request_latency_seconds` — total end-to-end latency
+  - `vllm:time_to_first_token_seconds` — TTFT (time to first token, measures prompt processing + scheduling)
+  - `vllm:inter_token_latency_seconds` — TPOT / ITL (time per output token / inter-token latency)
+  - `vllm:request_queue_time_seconds` — time spent waiting in the queue before processing
+  - `vllm:request_prefill_time_seconds` — prefill (prompt encoding) phase duration
+  - `vllm:request_decode_time_seconds` — decode (token generation) phase duration
+  - Decomposition: Queue + Prefill + Decode ≈ E2E latency
+
+- **Throughput** (counters, use `rate()` or `increase()`):
+  - `vllm:prompt_tokens_total` — input/prompt tokens processed
+  - `vllm:generation_tokens_total` — output/generation tokens produced
+  - `vllm:num_requests_total` — total requests received
+  - `vllm:request_success_total` — successful completions
+  - Tokens/sec = `rate(vllm:generation_tokens_total[5m])`
+
+- **KV Cache & Scheduling** (gauges):
+  - `vllm:gpu_cache_usage_perc` — GPU KV-cache utilization (0-1, critical for capacity)
+  - `vllm:cpu_cache_usage_perc` — CPU KV-cache utilization
+  - `vllm:num_requests_running` — currently active requests
+  - `vllm:num_requests_waiting` — requests queued (backpressure indicator)
+  - `vllm:num_preemptions_total` — preemptions/evictions (scheduling pressure)
+
+- **Prefix Caching**:
+  - `vllm:prefix_cache_hit_rate` or `vllm:prefix_cache_queries_total` / `vllm:prefix_cache_hits_total`
+  - Cache hit rate formula: `rate(vllm:prefix_cache_hits_total[5m]) / rate(vllm:prefix_cache_queries_total[5m])`
+
+- **Common abbreviations**: TTFT = Time To First Token, TPOT = Time Per Output Token,
+  ITL = Inter-Token Latency, KV = Key-Value (cache), E2E = End-to-End
+
+- **Common PromQL patterns for vLLM**:
+  - P95 latency: `histogram_quantile(0.95, rate(vllm:e2e_request_latency_seconds_bucket[5m]))`
+  - Per-model comparison: add `by (model_name)` to aggregations
+  - Per-instance breakdown: add `by (instance)` to aggregations
+  - Cache saturation check: `vllm:gpu_cache_usage_perc > 0.9`
+
 **📚 Enhanced Metrics Catalog Features:**
 
 The system now has intelligent metric discovery with category-aware filtering:

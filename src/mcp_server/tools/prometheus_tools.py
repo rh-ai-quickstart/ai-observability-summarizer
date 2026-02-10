@@ -389,7 +389,6 @@ def search_metrics_by_category(
         metrics = catalog.search_metrics_by_category(
             category_ids=category_ids,
             priorities=priorities,
-            include_low_priority=False
         )
 
         if not metrics:

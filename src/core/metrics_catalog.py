@@ -496,7 +496,6 @@ class MetricsCatalog:
             priority_dist = {
                 "High": len(metrics_dict.get("High", [])),
                 "Medium": len(metrics_dict.get("Medium", [])),
-                "Low": 0
             }
             total_metrics = priority_dist["High"] + priority_dist["Medium"]
 
@@ -535,35 +534,27 @@ class MetricsCatalog:
         self,
         category_ids: Optional[List[str]] = None,
         priorities: Optional[List[str]] = None,
-        include_low_priority: bool = False
     ) -> List[MetricInfo]:
         """
         Search metrics by category and priority.
 
         Args:
             category_ids: List of category IDs to filter by. None = all categories.
-            priorities: List of priorities to include ("High", "Medium", "Low"). None = auto.
-            include_low_priority: If True, include Low priority metrics (requires dynamic API call).
+            priorities: List of priorities to include ("High", "Medium"). None = defaults to both.
 
         Returns:
             List of MetricInfo objects matching the criteria.
+
+        Note:
+            Low priority metrics are excluded from the bundled catalog by design
+            (see design-details.md Decision 4). Only High and Medium are available.
         """
         if not self._load_catalog():
             return []
 
-        # Auto-determine priorities if not specified
+        # Only High and Medium priorities exist in the bundled catalog
         if priorities is None:
-            if include_low_priority:
-                priorities = ["High", "Medium", "Low"]
-            else:
-                priorities = ["High", "Medium"]
-
-        # Note: Low priority metrics are excluded from optimized catalog
-        if "Low" in priorities:
-            logger.warning(
-                "Low priority metrics requested but not available in optimized catalog. "
-                "Use dynamic discovery for complete Low priority metrics."
-            )
+            priorities = ["High", "Medium"]
 
         results = []
 
@@ -654,7 +645,13 @@ class MetricsCatalog:
                 "gpu", "nvidia", "cuda", "dcgm",  # NVIDIA
                 "gaudi", "habana", "intel", "xpu",  # Intel
                 "amd", "rocm", "amdgpu",  # AMD
-                "accelerator", "ai", "ml", "vllm", "inference"  # General AI/ML
+                "accelerator", "ai", "ml", "vllm", "inference",  # General AI/ML
+                "ttft", "tpot", "itl", "kv cache", "prefix cache",  # vLLM abbreviations
+                "preemption", "tokens per second", "model serving",  # vLLM concepts
+                "decode", "prefill", "queue time",  # Latency phases
+                "generation tokens", "prompt tokens",  # Token throughput
+                "llm", "serving", "e2e latency",  # Model serving
+                "first token", "cache hit", "cache usage",  # Cache & latency
             ],
             "cluster_health": ["cluster", "capacity", "quota", "resource"],
             "node_hardware": ["node", "cpu", "memory", "disk", "hardware"],
@@ -673,7 +670,6 @@ class MetricsCatalog:
             "operator": ["operator", "olm"],
             "kubelet": ["kubelet"],
             "controller": ["controller"],
-            "vllm": ["vllm", "llm", "inference"]
         }
 
         # Find matching categories
@@ -688,17 +684,17 @@ class MetricsCatalog:
         self,
         query: str,
         max_metrics: int = 100,
-        include_low_priority: bool = False
     ) -> List[str]:
         """
         Get smart metric list based on query with category-aware filtering.
 
         This is the main integration point for enhanced metric discovery.
+        Only High and Medium priority metrics are searched (Low priority metrics
+        are excluded from the bundled catalog by design).
 
         Args:
             query: User's question
             max_metrics: Maximum number of metrics to return
-            include_low_priority: Include Low priority metrics (requires API fallback)
 
         Returns:
             List of metric names, prioritized by relevance.
@@ -723,18 +719,16 @@ class MetricsCatalog:
             metrics = self.search_metrics_by_category(
                 category_ids=category_hints,
                 priorities=priorities,
-                include_low_priority=include_low_priority
             )
         else:
             # No hints, search all categories with High priority
             metrics = self.search_metrics_by_category(
                 category_ids=None,
                 priorities=priorities,
-                include_low_priority=include_low_priority
             )
 
         # Sort by priority (High first)
-        priority_order = {"High": 0, "Medium": 1, "Low": 2}
+        priority_order = {"High": 0, "Medium": 1}
         metrics.sort(key=lambda m: priority_order.get(m.priority, 999))
 
         # Extract names and limit

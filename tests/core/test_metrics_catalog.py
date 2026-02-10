@@ -332,6 +332,53 @@ class TestCategoryHintExtraction:
                 assert cat in hints, f"Expected {cat} in hints for query: {query}"
 
 
+class TestCategoryHintsVLLMKeywords:
+    """Test that vLLM-specific keywords correctly map to gpu_ai."""
+
+    def test_vllm_keywords_no_dangling_category(self, temp_catalog_file):
+        """Verify no dangling 'vllm' category exists (bug fix)."""
+        catalog = MetricsCatalog(catalog_path=temp_catalog_file)
+        hints = catalog.extract_category_hints("vllm inference metrics")
+        assert "vllm" not in hints, "Dangling 'vllm' category should be removed"
+        assert "gpu_ai" in hints
+
+    def test_ttft_maps_to_gpu_ai(self, temp_catalog_file):
+        """TTFT keyword should map to gpu_ai."""
+        catalog = MetricsCatalog(catalog_path=temp_catalog_file)
+        hints = catalog.extract_category_hints("What is the TTFT?")
+        assert "gpu_ai" in hints
+
+    def test_tpot_maps_to_gpu_ai(self, temp_catalog_file):
+        """TPOT keyword should map to gpu_ai."""
+        catalog = MetricsCatalog(catalog_path=temp_catalog_file)
+        hints = catalog.extract_category_hints("Show me the TPOT")
+        assert "gpu_ai" in hints
+
+    def test_kv_cache_maps_to_gpu_ai(self, temp_catalog_file):
+        """KV cache keyword should map to gpu_ai."""
+        catalog = MetricsCatalog(catalog_path=temp_catalog_file)
+        hints = catalog.extract_category_hints("How full is the kv cache?")
+        assert "gpu_ai" in hints
+
+    def test_prefix_cache_maps_to_gpu_ai(self, temp_catalog_file):
+        """Prefix cache keyword should map to gpu_ai."""
+        catalog = MetricsCatalog(catalog_path=temp_catalog_file)
+        hints = catalog.extract_category_hints("What is the prefix cache hit rate?")
+        assert "gpu_ai" in hints
+
+    def test_model_serving_maps_to_gpu_ai(self, temp_catalog_file):
+        """Model serving keyword should map to gpu_ai."""
+        catalog = MetricsCatalog(catalog_path=temp_catalog_file)
+        hints = catalog.extract_category_hints("Show model serving metrics")
+        assert "gpu_ai" in hints
+
+    def test_tokens_per_second_maps_to_gpu_ai(self, temp_catalog_file):
+        """Tokens per second keyword should map to gpu_ai."""
+        catalog = MetricsCatalog(catalog_path=temp_catalog_file)
+        hints = catalog.extract_category_hints("What is the tokens per second?")
+        assert "gpu_ai" in hints
+
+
 class TestPriorityFiltering:
     """Test priority-based filtering."""
 

@@ -513,11 +513,16 @@ monitor_port_forwards() {
     # Initialize log file
     log_health_event "=== Health monitor started ==="
 
+    # Track previous state to suppress repeated identical console output
+    local prev_failed_count=-1
+    local prev_verified_count=-1
+
     while true; do
         sleep 30
 
         local failed_count=0
         local restarted_count=0
+        local verified_count=0
 
         for entry in "${PORT_FORWARD_METADATA[@]}"; do
             IFS=':' read -r pid resource_name local_port remote_port namespace description <<< "$entry"
@@ -530,6 +535,7 @@ monitor_port_forwards() {
                 # Restart the port-forward
                 oc port-forward "$resource_name" "$local_port:$remote_port" -n "$namespace" >/dev/null 2>&1 &
                 local new_pid=$!
+                ((restarted_count++))
                 log_health_event "🔄 Restarting $description → new PID: $new_pid (resource: $resource_name, namespace: $namespace)"
 
                 # Update metadata with new PID
@@ -566,23 +572,31 @@ monitor_port_forwards() {
                     # Check if port is listening
                     if lsof -nP -iTCP:"$local_port" -sTCP:LISTEN >/dev/null 2>&1; then
                         log_health_event "✅ Successfully restarted $description (verified on port $local_port)"
-                        ((restarted_count++))
+                        ((verified_count++))
                         verified=true
                         break
                     fi
                 done
 
                 if ! $verified; then
-                    log_health_event "❌ Failed to restart $description after $max_attempts attempts"
+                    log_health_event "❌ Failed to verify $description after $max_attempts attempts (restart was attempted)"
                 fi
             fi
         done
 
-        # Log summary and show on console only if there were failures
+        # Always log to file, but only print to console when the situation changes
         if [ $failed_count -gt 0 ]; then
-            log_health_event "📊 Health check summary: $failed_count failed, $restarted_count restarted"
-            echo -e "${BLUE}🏥 Health check: $failed_count failed, $restarted_count restarted (details: $HEALTH_LOG_FILE)${NC}" >&2
+            log_health_event "📊 Health check summary: $failed_count died, $restarted_count restarted, $verified_count verified"
+            if [ $failed_count -ne $prev_failed_count ] || [ $verified_count -ne $prev_verified_count ]; then
+                echo -e "${BLUE}🏥 Health check: $failed_count died → $restarted_count restarted ($verified_count verified) (details: $HEALTH_LOG_FILE)${NC}" >&2
+            fi
+        elif [ $prev_failed_count -gt 0 ]; then
+            # Situation improved: all port-forwards are healthy now
+            log_health_event "📊 Health check: all port-forwards healthy"
+            echo -e "${GREEN}🏥 Health check: all port-forwards healthy${NC}" >&2
         fi
+        prev_failed_count=$failed_count
+        prev_verified_count=$verified_count
     done
 }
 

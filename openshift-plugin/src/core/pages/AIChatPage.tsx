@@ -53,7 +53,7 @@ const AIChatPage: React.FC = () => {
   const [isLoading, setIsLoading] = React.useState(false);
   const [configError, setConfigError] = React.useState<string | null>(null);
   const [configErrorType, setConfigErrorType] = React.useState<string | null>(null);
-  const [replayMessage, setReplayMessage] = React.useState<string>('');
+
   const [questionsExpanded, setQuestionsExpanded] = React.useState(chatSettings.suggestedQuestionsExpanded);
   const [collapsedMessages, setCollapsedMessages] = React.useState<Set<string>>(new Set());
   const [expandedProgressLogs, setExpandedProgressLogs] = React.useState<Set<string>>(new Set());
@@ -213,22 +213,6 @@ const AIChatPage: React.FC = () => {
 
       stopProgress();
 
-      // Replay progress log entries (show what the chatbot actually did)
-      if (progressLog && progressLog.length > 0) {
-        for (const entry of progressLog) {
-          if (!isMountedRef.current) return;
-          setReplayMessage(entry.message);
-          // Show each entry for 300ms to create replay effect
-          await new Promise(resolve => setTimeout(resolve, 300));
-        }
-
-        // Clear replay message
-        if (!isMountedRef.current) return;
-        setReplayMessage('');
-      }
-
-      if (!isMountedRef.current) return;
-
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
@@ -347,19 +331,11 @@ const AIChatPage: React.FC = () => {
   const handleSaveEdit = (messageId: string) => {
     if (!editValue.trim()) return;
 
-    // Find the message index
-    const messageIndex = messages.findIndex(m => m.id === messageId);
-    if (messageIndex === -1) return;
-
-    // Remove all messages from this point forward (the edited message and all responses after it)
-    const newMessages = messages.slice(0, messageIndex);
-    setMessages(newMessages);
-
     // Clear edit state
     setEditingMessageId(null);
     setEditValue('');
 
-    // Re-send the edited message
+    // Append the edited message as a new message (keep all history)
     handleSend(editValue);
   };
 
@@ -722,7 +698,7 @@ const AIChatPage: React.FC = () => {
                     <span></span>
                   </div>
                   <Text>
-                    {replayMessage || progressMessage || 'Analyzing...'}
+                    {progressMessage || 'Analyzing...'}
                   </Text>
                 </Flex>
               </div>
