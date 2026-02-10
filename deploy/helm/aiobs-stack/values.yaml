@@ -20,7 +20,7 @@ mcpServer:
   enabled: true  # Always deployed
   image:
     repository: quay.io/ecosystem-appeng/aiobs-mcp-server
-    tag: 1.1.0-feature
+    tag: 1.1.6-feature
 
 # OpenShift Console Plugin - Native console integration
 consolePlugin:
@@ -30,7 +30,7 @@ consolePlugin:
     description: "AI Observability Plugin"
     image:
       repository: quay.io/ecosystem-appeng/aiobs-console-plugin
-      tag: 1.1.0-feature
+      tag: 1.1.6-feature
     imagePullPolicy: Always
     replicas: 2
     port: 9443
