@@ -130,7 +130,7 @@ def fetch_api_key_from_secret(provider: Optional[str]) -> Optional[str]:
             logger.debug(f"Secret {secret_name} does not contain 'api-key' field")
             return None
 
-        api_key = base64.b64decode(api_key_b64).decode("utf-8")
+        api_key = base64.b64decode(api_key_b64).decode("utf-8").strip()
         logger.info(f"✅ Retrieved API key from secret: {secret_name}")
         return api_key
     except Exception as e:

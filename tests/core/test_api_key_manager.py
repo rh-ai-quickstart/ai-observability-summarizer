@@ -237,6 +237,33 @@ class TestFetchApiKeyFromSecret:
         assert "ai-google-credentials" in url
         assert "/namespaces/test-namespace/" in url
 
+    @patch('src.core.api_key_manager.requests.get')
+    @patch('builtins.open', create=True)
+    @patch('os.path.exists')
+    @patch.dict(os.environ, {'NAMESPACE': 'test-namespace'})
+    def test_api_key_trailing_newline_stripped(self, mock_exists, mock_open, mock_requests_get):
+        """Test that trailing newlines and whitespace are stripped from API key"""
+        mock_exists.return_value = True
+        mock_open.return_value.__enter__.return_value.read.return_value = "test-token"
+
+        # Mock API key with trailing newline (common when manually creating secrets)
+        api_key_with_newline = "test-api-key-12345\n"
+        encoded_key = base64.b64encode(api_key_with_newline.encode('utf-8')).decode('utf-8')
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "data": {
+                "api-key": encoded_key
+            }
+        }
+        mock_requests_get.return_value = mock_response
+
+        result = fetch_api_key_from_secret("google")
+
+        # Should be stripped of trailing newline
+        assert result == "test-api-key-12345"
+        assert "\n" not in result
+
 
 class TestResolveApiKey:
     """Test API key resolution with fallback priority"""
