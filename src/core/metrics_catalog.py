@@ -6,6 +6,7 @@ Provides centralized access to the optimized metrics catalog with:
 - Priority-based filtering (High, Medium, Low)
 - Fast in-memory caching
 - Runtime GPU discovery for vendor-agnostic GPU support
+- Dynamic catalog validation against live Prometheus
 - Backward compatibility with dynamic Prometheus API discovery
 """
 
@@ -52,6 +53,7 @@ class MetricsCatalog:
     Features:
     - Loads base metrics from bundled JSON (~1,800 metrics)
     - Runtime GPU discovery for vendor-agnostic support (NVIDIA, Intel, AMD)
+    - Dynamic catalog validation against live Prometheus
     - Category-aware filtering
     - Priority-based selection
     - In-memory caching for fast access
@@ -63,17 +65,21 @@ class MetricsCatalog:
         catalog_path: Optional[Path] = None,
         prometheus_url: Optional[str] = None,
         enable_gpu_discovery: bool = True,
-        gpu_discovery_timeout: float = 10.0
+        gpu_discovery_timeout: float = 10.0,
+        enable_catalog_validation: bool = True,
+        catalog_validation_timeout: float = 10.0,
     ):
         """
         Initialize metrics catalog.
 
         Args:
             catalog_path: Optional path to catalog JSON. If None, uses bundled default.
-            prometheus_url: URL for Prometheus/Thanos (for GPU discovery).
+            prometheus_url: URL for Prometheus/Thanos (for GPU discovery and validation).
                            Defaults to PROMETHEUS_URL env var or http://localhost:9090.
             enable_gpu_discovery: If True, discover GPU metrics at startup (async).
             gpu_discovery_timeout: Timeout for GPU discovery in seconds.
+            enable_catalog_validation: If True, validate catalog against Prometheus at startup.
+            catalog_validation_timeout: Timeout for catalog validation in seconds.
         """
         self._catalog_path = catalog_path
         self._catalog: Optional[Dict] = None
@@ -93,6 +99,15 @@ class MetricsCatalog:
         self._gpu_discovery_error: Optional[str] = None
         self._gpu_discovery_thread: Optional[threading.Thread] = None
         self._catalog_lock = threading.RLock()
+
+        # Catalog validation settings
+        self._enable_catalog_validation = enable_catalog_validation
+        self._catalog_validation_timeout = catalog_validation_timeout
+
+        # Catalog validation state
+        self._catalog_validated = False
+        self._catalog_validation_error: Optional[str] = None
+        self._catalog_validation_thread: Optional[threading.Thread] = None
 
     def _get_default_catalog_path(self) -> Path:
         """Get default path to bundled metrics catalog."""
@@ -158,6 +173,10 @@ class MetricsCatalog:
                 # Start GPU discovery if this is a base catalog
                 if catalog_type == "base" and self._enable_gpu_discovery:
                     self._start_gpu_discovery()
+
+                # Start catalog validation (runs for all catalog types)
+                if self._enable_catalog_validation:
+                    self._start_catalog_validation()
 
                 return True
 
@@ -305,6 +324,150 @@ class MetricsCatalog:
 
         self._gpu_discovery_thread.join(timeout)
         return not self._gpu_discovery_thread.is_alive()
+
+    def _start_catalog_validation(self) -> None:
+        """Start background catalog validation against Prometheus."""
+        if self._catalog_validation_thread is not None:
+            return  # Already started
+
+        logger.info(f"Starting catalog validation from {self._prometheus_url}")
+
+        def _validate():
+            try:
+                from core.catalog_validator import CatalogValidator
+
+                validator = CatalogValidator(self._prometheus_url)
+                result = validator.validate(
+                    categories=self._categories,
+                    lookup=self._lookup,
+                    timeout=self._catalog_validation_timeout,
+                )
+
+                if result.error:
+                    self._catalog_validation_error = result.error
+                    logger.warning(f"Catalog validation failed: {result.error}")
+                    return
+
+                # Apply results
+                self._apply_validation_result(result)
+                self._catalog_validated = True
+
+                logger.info(
+                    f"Catalog validation complete: "
+                    f"removed {len(result.metrics_removed)}, "
+                    f"added {len(result.metrics_added)}, "
+                    f"time={result.validation_time_ms:.1f}ms"
+                )
+
+            except ImportError as e:
+                self._catalog_validation_error = f"Catalog validator module not available: {e}"
+                logger.warning(self._catalog_validation_error)
+            except Exception as e:
+                self._catalog_validation_error = str(e)
+                logger.error(f"Catalog validation error: {e}", exc_info=True)
+
+        self._catalog_validation_thread = threading.Thread(target=_validate, daemon=True)
+        self._catalog_validation_thread.start()
+
+    def _apply_validation_result(self, result) -> None:
+        """
+        Apply catalog validation result — remove/add metrics under lock.
+
+        Args:
+            result: CatalogValidationResult from catalog_validator.
+        """
+        with self._catalog_lock:
+            # --- Remove metrics not in Prometheus ---
+            removed_by_cat: Dict[str, Set[str]] = {}
+            for entry in result.metrics_removed:
+                removed_by_cat.setdefault(entry["category_id"], set()).add(entry["name"])
+
+            for cat in self._categories:
+                names_to_remove = removed_by_cat.get(cat["id"])
+                if not names_to_remove:
+                    continue
+                for priority in ("High", "Medium"):
+                    cat["metrics"][priority] = [
+                        m for m in cat["metrics"].get(priority, [])
+                        if m["name"] not in names_to_remove
+                    ]
+                # Remove from lookup
+                for name in names_to_remove:
+                    self._lookup.pop(name, None)
+
+            # --- Add metrics found in Prometheus ---
+            added_by_cat: Dict[str, List[Dict]] = {}
+            for entry in result.metrics_added:
+                added_by_cat.setdefault(entry["category_id"], []).append(entry)
+
+            for cat in self._categories:
+                entries = added_by_cat.get(cat["id"])
+                if not entries:
+                    continue
+                for entry in entries:
+                    metric_entry = {
+                        "name": entry["name"],
+                        "type": entry.get("type", "unknown"),
+                        "help": entry.get("help", ""),
+                        "keywords": entry.get("keywords", []),
+                    }
+                    cat["metrics"].setdefault("Medium", []).append(metric_entry)
+                    self._lookup[entry["name"]] = {
+                        "category_id": entry["category_id"],
+                        "priority": "Medium",
+                    }
+
+            # --- Update metadata ---
+            if self._catalog and "metadata" in self._catalog:
+                self._catalog["metadata"]["catalog_validated"] = True
+                self._catalog["metadata"]["validation_removed"] = len(result.metrics_removed)
+                self._catalog["metadata"]["validation_added"] = len(result.metrics_added)
+                current_total = self._catalog["metadata"].get("total_metrics", 0)
+                self._catalog["metadata"]["total_metrics"] = (
+                    current_total - len(result.metrics_removed) + len(result.metrics_added)
+                )
+
+    def is_catalog_validated(self) -> bool:
+        """
+        Check if catalog validation against Prometheus is complete.
+
+        Returns:
+            True if validation finished successfully.
+        """
+        return self._catalog_validated
+
+    def get_catalog_validation_status(self) -> Dict:
+        """
+        Get detailed catalog validation status.
+
+        Returns:
+            Dict with status information.
+        """
+        return {
+            "enabled": self._enable_catalog_validation,
+            "ready": self._catalog_validated,
+            "error": self._catalog_validation_error,
+            "in_progress": (
+                self._catalog_validation_thread is not None and
+                self._catalog_validation_thread.is_alive()
+            ),
+        }
+
+    def wait_for_catalog_validation(self, timeout: float = None) -> bool:
+        """
+        Wait for catalog validation to complete.
+
+        Args:
+            timeout: Maximum time to wait in seconds. None = wait indefinitely.
+
+        Returns:
+            True if validation completed, False if timed out.
+        """
+        if self._catalog_validation_thread is None:
+            return True  # No validation started
+
+        self._catalog_validation_thread.join(timeout)
+        return not self._catalog_validation_thread.is_alive()
 
     def is_available(self) -> bool:
         """Check if catalog is loaded and available."""
@@ -592,16 +755,19 @@ _catalog_instance: Optional[MetricsCatalog] = None
 
 def get_metrics_catalog(
     prometheus_url: Optional[str] = None,
-    enable_gpu_discovery: bool = True
+    enable_gpu_discovery: bool = True,
+    enable_catalog_validation: bool = True,
 ) -> MetricsCatalog:
     """
     Get global metrics catalog instance (singleton pattern).
 
     Args:
-        prometheus_url: Optional Prometheus URL for GPU discovery.
+        prometheus_url: Optional Prometheus URL for GPU discovery and validation.
                        Only used when creating the singleton.
         enable_gpu_discovery: Whether to enable GPU discovery.
                              Only used when creating the singleton.
+        enable_catalog_validation: Whether to enable catalog validation.
+                                  Only used when creating the singleton.
 
     Returns:
         Shared MetricsCatalog instance.
@@ -610,7 +776,8 @@ def get_metrics_catalog(
     if _catalog_instance is None:
         _catalog_instance = MetricsCatalog(
             prometheus_url=prometheus_url,
-            enable_gpu_discovery=enable_gpu_discovery
+            enable_gpu_discovery=enable_gpu_discovery,
+            enable_catalog_validation=enable_catalog_validation,
         )
     return _catalog_instance
 

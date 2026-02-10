@@ -505,6 +505,7 @@ class TestGPUDiscoveryIntegration:
         catalog = MetricsCatalog(
             catalog_path=base_catalog_file,
             enable_gpu_discovery=True,
+            enable_catalog_validation=False,
             prometheus_url="http://test:9090"
         )
         catalog._load_catalog()
