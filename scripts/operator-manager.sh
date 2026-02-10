@@ -360,6 +360,10 @@ uninstall_operator() {
                     echo -e "${BLUE}     → Deleting all resources of type: $crd${NC}"
                     # Get the resource kind from CRD (plural name without domain)
                     local resource_kind=$(echo "$crd" | cut -d'.' -f1)
+
+                    # Check if CRD is cluster-scoped or namespaced
+                    local crd_scope=$(oc get crd "$crd" -o jsonpath='{.spec.scope}' 2>/dev/null || echo "Namespaced")
+
                     # Delete all resources of this type across all namespaces
                     local resources=$(oc get "$resource_kind" --all-namespaces -o name 2>/dev/null || true)
                     if [ -n "$resources" ]; then
@@ -367,22 +371,30 @@ uninstall_operator() {
                         oc delete "$resource_kind" --all --all-namespaces --ignore-not-found=true --timeout=30s 2>/dev/null || true
 
                         # Check if resources still exist (stuck with finalizers)
-                        local remaining=$(oc get "$resource_kind" --all-namespaces --no-headers 2>/dev/null | awk '{print $1 ":" $2}' || true)
-                        if [ -n "$remaining" ]; then
-                            echo -e "${YELLOW}        → Some resources still exist (likely stuck with finalizers)${NC}"
-                            echo -e "${BLUE}        → Removing finalizers to force deletion...${NC}"
-                            # Remove finalizers from remaining resources
-                            while IFS=: read -r ns name; do
-                                if [ "$ns" = "$name" ] || [ -z "$ns" ]; then
-                                    # Cluster-scoped resource (namespace column is same as name)
+                        if [ "$crd_scope" = "Cluster" ]; then
+                            # Cluster-scoped: output is "NAME AGE", so $1 is the name
+                            local remaining=$(oc get "$resource_kind" --no-headers -o custom-columns=NAME:.metadata.name 2>/dev/null || true)
+                            if [ -n "$remaining" ]; then
+                                echo -e "${YELLOW}        → Some cluster-scoped resources still exist (likely stuck with finalizers)${NC}"
+                                echo -e "${BLUE}        → Removing finalizers to force deletion...${NC}"
+                                while read -r name; do
+                                    [ -z "$name" ] && continue
                                     echo -e "${BLUE}           → Patching cluster-scoped: $name${NC}"
                                     oc patch "$resource_kind" "$name" --type json -p='[{"op": "remove", "path": "/metadata/finalizers"}]' 2>/dev/null || true
-                                else
-                                    # Namespaced resource
+                                done <<< "$remaining"
+                            fi
+                        else
+                            # Namespaced: output is "NAMESPACE NAME AGE", so $1:$2 is namespace:name
+                            local remaining=$(oc get "$resource_kind" --all-namespaces --no-headers -o custom-columns=NS:.metadata.namespace,NAME:.metadata.name 2>/dev/null | awk '{print $1 ":" $2}' || true)
+                            if [ -n "$remaining" ]; then
+                                echo -e "${YELLOW}        → Some namespaced resources still exist (likely stuck with finalizers)${NC}"
+                                echo -e "${BLUE}        → Removing finalizers to force deletion...${NC}"
+                                while IFS=: read -r ns name; do
+                                    [ -z "$name" ] && continue
                                     echo -e "${BLUE}           → Patching $ns/$name${NC}"
                                     oc patch "$resource_kind" "$name" -n "$ns" --type json -p='[{"op": "remove", "path": "/metadata/finalizers"}]' 2>/dev/null || true
-                                fi
-                            done <<< "$remaining"
+                                done <<< "$remaining"
+                            fi
                         fi
                     fi
                 done

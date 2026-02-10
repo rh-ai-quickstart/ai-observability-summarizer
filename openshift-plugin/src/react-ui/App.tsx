@@ -6,6 +6,7 @@ import AIObservabilityPage from '../core/pages/AIObservabilityPage';
 import VLLMMetricsPage from '../core/pages/VLLMMetricsPage';
 import { OpenShiftMetricsPage } from '../core/pages/OpenShiftMetricsPage';
 import { AIChatPage } from '../core/pages/AIChatPage';
+import DeviceMetricsPage from '../core/pages/DeviceMetricsPage';
 import { initializeRuntimeConfig } from '../core/services/runtimeConfig';
 
 const App: React.FC = () => {
@@ -50,6 +51,7 @@ const App: React.FC = () => {
         <Switch>
           <Route exact path="/" component={AIObservabilityPage} />
           <Route path="/vllm" component={VLLMMetricsPage} />
+          <Route path="/devices" component={DeviceMetricsPage} />
           <Route path="/openshift" component={OpenShiftMetricsPage} />
           <Route path="/chat" component={AIChatPage} />
           <Redirect from="/overview" to="/" />

@@ -186,8 +186,7 @@ MAX_TIME_RANGE_DAYS: int = int(os.getenv("MAX_TIME_RANGE_DAYS", "90"))
 # Default time range when none is provided (in days)
 DEFAULT_TIME_RANGE_DAYS: int = int(os.getenv("DEFAULT_TIME_RANGE_DAYS", "90"))
 
-# Korrel8r integration (feature-flagged)
-KORREL8R_ENABLED: bool = os.getenv("KORREL8R_ENABLED", "true").lower() == "true"
+# Korrel8r integration
 KORREL8R_URL: str = os.getenv("KORREL8R_URL", "")
 KORREL8R_TIMEOUT_SECONDS: int = int(os.getenv("KORREL8R_TIMEOUT_SECONDS", "8"))
 

@@ -45,7 +45,6 @@ This document consolidates previous Korrel8r proposals into a single, up-to-date
 - Format: `- namespace=<ns> pod=<pod> level=<LEVEL> <message>`.
 
 ### Configuration
-- `KORREL8R_ENABLED`: enable/disable enrichment.
 - `KORREL8R_URL`: Korrel8r base URL.
 - `MAX_NUM_LOG_ROWS`: max number of lines in prompts (default 10; Helm exposed in mcp-server chart).
 - `INJECT_VLLM_ERROR_LOG_MSG`: if set, appends a synthetic error line (testing only).
@@ -65,7 +64,7 @@ When correctly configured, the Troubleshooting Panel can pivot from a selected r
 - Available: `korrel8r_query_objects`, `korrel8r_get_correlated`.
 
 ### Behavior and guardrails
-- Respect `KORREL8R_ENABLED`; degrade gracefully when disabled/unavailable.
+- Korrel8r enrichment is always enabled for vLLM and OpenShift analysis.
 - Keep HTTP timeouts short; cap lines to avoid prompt bloat.
 - Avoid logging sensitive data; use structured logs.
 

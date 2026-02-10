@@ -54,7 +54,7 @@ export function clearSessionConfig(): void {
 /**
  * Detect provider from model ID or name
  */
-function detectProviderFromModelId(modelId: string): string | null {
+export function detectProviderFromModelId(modelId: string): string | null {
   const patterns: Record<string, RegExp> = {
     openai: /^(openai\/|gpt-)/,
     anthropic: /^(anthropic\/|claude-)/,
@@ -685,6 +685,7 @@ export async function chat(
     scope?: string;
     apiKey?: string;
     conversationHistory?: Array<{ role: string; content: string }>;
+    timeRange?: string;
   }
 ): Promise<{ response: string; progressLog: Array<{ timestamp: string; message: string }> }> {
   try {
@@ -695,6 +696,7 @@ export async function chat(
       scope: options?.scope,
       api_key: options?.apiKey,
       conversation_history: options?.conversationHistory,
+      time_range: options?.timeRange,
     });
 
     // The backend returns a JSON response with {response, progress_log, model, iterations}
