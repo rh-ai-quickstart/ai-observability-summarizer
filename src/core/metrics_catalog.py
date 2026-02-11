@@ -520,6 +520,53 @@ class MetricsCatalog:
 
         return None
 
+    def get_category_metrics_detail(self, category_id: str) -> Optional[Dict]:
+        """
+        Get full metric details for a single category, including keywords.
+
+        Returns a dict with category info and metrics grouped by priority,
+        where each metric includes name, type, help, and keywords.
+
+        Args:
+            category_id: Category identifier (e.g., "gpu_ai", "cluster_health")
+
+        Returns:
+            Dict with category details and metrics, or None if not found.
+        """
+        if not self._load_catalog():
+            return None
+
+        category = self.get_category_by_id(category_id)
+        if not category:
+            return None
+
+        metrics_dict = category.get("metrics", {})
+        metrics_by_priority = {}
+
+        for priority in ("High", "Medium"):
+            raw_metrics = metrics_dict.get(priority, [])
+            metrics_by_priority[priority] = [
+                {
+                    "name": m["name"],
+                    "type": m.get("type", "unknown"),
+                    "help": m.get("help", ""),
+                    "keywords": m.get("keywords", []),
+                }
+                for m in raw_metrics
+            ]
+
+        total = sum(len(v) for v in metrics_by_priority.values())
+
+        return {
+            "id": category["id"],
+            "name": category["name"],
+            "description": category.get("description", ""),
+            "icon": category.get("icon", ""),
+            "purpose": category.get("purpose", ""),
+            "total_metrics": total,
+            "metrics": metrics_by_priority,
+        }
+
     def search_metrics_by_category(
         self,
         category_ids: Optional[List[str]] = None,

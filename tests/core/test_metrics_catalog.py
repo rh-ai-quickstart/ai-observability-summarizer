@@ -613,6 +613,81 @@ class TestGPUDiscoveryIntegration:
         assert result is True
 
 
+class TestGetCategoryMetricsDetail:
+    """Test get_category_metrics_detail method."""
+
+    def test_valid_category(self, temp_catalog_file):
+        """Test getting details for a valid category."""
+        catalog = MetricsCatalog(catalog_path=temp_catalog_file)
+        detail = catalog.get_category_metrics_detail("gpu_ai")
+
+        assert detail is not None
+        assert detail["id"] == "gpu_ai"
+        assert detail["name"] == "GPU & AI Accelerators"
+        assert detail["total_metrics"] == 2
+        assert "metrics" in detail
+        assert len(detail["metrics"]["High"]) == 1
+        assert len(detail["metrics"]["Medium"]) == 1
+
+        # Check metric structure includes keywords field
+        high_metric = detail["metrics"]["High"][0]
+        assert high_metric["name"] == "DCGM_FI_DEV_GPU_TEMP"
+        assert high_metric["type"] == "gauge"
+        assert high_metric["help"] == "Current GPU temperature"
+        assert "keywords" in high_metric
+        assert isinstance(high_metric["keywords"], list)
+
+    def test_nonexistent_category(self, temp_catalog_file):
+        """Test getting details for a non-existent category returns None."""
+        catalog = MetricsCatalog(catalog_path=temp_catalog_file)
+        detail = catalog.get_category_metrics_detail("nonexistent_category")
+        assert detail is None
+
+    def test_unloaded_catalog(self):
+        """Test getting details when catalog is not loadable."""
+        catalog = MetricsCatalog(catalog_path=Path("/nonexistent/path.json"))
+        detail = catalog.get_category_metrics_detail("gpu_ai")
+        assert detail is None
+
+    def test_category_with_keywords(self, tmp_path):
+        """Test that keywords from metrics are preserved in detail output."""
+        catalog_data = {
+            "metadata": {"total_metrics": 1, "categories": 1},
+            "categories": [
+                {
+                    "id": "test_cat",
+                    "name": "Test Category",
+                    "description": "A test category",
+                    "icon": "T",
+                    "purpose": "Testing keywords",
+                    "metrics": {
+                        "High": [
+                            {
+                                "name": "test_metric",
+                                "type": "counter",
+                                "help": "Test help text",
+                                "keywords": ["test", "keyword", "example"],
+                            }
+                        ],
+                        "Medium": [],
+                    },
+                }
+            ],
+            "lookup": {"test_metric": {"category_id": "test_cat", "priority": "High"}},
+        }
+        catalog_file = tmp_path / "kw-catalog.json"
+        with open(catalog_file, "w") as f:
+            json.dump(catalog_data, f)
+
+        catalog = MetricsCatalog(catalog_path=catalog_file)
+        detail = catalog.get_category_metrics_detail("test_cat")
+
+        assert detail is not None
+        assert detail["purpose"] == "Testing keywords"
+        metric = detail["metrics"]["High"][0]
+        assert metric["keywords"] == ["test", "keyword", "example"]
+
+
 class TestResetCatalog:
     """Test catalog reset functionality."""
 

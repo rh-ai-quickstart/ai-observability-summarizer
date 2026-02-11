@@ -287,6 +287,89 @@ def find_best_metric_with_metadata_v2(
 # Enhanced Metrics Catalog Tools (NEW)
 # =============================================================================
 
+def get_metrics_categories_json() -> List[Dict[str, Any]]:
+    """Get all metric categories as clean JSON for UI consumption.
+
+    Returns a JSON array of category summaries including:
+    - Category ID, name, description, and icon
+    - Metric count and priority distribution
+
+    Unlike get_metrics_categories(), this returns structured JSON
+    suitable for direct use by frontend components.
+    """
+    try:
+        catalog = get_metrics_catalog()
+
+        if not catalog.is_available():
+            return make_mcp_text_response(
+                json.dumps({"error": "Metrics catalog not available"}),
+                is_error=True,
+            )
+
+        categories = catalog.get_all_categories()
+
+        result = []
+        for cat in categories:
+            result.append({
+                "id": cat.id,
+                "name": cat.name,
+                "description": cat.description,
+                "icon": cat.icon,
+                "metric_count": cat.metric_count,
+                "priority_distribution": cat.priority_distribution,
+            })
+
+        return make_mcp_text_response(json.dumps(result))
+
+    except Exception as e:
+        logger.error(f"Error getting metrics categories JSON: {e}")
+        return make_mcp_text_response(
+            json.dumps({"error": str(e)}), is_error=True
+        )
+
+
+def get_category_metrics_detail(category_id: str) -> List[Dict[str, Any]]:
+    """Get detailed metrics for a single category, including keywords.
+
+    Args:
+        category_id: Category identifier (e.g., "gpu_ai", "cluster_health").
+
+    Returns:
+        JSON with category info and metrics grouped by priority.
+        Each metric includes name, type, help text, and keywords.
+    """
+    try:
+        if not category_id:
+            return make_mcp_text_response(
+                json.dumps({"error": "category_id is required"}),
+                is_error=True,
+            )
+
+        catalog = get_metrics_catalog()
+
+        if not catalog.is_available():
+            return make_mcp_text_response(
+                json.dumps({"error": "Metrics catalog not available"}),
+                is_error=True,
+            )
+
+        detail = catalog.get_category_metrics_detail(category_id)
+
+        if detail is None:
+            return make_mcp_text_response(
+                json.dumps({"error": f"Category '{category_id}' not found"}),
+                is_error=True,
+            )
+
+        return make_mcp_text_response(json.dumps(detail))
+
+    except Exception as e:
+        logger.error(f"Error getting category metrics detail: {e}")
+        return make_mcp_text_response(
+            json.dumps({"error": str(e)}), is_error=True
+        )
+
+
 def get_metrics_categories() -> List[Dict[str, Any]]:
     """Get all metric categories with summary information.
 

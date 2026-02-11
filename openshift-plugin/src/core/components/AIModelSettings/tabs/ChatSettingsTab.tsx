@@ -31,6 +31,12 @@ export const ChatSettingsTab: React.FC<ChatSettingsTabProps> = ({
   onResetSettings,
 }) => {
   const [showResetConfirm, setShowResetConfirm] = React.useState(false);
+  const [previewLengthInput, setPreviewLengthInput] = React.useState(String(settings.collapsedPreviewLength));
+
+  // Keep local input in sync when settings change externally (e.g. reset)
+  React.useEffect(() => {
+    setPreviewLengthInput(String(settings.collapsedPreviewLength));
+  }, [settings.collapsedPreviewLength]);
 
   const handleReset = () => {
     onResetSettings();
@@ -100,11 +106,16 @@ export const ChatSettingsTab: React.FC<ChatSettingsTabProps> = ({
               <TextInput
                 id="collapsed-preview-length"
                 type="number"
-                value={settings.collapsedPreviewLength}
-                onChange={(_, value) => {
-                  const num = parseInt(value, 10);
-                  if (!isNaN(num) && num >= 100 && num <= 500) {
-                    onUpdateSettings({ collapsedPreviewLength: num });
+                value={previewLengthInput}
+                onChange={(_, value) => setPreviewLengthInput(value)}
+                onBlur={() => {
+                  const num = parseInt(previewLengthInput, 10);
+                  if (!isNaN(num)) {
+                    const clamped = Math.max(100, Math.min(500, num));
+                    onUpdateSettings({ collapsedPreviewLength: clamped });
+                    setPreviewLengthInput(String(clamped));
+                  } else {
+                    setPreviewLengthInput(String(settings.collapsedPreviewLength));
                   }
                 }}
                 min={100}
