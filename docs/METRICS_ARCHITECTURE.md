@@ -462,19 +462,40 @@ The scoring system in `calculate_semantic_score()` assigns points based on keywo
 
 Additional scoring from `calculate_type_relevance()` (metric type vs intent) and `calculate_specificity_score()` (subsystem-specific names score higher than generic ones).
 
-### MCP tools available to the AI
+### MCP tools — Metrics Catalog
+
+All MCP tools are registered with the FastMCP server in `observability_mcp.py`. Both the AI chatbot (LLM) and the frontend UI consume tools through the same registry, but via different adapters:
+
+- **AI chatbot (LLM)**: Calls tools via `MCPServerAdapter` (`mcp_tools_adapter.py`), which looks up registered tools by name from FastMCP and executes them in-process. The LLM decides which tools to call based on the system prompt in `base.py`.
+- **Frontend UI**: Calls tools via HTTP using `callMcpTool()` (`mcpClient.ts`), which sends JSON-RPC requests to the MCP server endpoint.
+
+Because both consumers dispatch tools **by name through the FastMCP registry**, a function must be registered as an MCP tool to be callable by either consumer.
+
+#### AI chatbot tools (LLM consumption)
+
+These tools return markdown-formatted responses optimized for LLM reasoning:
 
 | Tool | Purpose |
 |------|---------|
 | `search_metrics` | Pattern-based metric search (broad exploration) |
 | `search_metrics_by_category` | Category and priority-filtered search |
-| `get_metrics_categories` | List all 17 categories with summary stats |
+| `get_metrics_categories` | List all categories with summary stats (markdown + embedded JSON) |
 | `execute_promql` | Execute a PromQL query and return results |
 | `get_metric_metadata` | Get type, help text, unit for a specific metric |
 | `get_label_values` | Get all values for a label on a metric |
 | `find_best_metric_with_metadata` | Full smart discovery pipeline (category hints + scoring + PromQL generation) |
 | `suggest_queries` | Generate related PromQL queries from user intent |
 | `explain_results` | Natural language explanation of query results |
+
+#### UI tools (frontend consumption)
+
+These tools return clean JSON responses for direct use by frontend components:
+
+| Tool | Purpose |
+|------|---------|
+| `get_category_metrics_detail` | When called **without** `category_id`: returns JSON array of all category summaries (id, name, icon, metric count, priority distribution). When called **with** `category_id`: returns that category's detailed metrics including name, type, help text, and keywords, grouped by priority. Used by the Metrics Catalog tab in Settings. |
+
+> **Note:** `get_metrics_categories` (AI) and `get_category_metrics_detail` (UI) serve similar data but in different formats. The AI tool includes markdown formatting and example queries for LLM reasoning. The UI tool returns structured JSON for rendering in PatternFly components. They are intentionally separate to keep each consumer's contract clean.
 
 ---
 
@@ -563,9 +584,18 @@ make install-mcp-server NAMESPACE=my-ns GPU_PREFIX_NVIDIA="my_custom_gpu_"
 
 | File | Purpose |
 |------|---------|
-| `src/mcp_server/tools/prometheus_tools.py` | MCP tool definitions (11 tools) |
+| `src/mcp_server/tools/prometheus_tools.py` | MCP tool definitions (12 tools) |
 | `src/mcp_server/observability_mcp.py` | Tool registration with FastMCP |
+| `src/mcp_server/mcp_tools_adapter.py` | `MCPServerAdapter` -- allows LLM chatbots to call MCP tools by name in-process |
 | `src/mcp_server/data/openshift-metrics-optimized.json` | Bundled metrics catalog (~840KB, ~2,000 metrics) |
+
+### Frontend (Metrics Catalog UI)
+
+| File | Purpose |
+|------|---------|
+| `openshift-plugin/src/core/components/AIModelSettings/tabs/MetricsCatalogTab.tsx` | Metrics Catalog tab -- browse categories, expand for metric details with keywords |
+| `openshift-plugin/src/core/components/AIModelSettings/index.tsx` | Settings modal -- registers the Metrics Catalog tab |
+| `openshift-plugin/src/core/services/mcpClient.ts` | `callMcpTool()` -- HTTP client for calling MCP tools from the frontend |
 
 ### Scripts
 
@@ -584,6 +614,7 @@ make install-mcp-server NAMESPACE=my-ns GPU_PREFIX_NVIDIA="my_custom_gpu_"
 | `tests/core/test_canonical_questions.py` | Parametrized tests for canonical question set (Q1-Q20, SQ1-SQ3) |
 | `tests/test_smart_metrics_integration.py` | Integration tests for end-to-end discovery |
 | `tests/performance/test_metrics_catalog_perf.py` | Performance benchmarks |
+| `openshift-plugin/__tests__/components/MetricsCatalogTab.test.tsx` | Frontend tests for Metrics Catalog tab |
 
 ### Architecture decisions
 

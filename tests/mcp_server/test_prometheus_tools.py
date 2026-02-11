@@ -23,7 +23,6 @@ class TestPrometheusToolsBasic:
             select_best_metric,
             find_best_metric_with_metadata_v2,
             find_best_metric_with_metadata,
-            get_metrics_categories_json,
             get_category_metrics_detail,
         )
 
@@ -33,7 +32,7 @@ class TestPrometheusToolsBasic:
             execute_promql, explain_results, suggest_queries,
             select_best_metric, find_best_metric_with_metadata_v2,
             find_best_metric_with_metadata,
-            get_metrics_categories_json, get_category_metrics_detail,
+            get_category_metrics_detail,
         ]
 
         for tool in tools:

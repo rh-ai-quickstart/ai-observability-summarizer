@@ -59,7 +59,7 @@ export const MetricsCatalogTab: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await callMcpTool<any>('get_metrics_categories_json');
+      const response = await callMcpTool<any>('get_category_metrics_detail');
       const text = typeof response === 'string' ? response : response?.text ?? response?.content?.[0]?.text ?? JSON.stringify(response);
       const parsed = typeof text === 'string' ? JSON.parse(text) : text;
       if (parsed.error) {
