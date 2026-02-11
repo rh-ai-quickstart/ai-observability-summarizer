@@ -2,8 +2,8 @@
 Unit tests for catalog_validator module.
 
 Tests the dynamic catalog validation against Prometheus including:
-- Prefix map building
-- Metric categorization
+- Category classification (mirrored from metrics_cli.py)
+- Priority classification (mirrored from metrics_cli.py)
 - Keyword generation
 - Metric removal (not in Prometheus)
 - Metric addition (in Prometheus, not in catalog)
@@ -17,7 +17,12 @@ import requests as real_requests
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-from core.catalog_validator import CatalogValidator, CatalogValidationResult
+from core.catalog_validator import (
+    CatalogValidator,
+    CatalogValidationResult,
+    _classify_category,
+    _classify_priority,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -103,96 +108,119 @@ def validator():
 
 
 # ---------------------------------------------------------------------------
-# Prefix Map Building
+# Category Classification
 # ---------------------------------------------------------------------------
 
-class TestBuildPrefixMap:
-    """Test _build_prefix_map method."""
+class TestClassifyCategory:
+    """Test _classify_category function (mirrored from metrics_cli.py)."""
 
-    def test_builds_prefixes_from_categories(self, validator, sample_categories):
-        """Test that prefix map is built from existing metrics."""
-        prefix_map = validator._build_prefix_map(sample_categories, {"gpu_ai"})
+    def test_etcd_metric(self):
+        assert _classify_category("etcd_server_proposals_pending") == "etcd"
 
-        # "etcd" prefix should map to "etcd" category (unambiguous)
-        assert prefix_map.get("etcd") == "etcd"
-        assert prefix_map.get("etcd_server") == "etcd"
+    def test_cluster_metric(self):
+        assert _classify_category("cluster_version") == "cluster_health"
 
-    def test_ambiguous_prefixes_excluded(self, validator, sample_categories):
-        """Test that ambiguous prefixes (mapping to multiple categories) are excluded."""
-        prefix_map = validator._build_prefix_map(sample_categories, {"gpu_ai"})
+    def test_node_metric(self):
+        assert _classify_category("node_cpu_frequency_hertz") == "node_hardware"
 
-        # Single-letter or very short prefixes that map to multiple categories
-        # should be excluded. For instance, depth-1 prefix "cluster" maps to
-        # cluster_health only, so it should be present.
-        # But there may be prefixes at depth 1 shared across categories.
-        # All entries in the map should map to exactly 1 category.
-        for prefix, cat_id in prefix_map.items():
-            assert isinstance(cat_id, str)
+    def test_container_metric(self):
+        assert _classify_category("container_cpu_usage_seconds_total") == "pod_container"
 
-    def test_skipped_categories_excluded(self, validator, sample_categories):
-        """Test that skipped categories don't appear in prefix map."""
-        prefix_map = validator._build_prefix_map(sample_categories, {"gpu_ai"})
+    def test_apiserver_metric(self):
+        assert _classify_category("apiserver_request_total") == "api_server"
 
-        # No prefix should map to gpu_ai
-        assert "gpu_ai" not in prefix_map.values()
+    def test_coredns_metric(self):
+        assert _classify_category("coredns_dns_responses_total") == "networking"
 
-    def test_empty_categories(self, validator):
-        """Test prefix map with empty categories."""
-        prefix_map = validator._build_prefix_map([], set())
-        assert prefix_map == {}
+    def test_storage_operation_metric(self):
+        assert _classify_category("storage_operation_duration_seconds_count") == "storage"
 
-    def test_prefix_depths(self, validator, sample_categories):
-        """Test that prefixes at depths 1-4 are generated."""
-        prefix_map = validator._build_prefix_map(sample_categories, {"gpu_ai"})
+    def test_kubelet_volume_metric(self):
+        assert _classify_category("kubelet_volume_stats_used_bytes") == "storage"
 
-        # "etcd_server_leader_changes_seen_total" should generate:
-        # depth 1: "etcd"
-        # depth 2: "etcd_server"
-        # depth 3: "etcd_server_leader"
-        # depth 4: "etcd_server_leader_changes"
-        assert "etcd" in prefix_map
-        assert "etcd_server" in prefix_map
-        assert "etcd_server_leader" in prefix_map
-        assert "etcd_server_leader_changes" in prefix_map
+    def test_prometheus_metric(self):
+        assert _classify_category("prometheus_tsdb_compactions_total") == "observability"
+
+    def test_alertmanager_metric(self):
+        assert _classify_category("alertmanager_alerts_received_total") == "observability"
+
+    def test_authentication_metric(self):
+        assert _classify_category("authentication_duration_seconds_sum") == "security"
+
+    def test_imageregistry_metric(self):
+        assert _classify_category("imageregistry_http_requests_total") == "image_registry"
+
+    def test_kubelet_metric(self):
+        assert _classify_category("kubelet_node_startup_duration_seconds") == "kubelet"
+
+    def test_controller_runtime_metric(self):
+        assert _classify_category("controller_runtime_reconcile_total") == "controller_manager"
+
+    def test_csv_metric(self):
+        assert _classify_category("csv_count") == "openshift_specific"
+
+    def test_olm_metric(self):
+        assert _classify_category("olm_resolution_duration_seconds") == "openshift_specific"
+
+    def test_velero_metric(self):
+        assert _classify_category("velero_backup_attempt_total") == "backup_dr"
+
+    def test_go_metric(self):
+        assert _classify_category("go_goroutines") == "go_runtime"
+
+    def test_process_metric(self):
+        assert _classify_category("process_cpu_seconds_total") == "go_runtime"
+
+    def test_http_metric(self):
+        assert _classify_category("http_client_request_total") == "http_grpc"
+
+    def test_grpc_metric(self):
+        assert _classify_category("grpc_server_handled_total") == "http_grpc"
+
+    def test_dcgm_metric(self):
+        assert _classify_category("DCGM_FI_DEV_GPU_UTIL") == "gpu_ai"
+
+    def test_unknown_metric_falls_to_other(self):
+        assert _classify_category("completely_unknown_xyz") == "other"
+
+    def test_machine_metric(self):
+        assert _classify_category("machine_cpu_cores") == "node_hardware"
 
 
 # ---------------------------------------------------------------------------
-# Metric Categorization
+# Priority Classification
 # ---------------------------------------------------------------------------
 
-class TestCategorizeNewMetric:
-    """Test _categorize_new_metric method."""
+class TestClassifyPriority:
+    """Test _classify_priority function (mirrored from metrics_cli.py)."""
 
-    def test_longest_prefix_match(self, validator, sample_categories):
-        """Test that longest prefix wins."""
-        prefix_map = validator._build_prefix_map(sample_categories, {"gpu_ai"})
+    def test_high_cluster_operator(self):
+        assert _classify_priority("cluster_operator_up", "cluster_health") == "High"
 
-        # A new etcd metric should match etcd category
-        result = validator._categorize_new_metric("etcd_server_proposals_pending", prefix_map)
-        assert result == "etcd"
+    def test_high_etcd_server(self):
+        assert _classify_priority("etcd_server_leader_changes", "etcd") == "High"
 
-    def test_no_match_returns_none(self, validator):
-        """Test that unmatched metric returns None."""
-        prefix_map = {"etcd": "etcd", "node": "node_hardware"}
-        result = validator._categorize_new_metric("completely_unknown_metric", prefix_map)
-        assert result is None
+    def test_high_apiserver_request(self):
+        assert _classify_priority("apiserver_request_total", "api_server") == "High"
 
-    def test_single_segment_match(self, validator):
-        """Test matching on single-segment prefix."""
-        prefix_map = {"etcd": "etcd"}
-        result = validator._categorize_new_metric("etcd_new_metric", prefix_map)
-        assert result == "etcd"
+    def test_low_go_gc(self):
+        assert _classify_priority("go_gc_duration_seconds", "go_runtime") == "Low"
 
-    def test_four_segment_match(self, validator):
-        """Test matching on 4-segment prefix."""
-        prefix_map = {
-            "node": "node_hardware",
-            "node_cpu": "node_hardware",
-            "node_cpu_frequency": "node_hardware",
-            "node_cpu_frequency_max": "node_hardware",
-        }
-        result = validator._categorize_new_metric("node_cpu_frequency_max_hertz", prefix_map)
-        assert result == "node_hardware"
+    def test_low_bucket(self):
+        # Use a metric that doesn't match any High pattern first
+        assert _classify_priority("workqueue_queue_duration_seconds_bucket", "controller_manager") == "Low"
+
+    def test_low_build_info(self):
+        assert _classify_priority("alertmanager_build_info", "observability") == "Low"
+
+    def test_medium_total_suffix(self):
+        assert _classify_priority("etcd_debugging_new_total", "etcd") == "Medium"
+
+    def test_medium_default_category(self):
+        assert _classify_priority("etcd_bookmark_counts", "etcd") == "Medium"
+
+    def test_low_fallback(self):
+        assert _classify_priority("completely_unknown_xyz", "other") == "Low"
 
 
 # ---------------------------------------------------------------------------
@@ -303,14 +331,18 @@ class TestValidate:
         added_names = [m["name"] for m in result.metrics_added]
         assert "etcd_server_proposals_committed_total" in added_names
 
-    def test_added_metrics_have_medium_priority(self, validator, sample_categories, sample_lookup):
-        """Test that added metrics get Medium priority."""
-        prom_metrics = list(sample_lookup.keys()) + ["etcd_server_new_metric"]
+    def test_added_metrics_have_correct_priority(self, validator, sample_categories, sample_lookup):
+        """Test that added metrics get correct priority from CLI classification."""
+        prom_metrics = list(sample_lookup.keys()) + [
+            "etcd_server_new_metric",       # High (matches ^etcd_(server|disk|network)_)
+            "etcd_debugging_new_total",      # Medium (matches .*_total$)
+        ]
         with patch.object(real_requests, "get", side_effect=self._mock_responses(prom_metrics)):
             result = validator.validate(sample_categories, sample_lookup)
 
-        for added in result.metrics_added:
-            assert added["priority"] == "Medium"
+        added_by_name = {m["name"]: m for m in result.metrics_added}
+        assert added_by_name["etcd_server_new_metric"]["priority"] == "High"
+        assert added_by_name["etcd_debugging_new_total"]["priority"] == "Medium"
 
     def test_skips_gpu_ai_category(self, validator, sample_categories, sample_lookup):
         """Test that gpu_ai metrics are not removed even if missing from Prometheus."""
@@ -323,20 +355,23 @@ class TestValidate:
         removed_names = [m["name"] for m in result.metrics_removed]
         assert "DCGM_FI_DEV_GPU_TEMP" not in removed_names
 
-    def test_skips_low_priority_prefixes_for_addition(self, validator, sample_categories, sample_lookup):
-        """Test that go_*, process_*, promhttp_* metrics are not added."""
+    def test_skips_low_priority_metrics(self, validator, sample_categories, sample_lookup):
+        """Test that go_*, process_* metrics are not added (Low priority)."""
         prom_metrics = list(sample_lookup.keys()) + [
             "go_goroutines",
-            "process_cpu_seconds_total",
-            "promhttp_metric_handler_requests_total",
+            "process_resident_memory_bytes",
+            "rest_client_request_latency_seconds_bucket",
         ]
         with patch.object(real_requests, "get", side_effect=self._mock_responses(prom_metrics)):
             result = validator.validate(sample_categories, sample_lookup)
 
         added_names = [m["name"] for m in result.metrics_added]
+        # go_goroutines: go_runtime category, Low priority (no medium/high pattern)
         assert "go_goroutines" not in added_names
-        assert "process_cpu_seconds_total" not in added_names
-        assert "promhttp_metric_handler_requests_total" not in added_names
+        # process_resident_memory_bytes: go_runtime category, Low (^process_(cpu|resident|...) pattern)
+        assert "process_resident_memory_bytes" not in added_names
+        # rest_client_*: http_grpc category, Low (^rest_client_ pattern)
+        assert "rest_client_request_latency_seconds_bucket" not in added_names
 
     def test_zero_metrics_safety(self, validator, sample_categories, sample_lookup):
         """Test that 0 metrics from Prometheus is treated as error."""
@@ -386,11 +421,12 @@ class TestValidate:
         assert added[0]["type"] == "unknown"
 
     def test_unmatched_metrics_skipped(self, validator, sample_categories, sample_lookup):
-        """Test that Prometheus metrics that don't match any prefix are skipped."""
+        """Test that Prometheus metrics in 'other' category with Low priority are skipped."""
         prom_metrics = list(sample_lookup.keys()) + ["completely_unknown_xyz"]
         with patch.object(real_requests, "get", side_effect=self._mock_responses(prom_metrics)):
             result = validator.validate(sample_categories, sample_lookup)
 
+        # categorized as "other", classified as Low priority → skipped
         added_names = [m["name"] for m in result.metrics_added]
         assert "completely_unknown_xyz" not in added_names
 

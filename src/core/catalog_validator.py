@@ -3,7 +3,7 @@ Catalog Validator Module.
 
 Validates the bundled metrics catalog against the running Prometheus instance:
 - Removes catalog metrics that don't exist in Prometheus
-- Adds new Prometheus metrics that match known category prefixes
+- Adds new Prometheus metrics that match known category patterns
 - Skips gpu_ai category (handled by GPU discovery)
 
 Runs once at startup in a background thread, parallel to GPU discovery.
@@ -12,18 +12,172 @@ Runs once at startup in a background thread, parallel to GPU discovery.
 import logging
 import re
 import time
-from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set, Tuple
 
 logger = logging.getLogger(__name__)
 
-# Low-priority prefixes to skip when adding new metrics
-SKIP_PREFIXES_FOR_ADDITION = frozenset({
-    "go_",
-    "process_",
-    "promhttp_",
+# --------------------------------------------------------------------------
+# Priority classification — mirrored from scripts/metrics/metrics_cli.py.
+# The base catalog only includes High and Medium metrics. The validator must
+# apply the same classification so it doesn't re-add Low priority metrics.
+# --------------------------------------------------------------------------
+
+# Checked first — if matched, metric is High priority
+_HIGH_PRIORITY_PATTERNS = [re.compile(p, re.IGNORECASE) for p in [
+    r"^cluster_(operator|version|infrastructure)",
+    r"^up$",
+    r"^node_(cpu|memory|disk|network)_",
+    r"^kube_node_status",
+    r"^container_(cpu|memory|fs)_",
+    r"^pod_status_",
+    r"^kube_pod_(status|container_status)",
+    r"^etcd_(server|disk|network)_",
+    r"^apiserver_(request|storage|cache)_",
+    r"^DCGM_FI_DEV_(GPU_UTIL|GPU_TEMP|MEMORY_TEMP|POWER_USAGE)",
+    r"^vllm:.*_(latency|throughput|errors)",
+    r"^kubelet_(node_|running_|volume_stats_|pleg_)",
+    r"^coredns_dns_(requests_total|request_duration|responses_total)",
+    r"^coredns_forward_(requests_total|responses_total|healthcheck)",
+    r"^ovn_controller_(southbound|northbound)",
+    r"^scheduler_(pending_pods|scheduling_duration|queue_)",
+    r"^controller_runtime_reconcile_(total|errors_total)",
+    r"^alertmanager_alerts$",
+    r"^alertmanager_notifications_total",
+    r"^prometheus_tsdb_(head_|compactions_)",
+    r"^authentication_(attempts|duration)",
+    r"^authorization_(attempts|duration)",
+    r"^imageregistry_http_requests_total",
+    r"^csv_(count|succeeded|abnormal)",
+    r"^openshift_apps_deploymentconfigs_",
+]]
+
+# Checked second — if matched, metric is Low priority (skip)
+_LOW_PRIORITY_PATTERNS = [re.compile(p, re.IGNORECASE) for p in [
+    r"^go_(gc|goroutines|threads|memstats)",
+    r"^process_(cpu|resident|virtual|open)_",
+    r".*_bucket$",
+    r"^rest_client_",
+    r"^workqueue_longest_running",
+    r"^apiserver_admission_step_",
+    r".*_build_info$",
+    r"^grpc_",
+    r"^http_request",
+]]
+
+# Checked third — if matched, metric is Medium priority
+_MEDIUM_PRIORITY_PATTERNS = [re.compile(p, re.IGNORECASE) for p in [
+    r".*_(total|count|seconds|bytes|usage)$",
+    r"^kube_(deployment|statefulset|daemonset)_",
+    r"^scheduler_",
+    r"^workqueue_",
+    r"^alertmanager_(alerts|notifications)",
+    r"^prometheus_(tsdb|rule)",
+    r"^DCGM_FI_DEV_",
+    r"^container_",
+    r"^node_",
+]]
+
+# Categories that default to Medium when no pattern matches
+_MEDIUM_DEFAULT_CATEGORIES = frozenset({
+    "cluster_health", "node_hardware", "pod_container", "etcd", "gpu_ai",
 })
+
+
+def _classify_priority(metric_name: str, category_id: str) -> str:
+    """Classify a metric's priority using the same logic as metrics_cli.py."""
+    for p in _HIGH_PRIORITY_PATTERNS:
+        if p.search(metric_name):
+            return "High"
+    for p in _LOW_PRIORITY_PATTERNS:
+        if p.search(metric_name):
+            return "Low"
+    for p in _MEDIUM_PRIORITY_PATTERNS:
+        if p.search(metric_name):
+            return "Medium"
+    if category_id in _MEDIUM_DEFAULT_CATEGORIES:
+        return "Medium"
+    return "Low"
+
+
+# --------------------------------------------------------------------------
+# Category classification — mirrored from scripts/metrics/metrics_cli.py.
+# Uses the same explicit regex patterns as the CLI to categorize metrics,
+# rather than inferring categories from prefix overlap in the existing catalog.
+# --------------------------------------------------------------------------
+
+_CATEGORY_PATTERNS: List[Tuple[str, List[re.Pattern]]] = [
+    ("cluster_health", [re.compile(p, re.IGNORECASE) for p in [
+        r"^cluster_", r"^kube_node_status", r"^kube_daemonset",
+        r"^kube_deployment", r"^kube_statefulset", r"^kube_replicaset",
+    ]]),
+    ("node_hardware", [re.compile(p, re.IGNORECASE) for p in [
+        r"^node_", r"^machine_", r"^system_",
+    ]]),
+    ("pod_container", [re.compile(p, re.IGNORECASE) for p in [
+        r"^pod_", r"^container_", r"^kube_pod_",
+        r"^kube_container_", r"^kubelet_running_",
+    ]]),
+    ("api_server", [re.compile(p, re.IGNORECASE) for p in [
+        r"^apiserver_", r"^apiextensions_",
+    ]]),
+    ("networking", [re.compile(p, re.IGNORECASE) for p in [
+        r"^envoy_", r"^haproxy_", r"^coredns_", r"^ovn_",
+        r"^ovnkube_", r"^ovs_", r"^pilot_", r"^istio_",
+        r"^kube_service_", r"^kube_endpoint",
+    ]]),
+    ("storage", [re.compile(p, re.IGNORECASE) for p in [
+        r"^kube_persistentvolume", r"^kubelet_volume_",
+        r"^storage_operation_", r"^volume_manager_",
+    ]]),
+    ("observability", [re.compile(p, re.IGNORECASE) for p in [
+        r"^prometheus_", r"^alertmanager_", r"^thanos_", r"^cortex_",
+    ]]),
+    ("etcd", [re.compile(p, re.IGNORECASE) for p in [
+        r"^etcd_",
+    ]]),
+    ("scheduler", [re.compile(p, re.IGNORECASE) for p in [
+        r"^scheduler_", r"^kube_scheduler_",
+    ]]),
+    ("security", [re.compile(p, re.IGNORECASE) for p in [
+        r"^authentication_", r"^authorization_",
+        r"^apiserver_authorization_", r"^apiserver_certificates_",
+    ]]),
+    ("gpu_ai", [re.compile(p, re.IGNORECASE) for p in [
+        r"^DCGM_", r"^gpu_", r"^nvidia_", r"^vllm:",
+    ]]),
+    ("image_registry", [re.compile(p, re.IGNORECASE) for p in [
+        r"^imageregistry_", r"^registry_",
+    ]]),
+    ("kubelet", [re.compile(p, re.IGNORECASE) for p in [
+        r"^kubelet_",
+    ]]),
+    ("controller_manager", [re.compile(p, re.IGNORECASE) for p in [
+        r"^controller_runtime_", r"^endpoint_slice_controller_",
+    ]]),
+    ("openshift_specific", [re.compile(p, re.IGNORECASE) for p in [
+        r"^openshift_", r"^cvo_", r"^csv_", r"^olm_",
+    ]]),
+    ("backup_dr", [re.compile(p, re.IGNORECASE) for p in [
+        r"^velero_", r"^backup_",
+    ]]),
+    ("go_runtime", [re.compile(p, re.IGNORECASE) for p in [
+        r"^go_", r"^process_",
+    ]]),
+    ("http_grpc", [re.compile(p, re.IGNORECASE) for p in [
+        r"^http_", r"^grpc_", r"^rest_client_",
+    ]]),
+    # "other" has no patterns — it's the fallback
+]
+
+
+def _classify_category(metric_name: str) -> str:
+    """Classify a metric into a category using the same logic as metrics_cli.py."""
+    for category_id, patterns in _CATEGORY_PATTERNS:
+        for p in patterns:
+            if p.search(metric_name):
+                return category_id
+    return "other"
 
 
 @dataclass
@@ -107,10 +261,7 @@ class CatalogValidator:
             # Step 2: Fetch metadata (best-effort)
             all_metadata = self._fetch_metadata(timeout)
 
-            # Step 3: Build prefix map from existing catalog
-            prefix_map = self._build_prefix_map(categories, skip)
-
-            # Step 4: Count catalog metrics before
+            # Step 3: Count catalog metrics before
             total_before = sum(
                 len(cat["metrics"].get(p, []))
                 for cat in categories
@@ -118,7 +269,7 @@ class CatalogValidator:
                 if cat["id"] not in skip
             )
 
-            # Step 5: Identify metrics to remove (in catalog but not in Prometheus)
+            # Step 4: Identify metrics to remove (in catalog but not in Prometheus)
             metrics_removed = []
             for cat in categories:
                 if cat["id"] in skip:
@@ -133,19 +284,20 @@ class CatalogValidator:
                                 "priority": priority,
                             })
 
-            # Step 6: Identify metrics to add (in Prometheus but not in catalog)
+            # Step 5: Identify metrics to add (in Prometheus but not in catalog)
             existing_names = set(lookup.keys())
             metrics_added = []
             for name in sorted(prometheus_set - existing_names):
-                # Skip low-priority patterns
-                if any(name.startswith(prefix) for prefix in SKIP_PREFIXES_FOR_ADDITION):
-                    continue
-
-                category_id = self._categorize_new_metric(name, prefix_map)
-                if category_id is None:
-                    continue  # No matching category, skip
+                # Categorize using the same explicit patterns as metrics_cli.py
+                category_id = _classify_category(name)
 
                 if category_id in skip:
+                    continue
+
+                # Apply the same priority classification as the CLI.
+                # The base catalog only includes High and Medium metrics.
+                priority = _classify_priority(name, category_id)
+                if priority == "Low":
                     continue
 
                 meta = all_metadata.get(name, {})
@@ -156,7 +308,7 @@ class CatalogValidator:
                 metrics_added.append({
                     "name": name,
                     "category_id": category_id,
-                    "priority": "Medium",
+                    "priority": priority,
                     "type": metric_type,
                     "help": help_text,
                     "keywords": keywords,
@@ -166,15 +318,25 @@ class CatalogValidator:
             elapsed = (time.perf_counter() - start_time) * 1000
 
             if metrics_removed:
-                logger.info(
-                    f"Catalog validation: metrics removed (not in Prometheus): "
-                    f"{', '.join(e['name'] for e in metrics_removed)}"
-                )
+                # Group removed metrics by category for readable logging
+                removed_by_cat: Dict[str, List[str]] = {}
+                for e in metrics_removed:
+                    removed_by_cat.setdefault(e["category_id"], []).append(e["name"])
+                for cat_id, names in sorted(removed_by_cat.items()):
+                    logger.info(
+                        f"Catalog validation: removed from [{cat_id}] "
+                        f"(not in Prometheus): {', '.join(names)}"
+                    )
             if metrics_added:
-                logger.info(
-                    f"Catalog validation: metrics added (found in Prometheus): "
-                    f"{', '.join(e['name'] for e in metrics_added)}"
-                )
+                # Group added metrics by category for readable logging
+                added_by_cat: Dict[str, List[str]] = {}
+                for e in metrics_added:
+                    added_by_cat.setdefault(e["category_id"], []).append(e["name"])
+                for cat_id, names in sorted(added_by_cat.items()):
+                    logger.info(
+                        f"Catalog validation: added to [{cat_id}] "
+                        f"(found in Prometheus): {', '.join(names)}"
+                    )
 
             logger.info(
                 f"Catalog validation complete: "
@@ -260,73 +422,6 @@ class CatalogValidator:
         except Exception as e:
             logger.warning(f"Catalog validation: failed to fetch metadata: {e}")
             return {}
-
-    def _build_prefix_map(
-        self,
-        categories: List[Dict],
-        skip_categories: Set[str],
-    ) -> Dict[str, str]:
-        """
-        Build a prefix-to-category_id map from existing catalog metrics.
-
-        For each metric, extracts prefixes at depths 1-4 (splitting on '_').
-        Only keeps prefixes that map to exactly 1 category (unambiguous).
-
-        Args:
-            categories: Catalog category list.
-            skip_categories: Category IDs to skip.
-
-        Returns:
-            Dict mapping prefix string to category_id.
-        """
-        # prefix -> set of category_ids that have metrics with this prefix
-        prefix_categories: Dict[str, Set[str]] = defaultdict(set)
-
-        for cat in categories:
-            if cat["id"] in skip_categories:
-                continue
-
-            for priority in ("High", "Medium"):
-                for metric in cat["metrics"].get(priority, []):
-                    parts = metric["name"].split("_")
-                    # Extract prefixes at depths 1 through 4
-                    for depth in range(1, min(5, len(parts) + 1)):
-                        prefix = "_".join(parts[:depth])
-                        prefix_categories[prefix].add(cat["id"])
-
-        # Keep only unambiguous prefixes (exactly 1 category)
-        prefix_map: Dict[str, str] = {}
-        for prefix, cat_ids in prefix_categories.items():
-            if len(cat_ids) == 1:
-                prefix_map[prefix] = next(iter(cat_ids))
-
-        logger.debug(f"Catalog validation: built prefix map with {len(prefix_map)} entries")
-        return prefix_map
-
-    def _categorize_new_metric(
-        self,
-        name: str,
-        prefix_map: Dict[str, str],
-    ) -> Optional[str]:
-        """
-        Categorize a new metric using longest-prefix-match.
-
-        Tries 4-segment prefix first, then 3, 2, 1.
-
-        Args:
-            name: Metric name.
-            prefix_map: Prefix-to-category_id map.
-
-        Returns:
-            category_id or None if no match.
-        """
-        parts = name.split("_")
-        # Try longest prefix first (4 -> 3 -> 2 -> 1)
-        for depth in range(min(4, len(parts)), 0, -1):
-            prefix = "_".join(parts[:depth])
-            if prefix in prefix_map:
-                return prefix_map[prefix]
-        return None
 
     def _generate_keywords(self, name: str, help_text: str) -> List[str]:
         """

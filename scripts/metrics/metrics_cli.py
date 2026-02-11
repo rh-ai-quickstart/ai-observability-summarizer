@@ -206,7 +206,7 @@ CATEGORY_KEYWORDS: Dict[str, List[str]] = {
     "storage": ["storage", "volume", "pvc", "disk", "persistent"],
     "observability": ["prometheus", "metrics", "monitoring", "alerts", "thanos"],
     "etcd": ["etcd", "datastore", "raft", "consensus", "leader"],
-    "gpu_ai": ["gpu", "nvidia", "cuda", "vllm", "inference", "ai", "ml", "latency", "throughput", "p95"],
+    "gpu_ai": ["gpu", "nvidia", "dcgm", "habana", "gaudi", "intel", "amd", "rocm", "vllm", "inference", "ai", "ml", "ttft", "tpot", "tokens", "model serving", "latency", "throughput"],
     "image_registry": ["registry", "image", "build", "container image"],
     "kubelet": ["kubelet", "node", "pod lifecycle", "cri"],
     "controller_manager": ["controller", "reconcile", "workqueue"],

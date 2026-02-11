@@ -111,14 +111,11 @@ class MetricsCatalog:
 
     def _get_default_catalog_path(self) -> Path:
         """Get default path to bundled metrics catalog."""
-        # Try base catalog first (hybrid mode), then fall back to full catalog
+        # Base catalog — GPU/vLLM metrics are discovered at runtime,
+        # and catalog validation reconciles against live Prometheus.
         potential_paths = [
-            # Base catalog (hybrid mode - GPU discovered at runtime)
             Path("/app/mcp_server/data/openshift-metrics-base.json"),  # Production
             Path(__file__).parent.parent / "mcp_server/data/openshift-metrics-base.json",  # Development
-            # Full catalog (legacy mode - all metrics included)
-            Path("/app/mcp_server/data/openshift-metrics-optimized.json"),  # Production
-            Path(__file__).parent.parent / "mcp_server/data/openshift-metrics-optimized.json",  # Development
         ]
 
         for path in potential_paths:
@@ -351,13 +348,6 @@ class MetricsCatalog:
                 # Apply results
                 self._apply_validation_result(result)
                 self._catalog_validated = True
-
-                logger.info(
-                    f"Catalog validation complete: "
-                    f"removed {len(result.metrics_removed)}, "
-                    f"added {len(result.metrics_added)}, "
-                    f"time={result.validation_time_ms:.1f}ms"
-                )
 
             except ImportError as e:
                 self._catalog_validation_error = f"Catalog validator module not available: {e}"
