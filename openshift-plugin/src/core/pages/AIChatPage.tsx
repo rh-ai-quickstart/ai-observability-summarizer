@@ -336,7 +336,7 @@ const AIChatPage: React.FC = () => {
     setEditValue('');
   };
 
-  const handleSaveEdit = (messageId: string) => {
+  const handleSaveEdit = (_messageId: string) => {
     if (!editValue.trim()) return;
 
     // Clear edit state
@@ -371,6 +371,7 @@ const AIChatPage: React.FC = () => {
     try {
       const firstTime = new Date(progressLog[0].timestamp).getTime();
       const lastTime = new Date(progressLog[progressLog.length - 1].timestamp).getTime();
+      if (isNaN(firstTime) || isNaN(lastTime)) return '0.0s';
       const diffMs = lastTime - firstTime;
       const diffSec = (diffMs / 1000).toFixed(1);
       return `${diffSec}s`;

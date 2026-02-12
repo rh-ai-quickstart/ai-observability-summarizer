@@ -15,8 +15,7 @@ import logging
 import os
 import threading
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Callable
-from functools import lru_cache
+from typing import Dict, List, Optional, Set
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
@@ -252,18 +251,18 @@ class MetricsCatalog:
                 return
 
             # Update metrics
-            gpu_category["metrics"]["High"] = result.metrics_high
-            gpu_category["metrics"]["Medium"] = result.metrics_medium
+            gpu_category.setdefault("metrics", {})["High"] = result.metrics_high or []
+            gpu_category["metrics"]["Medium"] = result.metrics_medium or []
             gpu_category["runtime_discovery"] = False  # Mark as populated
             gpu_category["gpu_vendor"] = result.vendor.value
 
             # Update lookup table
-            for metric in result.metrics_high:
+            for metric in result.metrics_high or []:
                 self._lookup[metric["name"]] = {
                     "category_id": "gpu_ai",
                     "priority": "High"
                 }
-            for metric in result.metrics_medium:
+            for metric in result.metrics_medium or []:
                 self._lookup[metric["name"]] = {
                     "category_id": "gpu_ai",
                     "priority": "Medium"
@@ -401,10 +400,11 @@ class MetricsCatalog:
                         "help": entry.get("help", ""),
                         "keywords": entry.get("keywords", []),
                     }
-                    cat["metrics"].setdefault("Medium", []).append(metric_entry)
+                    priority = entry.get("priority", "Medium")
+                    cat["metrics"].setdefault(priority, []).append(metric_entry)
                     self._lookup[entry["name"]] = {
                         "category_id": entry["category_id"],
-                        "priority": "Medium",
+                        "priority": priority,
                     }
 
             # --- Update metadata ---

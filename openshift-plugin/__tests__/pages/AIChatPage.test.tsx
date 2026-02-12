@@ -1010,10 +1010,9 @@ describe('AIChatPage', () => {
 
       render(<AIChatPage />);
 
-      // Current behavior: invalid timestamps result in NaNs (not caught by try-catch)
-      // The time is displayed inside a Label component, so check the button's textContent
+      // Invalid timestamps should gracefully fall back to 0.0s
       const button = screen.getByText(/Show execution details/i);
-      expect(button.textContent).toContain('NaNs');
+      expect(button.textContent).toContain('0.0s');
     });
 
     it('should handle empty progress log array', () => {
@@ -1079,13 +1078,21 @@ describe('AIChatPage', () => {
   });
 
   describe('Phase 2 Features - Copy Message', () => {
+    let originalClipboard: Clipboard;
+
     beforeEach(() => {
-      // Mock clipboard API
+      // Save and mock clipboard API
+      originalClipboard = navigator.clipboard;
       Object.assign(navigator, {
         clipboard: {
           writeText: jest.fn().mockResolvedValue(undefined),
         },
       });
+    });
+
+    afterEach(() => {
+      // Restore original clipboard
+      Object.assign(navigator, { clipboard: originalClipboard });
     });
 
     it('should show copy button for assistant messages', () => {
@@ -1649,6 +1656,15 @@ describe('AIChatPage', () => {
   });
 
   describe('Phase 2 Features - Keyboard Shortcuts', () => {
+    const originalPlatform = navigator.platform;
+
+    afterEach(() => {
+      Object.defineProperty(navigator, 'platform', {
+        value: originalPlatform,
+        writable: true,
+      });
+    });
+
     it('should focus input when Cmd+K pressed on Mac', () => {
       Object.defineProperty(navigator, 'platform', {
         value: 'MacIntel',
@@ -1730,16 +1746,14 @@ describe('AIChatPage', () => {
       expect(mockStopProgress).toHaveBeenCalled();
     });
 
-    it('should show keyboard shortcuts in popover', () => {
+    it('should render keyboard shortcuts help button', () => {
       render(<AIChatPage />);
 
       const helpButton = screen.getByLabelText('Show keyboard shortcuts');
-      fireEvent.click(helpButton);
-
-      // Check for keyboard shortcut hints
-      // Note: Popover content might not be directly visible in tests without proper setup
-      // This is a basic check
       expect(helpButton).toBeInTheDocument();
+
+      // Click should not throw
+      fireEvent.click(helpButton);
     });
   });
 

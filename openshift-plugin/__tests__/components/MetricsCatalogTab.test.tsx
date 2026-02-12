@@ -220,17 +220,17 @@ describe('MetricsCatalogTab', () => {
       gpu_ai: gpuAiDetail,
     });
 
-    const { container } = render(<MetricsCatalogTab />);
+    render(<MetricsCatalogTab />);
 
     await waitFor(() => {
       expect(screen.getByText('Cluster Resources & Health')).toBeInTheDocument();
     });
 
     // Click the expandable section toggle for the first category
-    const toggleButtons = container.querySelectorAll('.pf-v5-c-expandable-section__toggle');
-    expect(toggleButtons.length).toBeGreaterThan(0);
+    const categoryToggle = screen.getByText('Cluster Resources & Health').closest('button');
+    expect(categoryToggle).toBeTruthy();
     await act(async () => {
-      fireEvent.click(toggleButtons[0]);
+      fireEvent.click(categoryToggle!);
     });
 
     await waitFor(() => {
@@ -245,15 +245,15 @@ describe('MetricsCatalogTab', () => {
       gpu_ai: gpuAiDetail,
     });
 
-    const { container } = render(<MetricsCatalogTab />);
+    render(<MetricsCatalogTab />);
 
     await waitFor(() => {
       expect(screen.getByText('Cluster Resources & Health')).toBeInTheDocument();
     });
 
-    const toggleButtons = container.querySelectorAll('.pf-v5-c-expandable-section__toggle');
+    const categoryToggle = screen.getByText('Cluster Resources & Health').closest('button');
     await act(async () => {
-      fireEvent.click(toggleButtons[0]);
+      fireEvent.click(categoryToggle!);
     });
 
     await waitFor(() => {
@@ -277,7 +277,7 @@ describe('MetricsCatalogTab', () => {
       gpu_ai: gpuAiDetail,
     });
 
-    const { container } = render(<MetricsCatalogTab />);
+    render(<MetricsCatalogTab />);
 
     // Wait for full loading to complete (spinner gone, categories + details loaded)
     await waitFor(() => {
@@ -286,9 +286,9 @@ describe('MetricsCatalogTab', () => {
     });
 
     // Expand the category
-    const categoryToggles = container.querySelectorAll('.pf-v5-c-expandable-section__toggle');
+    const categoryToggle = screen.getByText('Cluster Resources & Health').closest('button');
     await act(async () => {
-      fireEvent.click(categoryToggles[0]);
+      fireEvent.click(categoryToggle!);
     });
 
     await waitFor(() => {
@@ -300,25 +300,23 @@ describe('MetricsCatalogTab', () => {
     expect(screen.getByText('cluster_version')).toBeInTheDocument();
     expect(screen.getByText('cluster_operator_conditions')).toBeInTheDocument();
 
-    // Collapse the first High Priority section (for cluster_health)
-    const allToggles = container.querySelectorAll('.pf-v5-c-expandable-section__toggle');
-    // Find the first High Priority toggle (nested inside the expanded cluster_health category)
-    const highPriorityToggles = Array.from(allToggles).filter(
-      btn => btn.textContent?.includes('High Priority'),
-    );
-    expect(highPriorityToggles.length).toBeGreaterThan(0);
-    const highPriorityToggle = highPriorityToggles[0];
+    // Collapse the first High Priority section
+    const highPriorityToggle = screen.getAllByText('High Priority')[0].closest('button');
+    expect(highPriorityToggle).toBeTruthy();
 
     await act(async () => {
       fireEvent.click(highPriorityToggle!);
     });
 
-    // High Priority section should now be collapsed (content hidden via hidden attribute)
-    const highPriorityContent = screen.getByText('cluster_version').closest('.pf-v5-c-expandable-section__content');
-    expect(highPriorityContent).toHaveAttribute('hidden');
+    // After collapsing High Priority, cluster_version should be hidden
+    // (inside a collapsed expandable section with hidden attribute)
+    const versionElement = screen.getByText('cluster_version');
+    const hiddenParent = versionElement.closest('[hidden]');
+    expect(hiddenParent).toBeTruthy();
 
-    // Medium Priority section should remain visible
-    const mediumPriorityContent = screen.getByText('cluster_operator_conditions').closest('.pf-v5-c-expandable-section__content');
-    expect(mediumPriorityContent).not.toHaveAttribute('hidden');
+    // Medium Priority section should remain visible (no hidden ancestor)
+    const operatorElement = screen.getByText('cluster_operator_conditions');
+    const hiddenOperatorParent = operatorElement.closest('[hidden]');
+    expect(hiddenOperatorParent).toBeNull();
   });
 });

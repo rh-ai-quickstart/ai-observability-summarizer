@@ -249,8 +249,6 @@ class TestSemanticScoreVLLM:
             "cpu usage",
             "vllm:e2e_request_latency_seconds"
         )
-        # Should not get the 15-point vLLM bonus
-        vllm_bonus_present = any(
-            term in "cpu usage" for term in ["vllm", "inference", "model serving", "llm"]
-        )
-        assert not vllm_bonus_present
+        # "cpu usage" has no vLLM keywords, so the score should be low
+        # (no 15-point vLLM bonus applied)
+        assert score < 15

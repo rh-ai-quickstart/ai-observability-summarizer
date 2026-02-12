@@ -692,6 +692,10 @@ def extract_key_concepts(question: str) -> Dict[str, Any]:
         if any(pattern in question_lower for pattern in patterns):
             concepts["components"].add(component)
 
+    # Convert sets to lists for JSON serialization
+    concepts["measurements"] = list(concepts["measurements"])
+    concepts["components"] = list(concepts["components"])
+    concepts["aggregations"] = list(concepts["aggregations"])
     return concepts
 
 

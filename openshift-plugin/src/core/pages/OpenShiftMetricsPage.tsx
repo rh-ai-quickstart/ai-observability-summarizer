@@ -1170,7 +1170,7 @@ ${report.analysis}
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>${report.title}</title>
+    <title>${escapeHtml(report.title)}</title>
     <style>
         @media print {
             body { margin: 0; }
@@ -1199,13 +1199,13 @@ ${report.analysis}
         <p><small>Use your browser's print function and select "Save as PDF" as the destination.</small></p>
     </div>
     
-    <h1>${report.title}</h1>
-    
+    <h1>${escapeHtml(report.title)}</h1>
+
     <div class="metadata">
-        <strong>Category:</strong> ${report.category}<br>
-        <strong>Scope:</strong> ${report.scope}<br>
-        <strong>Time Range:</strong> ${report.timeRange}<br>
-        <strong>Generated:</strong> ${new Date(report.timestamp).toLocaleString()}
+        <strong>Category:</strong> ${escapeHtml(report.category)}<br>
+        <strong>Scope:</strong> ${escapeHtml(report.scope)}<br>
+        <strong>Time Range:</strong> ${escapeHtml(report.timeRange)}<br>
+        <strong>Generated:</strong> ${escapeHtml(new Date(report.timestamp).toLocaleString())}
     </div>
 
     <h2>Metrics Summary</h2>
@@ -1220,9 +1220,9 @@ ${report.analysis}
         <tbody>
             ${report.metrics.map(metric => `
                 <tr>
-                    <td><strong>${metric.name}</strong></td>
-                    <td>${metric.value}</td>
-                    <td>${metric.description}</td>
+                    <td><strong>${escapeHtml(metric.name)}</strong></td>
+                    <td>${escapeHtml(metric.value)}</td>
+                    <td>${escapeHtml(metric.description)}</td>
                 </tr>
             `).join('')}
         </tbody>
@@ -1230,7 +1230,7 @@ ${report.analysis}
 
     <h2>AI Analysis</h2>
     <div class="analysis">
-        ${report.analysis.replace(/\n/g, '<br>')}
+        ${escapeHtml(report.analysis).replace(/\n/g, '<br>')}
     </div>
 
     <div class="footer">

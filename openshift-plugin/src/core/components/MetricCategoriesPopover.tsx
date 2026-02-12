@@ -172,7 +172,6 @@ export const MetricCategoriesPopover: React.FC<MetricCategoriesPopoverProps> = (
 
   React.useEffect(() => {
     if (loadedRef.current) return;
-    loadedRef.current = true;
     loadCategories();
   }, []);
 
@@ -181,6 +180,7 @@ export const MetricCategoriesPopover: React.FC<MetricCategoriesPopoverProps> = (
     setError(null);
     try {
       const response = await callMcpTool<any>('get_category_metrics_detail');
+      loadedRef.current = true;
       const text =
         typeof response === 'string'
           ? response

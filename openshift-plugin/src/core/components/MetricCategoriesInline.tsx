@@ -37,7 +37,6 @@ export const MetricCategoriesInline: React.FC<MetricCategoriesInlineProps> = ({
 
   React.useEffect(() => {
     if (loadedRef.current) return;
-    loadedRef.current = true;
     loadCategories();
   }, []);
 
@@ -46,6 +45,7 @@ export const MetricCategoriesInline: React.FC<MetricCategoriesInlineProps> = ({
     setError(null);
     try {
       const response = await callMcpTool<any>('get_category_metrics_detail');
+      loadedRef.current = true;
       const text =
         typeof response === 'string'
           ? response

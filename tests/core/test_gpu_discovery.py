@@ -16,7 +16,6 @@ from unittest.mock import Mock, patch, MagicMock
 from core.gpu_metrics_discovery import (
     GPUMetricsDiscovery,
     GPUVendor,
-    GPUMetricInfo,
     GPUDiscoveryResult,
     discover_gpu_metrics,
 )

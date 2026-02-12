@@ -16,7 +16,7 @@ import os
 import re
 import threading
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set
 from enum import Enum
 
 logger = logging.getLogger(__name__)
@@ -28,17 +28,6 @@ class GPUVendor(Enum):
     INTEL = "intel"
     AMD = "amd"
     UNKNOWN = "unknown"
-
-
-@dataclass
-class GPUMetricInfo:
-    """Information about a discovered GPU metric."""
-    name: str
-    vendor: GPUVendor
-    priority: str  # "High" or "Medium"
-    metric_type: str  # "gauge", "counter", "histogram", etc.
-    help_text: str
-    keywords: List[str] = field(default_factory=list)
 
 
 @dataclass

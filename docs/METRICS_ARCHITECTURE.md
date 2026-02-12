@@ -13,9 +13,11 @@ This document describes the metrics catalog system: how metrics are pre-loaded, 
 5. [Non-GPU Catalog Validation (Sync)](#non-gpu-catalog-validation-sync)
 6. [Categories and Keywords](#categories-and-keywords)
 7. [Query Flow: From User Question to PromQL](#query-flow-from-user-question-to-promql)
-8. [Architecture Decision Records](#architecture-decision-records)
-9. [Configuration Reference](#configuration-reference)
-10. [Appendix: File Reference](#appendix-file-reference)
+8. [Frontend — Metrics Catalog Search & Caching](#frontend--metrics-catalog-search--caching)
+9. [Frontend — Metric Categories in AI Chat](#frontend--metric-categories-in-ai-chat)
+10. [Architecture Decision Records](#architecture-decision-records)
+11. [Configuration Reference](#configuration-reference)
+12. [Appendix: File Reference](#appendix-file-reference)
 
 ---
 
@@ -497,6 +499,67 @@ These tools return clean JSON responses for direct use by frontend components:
 
 > **Note:** `get_metrics_categories` (AI) and `get_category_metrics_detail` (UI) serve similar data but in different formats. The AI tool includes markdown formatting and example queries for LLM reasoning. The UI tool returns structured JSON for rendering in PatternFly components. They are intentionally separate to keep each consumer's contract clean.
 
+### Frontend — Metrics Catalog Search & Caching
+
+The `MetricsCatalogTab` in Settings uses a multi-layer performance optimization for browsing and searching ~1,877 metrics:
+
+```
+Tab opens
+    |
+    v
+[Load from cache?] --yes--> Render immediately
+    |no
+    v
+[Fetch category summaries]  (1 API call)
+    |
+    v
+[Fetch all category details in parallel]  (Promise.allSettled, N API calls)
+    |
+    v
+[Store in module-level cache]  (persists for page session lifetime)
+    |
+    v
+[Render categories + SearchInput]
+
+User types in SearchInput
+    |
+    v
+[searchTerm updates instantly]  (input stays responsive)
+    |
+    v
+[200ms debounce timer]
+    |
+    v
+[debouncedSearch triggers useMemo filtering]
+    - Matches category name/description
+    - Matches individual metric name, help text, keywords
+    |
+    v
+[filteredCategories + metricMatches]
+    - Categories with metric-level matches show "X matches" badge
+    - Auto-expand only if ≤ 2 categories match
+    - Lazy content rendering: DOM only for expanded categories
+```
+
+**Cache behavior:** The metrics catalog is static after MCP server startup (metrics sync only at startup time). The module-level cache has no TTL -- it persists for the page session lifetime and is cleared on page refresh. For test isolation, `resetMetricsCatalogCache()` is exported and called in `beforeEach`.
+
+### Frontend — Metric Categories in AI Chat
+
+Metric categories can be displayed in the chat page in two locations (configurable via Chat Settings):
+
+| Mode | Component | Behavior |
+|------|-----------|----------|
+| **Header** (default) | `MetricCategoriesPopover` | Button in chat header, opens popover with category list → click category → see pre-defined questions → click question → sends to chat |
+| **Inline** | `MetricCategoriesInline` | Expandable section in chat body with category dropdown → select category → see question cards → click question → sends to chat |
+
+**Inline section behavior:**
+- **Mutual exclusion:** When both Suggested Questions and Metric Categories are inline, expanding one collapses the other
+- **Collapse on send:** Both inline sections collapse when a question is sent
+- **Category context:** Selecting a category shows a purple badge above the input; typing a manual message auto-prefixes with "Regarding {category} metrics: ..."
+- **Category clearing:** The category badge clears after any message is sent
+
+**Pre-defined questions:** `CATEGORY_QUESTIONS` in `MetricCategoriesPopover.tsx` maps 18 category IDs to 4-8 pre-defined questions each. Categories without entries get a default "Show me the key {name} metrics" question via `getQuestionsForCategory()`.
+
 ---
 
 ## Architecture Decision Records
@@ -593,9 +656,14 @@ make install-mcp-server NAMESPACE=my-ns GPU_PREFIX_NVIDIA="my_custom_gpu_"
 
 | File | Purpose |
 |------|---------|
-| `openshift-plugin/src/core/components/AIModelSettings/tabs/MetricsCatalogTab.tsx` | Metrics Catalog tab -- browse categories, expand for metric details with keywords |
+| `openshift-plugin/src/core/components/AIModelSettings/tabs/MetricsCatalogTab.tsx` | Metrics Catalog settings tab -- browse categories with deep search, session-lifetime caching, debounced filtering |
+| `openshift-plugin/src/core/components/AIModelSettings/tabs/ChatSettingsTab.tsx` | Chat Settings tab -- includes `metricCategoriesLocation` and `suggestedQuestionsLocation` radio groups |
 | `openshift-plugin/src/core/components/AIModelSettings/index.tsx` | Settings modal -- registers the Metrics Catalog tab |
+| `openshift-plugin/src/core/components/MetricCategoriesPopover.tsx` | Header popover for metric categories with pre-defined questions per category (`CATEGORY_QUESTIONS` map) |
+| `openshift-plugin/src/core/components/MetricCategoriesInline.tsx` | Inline expandable section with category dropdown and clickable question cards |
+| `openshift-plugin/src/core/hooks/useChatSettings.ts` | Chat settings hook -- includes `metricCategoriesLocation: 'header' \| 'inline'` |
 | `openshift-plugin/src/core/services/mcpClient.ts` | `callMcpTool()` -- HTTP client for calling MCP tools from the frontend |
+| `openshift-plugin/src/core/pages/AIChatPage.tsx` | Chat page -- conditional rendering of header/inline metric categories, mutual exclusion with suggested questions |
 
 ### Scripts
 
@@ -614,7 +682,10 @@ make install-mcp-server NAMESPACE=my-ns GPU_PREFIX_NVIDIA="my_custom_gpu_"
 | `tests/core/test_canonical_questions.py` | Parametrized tests for canonical question set (Q1-Q20, SQ1-SQ3) |
 | `tests/test_smart_metrics_integration.py` | Integration tests for end-to-end discovery |
 | `tests/performance/test_metrics_catalog_perf.py` | Performance benchmarks |
-| `openshift-plugin/__tests__/components/MetricsCatalogTab.test.tsx` | Frontend tests for Metrics Catalog tab |
+| `openshift-plugin/__tests__/components/MetricsCatalogTab.test.tsx` | Frontend tests for Metrics Catalog settings tab (search, caching, debounce) |
+| `openshift-plugin/__tests__/components/MetricCategoriesInline.test.tsx` | Frontend tests for inline metric categories component |
+| `openshift-plugin/__tests__/components/MetricCategoriesPopover.test.tsx` | Frontend tests for header popover metric categories |
+| `openshift-plugin/__tests__/pages/AIChatPage.test.tsx` | Chat page tests including metric categories integration |
 
 ### Architecture decisions
 
