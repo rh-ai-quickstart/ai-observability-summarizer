@@ -703,11 +703,12 @@ IMPORTANT Instructions:
 User question: ${question}`;
 
     // Use the general chat tool which has access to all MCP tools
+    // Only pass namespace if it's defined (not 'all')
     const result = await chat(
       summarizeModelId,
       contextMessage,
       {
-        namespace,
+        ...(namespace ? { namespace } : {}),
         scope: 'vllm',
         apiKey,
       }

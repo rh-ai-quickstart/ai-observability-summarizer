@@ -1235,7 +1235,7 @@ const VLLMMetricsPage: React.FC = () => {
                 <MetricsChatPanel
                   pageType="vllm"
                   scope={namespace || 'all'}
-                  namespace={namespace}
+                  namespace={namespace !== 'all' ? namespace : undefined}
                   category={selectedCategory}
                   timeRange={timeRange}
                   isOpen={chatPanelOpen}
