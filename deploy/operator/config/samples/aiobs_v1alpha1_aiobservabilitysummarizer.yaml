@@ -55,26 +55,13 @@ spec:
   alerting:
     enabled: false
 
+  # Development Mode - Enable for testing with browser-cached credentials
+  # Default: false (production mode)
+  devMode: false
+
   # ==========================================================================
   # Infrastructure Components
   # ==========================================================================
-  
-  # TempoStack - Distributed tracing
-  tempo:
-    enabled: true
-
-  # LokiStack - Log aggregation
-  loki:
-    enabled: true
-
-  # OpenTelemetry Collector - Trace/metric collection
-  otelCollector:
-    enabled: true
-
-  # Korrel8r - Signal correlation
-  korrel8r:
-    enabled: true
-
-  # MinIO - S3-compatible object storage
-  minio:
-    enabled: true
+  # NOTE: All infrastructure components (TempoStack, LokiStack, OTEL Collector,
+  # MinIO, Korrel8r) are always installed automatically.
+  # Only one AIObservabilitySummarizer CR is allowed per cluster.

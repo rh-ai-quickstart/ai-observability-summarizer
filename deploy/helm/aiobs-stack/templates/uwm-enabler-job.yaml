@@ -43,14 +43,12 @@ spec:
           # Check if ConfigMap exists and has enableUserWorkload: true
           if oc get configmap cluster-monitoring-config -n openshift-monitoring \
              -o jsonpath='{.data.config\.yaml}' 2>/dev/null | grep -q "enableUserWorkload: true"; then
-            echo "✅ User workload monitoring already enabled - skipping"
-            exit 0
-          fi
+            echo "✅ User workload monitoring already enabled - skipping UWM configuration"
+          else
+            echo "→ User workload monitoring not enabled, enabling now..."
 
-          echo "→ User workload monitoring not enabled, enabling now..."
-
-          # Apply/patch the ConfigMap (idempotent with oc apply)
-          oc apply -f - <<EOF
+            # Apply/patch the ConfigMap (idempotent with oc apply)
+            oc apply -f - <<EOF
           apiVersion: v1
           kind: ConfigMap
           metadata:
@@ -61,13 +59,44 @@ spec:
               enableUserWorkload: true
           EOF
 
-          echo "✅ User workload monitoring enabled successfully!"
+            echo "✅ User workload monitoring enabled successfully!"
 
-          # Wait a moment for the change to propagate
-          echo "⏳ Waiting 10 seconds for monitoring stack to reconcile..."
-          sleep 10
+            # Wait a moment for the change to propagate
+            echo "⏳ Waiting 5 seconds for monitoring stack to reconcile..."
+            sleep 5
+          fi
 
-          echo "✅ Done!"
+          echo ""
+          echo "🔍 Enabling Alertmanager for user workload monitoring..."
+
+          # Check if Alertmanager is already enabled
+          if oc get configmap user-workload-monitoring-config -n openshift-user-workload-monitoring \
+             -o jsonpath='{.data.config\.yaml}' 2>/dev/null | grep -q "enabled: true"; then
+            echo "✅ Alertmanager already enabled - skipping"
+          else
+            echo "→ Enabling Alertmanager for user workload monitoring..."
+
+            # Apply the user-workload-monitoring-config ConfigMap
+            oc apply -f - <<EOF
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: user-workload-monitoring-config
+            namespace: openshift-user-workload-monitoring
+          data:
+            config.yaml: |
+              alertmanager:
+                enabled: true
+                enableAlertmanagerConfig: true
+          EOF
+
+            echo "✅ Alertmanager enabled for user workload monitoring"
+            echo "  → alertmanager.enabled = true"
+            echo "  → alertmanager.enableAlertmanagerConfig = true"
+          fi
+
+          echo ""
+          echo "✅ User workload monitoring configuration complete!"
         securityContext:
           runAsNonRoot: true
           allowPrivilegeEscalation: false
@@ -107,7 +136,9 @@ rules:
 - apiGroups: [""]
   resources: ["configmaps"]
   verbs: ["get", "list", "create", "patch", "update"]
-  # Needs cluster-wide access to check/create ConfigMap in openshift-monitoring
+  # Needs cluster-wide access for:
+  # - openshift-monitoring/cluster-monitoring-config (enable UWM)
+  # - openshift-user-workload-monitoring/user-workload-monitoring-config (enable Alertmanager)
 ---
 # ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
