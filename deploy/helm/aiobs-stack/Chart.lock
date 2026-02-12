@@ -26,5 +26,5 @@ dependencies:
 - name: minio-observability-storage
   repository: file://../minio
   version: 0.1.0
-digest: sha256:c9ed0d02a807366f3580d318fc95b4814ed6b86d6fc961de0b295af533362382
-generated: "2026-02-05T14:56:56.893923-05:00"
+digest: sha256:fa28f9e89a94de5f3510edaa7bf720fb8e7cb5f0d9bb9d45401b4da0f5ac3945
+generated: "2026-02-11T13:18:35.082217-05:00"

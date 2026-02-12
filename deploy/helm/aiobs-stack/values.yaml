@@ -5,6 +5,10 @@
 # GLOBAL SETTINGS
 # =============================================================================
 
+# Development mode - enables browser-cached API keys (sessionStorage)
+# Default: false (production mode)
+devMode: false
+
 # Target namespaces for infrastructure components
 global:
   observabilityNamespace: observability-hub
@@ -20,7 +24,9 @@ mcpServer:
   enabled: true  # Always deployed
   image:
     repository: quay.io/ecosystem-appeng/aiobs-mcp-server
-    tag: 1.1.6-feature
+    tag: 1.1.10-operator
+  # NOTE: The following values will be set automatically based on top-level devMode:
+  # env.DEV_MODE will be set to "true" or "false" (string) by the operator
 
 # OpenShift Console Plugin - Native console integration
 consolePlugin:
@@ -30,7 +36,7 @@ consolePlugin:
     description: "AI Observability Plugin"
     image:
       repository: quay.io/ecosystem-appeng/aiobs-console-plugin
-      tag: 1.1.6-feature
+      tag: 1.1.10-operator
     imagePullPolicy: Always
     replicas: 2
     port: 9443
@@ -58,16 +64,16 @@ rag:
 
 # =============================================================================
 # INFRASTRUCTURE COMPONENTS (deployed to fixed namespaces)
+# NOTE: All infrastructure components are always installed (no toggles)
+# Matches 'make install' behavior - single CR per cluster
 # =============================================================================
 
 # TempoStack - Distributed tracing backend (observability-hub)
-tempo:
-  enabled: true
+tempo: {}
 
 # LokiStack - Log aggregation (openshift-logging)
 # NOTE: Collector RBAC is disabled to avoid conflicts with OLM-managed ClusterRoles
 loki:
-  enabled: true
   global:
     namespace: openshift-logging  # Deploy LokiStack to openshift-logging (not ai-observability)
   rbac:
@@ -75,16 +81,13 @@ loki:
       create: false  # OLM Logging Operator manages collector RBAC
 
 # OpenTelemetry Collector - Trace/metric collection (observability-hub)
-otelCollector:
-  enabled: true
+otelCollector: {}
 
 # Korrel8r - Signal correlation engine (openshift-cluster-observability-operator)
-korrel8r:
-  enabled: true
+korrel8r: {}
 
 # MinIO - S3-compatible object storage (observability-hub)
-minio:
-  enabled: true
+minio: {}
 
 # =============================================================================
 # AUTO-INSTRUMENTATION (for automatic tracing of Python applications)

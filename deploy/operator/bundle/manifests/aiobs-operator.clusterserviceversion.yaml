@@ -25,19 +25,8 @@ metadata:
             "consolePlugin": {
               "enabled": true
             },
-            "korrel8r": {
-              "enabled": true
-            },
-            "loki": {
-              "enabled": true
-            },
+            "devMode": false,
             "mcpServer": {
-              "enabled": true
-            },
-            "minio": {
-              "enabled": true
-            },
-            "otelCollector": {
               "enabled": true
             },
             "rag": {
@@ -55,9 +44,6 @@ metadata:
                   "hf_token": ""
                 }
               }
-            },
-            "tempo": {
-              "enabled": true
             }
           }
         }
@@ -65,14 +51,14 @@ metadata:
     capabilities: Basic Install
     categories: AI/Machine Learning, Monitoring
     containerImage: quay.io/ecosystem-appeng/aiobs-operator:v1.0.14-feature
-    createdAt: "2026-02-10T16:35:43Z"
+    createdAt: "2026-02-12T15:58:32Z"
     description: Deploy AI-powered observability summarization for OpenShift
     operatorframework.io/suggested-namespace: ai-observability
     operators.operatorframework.io/builder: operator-sdk-v1.37.0
     operators.operatorframework.io/project_layout: helm.sdk.operatorframework.io/v1
     repository: https://github.com/rh-ai-quickstart/openshift-ai-observability-summarizer
     support: Community
-  name: aiobs-operator.v1.1.6-feature
+  name: aiobs-operator.v1.1.10-operator
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
@@ -154,10 +140,10 @@ spec:
         x-descriptors:
         - urn:alm:descriptor:com.tectonic.ui:fieldGroup:Other Settings
         - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
-      - description: Correlates metrics, logs, and traces for better observability
-          insights. Enabled by default - disable only if you have an existing installation.
-        displayName: Enable Korrel8r
-        path: korrel8r.enabled
+      - description: Enable development mode for testing with browser-cached API keys
+          (sessionStorage). Use only for development/testing environments.
+        displayName: Development Mode
+        path: devMode
         x-descriptors:
         - urn:alm:descriptor:com.tectonic.ui:fieldGroup:Other Settings
         - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
@@ -400,7 +386,7 @@ spec:
                 - --metrics-bind-address=127.0.0.1:8080
                 - --leader-elect
                 - --leader-election-id=aiobs-operator
-                image: quay.io/ecosystem-appeng/aiobs-operator:v1.1.6-feature
+                image: quay.io/ecosystem-appeng/aiobs-operator:v1.1.10-operator
                 imagePullPolicy: Always
                 livenessProbe:
                   httpGet:
@@ -499,4 +485,4 @@ spec:
   provider:
     name: RH AI Quickstart
     url: https://github.com/rh-ai-quickstart
-  version: 1.1.6-feature
+  version: 1.1.10-operator
