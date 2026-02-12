@@ -15,6 +15,13 @@ import {
 } from '@patternfly/react-core';
 import { callMcpTool } from '../../../services/mcpClient';
 
+// Module-level cache — metrics catalog is static after MCP server startup,
+// so we cache for the lifetime of the page session (cleared on page refresh).
+let cachedData: { categories: any[]; details: Record<string, any> } | null = null;
+
+/** Reset the module-level cache (exported for testing) */
+export const resetMetricsCatalogCache = () => { cachedData = null; };
+
 interface CategorySummary {
   id: string;
   name: string;
@@ -41,73 +48,117 @@ interface CategoryDetail {
   metrics: { High: MetricEntry[]; Medium: MetricEntry[] };
 }
 
+const matchesMetric = (metric: MetricEntry, lower: string): boolean =>
+  metric.name.toLowerCase().includes(lower) ||
+  (metric.help && metric.help.toLowerCase().includes(lower)) ||
+  (metric.keywords && metric.keywords.some(kw => kw.toLowerCase().includes(lower)));
+
 export const MetricsCatalogTab: React.FC = () => {
   const [categories, setCategories] = React.useState<CategorySummary[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [searchTerm, setSearchTerm] = React.useState('');
+  const [debouncedSearch, setDebouncedSearch] = React.useState('');
   const [expandedCategories, setExpandedCategories] = React.useState<Record<string, boolean>>({});
   const [expandedPriorities, setExpandedPriorities] = React.useState<Record<string, boolean>>({});
   const [categoryDetails, setCategoryDetails] = React.useState<Record<string, CategoryDetail>>({});
-  const [loadingDetails, setLoadingDetails] = React.useState<Record<string, boolean>>({});
+
+  // Debounce the search term so input stays responsive while filtering is deferred
+  React.useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchTerm), 200);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
 
   React.useEffect(() => {
-    loadCategories();
+    loadAllData();
   }, []);
 
-  const loadCategories = async () => {
+  const parseMcpResponse = (response: any): any => {
+    const text = typeof response === 'string' ? response : response?.text ?? response?.content?.[0]?.text ?? JSON.stringify(response);
+    return typeof text === 'string' ? JSON.parse(text) : text;
+  };
+
+  const loadAllData = async () => {
+    // Use cached data if available (static for the session lifetime)
+    if (cachedData) {
+      setCategories(cachedData.categories);
+      setCategoryDetails(cachedData.details);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
+      // Load category summaries first
       const response = await callMcpTool<any>('get_category_metrics_detail');
-      const text = typeof response === 'string' ? response : response?.text ?? response?.content?.[0]?.text ?? JSON.stringify(response);
-      const parsed = typeof text === 'string' ? JSON.parse(text) : text;
+      const parsed = parseMcpResponse(response);
       if (parsed.error) {
         setError(parsed.error);
-      } else {
-        setCategories(Array.isArray(parsed) ? parsed : []);
+        return;
       }
+      const cats: CategorySummary[] = Array.isArray(parsed) ? parsed : [];
+      setCategories(cats);
+
+      // Load all category details in parallel
+      const detailResults = await Promise.allSettled(
+        cats.map(cat => callMcpTool<any>('get_category_metrics_detail', { category_id: cat.id })),
+      );
+      const details: Record<string, CategoryDetail> = {};
+      detailResults.forEach((result, index) => {
+        if (result.status === 'fulfilled') {
+          try {
+            const detail = parseMcpResponse(result.value);
+            if (!detail.error) {
+              details[cats[index].id] = detail;
+            }
+          } catch { /* skip malformed responses */ }
+        }
+      });
+      setCategoryDetails(details);
+
+      cachedData = { categories: cats, details };
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load metrics categories');
+      setError(e instanceof Error ? e.message : 'Failed to load metrics catalog');
     } finally {
       setLoading(false);
     }
   };
 
-  const loadCategoryDetail = async (categoryId: string) => {
-    if (categoryDetails[categoryId]) return;
-    setLoadingDetails(prev => ({ ...prev, [categoryId]: true }));
-    try {
-      const response = await callMcpTool<any>('get_category_metrics_detail', { category_id: categoryId });
-      const text = typeof response === 'string' ? response : response?.text ?? response?.content?.[0]?.text ?? JSON.stringify(response);
-      const parsed: CategoryDetail = typeof text === 'string' ? JSON.parse(text) : text;
-      if ((parsed as any).error) {
-        setError((parsed as any).error);
-      } else {
-        setCategoryDetails(prev => ({ ...prev, [categoryId]: parsed }));
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : `Failed to load details for ${categoryId}`);
-    } finally {
-      setLoadingDetails(prev => ({ ...prev, [categoryId]: false }));
-    }
-  };
-
-  const handleToggle = (categoryId: string, expanded: boolean) => {
+  const handleToggle = React.useCallback((categoryId: string, expanded: boolean) => {
     setExpandedCategories(prev => ({ ...prev, [categoryId]: expanded }));
-    if (expanded) {
-      loadCategoryDetail(categoryId);
-    }
-  };
+  }, []);
 
-  const filteredCategories = categories.filter(cat =>
-    cat.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    cat.description.toLowerCase().includes(searchTerm.toLowerCase()),
-  );
-
-  const handlePriorityToggle = (key: string, expanded: boolean) => {
+  const handlePriorityToggle = React.useCallback((key: string, expanded: boolean) => {
     setExpandedPriorities(prev => ({ ...prev, [key]: expanded }));
-  };
+  }, []);
+
+  // Memoize filtered categories and their matching metrics (uses debounced search)
+  const { filteredCategories, metricMatches } = React.useMemo(() => {
+    if (!debouncedSearch) {
+      return { filteredCategories: categories, metricMatches: {} as Record<string, { High: MetricEntry[]; Medium: MetricEntry[] }> };
+    }
+    const lower = debouncedSearch.toLowerCase();
+    const matches: Record<string, { High: MetricEntry[]; Medium: MetricEntry[] }> = {};
+    const filtered = categories.filter(cat => {
+      // Match on category name or description
+      if (cat.name.toLowerCase().includes(lower) || cat.description.toLowerCase().includes(lower)) {
+        return true;
+      }
+      // Match on individual metrics
+      const detail = categoryDetails[cat.id];
+      if (detail) {
+        const high = detail.metrics.High?.filter(m => matchesMetric(m, lower)) || [];
+        const medium = detail.metrics.Medium?.filter(m => matchesMetric(m, lower)) || [];
+        if (high.length > 0 || medium.length > 0) {
+          matches[cat.id] = { High: high, Medium: medium };
+          return true;
+        }
+      }
+      return false;
+    });
+    return { filteredCategories: filtered, metricMatches: matches };
+  }, [debouncedSearch, categories, categoryDetails]);
 
   const renderMetricList = (metrics: MetricEntry[], priority: string, categoryId: string) => {
     if (!metrics || metrics.length === 0) return null;
@@ -209,63 +260,92 @@ export const MetricsCatalogTab: React.FC = () => {
       </TextContent>
 
       <SearchInput
-        placeholder="Filter categories..."
+        placeholder="Search categories and metrics..."
         value={searchTerm}
         onChange={(_evt, value) => setSearchTerm(value)}
         onClear={() => setSearchTerm('')}
         style={{ marginBottom: '16px' }}
-        aria-label="Filter categories"
+        aria-label="Search categories and metrics"
       />
 
       {filteredCategories.length === 0 ? (
         <TextContent>
           <Text component={TextVariants.p} style={{ color: 'var(--pf-v5-global--Color--200)', textAlign: 'center', padding: '20px' }}>
-            No categories match the filter.
+            No categories or metrics match the search.
           </Text>
         </TextContent>
       ) : (
-        filteredCategories.map(cat => (
-          <ExpandableSection
-            key={cat.id}
-            isExpanded={expandedCategories[cat.id] || false}
-            onToggle={(_evt, expanded) => handleToggle(cat.id, expanded)}
-            toggleContent={
-              <Flex alignItems={{ default: 'alignItemsCenter' }}>
-                <FlexItem>
-                  <span style={{ marginRight: '8px' }}>{cat.icon}</span>
-                </FlexItem>
-                <FlexItem>
-                  <Text component={TextVariants.h4} style={{ margin: 0 }}>
-                    {cat.name}
-                  </Text>
-                </FlexItem>
-                <FlexItem style={{ marginLeft: 'auto' }}>
-                  <Badge isRead>{cat.metric_count} metrics</Badge>
-                </FlexItem>
-              </Flex>
-            }
-            isIndented
-            style={{ marginBottom: '8px' }}
-          >
-            {loadingDetails[cat.id] ? (
-              <div style={{ display: 'flex', justifyContent: 'center', padding: '20px' }}>
-                <Spinner size="md" aria-label={`Loading ${cat.name} details`} />
-              </div>
-            ) : categoryDetails[cat.id] ? (
+        filteredCategories.map(cat => {
+          const hasMetricMatch = !!metricMatches[cat.id];
+          // Only auto-expand when few categories match to avoid creating
+          // massive DOM (e.g. searching "v" matches nearly every category).
+          const shouldAutoExpand = hasMetricMatch && filteredCategories.length <= 2;
+          const isExpanded = expandedCategories[cat.id] || shouldAutoExpand || false;
+          const metricMatchCount = metricMatches[cat.id]
+            ? (metricMatches[cat.id].High?.length || 0) + (metricMatches[cat.id].Medium?.length || 0)
+            : 0;
+
+          // Only render metric content when category is actually visible (expanded)
+          // This avoids creating ~1,877 DOM nodes for collapsed categories
+          let content: React.ReactNode = null;
+          if (isExpanded) {
+            const displayMetrics = metricMatches[cat.id] || (categoryDetails[cat.id]?.metrics ?? null);
+            const matchCount = metricMatches[cat.id]
+              ? (metricMatches[cat.id].High?.length || 0) + (metricMatches[cat.id].Medium?.length || 0)
+              : null;
+
+            content = displayMetrics ? (
               <div style={{ padding: '8px 0' }}>
-                {categoryDetails[cat.id].purpose && (
+                {categoryDetails[cat.id]?.purpose && !hasMetricMatch && (
                   <TextContent style={{ marginBottom: '12px' }}>
                     <Text component={TextVariants.small} style={{ color: 'var(--pf-v5-global--Color--200)' }}>
                       {categoryDetails[cat.id].purpose}
                     </Text>
                   </TextContent>
                 )}
-                {renderMetricList(categoryDetails[cat.id].metrics.High, 'High', cat.id)}
-                {renderMetricList(categoryDetails[cat.id].metrics.Medium, 'Medium', cat.id)}
+                {matchCount !== null && (
+                  <TextContent style={{ marginBottom: '8px' }}>
+                    <Text component={TextVariants.small} style={{ color: 'var(--pf-v5-global--Color--200)' }}>
+                      Showing {matchCount} of {cat.metric_count} metrics matching &quot;{searchTerm}&quot;
+                    </Text>
+                  </TextContent>
+                )}
+                {renderMetricList(displayMetrics.High, 'High', cat.id)}
+                {renderMetricList(displayMetrics.Medium, 'Medium', cat.id)}
               </div>
-            ) : null}
-          </ExpandableSection>
-        ))
+            ) : null;
+          }
+
+          return (
+            <ExpandableSection
+              key={cat.id}
+              isExpanded={isExpanded}
+              onToggle={(_evt, expanded) => handleToggle(cat.id, expanded)}
+              toggleContent={
+                <Flex alignItems={{ default: 'alignItemsCenter' }}>
+                  <FlexItem>
+                    <span style={{ marginRight: '8px' }}>{cat.icon}</span>
+                  </FlexItem>
+                  <FlexItem>
+                    <Text component={TextVariants.h4} style={{ margin: 0 }}>
+                      {cat.name}
+                    </Text>
+                  </FlexItem>
+                  <FlexItem style={{ marginLeft: 'auto' }}>
+                    <Badge isRead>{cat.metric_count} metrics</Badge>
+                    {hasMetricMatch && metricMatchCount > 0 && (
+                      <Badge style={{ marginLeft: '6px' }}>{metricMatchCount} match{metricMatchCount !== 1 ? 'es' : ''}</Badge>
+                    )}
+                  </FlexItem>
+                </Flex>
+              }
+              isIndented
+              style={{ marginBottom: '8px' }}
+            >
+              {content}
+            </ExpandableSection>
+          );
+        })
       )}
     </div>
   );

@@ -4,7 +4,7 @@
 import * as React from 'react';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import { MetricsCatalogTab } from '../../src/core/components/AIModelSettings/tabs/MetricsCatalogTab';
+import { MetricsCatalogTab, resetMetricsCatalogCache } from '../../src/core/components/AIModelSettings/tabs/MetricsCatalogTab';
 
 // Mock callMcpTool
 const mockCallMcpTool = jest.fn();
@@ -31,7 +31,7 @@ const sampleCategories = [
   },
 ];
 
-const sampleCategoryDetail = {
+const clusterHealthDetail = {
   id: 'cluster_health',
   name: 'Cluster Resources & Health',
   description: 'Cluster-wide resource metrics',
@@ -58,9 +58,46 @@ const sampleCategoryDetail = {
   },
 };
 
+const gpuAiDetail = {
+  id: 'gpu_ai',
+  name: 'GPU & AI Accelerators',
+  description: 'GPU metrics for AI/ML workloads',
+  icon: '\uD83C\uDFAE',
+  purpose: 'GPU and AI/ML workload metrics',
+  total_metrics: 1,
+  metrics: {
+    High: [
+      {
+        name: 'vllm:e2e_request_latency_seconds_bucket',
+        type: 'unknown',
+        help: 'End to end request latency',
+        keywords: ['vllm', 'latency', 'e2e'],
+      },
+    ],
+    Medium: [],
+  },
+};
+
+/** Helper: mock the full load sequence (categories + all details) */
+const mockFullLoad = (cats = sampleCategories, details: Record<string, any> = {}) => {
+  // First call: get_category_metrics_detail (no args) returns category list
+  mockCallMcpTool.mockResolvedValueOnce(JSON.stringify(cats));
+  // Subsequent calls: one per category for details
+  cats.forEach(cat => {
+    const detail = details[cat.id] || { id: cat.id, name: cat.name, description: '', icon: '', purpose: '', total_metrics: 0, metrics: { High: [], Medium: [] } };
+    mockCallMcpTool.mockResolvedValueOnce(JSON.stringify(detail));
+  });
+};
+
 describe('MetricsCatalogTab', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.useFakeTimers();
+    resetMetricsCatalogCache();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
   });
 
   it('shows loading spinner initially', () => {
@@ -70,7 +107,7 @@ describe('MetricsCatalogTab', () => {
   });
 
   it('displays categories after loading', async () => {
-    mockCallMcpTool.mockResolvedValueOnce(JSON.stringify(sampleCategories));
+    mockFullLoad();
 
     render(<MetricsCatalogTab />);
 
@@ -105,7 +142,10 @@ describe('MetricsCatalogTab', () => {
   });
 
   it('filters categories by search term', async () => {
-    mockCallMcpTool.mockResolvedValueOnce(JSON.stringify(sampleCategories));
+    mockFullLoad(sampleCategories, {
+      cluster_health: clusterHealthDetail,
+      gpu_ai: gpuAiDetail,
+    });
 
     render(<MetricsCatalogTab />);
 
@@ -113,15 +153,23 @@ describe('MetricsCatalogTab', () => {
       expect(screen.getByText('Cluster Resources & Health')).toBeInTheDocument();
     });
 
-    const searchInput = screen.getByPlaceholderText('Filter categories...');
+    const searchInput = screen.getByPlaceholderText('Search categories and metrics...');
     fireEvent.change(searchInput, { target: { value: 'GPU' } });
+
+    // Advance past the 200ms debounce timer
+    await act(async () => {
+      jest.advanceTimersByTime(300);
+    });
 
     expect(screen.queryByText('Cluster Resources & Health')).not.toBeInTheDocument();
     expect(screen.getByText('GPU & AI Accelerators')).toBeInTheDocument();
   });
 
   it('shows no-match message when filter has no results', async () => {
-    mockCallMcpTool.mockResolvedValueOnce(JSON.stringify(sampleCategories));
+    mockFullLoad(sampleCategories, {
+      cluster_health: clusterHealthDetail,
+      gpu_ai: gpuAiDetail,
+    });
 
     render(<MetricsCatalogTab />);
 
@@ -129,16 +177,48 @@ describe('MetricsCatalogTab', () => {
       expect(screen.getByText('Cluster Resources & Health')).toBeInTheDocument();
     });
 
-    const searchInput = screen.getByPlaceholderText('Filter categories...');
+    const searchInput = screen.getByPlaceholderText('Search categories and metrics...');
     fireEvent.change(searchInput, { target: { value: 'nonexistent' } });
 
-    expect(screen.getByText('No categories match the filter.')).toBeInTheDocument();
+    // Advance past the 200ms debounce timer
+    await act(async () => {
+      jest.advanceTimersByTime(300);
+    });
+
+    expect(screen.getByText('No categories or metrics match the search.')).toBeInTheDocument();
   });
 
-  it('loads category details on expansion', async () => {
-    mockCallMcpTool
-      .mockResolvedValueOnce(JSON.stringify(sampleCategories))
-      .mockResolvedValueOnce(JSON.stringify(sampleCategoryDetail));
+  it('searches within metric names and shows matching category', async () => {
+    mockFullLoad(sampleCategories, {
+      cluster_health: clusterHealthDetail,
+      gpu_ai: gpuAiDetail,
+    });
+
+    render(<MetricsCatalogTab />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Cluster Resources & Health')).toBeInTheDocument();
+    });
+
+    const searchInput = screen.getByPlaceholderText('Search categories and metrics...');
+    fireEvent.change(searchInput, { target: { value: 'vllm' } });
+
+    // Advance past the 200ms debounce timer
+    await act(async () => {
+      jest.advanceTimersByTime(300);
+    });
+
+    // GPU category should appear because it contains a vllm metric
+    expect(screen.getByText('GPU & AI Accelerators')).toBeInTheDocument();
+    // Cluster category should not appear (no matching metrics)
+    expect(screen.queryByText('Cluster Resources & Health')).not.toBeInTheDocument();
+  });
+
+  it('shows metric details when category is expanded', async () => {
+    mockFullLoad(sampleCategories, {
+      cluster_health: clusterHealthDetail,
+      gpu_ai: gpuAiDetail,
+    });
 
     const { container } = render(<MetricsCatalogTab />);
 
@@ -153,11 +233,6 @@ describe('MetricsCatalogTab', () => {
       fireEvent.click(toggleButtons[0]);
     });
 
-    // Should call get_category_metrics_detail
-    expect(mockCallMcpTool).toHaveBeenCalledWith('get_category_metrics_detail', {
-      category_id: 'cluster_health',
-    });
-
     await waitFor(() => {
       expect(screen.getByText('cluster_version')).toBeInTheDocument();
       expect(screen.getByText('Current cluster version')).toBeInTheDocument();
@@ -165,9 +240,10 @@ describe('MetricsCatalogTab', () => {
   });
 
   it('displays labeled sections for description and keywords', async () => {
-    mockCallMcpTool
-      .mockResolvedValueOnce(JSON.stringify(sampleCategories))
-      .mockResolvedValueOnce(JSON.stringify(sampleCategoryDetail));
+    mockFullLoad(sampleCategories, {
+      cluster_health: clusterHealthDetail,
+      gpu_ai: gpuAiDetail,
+    });
 
     const { container } = render(<MetricsCatalogTab />);
 
@@ -196,14 +272,17 @@ describe('MetricsCatalogTab', () => {
   });
 
   it('shows collapsible priority sections', async () => {
-    mockCallMcpTool
-      .mockResolvedValueOnce(JSON.stringify(sampleCategories))
-      .mockResolvedValueOnce(JSON.stringify(sampleCategoryDetail));
+    mockFullLoad(sampleCategories, {
+      cluster_health: clusterHealthDetail,
+      gpu_ai: gpuAiDetail,
+    });
 
     const { container } = render(<MetricsCatalogTab />);
 
+    // Wait for full loading to complete (spinner gone, categories + details loaded)
     await waitFor(() => {
       expect(screen.getByText('Cluster Resources & Health')).toBeInTheDocument();
+      expect(screen.queryByLabelText('Loading metrics catalog')).not.toBeInTheDocument();
     });
 
     // Expand the category
@@ -213,7 +292,7 @@ describe('MetricsCatalogTab', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText('High Priority')).toBeInTheDocument();
+      expect(screen.getAllByText('High Priority').length).toBeGreaterThan(0);
       expect(screen.getByText('Medium Priority')).toBeInTheDocument();
     });
 
@@ -221,13 +300,14 @@ describe('MetricsCatalogTab', () => {
     expect(screen.getByText('cluster_version')).toBeInTheDocument();
     expect(screen.getByText('cluster_operator_conditions')).toBeInTheDocument();
 
-    // Collapse the High Priority section
+    // Collapse the first High Priority section (for cluster_health)
     const allToggles = container.querySelectorAll('.pf-v5-c-expandable-section__toggle');
-    // Find the High Priority toggle (it's nested inside the category)
-    const highPriorityToggle = Array.from(allToggles).find(
+    // Find the first High Priority toggle (nested inside the expanded cluster_health category)
+    const highPriorityToggles = Array.from(allToggles).filter(
       btn => btn.textContent?.includes('High Priority'),
     );
-    expect(highPriorityToggle).toBeDefined();
+    expect(highPriorityToggles.length).toBeGreaterThan(0);
+    const highPriorityToggle = highPriorityToggles[0];
 
     await act(async () => {
       fireEvent.click(highPriorityToggle!);

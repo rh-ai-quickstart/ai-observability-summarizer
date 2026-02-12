@@ -513,9 +513,15 @@ monitor_port_forwards() {
     # Initialize log file
     log_health_event "=== Health monitor started ==="
 
-    # Track previous state to suppress repeated identical console output
-    local prev_failed_count=-1
-    local prev_verified_count=-1
+    # Track state to suppress repeated console output
+    # Console output strategy: only print when something genuinely new happens.
+    # - First restart event: print once
+    # - Repeated identical restart cycles: suppress (details always in log file)
+    # - Verification failure (not all restarted successfully): always print
+    # - "All healthy" after restarts: print once, then suppress
+    local has_printed_restart=false   # Have we already printed a restart message?
+    local has_printed_healthy=false   # Have we already printed a recovery message?
+    local consecutive_healthy=0       # How many consecutive all-healthy checks?
 
     while true; do
         sleep 30
@@ -584,19 +590,39 @@ monitor_port_forwards() {
             fi
         done
 
-        # Always log to file, but only print to console when the situation changes
+        # Always log to file; only print to console when genuinely noteworthy
         if [ $failed_count -gt 0 ]; then
             log_health_event "📊 Health check summary: $failed_count died, $restarted_count restarted, $verified_count verified"
-            if [ $failed_count -ne $prev_failed_count ] || [ $verified_count -ne $prev_verified_count ]; then
+            consecutive_healthy=0
+            has_printed_healthy=false
+
+            if [ $verified_count -lt $restarted_count ]; then
+                # Some restarts failed verification — always report this
+                echo -e "${RED}🏥 Health check: $failed_count died → $restarted_count restarted (only $verified_count verified!) (details: $HEALTH_LOG_FILE)${NC}" >&2
+                has_printed_restart=true
+            elif ! $has_printed_restart; then
+                # First time seeing restarts — print once
                 echo -e "${BLUE}🏥 Health check: $failed_count died → $restarted_count restarted ($verified_count verified) (details: $HEALTH_LOG_FILE)${NC}" >&2
+                has_printed_restart=true
             fi
-        elif [ $prev_failed_count -gt 0 ]; then
-            # Situation improved: all port-forwards are healthy now
+            # Subsequent identical restart cycles: silently handled, details in log file
+        else
             log_health_event "📊 Health check: all port-forwards healthy"
-            echo -e "${GREEN}🏥 Health check: all port-forwards healthy${NC}" >&2
+            ((consecutive_healthy++))
+
+            if $has_printed_restart && ! $has_printed_healthy; then
+                # First healthy check after restarts — confirm recovery once
+                echo -e "${GREEN}🏥 Health check: all port-forwards healthy${NC}" >&2
+                has_printed_healthy=true
+            fi
+
+            # After sustained healthy period, reset restart tracking so future
+            # issues are reported again
+            if [ $consecutive_healthy -ge 3 ]; then
+                has_printed_restart=false
+                has_printed_healthy=false
+            fi
         fi
-        prev_failed_count=$failed_count
-        prev_verified_count=$verified_count
     done
 }
 

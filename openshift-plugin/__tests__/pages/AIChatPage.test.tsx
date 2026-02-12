@@ -47,6 +47,35 @@ jest.mock('../../src/core/components/SuggestedQuestionsPopover', () => ({
   ),
 }));
 
+jest.mock('../../src/core/components/MetricCategoriesPopover', () => ({
+  MetricCategoriesPopover: ({ onSelectQuestion }: any) => (
+    <div data-testid="metric-categories-popover">
+      <button onClick={() => onSelectQuestion('What is the overall health of my cluster?')}>
+        Cluster Health Question
+      </button>
+    </div>
+  ),
+}));
+
+jest.mock('../../src/core/components/MetricCategoriesInline', () => ({
+  MetricCategoriesInline: ({ onSelectQuestion, onCategorySelect, isExpanded, onToggle }: any) => (
+    <div data-testid="metric-categories-inline">
+      <button onClick={() => onToggle(!isExpanded)}>
+        {isExpanded ? 'Hide' : 'Browse'} metric categories
+      </button>
+      <button onClick={() => onSelectQuestion('What is the overall health of my cluster?')}>
+        Cluster Health Question Inline
+      </button>
+      <button onClick={() => onCategorySelect('GPU & AI Accelerators')}>
+        Select GPU Category
+      </button>
+      <button onClick={() => onCategorySelect(null)}>
+        Clear Category
+      </button>
+    </div>
+  ),
+}));
+
 describe('AIChatPage', () => {
   const mockSetMessages = jest.fn();
   const mockClearHistory = jest.fn();
@@ -84,6 +113,7 @@ describe('AIChatPage', () => {
         collapsedPreviewLength: 200,
         suggestedQuestionsExpanded: true,
         suggestedQuestionsLocation: 'inline', // Use inline for tests
+        metricCategoriesLocation: 'header',
         conversationContextLimit: 10,
         showProgressLogByDefault: false,
         enableKeyboardShortcuts: true,

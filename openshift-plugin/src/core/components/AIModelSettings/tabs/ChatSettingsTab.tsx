@@ -179,6 +179,36 @@ export const ChatSettingsTab: React.FC<ChatSettingsTabProps> = ({
 
         <Divider style={{ margin: '24px 0' }} />
 
+        {/* Metric Categories Section */}
+        <TextContent style={{ marginBottom: '16px' }}>
+          <Text component={TextVariants.h4}>Metric Categories</Text>
+        </TextContent>
+
+        <FormGroup
+          label="Location"
+          fieldId="metric-categories-location"
+        >
+          <Radio
+            id="metric-categories-location-header"
+            name="metric-categories-location"
+            label="Header (button with popover)"
+            description="Show as a button in the chat header. Click to browse categories in a popover menu."
+            isChecked={settings.metricCategoriesLocation === 'header'}
+            onChange={() => onUpdateSettings({ metricCategoriesLocation: 'header' })}
+          />
+          <Radio
+            id="metric-categories-location-inline"
+            name="metric-categories-location"
+            label="Inline (below messages)"
+            description="Show below chat messages in an expandable section."
+            isChecked={settings.metricCategoriesLocation === 'inline'}
+            onChange={() => onUpdateSettings({ metricCategoriesLocation: 'inline' })}
+            style={{ marginTop: '12px' }}
+          />
+        </FormGroup>
+
+        <Divider style={{ margin: '24px 0' }} />
+
         {/* Conversation Context Section */}
         <TextContent style={{ marginBottom: '16px' }}>
           <Text component={TextVariants.h4}>Conversation Context</Text>
