@@ -3,12 +3,12 @@
 OpenShift Metrics CLI - Unified tool for fetching, categorizing, and optimizing metrics.
 
 Usage:
-    python scripts/metrics/metrics_cli.py -f              # Fetch from Prometheus
-    python scripts/metrics/metrics_cli.py -c              # Categorize metrics
-    python scripts/metrics/metrics_cli.py -m              # Optimize with keywords (full catalog)
-    python scripts/metrics/metrics_cli.py -m --exclude-gpu # Create base catalog (no GPU)
-    python scripts/metrics/metrics_cli.py -a              # Run all steps
-    python scripts/metrics/metrics_cli.py -a -o out.json  # Custom output path
+    python scripts/metrics/cli.py -f              # Fetch from Prometheus
+    python scripts/metrics/cli.py -c              # Categorize metrics
+    python scripts/metrics/cli.py -m              # Optimize with keywords (full catalog)
+    python scripts/metrics/cli.py -m --exclude-gpu # Create base catalog (no GPU)
+    python scripts/metrics/cli.py -a              # Run all steps
+    python scripts/metrics/cli.py -a -o out.json  # Custom output path
 
 Options:
     -f, --fetch       Fetch metrics from Prometheus/Thanos

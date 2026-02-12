@@ -434,24 +434,49 @@ make install NAMESPACE=your-ns LLM=llama-3.1-8b-instruct
 
 ### Managing the Metrics Catalog
 
-The `scripts/metrics/metrics_cli.py` tool manages the optimized metrics catalog used by AI Chat for intelligent metric discovery.
+The `scripts/metrics/cli.py` tool manages the optimized metrics catalog used by AI Chat for intelligent metric discovery.
 
 ```bash
 # Regenerate the metrics catalog (requires Prometheus access)
-python scripts/metrics/metrics_cli.py -a              # Run all: fetch → categorize → optimize
+python scripts/metrics/cli.py -a              # Run all: fetch → categorize → optimize
 
 # Individual steps
-python scripts/metrics/metrics_cli.py -f              # Fetch from Prometheus
-python scripts/metrics/metrics_cli.py -c              # Categorize by priority
-python scripts/metrics/metrics_cli.py -m              # Optimize with keywords
+python scripts/metrics/cli.py -f              # Fetch from Prometheus
+python scripts/metrics/cli.py -c              # Categorize by priority
+python scripts/metrics/cli.py -m              # Optimize with keywords
 
 # Options
-python scripts/metrics/metrics_cli.py -h              # Show all options
-python scripts/metrics/metrics_cli.py -a -v           # Verbose output
-python scripts/metrics/metrics_cli.py -m -o out.json  # Custom output path
+python scripts/metrics/cli.py -h              # Show all options
+python scripts/metrics/cli.py -a -v           # Verbose output
+python scripts/metrics/cli.py -m -o out.json  # Custom output path
 ```
 
 **Output**: `src/mcp_server/data/openshift-metrics-optimized.json` - Contains categorized metrics with keywords for AI-powered search.
+
+### Shared Metric Configurations (Frontend)
+
+Metric constants used by both the metrics pages and Settings tabs are in shared data files:
+
+- **`openshift-plugin/src/core/data/vllmMetricsConfig.ts`** — `KEY_METRICS_CONFIG` (6 key metrics) and `METRIC_CATEGORIES` (8 categories) used by the vLLM Metrics page and vLLM Metrics Settings tab
+- **`openshift-plugin/src/core/data/openshiftMetricsConfig.ts`** — `CLUSTER_WIDE_CATEGORIES` (11 categories) used by the OpenShift Metrics page and OpenShift Metrics Settings tab
+
+Both the page components and settings tabs import from these shared files to keep metric definitions in a single location.
+
+### Settings — Metrics Tabs
+
+The Settings modal has three metrics-related tabs:
+
+| Tab | Source | Description |
+|-----|--------|-------------|
+| **Chat - Metrics Catalog** | MCP `get_category_metrics_detail` tool | Browse the AI chat metrics catalog (loaded from MCP server) |
+| **vLLM Metrics** | `vllmMetricsConfig.ts` | Read-only view of vLLM Metrics page metrics (6 key + 8 categories) |
+| **OpenShift Metrics** | `openshiftMetricsConfig.ts` | Read-only view of OpenShift Metrics page metrics (11 categories) |
+
+All three tabs support:
+- **Search** with 200ms debounce filtering
+- **Download** button that exports metrics as a markdown (`.md`) file
+
+The download utility is at `openshift-plugin/src/core/utils/downloadFile.ts`.
 
 ### Error Handling
 - API endpoints use HTTPException for user-facing errors

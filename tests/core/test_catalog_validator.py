@@ -2,8 +2,8 @@
 Unit tests for catalog_validator module.
 
 Tests the dynamic catalog validation against Prometheus including:
-- Category classification (mirrored from metrics_cli.py)
-- Priority classification (mirrored from metrics_cli.py)
+- Category classification (mirrored from cli.py)
+- Priority classification (mirrored from cli.py)
 - Keyword generation
 - Metric removal (not in Prometheus)
 - Metric addition (in Prometheus, not in catalog)
@@ -112,7 +112,7 @@ def validator():
 # ---------------------------------------------------------------------------
 
 class TestClassifyCategory:
-    """Test _classify_category function (mirrored from metrics_cli.py)."""
+    """Test _classify_category function (mirrored from cli.py)."""
 
     def test_etcd_metric(self):
         assert _classify_category("etcd_server_proposals_pending") == "etcd"
@@ -192,7 +192,7 @@ class TestClassifyCategory:
 # ---------------------------------------------------------------------------
 
 class TestClassifyPriority:
-    """Test _classify_priority function (mirrored from metrics_cli.py)."""
+    """Test _classify_priority function (mirrored from cli.py)."""
 
     def test_high_cluster_operator(self):
         assert _classify_priority("cluster_operator_up", "cluster_health") == "High"

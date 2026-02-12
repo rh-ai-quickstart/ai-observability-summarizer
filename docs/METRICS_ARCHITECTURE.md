@@ -129,7 +129,7 @@ Loading takes ~15ms and is cached for the process lifetime via the singleton pat
 
 ## Generating the Catalog JSON
 
-The catalog is generated from a live Prometheus/Thanos instance using `scripts/metrics/metrics_cli.py`.
+The catalog is generated from a live Prometheus/Thanos instance using `scripts/metrics/cli.py`.
 
 ### Prerequisites
 
@@ -140,17 +140,17 @@ The catalog is generated from a live Prometheus/Thanos instance using `scripts/m
 
 ```bash
 # Run all steps: fetch -> categorize -> optimize
-python scripts/metrics/metrics_cli.py -a
+python scripts/metrics/cli.py -a
 
 # Or run individual steps:
-python scripts/metrics/metrics_cli.py -f              # Step 1: Fetch from Prometheus
-python scripts/metrics/metrics_cli.py -c              # Step 2: Categorize with priorities
-python scripts/metrics/metrics_cli.py -m              # Step 3: Optimize with keywords
+python scripts/metrics/cli.py -f              # Step 1: Fetch from Prometheus
+python scripts/metrics/cli.py -c              # Step 2: Categorize with priorities
+python scripts/metrics/cli.py -m              # Step 3: Optimize with keywords
 
 # Options:
-python scripts/metrics/metrics_cli.py -a --url http://thanos:9090
-python scripts/metrics/metrics_cli.py -a --exclude-gpu   # Base catalog (GPU discovered at runtime)
-python scripts/metrics/metrics_cli.py -a -v               # Verbose output
+python scripts/metrics/cli.py -a --url http://thanos:9090
+python scripts/metrics/cli.py -a --exclude-gpu   # Base catalog (GPU discovered at runtime)
+python scripts/metrics/cli.py -a -v               # Verbose output
 ```
 
 ### Step 1: Fetch (`-f`)
@@ -348,7 +348,7 @@ The catalog organizes metrics into 17 categories (plus an `other` fallback):
 
 ### How categories are assigned
 
-Each category has a set of regex patterns that match metric names. During categorization (`metrics_cli.py` Step 2):
+Each category has a set of regex patterns that match metric names. During categorization (`cli.py` Step 2):
 
 ```
 cluster_health:  ^cluster_, ^kube_node_status, ^kube_daemonset
@@ -652,13 +652,18 @@ make install-mcp-server NAMESPACE=my-ns GPU_PREFIX_NVIDIA="my_custom_gpu_"
 | `src/mcp_server/mcp_tools_adapter.py` | `MCPServerAdapter` -- allows LLM chatbots to call MCP tools by name in-process |
 | `src/mcp_server/data/openshift-metrics-optimized.json` | Bundled metrics catalog (~840KB, ~2,000 metrics) |
 
-### Frontend (Metrics Catalog UI)
+### Frontend (Metrics UI)
 
 | File | Purpose |
 |------|---------|
-| `openshift-plugin/src/core/components/AIModelSettings/tabs/MetricsCatalogTab.tsx` | Metrics Catalog settings tab -- browse categories with deep search, session-lifetime caching, debounced filtering |
+| `openshift-plugin/src/core/data/vllmMetricsConfig.ts` | Shared vLLM metric constants (`KEY_METRICS_CONFIG`, `METRIC_CATEGORIES`) -- imported by VLLMMetricsPage and VLLMMetricsSettingsTab |
+| `openshift-plugin/src/core/data/openshiftMetricsConfig.ts` | Shared OpenShift metric constants (`CLUSTER_WIDE_CATEGORIES`) -- imported by OpenShiftMetricsPage and OpenShiftMetricsSettingsTab |
+| `openshift-plugin/src/core/utils/downloadFile.ts` | Shared `downloadAsFile()` utility for exporting metrics as markdown files |
+| `openshift-plugin/src/core/components/AIModelSettings/tabs/MetricsCatalogTab.tsx` | Chat - Metrics Catalog settings tab -- browse MCP catalog categories with deep search, session-lifetime caching, debounced filtering, download button |
+| `openshift-plugin/src/core/components/AIModelSettings/tabs/VLLMMetricsSettingsTab.tsx` | vLLM Metrics settings tab -- read-only view of vLLM metrics (6 key + 8 categories) with search and download |
+| `openshift-plugin/src/core/components/AIModelSettings/tabs/OpenShiftMetricsSettingsTab.tsx` | OpenShift Metrics settings tab -- read-only view of OpenShift metrics (11 categories) with search and download |
 | `openshift-plugin/src/core/components/AIModelSettings/tabs/ChatSettingsTab.tsx` | Chat Settings tab -- includes `metricCategoriesLocation` and `suggestedQuestionsLocation` radio groups |
-| `openshift-plugin/src/core/components/AIModelSettings/index.tsx` | Settings modal -- registers the Metrics Catalog tab |
+| `openshift-plugin/src/core/components/AIModelSettings/index.tsx` | Settings modal -- registers 7 tabs including 3 metrics tabs |
 | `openshift-plugin/src/core/components/MetricCategoriesPopover.tsx` | Header popover for metric categories with pre-defined questions per category (`CATEGORY_QUESTIONS` map) |
 | `openshift-plugin/src/core/components/MetricCategoriesInline.tsx` | Inline expandable section with category dropdown and clickable question cards |
 | `openshift-plugin/src/core/hooks/useChatSettings.ts` | Chat settings hook -- includes `metricCategoriesLocation: 'header' \| 'inline'` |
@@ -669,7 +674,7 @@ make install-mcp-server NAMESPACE=my-ns GPU_PREFIX_NVIDIA="my_custom_gpu_"
 
 | File | Purpose |
 |------|---------|
-| `scripts/metrics/metrics_cli.py` | CLI to fetch, categorize, and optimize metrics from Prometheus |
+| `scripts/metrics/cli.py` | CLI to fetch, categorize, and optimize metrics from Prometheus |
 
 ### Tests
 
@@ -682,7 +687,9 @@ make install-mcp-server NAMESPACE=my-ns GPU_PREFIX_NVIDIA="my_custom_gpu_"
 | `tests/core/test_canonical_questions.py` | Parametrized tests for canonical question set (Q1-Q20, SQ1-SQ3) |
 | `tests/test_smart_metrics_integration.py` | Integration tests for end-to-end discovery |
 | `tests/performance/test_metrics_catalog_perf.py` | Performance benchmarks |
-| `openshift-plugin/__tests__/components/MetricsCatalogTab.test.tsx` | Frontend tests for Metrics Catalog settings tab (search, caching, debounce) |
+| `openshift-plugin/__tests__/components/MetricsCatalogTab.test.tsx` | Frontend tests for Metrics Catalog settings tab (search, caching, debounce, download) |
+| `openshift-plugin/__tests__/components/VLLMMetricsSettingsTab.test.tsx` | Frontend tests for vLLM Metrics settings tab |
+| `openshift-plugin/__tests__/components/OpenShiftMetricsSettingsTab.test.tsx` | Frontend tests for OpenShift Metrics settings tab |
 | `openshift-plugin/__tests__/components/MetricCategoriesInline.test.tsx` | Frontend tests for inline metric categories component |
 | `openshift-plugin/__tests__/components/MetricCategoriesPopover.test.tsx` | Frontend tests for header popover metric categories |
 | `openshift-plugin/__tests__/pages/AIChatPage.test.tsx` | Chat page tests including metric categories integration |

@@ -18,7 +18,7 @@ from typing import Dict, List, Optional, Set, Tuple
 logger = logging.getLogger(__name__)
 
 # --------------------------------------------------------------------------
-# Priority classification — mirrored from scripts/metrics/metrics_cli.py.
+# Priority classification — mirrored from scripts/metrics/cli.py.
 # The base catalog only includes High and Medium metrics. The validator must
 # apply the same classification so it doesn't re-add Low priority metrics.
 # --------------------------------------------------------------------------
@@ -85,7 +85,7 @@ _MEDIUM_DEFAULT_CATEGORIES = frozenset({
 
 
 def _classify_priority(metric_name: str, category_id: str) -> str:
-    """Classify a metric's priority using the same logic as metrics_cli.py."""
+    """Classify a metric's priority using the same logic as cli.py."""
     for p in _HIGH_PRIORITY_PATTERNS:
         if p.search(metric_name):
             return "High"
@@ -101,7 +101,7 @@ def _classify_priority(metric_name: str, category_id: str) -> str:
 
 
 # --------------------------------------------------------------------------
-# Category classification — mirrored from scripts/metrics/metrics_cli.py.
+# Category classification — mirrored from scripts/metrics/cli.py.
 # Uses the same explicit regex patterns as the CLI to categorize metrics,
 # rather than inferring categories from prefix overlap in the existing catalog.
 # --------------------------------------------------------------------------
@@ -172,7 +172,7 @@ _CATEGORY_PATTERNS: List[Tuple[str, List[re.Pattern]]] = [
 
 
 def _classify_category(metric_name: str) -> str:
-    """Classify a metric into a category using the same logic as metrics_cli.py."""
+    """Classify a metric into a category using the same logic as cli.py."""
     for category_id, patterns in _CATEGORY_PATTERNS:
         for p in patterns:
             if p.search(metric_name):
@@ -288,7 +288,7 @@ class CatalogValidator:
             existing_names = set(lookup.keys())
             metrics_added = []
             for name in sorted(prometheus_set - existing_names):
-                # Categorize using the same explicit patterns as metrics_cli.py
+                # Categorize using the same explicit patterns as cli.py
                 category_id = _classify_category(name)
 
                 if category_id in skip:
