@@ -689,7 +689,8 @@ export async function chatVLLM(
     console.log('[vLLM] Chat:', { modelName, question, timeRange, summarizeModelId });
 
     // Build context message that guides the AI to fetch vLLM metrics
-    // Include time_range in the message since the chat tool doesn't accept it as a parameter
+    // Note: The backend chat tool doesn't accept time_range as a parameter,
+    // so we include it in the message prompt instead
     const contextMessage = `You are helping analyze vLLM metrics for model "${modelName}"${namespace ? ` in namespace "${namespace}"` : ''}.
 
 IMPORTANT Instructions:
@@ -727,6 +728,9 @@ User question: ${question}`;
 /**
  * Chat with AI about observability
  * Returns both the response and progress log for replay
+ *
+ * Note: The backend chat tool does NOT accept time_range as a parameter.
+ * If you need to specify a time range, include it in the message text.
  */
 export async function chat(
   modelName: string,
@@ -736,7 +740,6 @@ export async function chat(
     scope?: string;
     apiKey?: string;
     conversationHistory?: Array<{ role: string; content: string }>;
-    timeRange?: string;
   }
 ): Promise<{ response: string; progressLog: Array<{ timestamp: string; message: string }> }> {
   try {
@@ -747,7 +750,6 @@ export async function chat(
       scope: options?.scope,
       api_key: options?.apiKey,
       conversation_history: options?.conversationHistory,
-      time_range: options?.timeRange,
     });
 
     // The backend returns a JSON response with {response, progress_log, model, iterations}
