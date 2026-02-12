@@ -35,9 +35,12 @@ import {
   TachometerAltIcon,
   AngleDownIcon,
   AngleRightIcon,
+  RobotIcon,
+  TimesIcon,
 } from '@patternfly/react-icons';
 import { listModels, listNamespaces, ModelInfo, NamespaceInfo, fetchVLLMMetrics, analyzeVLLM, getSessionConfig, AnalysisResult } from '../services/mcpClient';
 import { ConfigurationRequiredAlert } from '../components/ConfigurationRequiredAlert';
+import { MetricsChatPanel } from '../components/MetricsChatPanel';
 import { KEY_METRICS_CONFIG, METRIC_CATEGORIES } from '../data/vllmMetricsConfig';
 
 // Metric Card Component with Sparkline
@@ -409,9 +412,11 @@ interface KeyMetricsSectionProps {
   data: Record<string, MetricDataValue>;
   loading: boolean;
   timeRange: string;
+  isSelected?: boolean;
+  onSelect?: () => void;
 }
 
-const KeyMetricsSection: React.FC<KeyMetricsSectionProps> = ({ data, loading, timeRange }) => {
+const KeyMetricsSection: React.FC<KeyMetricsSectionProps> = ({ data, loading, timeRange, isSelected, onSelect }) => {
   // Helper: Convert time range string to seconds
   const getTimeRangeSeconds = (range: string): number => {
     const num = parseInt(range);
@@ -495,11 +500,16 @@ const KeyMetricsSection: React.FC<KeyMetricsSectionProps> = ({ data, loading, ti
   };
 
   return (
-    <Card style={{
-      marginBottom: '24px',
-      background: 'linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%)',
-      border: '2px solid #c4b5fd',
-    }}>
+    <Card
+      style={{
+        marginBottom: '24px',
+        background: 'linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%)',
+        border: isSelected ? '2px solid var(--pf-v5-global--primary-color--100)' : '2px solid #c4b5fd',
+        boxShadow: isSelected ? '0 0 8px rgba(0,102,204,0.3)' : undefined,
+        cursor: onSelect ? 'pointer' : 'default',
+      }}
+      onClick={onSelect}
+    >
       <CardTitle>
         <Flex alignItems={{ default: 'alignItemsCenter' }}>
           <FlexItem>
@@ -554,16 +564,29 @@ interface CategorySectionProps {
   metrics: Array<{ key: string; label: string; unit: string; description: string }>;
   data: Record<string, MetricDataValue>;
   loading: boolean;
+  isSelected?: boolean;
+  onSelect?: (title: string) => void;
 }
 
-const CategorySection: React.FC<CategorySectionProps> = ({ title, icon: Icon, description, metrics, data, loading }) => {
+const CategorySection: React.FC<CategorySectionProps> = ({ title, icon: Icon, description, metrics, data, loading, isSelected, onSelect }) => {
   const [isExpanded, setIsExpanded] = React.useState(false);
 
+  const handleClick = () => {
+    setIsExpanded(!isExpanded);
+    if (onSelect) {
+      onSelect(title);
+    }
+  };
+
   return (
-    <Card style={{ marginBottom: '16px' }}>
+    <Card style={{
+      marginBottom: '16px',
+      border: isSelected ? '2px solid var(--pf-v5-global--primary-color--100)' : undefined,
+      boxShadow: isSelected ? '0 0 8px rgba(0,102,204,0.3)' : undefined,
+    }}>
       <CardTitle
         style={{ cursor: 'pointer', userSelect: 'none' }}
-        onClick={() => setIsExpanded(!isExpanded)}
+        onClick={handleClick}
       >
         <Flex alignItems={{ default: 'alignItemsCenter' }} justifyContent={{ default: 'justifyContentSpaceBetween' }}>
           <FlexItem>
@@ -626,6 +649,8 @@ const VLLMMetricsPage: React.FC = () => {
   const [analysisResult, setAnalysisResult] = React.useState<AnalysisResult | null>(null);
   const [metricsData, setMetricsData] = React.useState<Record<string, MetricDataValue>>({});
   const fetchIdRef = React.useRef(0);
+  const [chatPanelOpen, setChatPanelOpen] = React.useState(false);
+  const [selectedCategory, setSelectedCategory] = React.useState<string>('vLLM Overview');
 
   React.useEffect(() => {
     loadData();
@@ -952,109 +977,149 @@ const VLLMMetricsPage: React.FC = () => {
                 Analyze with AI
               </Button>
             </ToolbarItem>
+            <ToolbarItem>
+              <Button
+                variant={chatPanelOpen ? 'primary' : 'secondary'}
+                icon={chatPanelOpen ? <TimesIcon /> : <RobotIcon />}
+                onClick={() => setChatPanelOpen(!chatPanelOpen)}
+                isDisabled={!model}
+              >
+                {chatPanelOpen ? 'Close Assistant' : 'AI Assistant'}
+              </Button>
+            </ToolbarItem>
           </ToolbarContent>
         </Toolbar>
       </PageSection>
 
       {/* Main Content */}
       <PageSection>
-        {/* Current Selection Labels */}
-        {model !== 'all' && (
-          <Flex style={{ marginBottom: '16px' }}>
-            <FlexItem>
-              <Label color="blue" icon={<CubesIcon />}>
-                {namespace === 'all' ? 'All Namespaces' : namespace}
-              </Label>
-            </FlexItem>
-            <FlexItem>
-              <Label color="purple" icon={<TachometerAltIcon />}>
-                {model.split(' | ')[1] || model}
-              </Label>
-            </FlexItem>
-            <FlexItem>
-              <Label color="grey">
-                Last {timeRange === '15m' ? '15 minutes' : timeRange === '1h' ? '1 hour' : timeRange === '6h' ? '6 hours' : timeRange === '24h' ? '24 hours' : '7 days'}
-              </Label>
-            </FlexItem>
-          </Flex>
-        )}
-
-        {/* Error Alert */}
-        {error && (
-          <div style={{ marginBottom: '16px' }}>
-            {error === 'Please configure an AI model in Settings first' ? (
-              <ConfigurationRequiredAlert onClose={() => setError(null)} />
-            ) : (
-              <Alert variant={AlertVariant.warning} title="Warning" isInline>
-                {error}
-              </Alert>
-            )}
-          </div>
-        )}
-
-        {/* AI Analysis Result */}
-        {analysisResult && (
-          <Card style={{ marginBottom: '16px', background: 'linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%)', border: '1px solid #c4b5fd' }}>
-            <CardTitle>
-              <Flex alignItems={{ default: 'alignItemsCenter' }}>
+        <Grid hasGutter>
+          <GridItem span={chatPanelOpen ? 8 : 12}>
+            {/* Current Selection Labels */}
+            {model !== 'all' && (
+              <Flex style={{ marginBottom: '16px' }}>
                 <FlexItem>
-                  <OutlinedLightbulbIcon style={{ color: '#7c3aed', marginRight: '8px' }} />
-                  AI Analysis
+                  <Label color="blue" icon={<CubesIcon />}>
+                    {namespace === 'all' ? 'All Namespaces' : namespace}
+                  </Label>
                 </FlexItem>
-                <FlexItem align={{ default: 'alignRight' }}>
-                  <Button variant="plain" onClick={() => setAnalysisResult(null)}>✕</Button>
+                <FlexItem>
+                  <Label color="purple" icon={<TachometerAltIcon />}>
+                    {model.split(' | ')[1] || model}
+                  </Label>
+                </FlexItem>
+                <FlexItem>
+                  <Label color="grey">
+                    Last {timeRange === '15m' ? '15 minutes' : timeRange === '1h' ? '1 hour' : timeRange === '6h' ? '6 hours' : timeRange === '24h' ? '24 hours' : '7 days'}
+                  </Label>
                 </FlexItem>
               </Flex>
-            </CardTitle>
-            <CardBody>
-              <div style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', margin: 0, lineHeight: 1.6 }}>
-                {analysisResult.summary}
+            )}
+
+            {/* Error Alert */}
+            {error && (
+              <div style={{ marginBottom: '16px' }}>
+                {error === 'Please configure an AI model in Settings first' ? (
+                  <ConfigurationRequiredAlert onClose={() => setError(null)} />
+                ) : (
+                  <Alert variant={AlertVariant.warning} title="Warning" isInline>
+                    {error}
+                  </Alert>
+                )}
               </div>
-            </CardBody>
-          </Card>
-        )}
+            )}
 
-        {/* Loading */}
-        {metricsLoading && (
-          <Bullseye style={{ minHeight: '200px' }}>
-            <div style={{ textAlign: 'center' }}>
-              <Spinner size="xl" />
-              <Text component={TextVariants.p} style={{ marginTop: '16px', color: 'var(--pf-v5-global--Color--200)' }}>
-                Fetching vLLM metrics for {model}...
-              </Text>
-            </div>
-          </Bullseye>
-        )}
+            {/* AI Analysis Result */}
+            {analysisResult && (
+              <Card style={{ marginBottom: '16px', background: 'linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%)', border: '1px solid #c4b5fd' }}>
+                <CardTitle>
+                  <Flex alignItems={{ default: 'alignItemsCenter' }}>
+                    <FlexItem>
+                      <OutlinedLightbulbIcon style={{ color: '#7c3aed', marginRight: '8px' }} />
+                      AI Analysis
+                    </FlexItem>
+                    <FlexItem align={{ default: 'alignRight' }}>
+                      <Button variant="plain" onClick={() => setAnalysisResult(null)}>✕</Button>
+                    </FlexItem>
+                  </Flex>
+                </CardTitle>
+                <CardBody>
+                  <div style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', margin: 0, lineHeight: 1.6 }}>
+                    {analysisResult.summary}
+                  </div>
+                </CardBody>
+              </Card>
+            )}
 
-        {/* Metrics Display */}
-        {!metricsLoading && (
-          <>
-            {/* Key Metrics Section - Priority metrics at the top */}
-            <KeyMetricsSection data={metricsData} loading={metricsLoading} timeRange={timeRange} />
+            {/* Loading */}
+            {metricsLoading && (
+              <Bullseye style={{ minHeight: '200px' }}>
+                <div style={{ textAlign: 'center' }}>
+                  <Spinner size="xl" />
+                  <Text component={TextVariants.p} style={{ marginTop: '16px', color: 'var(--pf-v5-global--Color--200)' }}>
+                    Fetching vLLM metrics for {model}...
+                  </Text>
+                </div>
+              </Bullseye>
+            )}
 
-            {/* Detailed Category Sections - Collapsible */}
-            {Object.entries(METRIC_CATEGORIES)
-              .sort(([, a], [, b]) => (a.priority || 999) - (b.priority || 999))
-              .map(([categoryName, category]) => (
-                <CategorySection
-                  key={categoryName}
-                  title={categoryName}
-                  icon={category.icon}
-                  description={category.description}
-                  metrics={category.metrics}
+            {/* Metrics Display */}
+            {!metricsLoading && (
+              <>
+                {/* Key Metrics Section - Priority metrics at the top */}
+                <KeyMetricsSection
                   data={metricsData}
                   loading={metricsLoading}
+                  timeRange={timeRange}
+                  isSelected={selectedCategory === 'vLLM Overview'}
+                  onSelect={() => setSelectedCategory('vLLM Overview')}
                 />
-              ))}
-          </>
-        )}
 
-        {/* No data message */}
-        {!metricsLoading && model && Object.keys(metricsData).length === 0 && (
-          <Alert variant={AlertVariant.warning} title="No metrics data" isInline>
-            No metrics data available for {model}. Make sure the model is active and metrics are enabled.
-          </Alert>
-        )}
+                {/* Detailed Category Sections - Collapsible */}
+                {Object.entries(METRIC_CATEGORIES)
+                  .sort(([, a], [, b]) => (a.priority || 999) - (b.priority || 999))
+                  .map(([categoryName, category]) => (
+                    <CategorySection
+                      key={categoryName}
+                      title={categoryName}
+                      icon={category.icon}
+                      description={category.description}
+                      metrics={category.metrics}
+                      data={metricsData}
+                      loading={metricsLoading}
+                      isSelected={selectedCategory === categoryName}
+                      onSelect={setSelectedCategory}
+                    />
+                  ))}
+              </>
+            )}
+
+            {/* No data message */}
+            {!metricsLoading && model && Object.keys(metricsData).length === 0 && (
+              <Alert variant={AlertVariant.warning} title="No metrics data" isInline>
+                No metrics data available for {model}. Make sure the model is active and metrics are enabled.
+              </Alert>
+            )}
+          </GridItem>
+
+          {/* Chat Panel */}
+          {chatPanelOpen && (
+            <GridItem span={4}>
+              <div style={{ position: 'sticky', top: '16px', height: 'calc(100vh - 250px)' }}>
+                <MetricsChatPanel
+                  pageType="vllm"
+                  scope={namespace || 'all'}
+                  namespace={namespace !== 'all' ? namespace : undefined}
+                  category={selectedCategory}
+                  timeRange={timeRange}
+                  isOpen={chatPanelOpen}
+                  onClose={() => setChatPanelOpen(false)}
+                  modelName={model}
+                />
+              </div>
+            </GridItem>
+          )}
+        </Grid>
       </PageSection>
 
       {models.length === 0 && namespaces.length === 0 && (

@@ -674,8 +674,63 @@ export async function analyzeVLLM(
 }
 
 /**
+ * Chat with AI about vLLM metrics
+ * Uses the general chat tool which can fetch metrics as needed
+ */
+export async function chatVLLM(
+  modelName: string,
+  namespace: string | undefined,
+  question: string,
+  timeRange: string,
+  summarizeModelId: string,
+  apiKey?: string
+): Promise<{ response: string }> {
+  try {
+    console.log('[vLLM] Chat:', { modelName, question, timeRange, summarizeModelId });
+
+    // Build context message that guides the AI to fetch vLLM metrics
+    // Note: The backend chat tool doesn't accept time_range as a parameter,
+    // so we include it in the message prompt instead
+    const contextMessage = `You are helping analyze vLLM metrics for model "${modelName}"${namespace ? ` in namespace "${namespace}"` : ''}.
+
+IMPORTANT Instructions:
+1. Use ONLY the fetch_vllm_metrics_data tool to get metrics
+   - Parameters: model_name="${modelName}", time_range="${timeRange}"${namespace ? `, namespace="${namespace}"` : ''}
+2. DO NOT use analyze_vllm (it's too slow)
+3. Analyze the raw metrics data yourself and provide insights
+4. Focus on relevant metrics for the user's question
+5. Provide specific, data-driven insights based on actual metric values
+
+User question: ${question}`;
+
+    // Use the general chat tool which has access to all MCP tools
+    // Only pass namespace if it's defined (not 'all')
+    const result = await chat(
+      summarizeModelId,
+      contextMessage,
+      {
+        ...(namespace ? { namespace } : {}),
+        scope: 'vllm',
+        apiKey,
+      }
+    );
+
+    return {
+      response: result.response,
+    };
+
+  } catch (error) {
+    console.error('vLLM chat error:', error);
+    throw error;
+  }
+}
+
+/**
  * Chat with AI about observability
  * Returns both the response and progress log for replay
+ *
+ * Note: The backend chat tool does NOT accept time_range as a parameter.
+ * If you need to specify a time range, include it in the message text.
  */
 export async function chat(
   modelName: string,
@@ -685,7 +740,6 @@ export async function chat(
     scope?: string;
     apiKey?: string;
     conversationHistory?: Array<{ role: string; content: string }>;
-    timeRange?: string;
   }
 ): Promise<{ response: string; progressLog: Array<{ timestamp: string; message: string }> }> {
   try {
@@ -696,7 +750,6 @@ export async function chat(
       scope: options?.scope,
       api_key: options?.apiKey,
       conversation_history: options?.conversationHistory,
-      time_range: options?.timeRange,
     });
 
     // The backend returns a JSON response with {response, progress_log, model, iterations}

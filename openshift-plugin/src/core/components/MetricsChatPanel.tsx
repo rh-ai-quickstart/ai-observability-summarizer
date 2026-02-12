@@ -12,16 +12,18 @@ import {
 } from '@patternfly/react-core';
 import { RobotIcon, TimesIcon, PaperPlaneIcon, UserIcon } from '@patternfly/react-icons';
 import ReactMarkdown from 'react-markdown';
-import { getSessionConfig, chatOpenShift } from '../services/mcpClient';
+import { getSessionConfig, chatOpenShift, chatVLLM } from '../services/mcpClient';
 import { ConfigurationRequiredAlert } from './ConfigurationRequiredAlert';
 
 interface MetricsChatPanelProps {
-  scope: 'cluster_wide' | 'namespace_scoped';
+  pageType?: 'openshift' | 'vllm';
+  scope: 'cluster_wide' | 'namespace_scoped' | string;
   namespace?: string;
   category: string;
   timeRange: string;
   isOpen: boolean;
   onClose: () => void;
+  modelName?: string; // For vLLM - the full model name (namespace | model)
 }
 
 interface ChatMessage {
@@ -99,6 +101,61 @@ const CATEGORY_QUESTIONS: Record<string, string[]> = {
     "What's my current error rate?",
     "Are there any performance anomalies?",
     "How is traffic distribution across my services?"
+  ],
+  // vLLM-specific categories
+  'vLLM Overview': [
+    "What's the overall health of this vLLM model?",
+    "Are there any performance issues I should investigate?",
+    "How are the GPU resources being utilized?",
+    "What optimizations would you recommend?"
+  ],
+  'Request Tracking & Throughput': [
+    "How many requests are currently being processed?",
+    "Are there any request errors or failures?",
+    "What's the current request throughput?",
+    "Are there requests waiting in the queue?"
+  ],
+  'Token Throughput': [
+    "What's the current token generation rate?",
+    "How are prompt and output tokens trending?",
+    "Are there any token processing bottlenecks?",
+    "What's the average tokens per request?"
+  ],
+  'Latency & Timing': [
+    "What's the current P95 latency?",
+    "How is the time to first token (TTFT) performing?",
+    "Are there any latency spikes I should investigate?",
+    "What's causing high queue or processing times?"
+  ],
+  'Memory & Cache': [
+    "How is the KV cache utilization?",
+    "Are there any cache efficiency issues?",
+    "What's the current cache fragmentation level?",
+    "Are we hitting cache capacity limits?"
+  ],
+  'Scheduling & Queueing': [
+    "How is batch scheduling performing?",
+    "What's the current batch size?",
+    "Are there scheduling delays or idle time?",
+    "How many requests are pending in the queue?"
+  ],
+  'GPU Hardware': [
+    "What's the current GPU temperature and power usage?",
+    "Are any GPUs running too hot?",
+    "How is GPU memory utilization?",
+    "Is GPU energy consumption within normal range?"
+  ],
+  'RPC Monitoring': [
+    "Are there any RPC errors?",
+    "How are RPC connections performing?",
+    "What's the RPC request volume?",
+    "Are there any RPC performance issues?"
+  ],
+  'Request Parameters': [
+    "What are the typical request parameters?",
+    "How are max tokens settings configured?",
+    "What's the average tokens per iteration?",
+    "Are request parameters optimally configured?"
   ]
 };
 
@@ -111,12 +168,14 @@ const GENERAL_OPENSHIFT_QUESTIONS = [
 ];
 
 export const MetricsChatPanel: React.FC<MetricsChatPanelProps> = ({
+  pageType = 'openshift',
   scope,
   namespace,
   category,
   timeRange,
   isOpen,
   onClose,
+  modelName,
 }) => {
   const [messages, setMessages] = React.useState<ChatMessage[]>([]);
   const [currentQuestion, setCurrentQuestion] = React.useState<string>('');
@@ -186,19 +245,47 @@ export const MetricsChatPanel: React.FC<MetricsChatPanelProps> = ({
         return;
       }
 
-      // Call OpenShift-specific chat API (matching Streamlit implementation)
-      const result = await chatOpenShift(
-        category,
-        question,
-        scope,
-        scope === 'namespace_scoped' ? namespace : undefined,
-        timeRange,
-        config.ai_model,
-        config.api_key
-      );
-      
-      const responseContent = result.response;
-      const promqlContent = result.promql;
+      let responseContent = '';
+      let promqlContent: string | undefined = undefined;
+
+      if (pageType === 'vllm') {
+        // Call vLLM-specific chat API
+        if (!modelName) {
+          setError('Model name is required for vLLM chat');
+          setIsLoading(false);
+          return;
+        }
+
+        // Enhance question with category context if it's a general question
+        const contextualQuestion = category !== 'vLLM Overview'
+          ? `[Category: ${category}] ${question}`
+          : question;
+
+        const result = await chatVLLM(
+          modelName,
+          namespace,
+          contextualQuestion,
+          timeRange,
+          config.ai_model,
+          config.api_key
+        );
+
+        responseContent = result.response;
+      } else {
+        // Call OpenShift-specific chat API (matching Streamlit implementation)
+        const result = await chatOpenShift(
+          category,
+          question,
+          scope,
+          scope === 'namespace_scoped' ? namespace : undefined,
+          timeRange,
+          config.ai_model,
+          config.api_key
+        );
+
+        responseContent = result.response;
+        promqlContent = result.promql;
+      }
 
       // Add assistant message
       const assistantMessage: ChatMessage = {
@@ -282,9 +369,23 @@ export const MetricsChatPanel: React.FC<MetricsChatPanelProps> = ({
         {/* Context Info */}
         <Alert variant="info" isInline title="Chat Context" style={{ marginBottom: '12px' }}>
           <Text component={TextVariants.small}>
-            <strong>Category:</strong> {category}<br/>
-            <strong>Scope:</strong> {scope === 'cluster_wide' ? 'Cluster-wide' : namespace}<br/>
-            <strong>Time Range:</strong> {timeRange}
+            {pageType === 'vllm' ? (
+              <>
+                <strong>Model:</strong> {modelName || 'N/A'}<br/>
+                <strong>Category:</strong> {category}<br/>
+                <strong>Namespace:</strong> {namespace || 'all'}<br/>
+                <strong>Time Range:</strong> {timeRange}<br/>
+                <em style={{ fontSize: '0.85em', color: 'var(--pf-v5-global--Color--200)' }}>
+                  💡 Tip: Click on metric categories below to see category-specific questions
+                </em>
+              </>
+            ) : (
+              <>
+                <strong>Category:</strong> {category}<br/>
+                <strong>Scope:</strong> {scope === 'cluster_wide' ? 'Cluster-wide' : namespace}<br/>
+                <strong>Time Range:</strong> {timeRange}
+              </>
+            )}
           </Text>
         </Alert>
 
@@ -451,7 +552,9 @@ export const MetricsChatPanel: React.FC<MetricsChatPanelProps> = ({
               value={currentQuestion}
               onChange={(_event, value) => setCurrentQuestion(value)}
               onKeyPress={handleKeyPress}
-              placeholder={`Ask a question about ${category} metrics...`}
+              placeholder={pageType === 'vllm'
+                ? `Ask about ${category} for ${modelName?.split(' | ')[1] || 'this model'}...`
+                : `Ask a question about ${category} metrics...`}
               isDisabled={isLoading}
               aria-label="Type your question"
             />

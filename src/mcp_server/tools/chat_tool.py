@@ -9,6 +9,8 @@ import logging
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 
+from core.api_key_manager import resolve_api_key
+
 logger = logging.getLogger(__name__)
 
 
@@ -88,10 +90,14 @@ def chat(
         # Create MCP tools adapter for this server
         tool_executor = MCPServerAdapter(_server_instance)
 
+        # Resolve API key with fallback logic (same as analyze_openshift)
+        # Priority: 1) Provided api_key (from UI), 2) Kubernetes secret
+        resolved_api_key = resolve_api_key(api_key=api_key, model_id=model_name)
+
         # Create chatbot with tool executor
         chatbot = create_chatbot(
             model_name=model_name,
-            api_key=api_key,
+            api_key=resolved_api_key if resolved_api_key else None,
             tool_executor=tool_executor
         )
 

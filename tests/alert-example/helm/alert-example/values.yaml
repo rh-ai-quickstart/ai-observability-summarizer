@@ -21,6 +21,9 @@ apps:
     enabled: true
     workload: deployment
     config:
+      # Config contains 'Crash' keyword - app will crash immediately on startup (see app.py:136-138)
+      # This triggers CrashLoopBackoff, making the deployment unavailable and firing the alert
+      # The alert will fire after 10s of continuous unavailable replicas (see prometheusrule.yaml)
       message: "Crash on startup" # contains 'Crash' to force CrashLoop
     prometheusRule:
       enabled: true
@@ -28,6 +31,9 @@ apps:
     enabled: true
     workload: pod
     config:
+      # Config contains 'Error' keyword - app will emit an error span when /config endpoint is called
+      # This generates trace data with error status for testing trace correlation (see app.py:159-160)
+      # Does NOT crash the app, just returns HTTP 500 and creates an error span in distributed tracing
       message: "Error detected in configuration" # contains 'Error' for error span on /config
     prometheusRule:
       enabled: false

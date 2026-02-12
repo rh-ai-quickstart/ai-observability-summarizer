@@ -11,7 +11,9 @@ spec:
     - alert: {{ .name | replace "-" "_" | title }}Down
       expr: |
         kube_deployment_status_replicas_unavailable{deployment="{{ .name }}"} > 0
-      for: 2m
+      # Short duration for demo purposes - alert fires quickly after deployment becomes unavailable
+      # This ensures deterministic behavior when demonstrating E2E observability integration
+      for: 10s
       labels:
         severity: critical
       annotations:
