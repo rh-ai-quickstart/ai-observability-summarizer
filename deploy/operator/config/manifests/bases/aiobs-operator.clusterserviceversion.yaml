@@ -8,37 +8,41 @@ metadata:
           "apiVersion": "aiobs.rh-ai-quickstart.io/v1alpha1",
           "kind": "AIObservabilitySummarizer",
           "metadata": {
+            "labels": {
+              "app.kubernetes.io/created-by": "aiobs-operator",
+              "app.kubernetes.io/instance": "cluster-ai-observability",
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "aiobservabilitysummarizer",
+              "app.kubernetes.io/part-of": "aiobs-operator"
+            },
             "name": "cluster-ai-observability",
             "namespace": "ai-observability"
           },
           "spec": {
-            "aiobs-app": {
-              "rag": {
-                "enabled": true,
-                "global": {
-                  "models": {
-                    "llama-3-1-8b-instruct": {
-                      "enabled": true
-                    }
-                  }
-                },
-                "llm-service": {
-                  "device": "gpu",
-                  "secret": {
-                    "hf_token": ""
+            "alerting": {
+              "enabled": false
+            },
+            "consolePlugin": {
+              "enabled": true
+            },
+            "devMode": false,
+            "mcpServer": {
+              "enabled": true
+            },
+            "rag": {
+              "enabled": true,
+              "global": {
+                "models": {
+                  "llama-3-1-8b-instruct": {
+                    "enabled": true
                   }
                 }
               },
-              "alerting": {
-                "enabled": false
-              }
-            },
-            "infrastructure": {
-              "enabled": true
-            },
-            "aiobs-infra": {
-              "korrel8r": {
-                "enabled": true
+              "llm-service": {
+                "device": "gpu",
+                "secret": {
+                  "hf_token": ""
+                }
               }
             }
           }
@@ -134,10 +138,10 @@ spec:
         x-descriptors:
         - urn:alm:descriptor:com.tectonic.ui:fieldGroup:Other Settings
         - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
-      - description: Correlates metrics, logs, and traces for better observability
-          insights. Enabled by default - disable only if you have an existing installation.
-        displayName: Enable Korrel8r
-        path: korrel8r.enabled
+      - description: Enable development mode for testing with browser-cached API keys
+          (sessionStorage). Use only for development/testing environments.
+        displayName: Development Mode
+        path: devMode
         x-descriptors:
         - urn:alm:descriptor:com.tectonic.ui:fieldGroup:Other Settings
         - urn:alm:descriptor:com.tectonic.ui:booleanSwitch

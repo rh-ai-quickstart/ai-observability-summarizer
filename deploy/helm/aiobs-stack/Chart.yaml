@@ -43,13 +43,14 @@ dependencies:
 
   # =============================================================================
   # INFRASTRUCTURE COMPONENTS (deployed to fixed namespaces)
+  # NOTE: All infrastructure components are always installed (no conditions)
+  # Matches behavior of 'make install' - single CR per cluster
   # =============================================================================
 
   # TempoStack - Distributed tracing backend (observability-hub)
   - name: tempo-stack
     version: ">=0.0.0"
     repository: "file://../observability/tempo"
-    condition: tempo.enabled
     alias: tempo
 
   # LokiStack - Log aggregation (openshift-logging)
@@ -57,25 +58,21 @@ dependencies:
   - name: loki-stack
     version: ">=0.0.0"
     repository: "file://../observability/loki"
-    condition: loki.enabled
     alias: loki
 
   # OpenTelemetry Collector - Trace/metric collection (observability-hub)
   - name: otel-collector
     version: ">=0.0.0"
     repository: "file://../observability/otel-collector"
-    condition: otelCollector.enabled
     alias: otelCollector
 
   # Korrel8r - Signal correlation engine (openshift-cluster-observability-operator)
   - name: korrel8r
     version: ">=0.0.0"
     repository: "file://../observability/korrel8r"
-    condition: korrel8r.enabled
 
   # MinIO - S3-compatible object storage (observability-hub)
   - name: minio-observability-storage
     version: ">=0.0.0"
     repository: "file://../minio"
-    condition: minio.enabled
     alias: minio
