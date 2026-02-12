@@ -20,6 +20,8 @@ import {
   PlusCircleIcon,
   CogIcon,
   ListIcon,
+  TachometerAltIcon,
+  ClusterIcon,
 } from '@patternfly/react-icons';
 
 import { AIModelState } from './types/models';
@@ -30,6 +32,8 @@ import { APIKeysTab } from './tabs/APIKeysTab';
 import { AddModelTab } from './tabs/AddModelTab';
 import { ChatSettingsTab } from './tabs/ChatSettingsTab';
 import { MetricsCatalogTab } from './tabs/MetricsCatalogTab';
+import { VLLMMetricsSettingsTab } from './tabs/VLLMMetricsSettingsTab';
+import { OpenShiftMetricsSettingsTab } from './tabs/OpenShiftMetricsSettingsTab';
 import { isDevMode } from '../../services/devCredentials';
 import { useChatSettings } from '../../hooks/useChatSettings';
 
@@ -271,6 +275,10 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
         );
       case 'metricscatalog':
         return <MetricsCatalogTab />;
+      case 'vllmmetrics':
+        return <VLLMMetricsSettingsTab />;
+      case 'openshiftmetrics':
+        return <OpenShiftMetricsSettingsTab />;
       default:
         return null;
     }
@@ -407,6 +415,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
           activeKey={state.activeTab}
           onSelect={handleTabSelect}
           aria-label="AI Model Settings Tabs"
+          isOverflowHorizontal
         >
           <Tab
             eventKey="models"
@@ -465,12 +474,38 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
             title={
               <TabTitleText>
                 <ListIcon style={{ marginRight: '8px' }} />
-                Metrics Catalog
+                Chat - Metrics Catalog
               </TabTitleText>
             }
-            aria-label="Metrics Catalog"
+            aria-label="Chat - Metrics Catalog"
           >
             {state.activeTab === 'metricscatalog' && renderTabContent()}
+          </Tab>
+
+          <Tab
+            eventKey="vllmmetrics"
+            title={
+              <TabTitleText>
+                <TachometerAltIcon style={{ marginRight: '8px' }} />
+                vLLM Metrics
+              </TabTitleText>
+            }
+            aria-label="vLLM Metrics"
+          >
+            {state.activeTab === 'vllmmetrics' && renderTabContent()}
+          </Tab>
+
+          <Tab
+            eventKey="openshiftmetrics"
+            title={
+              <TabTitleText>
+                <ClusterIcon style={{ marginRight: '8px' }} />
+                OpenShift Metrics
+              </TabTitleText>
+            }
+            aria-label="OpenShift Metrics"
+          >
+            {state.activeTab === 'openshiftmetrics' && renderTabContent()}
           </Tab>
         </Tabs>
       </div>

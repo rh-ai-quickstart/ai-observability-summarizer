@@ -12,6 +12,12 @@ jest.mock('../../src/core/services/mcpClient', () => ({
   callMcpTool: (...args: any[]) => mockCallMcpTool(...args),
 }));
 
+// Mock downloadAsFile
+const mockDownloadAsFile = jest.fn();
+jest.mock('../../src/core/utils/downloadFile', () => ({
+  downloadAsFile: (...args: any[]) => mockDownloadAsFile(...args),
+}));
+
 const sampleCategories = [
   {
     id: 'cluster_health',
@@ -269,6 +275,53 @@ describe('MetricsCatalogTab', () => {
       expect(screen.getByText('operator')).toBeInTheDocument();
       expect(screen.getByText('conditions')).toBeInTheDocument();
     });
+  });
+
+  it('renders download button', async () => {
+    mockFullLoad(sampleCategories, {
+      cluster_health: clusterHealthDetail,
+      gpu_ai: gpuAiDetail,
+    });
+
+    render(<MetricsCatalogTab />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Cluster Resources & Health')).toBeInTheDocument();
+    });
+
+    const downloadButton = screen.getByLabelText('Download metrics catalog as markdown');
+    expect(downloadButton).toBeInTheDocument();
+    expect(downloadButton).not.toBeDisabled();
+  });
+
+  it('download button is disabled during loading', () => {
+    mockCallMcpTool.mockReturnValue(new Promise(() => {})); // never resolves
+    render(<MetricsCatalogTab />);
+    // During loading, the download button is not rendered (loading spinner shown instead)
+    expect(screen.queryByLabelText('Download metrics catalog as markdown')).not.toBeInTheDocument();
+  });
+
+  it('download button generates markdown file', async () => {
+    mockFullLoad(sampleCategories, {
+      cluster_health: clusterHealthDetail,
+      gpu_ai: gpuAiDetail,
+    });
+
+    render(<MetricsCatalogTab />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Cluster Resources & Health')).toBeInTheDocument();
+    });
+
+    const downloadButton = screen.getByLabelText('Download metrics catalog as markdown');
+    fireEvent.click(downloadButton);
+
+    expect(mockDownloadAsFile).toHaveBeenCalledTimes(1);
+    const [content, filename] = mockDownloadAsFile.mock.calls[0];
+    expect(content).toContain('# Metrics Catalog');
+    expect(content).toContain('Cluster Resources & Health');
+    expect(content).toContain('cluster_version');
+    expect(filename).toMatch(/^metrics-catalog-\d+\.md$/);
   });
 
   it('shows collapsible priority sections', async () => {

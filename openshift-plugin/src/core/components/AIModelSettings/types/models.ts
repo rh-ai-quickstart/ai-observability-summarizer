@@ -68,7 +68,7 @@ export interface AIModelState {
   };
   
   // Current active tab
-  activeTab: 'models' | 'apikeys' | 'addmodel' | 'chatsettings' | 'metricscatalog';
+  activeTab: 'models' | 'apikeys' | 'addmodel' | 'chatsettings' | 'metricscatalog' | 'vllmmetrics' | 'openshiftmetrics';
   
   // Error and success messages
   error: string | null;
