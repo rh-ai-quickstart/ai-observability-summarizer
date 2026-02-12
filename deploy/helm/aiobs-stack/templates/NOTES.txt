@@ -43,6 +43,5 @@ To check component status:
 
 ⚠️  Tempo Operator - Manual Approval Required
 The Tempo operator is configured with Manual installPlanApproval to prevent
-automatic upgrades to buggy versions. To approve a Tempo operator upgrade:
-  oc get installplan -n openshift-tempo-operator
-  oc patch installplan <name> -n openshift-tempo-operator --type=merge -p '{"spec":{"approved":true}}'
+automatic upgrades to buggy versions. Future Tempo operator upgrades will
+require manual approval via the OpenShift Console or CLI.
