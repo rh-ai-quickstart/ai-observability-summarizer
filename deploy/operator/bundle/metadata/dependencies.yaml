@@ -26,7 +26,8 @@ dependencies:
   # Tempo Operator - Distributed tracing backend
   # Provides: TempoStack CRD
   # PINNED: v0.16.x series - v0.18.x has container crash bug (APPENG-3916)
-  # Aligned with subscription YAML: startingCSV=v0.16.0-2, approval=Manual
+  # NOTE: installPlanApproval is set to Manual via post-install hook (tempo-subscription-patcher.yaml)
+  #       This prevents automatic upgrades to buggy versions. Manual approval required for upgrades.
   # Range: >=0.16.0-2 allows v0.16.0-2 and newer v0.16.x patches, blocks v0.17.0+ (including buggy v0.18.x)
   - type: olm.package
     value:
