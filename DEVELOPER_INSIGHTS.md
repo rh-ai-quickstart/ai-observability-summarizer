@@ -205,6 +205,33 @@ See [Build & Deploy](#build--deploy) section for image build commands.
 
 ### Installing the OpenShift AI Observability Summarizer
 
+#### Option 1: Install via Operator (Recommended)
+
+One-click installation via OperatorHub with automatic dependency management and cluster configuration.
+
+**Quick Install:**
+1. **Install CatalogSource:** `oc apply -f deploy/operator/catalog-source.yaml` (or Import YAML via Console UI)
+2. **Install Operator:** Search "AI Observability" in OperatorHub → Install to `ai-observability` namespace (auto-created)
+3. **Create CR:** Configure HuggingFace token and model → Create
+
+**What Gets Installed:**
+- Application: MCP Server, Console Plugin, RAG Stack (LlamaStack, LLM Service, PGVector)
+- Infrastructure: TempoStack, LokiStack, OTEL Collector, MinIO, Korrel8r (auto-deployed to multiple namespaces)
+- Dependency Operators: Cluster Observability, OpenTelemetry, Tempo, Logging, Loki (auto-installed by OLM)
+- Cluster Config: User Workload Monitoring + Alertmanager (auto-configured)
+
+**📚 Documentation:**
+- **User Guide:** [docs/OPERATOR.md](docs/OPERATOR.md) - Installation, configuration, troubleshooting
+- **Technical Reference:** [deploy/operator/README.md](deploy/operator/README.md) - Architecture, development, building images
+
+**Development:**
+```bash
+make operator-config  # Show current configuration
+make operator-deploy  # Build and push all operator images
+```
+
+#### Option 2: Install via Helm
+
 Use the included `Makefile` to install everything:
 ```bash
 # Install with Console Plugin (production mode - default)

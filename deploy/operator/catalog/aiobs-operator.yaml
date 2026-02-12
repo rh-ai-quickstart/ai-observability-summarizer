@@ -1,6 +1,17 @@
+# File-Based Catalog (FBC) entry for AI Observability Operator
+# This is the OLM v1 declarative catalog format
+#
+# NOTE: This file is NOT currently used in the build process.
+# The current catalog build uses SQLite-based index (opm index add).
+# This file is maintained for future migration to File-Based Catalogs.
+#
+# To use FBC in the future, replace the catalog-build target with:
+#   opm alpha render-template basic catalog.yaml > catalog/index.yaml
+#   opm validate catalog/
+#
 ---
-image: quay.io/ecosystem-appeng/aiobs-operator-bundle:v0.0.7
-name: aiobs-operator.v0.0.1
+image: quay.io/ecosystem-appeng/aiobs-operator-bundle:v1.1.10-operator
+name: aiobs-operator.v1.1.10-operator
 package: aiobs-operator
 properties:
 - type: olm.gvk
@@ -11,27 +22,27 @@ properties:
 - type: olm.package
   value:
     packageName: aiobs-operator
-    version: 0.0.1
+    version: 1.1.10-operator
 - type: olm.package.required
   value:
     packageName: cluster-logging
-    versionRange: '>=0.0.0'
+    versionRange: '>=6.3.0 <6.5.0'
 - type: olm.package.required
   value:
     packageName: cluster-observability-operator
-    versionRange: '>=0.0.0'
+    versionRange: '>=1.0.0'
 - type: olm.package.required
   value:
     packageName: loki-operator
-    versionRange: '>=0.0.0'
+    versionRange: '>=6.3.0 <6.5.0'
 - type: olm.package.required
   value:
     packageName: opentelemetry-product
-    versionRange: '>=0.0.0'
+    versionRange: '>=0.108.0'
 - type: olm.package.required
   value:
     packageName: tempo-product
-    versionRange: '>=0.0.0'
+    versionRange: '>=0.16.0 <0.18.0'
 - type: olm.bundle.object
   value:
     data: eyJhcGlWZXJzaW9uIjoicmJhYy5hdXRob3JpemF0aW9uLms4cy5pby92MSIsImtpbmQiOiJDbHVzdGVyUm9sZSIsIm1ldGFkYXRhIjp7ImNyZWF0aW9uVGltZXN0YW1wIjpudWxsLCJsYWJlbHMiOnsiYXBwLmt1YmVybmV0ZXMuaW8vbWFuYWdlZC1ieSI6Imt1c3RvbWl6ZSIsImFwcC5rdWJlcm5ldGVzLmlvL25hbWUiOiJhaW9icy1vcGVyYXRvciJ9LCJuYW1lIjoiYWlvYnMtb3BlcmF0b3ItYWlvYnNlcnZhYmlsaXR5c3VtbWFyaXplci1lZGl0b3Itcm9sZSJ9LCJydWxlcyI6W3siYXBpR3JvdXBzIjpbImFpb2JzLnJoLWFpLXF1aWNrc3RhcnQuaW8iXSwicmVzb3VyY2VzIjpbImFpb2JzZXJ2YWJpbGl0eXN1bW1hcml6ZXJzIl0sInZlcmJzIjpbImNyZWF0ZSIsImRlbGV0ZSIsImdldCIsImxpc3QiLCJwYXRjaCIsInVwZGF0ZSIsIndhdGNoIl19LHsiYXBpR3JvdXBzIjpbImFpb2JzLnJoLWFpLXF1aWNrc3RhcnQuaW8iXSwicmVzb3VyY2VzIjpbImFpb2JzZXJ2YWJpbGl0eXN1bW1hcml6ZXJzL3N0YXR1cyJdLCJ2ZXJicyI6WyJnZXQiXX1dfQ==
@@ -53,9 +64,9 @@ properties:
 relatedImages:
 - image: gcr.io/kubebuilder/kube-rbac-proxy:v0.16.0
   name: ""
-- image: quay.io/ecosystem-appeng/aiobs-operator-bundle:v1.0.7
+- image: quay.io/ecosystem-appeng/aiobs-operator-bundle:v1.1.10-operator
   name: ""
-- image: quay.io/ecosystem-appeng/aiobs-operator:v0.0.1
+- image: quay.io/ecosystem-appeng/aiobs-operator:v1.1.10-operator
   name: ""
 schema: olm.bundle
 ---
@@ -63,7 +74,7 @@ schema: olm.channel
 package: aiobs-operator
 name: alpha
 entries:
-  - name: aiobs-operator.v1.0.7
+  - name: aiobs-operator.v1.1.10-operator
 ---
 schema: olm.package
 name: aiobs-operator
