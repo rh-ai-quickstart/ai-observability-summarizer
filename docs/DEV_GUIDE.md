@@ -462,19 +462,21 @@ Metric constants used by both the metrics pages and Settings tabs are in shared 
 
 Both the page components and settings tabs import from these shared files to keep metric definitions in a single location.
 
-### Settings — Metrics Tabs
+### Settings — Metrics Tab
 
-The Settings modal has three metrics-related tabs:
+The Settings modal has a consolidated **"Metrics"** tab containing three subtabs:
 
-| Tab | Source | Description |
-|-----|--------|-------------|
-| **Chat - Metrics Catalog** | MCP `get_category_metrics_detail` tool | Browse the AI chat metrics catalog (loaded from MCP server) |
+| Subtab | Source | Description |
+|--------|--------|-------------|
+| **Chat Metrics Catalog** | MCP `get_category_metrics_detail` tool | Browse the AI chat metrics catalog (loaded from MCP server) |
 | **vLLM Metrics** | `vllmMetricsConfig.ts` | Read-only view of vLLM Metrics page metrics (6 key + 8 categories) |
 | **OpenShift Metrics** | `openshiftMetricsConfig.ts` | Read-only view of OpenShift Metrics page metrics (11 categories) |
 
-All three tabs support:
+All three subtabs support:
 - **Search** with 200ms debounce filtering
-- **Download** button that exports metrics as a markdown (`.md`) file
+- **Shared download button** at the parent level that exports metrics as a markdown (`.md`) file for whichever subtab is active
+
+The wrapper component is `MetricsSettingsTab.tsx`. Each sub-component (`MetricsCatalogTab`, `VLLMMetricsSettingsTab`, `OpenShiftMetricsSettingsTab`) accepts optional `downloadRef` and `hideHeader` props for integration with the wrapper while remaining usable standalone.
 
 The download utility is at `openshift-plugin/src/core/utils/downloadFile.ts`.
 

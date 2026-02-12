@@ -499,6 +499,27 @@ These tools return clean JSON responses for direct use by frontend components:
 
 > **Note:** `get_metrics_categories` (AI) and `get_category_metrics_detail` (UI) serve similar data but in different formats. The AI tool includes markdown formatting and example queries for LLM reasoning. The UI tool returns structured JSON for rendering in PatternFly components. They are intentionally separate to keep each consumer's contract clean.
 
+### Frontend — Consolidated Metrics Settings Tab
+
+The Settings modal groups all three metrics tabs under a single **"Metrics"** parent tab with three subtabs:
+
+| Subtab | Source | Description |
+|--------|--------|-------------|
+| **Chat Metrics Catalog** | MCP `get_category_metrics_detail` tool | Browse the AI chat metrics catalog (loaded from MCP server) |
+| **vLLM Metrics** | `vllmMetricsConfig.ts` | Read-only view of vLLM Metrics page metrics (6 key + 8 categories) |
+| **OpenShift Metrics** | `openshiftMetricsConfig.ts` | Read-only view of OpenShift Metrics page metrics (11 categories) |
+
+The wrapper component (`MetricsSettingsTab.tsx`) manages:
+- **Subtab state** — which of the 3 subtabs is active
+- **Shared download button** — a single download button in the parent header delegates to whichever subtab is active via `downloadRef` props
+- **Hidden sub-headers** — each sub-component receives `hideHeader={true}` to suppress its individual header/download button when rendered inside the wrapper
+
+Each sub-component accepts two optional props for wrapper integration:
+- `downloadRef?: React.MutableRefObject<(() => void) | null>` — registers its download handler so the parent can trigger it
+- `hideHeader?: boolean` — hides the individual header+download button
+
+These props are optional, so the sub-components remain usable standalone (e.g., in tests).
+
 ### Frontend — Metrics Catalog Search & Caching
 
 The `MetricsCatalogTab` in Settings uses a multi-layer performance optimization for browsing and searching ~1,877 metrics:
@@ -659,11 +680,12 @@ make install-mcp-server NAMESPACE=my-ns GPU_PREFIX_NVIDIA="my_custom_gpu_"
 | `openshift-plugin/src/core/data/vllmMetricsConfig.ts` | Shared vLLM metric constants (`KEY_METRICS_CONFIG`, `METRIC_CATEGORIES`) -- imported by VLLMMetricsPage and VLLMMetricsSettingsTab |
 | `openshift-plugin/src/core/data/openshiftMetricsConfig.ts` | Shared OpenShift metric constants (`CLUSTER_WIDE_CATEGORIES`) -- imported by OpenShiftMetricsPage and OpenShiftMetricsSettingsTab |
 | `openshift-plugin/src/core/utils/downloadFile.ts` | Shared `downloadAsFile()` utility for exporting metrics as markdown files |
-| `openshift-plugin/src/core/components/AIModelSettings/tabs/MetricsCatalogTab.tsx` | Chat - Metrics Catalog settings tab -- browse MCP catalog categories with deep search, session-lifetime caching, debounced filtering, download button |
-| `openshift-plugin/src/core/components/AIModelSettings/tabs/VLLMMetricsSettingsTab.tsx` | vLLM Metrics settings tab -- read-only view of vLLM metrics (6 key + 8 categories) with search and download |
-| `openshift-plugin/src/core/components/AIModelSettings/tabs/OpenShiftMetricsSettingsTab.tsx` | OpenShift Metrics settings tab -- read-only view of OpenShift metrics (11 categories) with search and download |
+| `openshift-plugin/src/core/components/AIModelSettings/tabs/MetricsSettingsTab.tsx` | Consolidated Metrics wrapper tab -- manages subtab state (catalog/vLLM/OpenShift), shared download button via `downloadRef`, renders sub-components with `hideHeader` |
+| `openshift-plugin/src/core/components/AIModelSettings/tabs/MetricsCatalogTab.tsx` | Chat Metrics Catalog subtab -- browse MCP catalog categories with deep search, session-lifetime caching, debounced filtering; accepts `downloadRef`/`hideHeader` props |
+| `openshift-plugin/src/core/components/AIModelSettings/tabs/VLLMMetricsSettingsTab.tsx` | vLLM Metrics subtab -- read-only view of vLLM metrics (6 key + 8 categories) with search; accepts `downloadRef`/`hideHeader` props |
+| `openshift-plugin/src/core/components/AIModelSettings/tabs/OpenShiftMetricsSettingsTab.tsx` | OpenShift Metrics subtab -- read-only view of OpenShift metrics (11 categories) with search; accepts `downloadRef`/`hideHeader` props |
 | `openshift-plugin/src/core/components/AIModelSettings/tabs/ChatSettingsTab.tsx` | Chat Settings tab -- includes `metricCategoriesLocation` and `suggestedQuestionsLocation` radio groups |
-| `openshift-plugin/src/core/components/AIModelSettings/index.tsx` | Settings modal -- registers 7 tabs including 3 metrics tabs |
+| `openshift-plugin/src/core/components/AIModelSettings/index.tsx` | Settings modal -- registers 5 tabs: Models, API Keys, Add Model, Chat Settings, Metrics |
 | `openshift-plugin/src/core/components/MetricCategoriesPopover.tsx` | Header popover for metric categories with pre-defined questions per category (`CATEGORY_QUESTIONS` map) |
 | `openshift-plugin/src/core/components/MetricCategoriesInline.tsx` | Inline expandable section with category dropdown and clickable question cards |
 | `openshift-plugin/src/core/hooks/useChatSettings.ts` | Chat settings hook -- includes `metricCategoriesLocation: 'header' \| 'inline'` |
@@ -687,9 +709,10 @@ make install-mcp-server NAMESPACE=my-ns GPU_PREFIX_NVIDIA="my_custom_gpu_"
 | `tests/core/test_canonical_questions.py` | Parametrized tests for canonical question set (Q1-Q20, SQ1-SQ3) |
 | `tests/test_smart_metrics_integration.py` | Integration tests for end-to-end discovery |
 | `tests/performance/test_metrics_catalog_perf.py` | Performance benchmarks |
-| `openshift-plugin/__tests__/components/MetricsCatalogTab.test.tsx` | Frontend tests for Metrics Catalog settings tab (search, caching, debounce, download) |
-| `openshift-plugin/__tests__/components/VLLMMetricsSettingsTab.test.tsx` | Frontend tests for vLLM Metrics settings tab |
-| `openshift-plugin/__tests__/components/OpenShiftMetricsSettingsTab.test.tsx` | Frontend tests for OpenShift Metrics settings tab |
+| `openshift-plugin/__tests__/components/MetricsSettingsTab.test.tsx` | Frontend tests for consolidated Metrics wrapper (subtab rendering, switching, download delegation) |
+| `openshift-plugin/__tests__/components/MetricsCatalogTab.test.tsx` | Frontend tests for Metrics Catalog subtab (search, caching, debounce, download) |
+| `openshift-plugin/__tests__/components/VLLMMetricsSettingsTab.test.tsx` | Frontend tests for vLLM Metrics subtab |
+| `openshift-plugin/__tests__/components/OpenShiftMetricsSettingsTab.test.tsx` | Frontend tests for OpenShift Metrics subtab |
 | `openshift-plugin/__tests__/components/MetricCategoriesInline.test.tsx` | Frontend tests for inline metric categories component |
 | `openshift-plugin/__tests__/components/MetricCategoriesPopover.test.tsx` | Frontend tests for header popover metric categories |
 | `openshift-plugin/__tests__/pages/AIChatPage.test.tsx` | Chat page tests including metric categories integration |

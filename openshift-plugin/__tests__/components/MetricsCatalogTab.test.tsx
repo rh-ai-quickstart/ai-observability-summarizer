@@ -318,7 +318,7 @@ describe('MetricsCatalogTab', () => {
 
     expect(mockDownloadAsFile).toHaveBeenCalledTimes(1);
     const [content, filename] = mockDownloadAsFile.mock.calls[0];
-    expect(content).toContain('# Metrics Catalog');
+    expect(content).toContain('# Chat - Metrics Catalog');
     expect(content).toContain('Cluster Resources & Health');
     expect(content).toContain('cluster_version');
     expect(filename).toMatch(/^metrics-catalog-\d+\.md$/);
