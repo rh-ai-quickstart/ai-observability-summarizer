@@ -18,6 +18,8 @@ from pathlib import Path
 from typing import Dict, List, Optional, Set
 from dataclasses import dataclass
 
+from core.config import PROMETHEUS_URL, VERIFY_SSL, THANOS_TOKEN
+
 logger = logging.getLogger(__name__)
 
 
@@ -74,7 +76,7 @@ class MetricsCatalog:
         Args:
             catalog_path: Optional path to catalog JSON. If None, uses bundled default.
             prometheus_url: URL for Prometheus/Thanos (for GPU discovery and validation).
-                           Defaults to PROMETHEUS_URL env var or http://localhost:9090.
+                           Defaults to PROMETHEUS_URL from config.
             enable_gpu_discovery: If True, discover GPU metrics at startup (async).
             gpu_discovery_timeout: Timeout for GPU discovery in seconds.
             enable_catalog_validation: If True, validate catalog against Prometheus at startup.
@@ -87,9 +89,7 @@ class MetricsCatalog:
         self._loaded = False
 
         # GPU discovery settings
-        self._prometheus_url = prometheus_url or os.environ.get(
-            "PROMETHEUS_URL", "http://localhost:9090"
-        )
+        self._prometheus_url = prometheus_url or PROMETHEUS_URL
         self._enable_gpu_discovery = enable_gpu_discovery
         self._gpu_discovery_timeout = gpu_discovery_timeout
 
@@ -197,7 +197,11 @@ class MetricsCatalog:
             try:
                 from core.gpu_metrics_discovery import GPUMetricsDiscovery
 
-                discovery = GPUMetricsDiscovery(self._prometheus_url)
+                discovery = GPUMetricsDiscovery(
+                    self._prometheus_url,
+                    ssl_verify=VERIFY_SSL,
+                    auth_token=THANOS_TOKEN,
+                )
                 result = discovery.discover(timeout_seconds=self._gpu_discovery_timeout)
 
                 if result.error:
@@ -332,7 +336,11 @@ class MetricsCatalog:
             try:
                 from core.catalog_validator import CatalogValidator
 
-                validator = CatalogValidator(self._prometheus_url)
+                validator = CatalogValidator(
+                    self._prometheus_url,
+                    ssl_verify=VERIFY_SSL,
+                    auth_token=THANOS_TOKEN,
+                )
                 result = validator.validate(
                     categories=self._categories,
                     lookup=self._lookup,

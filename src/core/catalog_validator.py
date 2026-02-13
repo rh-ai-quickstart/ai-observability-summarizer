@@ -206,14 +206,23 @@ class CatalogValidator:
     # Categories to skip during validation
     SKIP_CATEGORIES = frozenset({"gpu_ai"})
 
-    def __init__(self, prometheus_url: str = "http://localhost:9090"):
+    def __init__(
+        self,
+        prometheus_url: str,
+        ssl_verify=True,
+        auth_token: Optional[str] = None,
+    ):
         """
         Initialize catalog validator.
 
         Args:
             prometheus_url: URL of the Prometheus/Thanos endpoint.
+            ssl_verify: SSL verification setting (bool or CA bundle path string).
+            auth_token: Bearer token for Prometheus/Thanos authentication.
         """
         self.prometheus_url = prometheus_url.rstrip("/")
+        self._ssl_verify = ssl_verify
+        self._auth_token = auth_token
 
     def validate(
         self,
@@ -362,6 +371,14 @@ class CatalogValidator:
                 validation_time_ms=elapsed,
             )
 
+    def _request_headers(self) -> Dict[str, str]:
+        """Build HTTP headers with Bearer token if configured."""
+        headers: Dict[str, str] = {}
+        token = (self._auth_token or "").strip()
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        return headers
+
     def _fetch_metric_names(self, timeout: float) -> List[str]:
         """
         Fetch all metric names from Prometheus.
@@ -376,6 +393,8 @@ class CatalogValidator:
 
         response = requests.get(
             f"{self.prometheus_url}/api/v1/label/__name__/values",
+            headers=self._request_headers(),
+            verify=self._ssl_verify,
             timeout=timeout,
         )
         response.raise_for_status()
@@ -401,6 +420,8 @@ class CatalogValidator:
         try:
             response = requests.get(
                 f"{self.prometheus_url}/api/v1/metadata",
+                headers=self._request_headers(),
+                verify=self._ssl_verify,
                 timeout=timeout,
             )
             response.raise_for_status()

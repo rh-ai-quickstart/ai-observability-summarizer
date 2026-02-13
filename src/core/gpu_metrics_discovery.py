@@ -132,14 +132,23 @@ class GPUMetricsDiscovery:
         "vllm:request_success_total": ["success rate", "successful requests", "completion rate"],
     }
 
-    def __init__(self, prometheus_url: str = "http://localhost:9090"):
+    def __init__(
+        self,
+        prometheus_url: str,
+        ssl_verify=True,
+        auth_token: Optional[str] = None,
+    ):
         """
         Initialize GPU metrics discovery.
 
         Args:
-            prometheus_url: URL of Prometheus/Thanos endpoint
+            prometheus_url: URL of Prometheus/Thanos endpoint.
+            ssl_verify: SSL verification setting (bool or CA bundle path string).
+            auth_token: Bearer token for Prometheus/Thanos authentication.
         """
         self.prometheus_url = prometheus_url.rstrip("/")
+        self._ssl_verify = ssl_verify
+        self._auth_token = auth_token
         self._high_priority_regex = re.compile("|".join(self.HIGH_PRIORITY_PATTERNS))
         vendor_patterns = self._build_vendor_patterns()
         self._vendor_regexes = {
@@ -148,6 +157,14 @@ class GPUMetricsDiscovery:
         }
         self._framework_regex = re.compile("|".join(self.FRAMEWORK_PATTERNS))
         self._lock = threading.Lock()
+
+    def _request_headers(self) -> Dict[str, str]:
+        """Build HTTP headers with Bearer token if configured."""
+        headers: Dict[str, str] = {}
+        token = (self._auth_token or "").strip()
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        return headers
 
     def _build_vendor_patterns(self) -> Dict[GPUVendor, List[str]]:
         """
@@ -264,7 +281,9 @@ class GPUMetricsDiscovery:
             # Step 1: Get all metric names
             response = requests.get(
                 f"{self.prometheus_url}/api/v1/label/__name__/values",
-                timeout=timeout_seconds
+                headers=self._request_headers(),
+                verify=self._ssl_verify,
+                timeout=timeout_seconds,
             )
             response.raise_for_status()
             data = response.json()
@@ -381,7 +400,9 @@ class GPUMetricsDiscovery:
             # Use /api/v1/metadata endpoint
             response = requests.get(
                 f"{self.prometheus_url}/api/v1/metadata",
-                timeout=timeout_seconds
+                headers=self._request_headers(),
+                verify=self._ssl_verify,
+                timeout=timeout_seconds,
             )
             response.raise_for_status()
             data = response.json()
@@ -435,8 +456,10 @@ class GPUMetricsDiscovery:
 
 # Convenience function for direct discovery
 def discover_gpu_metrics(
-    prometheus_url: str = "http://localhost:9090",
-    timeout_seconds: float = 10.0
+    prometheus_url: str,
+    timeout_seconds: float = 10.0,
+    ssl_verify=True,
+    auth_token: Optional[str] = None,
 ) -> GPUDiscoveryResult:
     """
     Discover GPU metrics from Prometheus.
@@ -444,9 +467,11 @@ def discover_gpu_metrics(
     Args:
         prometheus_url: URL of Prometheus/Thanos endpoint
         timeout_seconds: Timeout for API calls
+        ssl_verify: SSL verification setting (bool or CA bundle path string).
+        auth_token: Bearer token for Prometheus/Thanos authentication.
 
     Returns:
         GPUDiscoveryResult with discovered metrics
     """
-    discovery = GPUMetricsDiscovery(prometheus_url)
+    discovery = GPUMetricsDiscovery(prometheus_url, ssl_verify=ssl_verify, auth_token=auth_token)
     return discovery.discover(timeout_seconds)
