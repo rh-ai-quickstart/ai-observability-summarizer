@@ -84,7 +84,7 @@ The file is included in the container image via the existing `COPY mcp_server /a
     {
       "id": "cluster_health",
       "name": "Cluster Resources & Health",
-      "icon": "\ud83c\udfe2",
+      "icon": "🏢",
       "purpose": "Monitor overall cluster state...",
       "keywords": ["cluster", "health", "operators", "version"],
       "metrics": {
@@ -328,23 +328,23 @@ The catalog organizes metrics into 17 categories (plus an `other` fallback):
 
 | Category ID | Name | Icon | Typical High Priority Count |
 |-------------|------|------|---------------------------|
-| `cluster_health` | Cluster Resources & Health | \ud83c\udfe2 | 14 |
-| `node_hardware` | Node & Hardware | \ud83d\udda5\ufe0f | 107 |
-| `pod_container` | Pods & Containers | \ud83d\udce6 | 54 |
-| `api_server` | API Server | \ud83d\udd0c | 39 |
-| `etcd` | etcd | \ud83d\uddc3\ufe0f | 51 |
-| `networking` | Networking | \ud83c\udf10 | 7 |
-| `storage` | Storage | \ud83d\udcbe | 6 |
-| `observability` | Observability Stack | \ud83d\udd2d | 25 |
-| `gpu_ai` | GPU & AI/ML | \ud83c\udfae | 12 (static) + dynamic |
-| `kubelet` | Kubelet | \u2699\ufe0f | 14 |
-| `scheduler` | Scheduler | \ud83d\udcc5 | 2 |
-| `security` | Security | \ud83d\udd12 | 8 |
-| `controller_manager` | Controller Manager | \ud83c\udfae | 2 |
-| `openshift_specific` | OpenShift Specific | \ud83c\udfe2 | 5 |
-| `image_registry` | Image Registry | \ud83d\uddbc\ufe0f | 1 |
-| `backup_dr` | Backup & DR | \ud83d\udcbe | 0 |
-| `go_runtime` | Go Runtime | \u2699\ufe0f | 0 |
+| `cluster_health` | Cluster Resources & Health | 🏢 | 14 |
+| `node_hardware` | Node & Hardware | 🖥️ | 107 |
+| `pod_container` | Pods & Containers | 📦 | 54 |
+| `api_server` | API Server | 🔌 | 39 |
+| `etcd` | etcd | 🗃️ | 51 |
+| `networking` | Networking | 🌐 | 7 |
+| `storage` | Storage | 💾 | 6 |
+| `observability` | Observability Stack | 🔭 | 25 |
+| `gpu_ai` | GPU & AI/ML | 🎮 | 12 (static) + dynamic |
+| `kubelet` | Kubelet | ⚙️ | 14 |
+| `scheduler` | Scheduler | 📅 | 2 |
+| `security` | Security | 🔒 | 8 |
+| `controller_manager` | Controller Manager | 🎮 | 2 |
+| `openshift_specific` | OpenShift Specific | 🏢 | 5 |
+| `image_registry` | Image Registry | 🖼️ | 1 |
+| `backup_dr` | Backup & DR | 💾 | 0 |
+| `go_runtime` | Go Runtime | ⚙️ | 0 |
 
 ### How categories are assigned
 
@@ -622,7 +622,7 @@ make install-mcp-server NAMESPACE=my-ns GPU_PREFIX_NVIDIA="my_custom_gpu_"
 
 | Variable | Purpose | Default |
 |----------|---------|---------|
-| `PROMETHEUS_URL` | Prometheus/Thanos endpoint | `http://localhost:9090` |
+| `PROMETHEUS_URL` | Prometheus/Thanos endpoint | Auto-detected: in-cluster uses Thanos service URL, local dev uses `http://localhost:9090` |
 | `GPU_METRICS_PREFIX_NVIDIA` | Additional NVIDIA metric prefixes (comma-separated) | (empty) |
 | `GPU_METRICS_PREFIX_INTEL` | Additional Intel metric prefixes (comma-separated) | (empty) |
 | `GPU_METRICS_PREFIX_AMD` | Additional AMD metric prefixes (comma-separated) | (empty) |
@@ -632,7 +632,7 @@ make install-mcp-server NAMESPACE=my-ns GPU_PREFIX_NVIDIA="my_custom_gpu_"
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `catalog_path` | `Optional[Path]` | Auto-detected | Path to catalog JSON |
-| `prometheus_url` | `Optional[str]` | From env | Prometheus URL for discovery |
+| `prometheus_url` | `Optional[str]` | From `config.PROMETHEUS_URL` | Prometheus URL for discovery and validation |
 | `enable_gpu_discovery` | `bool` | `True` | Enable async GPU discovery |
 | `gpu_discovery_timeout` | `float` | `10.0` | GPU discovery timeout (seconds) |
 | `enable_catalog_validation` | `bool` | `True` | Enable catalog validation against live Prometheus |
