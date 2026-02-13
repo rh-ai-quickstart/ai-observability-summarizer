@@ -65,7 +65,7 @@ describe('MetricsSettingsTab', () => {
 
     expect(screen.getByText('Metrics')).toBeInTheDocument();
     expect(screen.getByText('Browse and download metrics for Chat, vLLM, and OpenShift.')).toBeInTheDocument();
-    expect(screen.getByLabelText('Download metrics as markdown')).toBeInTheDocument();
+    expect(screen.getByLabelText('Download Chat Metrics Catalog as markdown')).toBeInTheDocument();
   });
 
   it('renders 3 subtabs', async () => {
@@ -126,7 +126,7 @@ describe('MetricsSettingsTab', () => {
     });
 
     // Click the shared download button
-    const downloadButton = screen.getByLabelText('Download metrics as markdown');
+    const downloadButton = screen.getByLabelText('Download vLLM Metrics as markdown');
     fireEvent.click(downloadButton);
 
     expect(mockDownloadAsFile).toHaveBeenCalledTimes(1);
@@ -148,7 +148,7 @@ describe('MetricsSettingsTab', () => {
     });
 
     // Click the shared download button
-    const downloadButton = screen.getByLabelText('Download metrics as markdown');
+    const downloadButton = screen.getByLabelText('Download OpenShift Metrics as markdown');
     fireEvent.click(downloadButton);
 
     expect(mockDownloadAsFile).toHaveBeenCalledTimes(1);
@@ -167,7 +167,7 @@ describe('MetricsSettingsTab', () => {
     });
 
     // Click the shared download button
-    const downloadButton = screen.getByLabelText('Download metrics as markdown');
+    const downloadButton = screen.getByLabelText('Download Chat Metrics Catalog as markdown');
     fireEvent.click(downloadButton);
 
     expect(mockDownloadAsFile).toHaveBeenCalledTimes(1);

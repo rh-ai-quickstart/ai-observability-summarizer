@@ -626,6 +626,7 @@ make install-mcp-server NAMESPACE=my-ns GPU_PREFIX_NVIDIA="my_custom_gpu_"
 | `GPU_METRICS_PREFIX_NVIDIA` | Additional NVIDIA metric prefixes (comma-separated) | (empty) |
 | `GPU_METRICS_PREFIX_INTEL` | Additional Intel metric prefixes (comma-separated) | (empty) |
 | `GPU_METRICS_PREFIX_AMD` | Additional AMD metric prefixes (comma-separated) | (empty) |
+| `DISCOVERY_TIMEOUT_SECONDS` | Timeout for GPU discovery and catalog validation (seconds) | `10.0` |
 
 ### MetricsCatalog initialization parameters
 
@@ -634,9 +635,9 @@ make install-mcp-server NAMESPACE=my-ns GPU_PREFIX_NVIDIA="my_custom_gpu_"
 | `catalog_path` | `Optional[Path]` | Auto-detected | Path to catalog JSON |
 | `prometheus_url` | `Optional[str]` | From `config.PROMETHEUS_URL` | Prometheus URL for discovery and validation |
 | `enable_gpu_discovery` | `bool` | `True` | Enable async GPU discovery |
-| `gpu_discovery_timeout` | `float` | `10.0` | GPU discovery timeout (seconds) |
+| `gpu_discovery_timeout` | `float` | `DISCOVERY_TIMEOUT_SECONDS` | GPU discovery timeout (seconds) |
 | `enable_catalog_validation` | `bool` | `True` | Enable catalog validation against live Prometheus |
-| `catalog_validation_timeout` | `float` | `10.0` | Validation timeout (seconds) |
+| `catalog_validation_timeout` | `float` | `DISCOVERY_TIMEOUT_SECONDS` | Validation timeout (seconds) |
 
 ### Performance characteristics
 

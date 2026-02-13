@@ -16,8 +16,12 @@ import os
 import re
 import threading
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Set
+from typing import Callable, Dict, List, Optional, Set
 from enum import Enum
+
+import requests
+
+from .config import DISCOVERY_TIMEOUT_SECONDS
 
 logger = logging.getLogger(__name__)
 
@@ -156,7 +160,6 @@ class GPUMetricsDiscovery:
             for vendor, patterns in vendor_patterns.items()
         }
         self._framework_regex = re.compile("|".join(self.FRAMEWORK_PATTERNS))
-        self._lock = threading.Lock()
 
     def _request_headers(self) -> Dict[str, str]:
         """Build HTTP headers with Bearer token if configured."""
@@ -251,7 +254,7 @@ class GPUMetricsDiscovery:
         # Limit total keywords
         return list(keywords)[:12]
 
-    def discover(self, timeout_seconds: float = 10.0) -> GPUDiscoveryResult:
+    def discover(self, timeout_seconds: float = DISCOVERY_TIMEOUT_SECONDS) -> GPUDiscoveryResult:
         """
         Discover GPU metrics from Prometheus.
 
@@ -263,19 +266,6 @@ class GPUMetricsDiscovery:
         """
         import time
         start_time = time.perf_counter()
-
-        try:
-            # Import requests here to avoid import errors if not installed
-            import requests
-        except ImportError:
-            return GPUDiscoveryResult(
-                vendor=GPUVendor.UNKNOWN,
-                metrics_high=[],
-                metrics_medium=[],
-                total_discovered=0,
-                discovery_time_ms=0,
-                error="requests library not installed"
-            )
 
         try:
             # Step 1: Get all metric names
@@ -394,8 +384,6 @@ class GPUMetricsDiscovery:
         Returns:
             Dict mapping metric name to metadata (type, help)
         """
-        import requests
-
         try:
             # Use /api/v1/metadata endpoint
             response = requests.get(
@@ -431,8 +419,8 @@ class GPUMetricsDiscovery:
 
     def discover_async(
         self,
-        callback: Optional[callable] = None,
-        timeout_seconds: float = 10.0
+        callback: Optional[Callable[[object], None]] = None,
+        timeout_seconds: float = DISCOVERY_TIMEOUT_SECONDS
     ) -> threading.Thread:
         """
         Discover GPU metrics asynchronously.
@@ -457,7 +445,7 @@ class GPUMetricsDiscovery:
 # Convenience function for direct discovery
 def discover_gpu_metrics(
     prometheus_url: str,
-    timeout_seconds: float = 10.0,
+    timeout_seconds: float = DISCOVERY_TIMEOUT_SECONDS,
     ssl_verify=True,
     auth_token: Optional[str] = None,
 ) -> GPUDiscoveryResult:

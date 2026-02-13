@@ -15,6 +15,10 @@ import time
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set, Tuple
 
+import requests
+
+from .config import DISCOVERY_TIMEOUT_SECONDS
+
 logger = logging.getLogger(__name__)
 
 # --------------------------------------------------------------------------
@@ -229,7 +233,7 @@ class CatalogValidator:
         categories: List[Dict],
         lookup: Dict[str, Dict],
         skip_categories: Optional[Set[str]] = None,
-        timeout: float = 10.0,
+        timeout: float = DISCOVERY_TIMEOUT_SECONDS,
     ) -> CatalogValidationResult:
         """
         Validate catalog against Prometheus.
@@ -245,14 +249,6 @@ class CatalogValidator:
         """
         start_time = time.perf_counter()
         skip = skip_categories if skip_categories is not None else self.SKIP_CATEGORIES
-
-        try:
-            import requests
-        except ImportError:
-            return CatalogValidationResult(
-                error="requests library not installed",
-                validation_time_ms=(time.perf_counter() - start_time) * 1000,
-            )
 
         try:
             # Step 1: Fetch all metric names from Prometheus
@@ -389,8 +385,6 @@ class CatalogValidator:
         Returns:
             List of metric name strings, or empty list on failure.
         """
-        import requests
-
         response = requests.get(
             f"{self.prometheus_url}/api/v1/label/__name__/values",
             headers=self._request_headers(),
@@ -415,8 +409,6 @@ class CatalogValidator:
         Returns:
             Dict mapping metric name to {type, help}. Empty dict on failure.
         """
-        import requests
-
         try:
             response = requests.get(
                 f"{self.prometheus_url}/api/v1/metadata",

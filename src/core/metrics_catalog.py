@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Set
 from dataclasses import dataclass
 
-from core.config import PROMETHEUS_URL, VERIFY_SSL, THANOS_TOKEN
+from .config import DISCOVERY_TIMEOUT_SECONDS, PROMETHEUS_URL, VERIFY_SSL, THANOS_TOKEN
 
 logger = logging.getLogger(__name__)
 
@@ -66,9 +66,9 @@ class MetricsCatalog:
         catalog_path: Optional[Path] = None,
         prometheus_url: Optional[str] = None,
         enable_gpu_discovery: bool = True,
-        gpu_discovery_timeout: float = 10.0,
+        gpu_discovery_timeout: float = DISCOVERY_TIMEOUT_SECONDS,
         enable_catalog_validation: bool = True,
-        catalog_validation_timeout: float = 10.0,
+        catalog_validation_timeout: float = DISCOVERY_TIMEOUT_SECONDS,
     ):
         """
         Initialize metrics catalog.
@@ -195,7 +195,7 @@ class MetricsCatalog:
 
         def _discover():
             try:
-                from core.gpu_metrics_discovery import GPUMetricsDiscovery
+                from .gpu_metrics_discovery import GPUMetricsDiscovery
 
                 discovery = GPUMetricsDiscovery(
                     self._prometheus_url,
@@ -334,7 +334,7 @@ class MetricsCatalog:
 
         def _validate():
             try:
-                from core.catalog_validator import CatalogValidator
+                from .catalog_validator import CatalogValidator
 
                 validator = CatalogValidator(
                     self._prometheus_url,

@@ -9,6 +9,7 @@ import {
   Text,
   TextContent,
   TextVariants,
+  Tooltip,
 } from '@patternfly/react-core';
 import { DownloadIcon } from '@patternfly/react-icons';
 import { MetricsCatalogTab } from './MetricsCatalogTab';
@@ -26,6 +27,12 @@ export const MetricsSettingsTab: React.FC = () => {
 
   const handleSubtabSelect = (_event: React.MouseEvent<HTMLElement, MouseEvent>, tabIndex: string | number) => {
     setActiveSubtab(tabIndex as MetricsSubtab);
+  };
+
+  const subtabLabels: Record<MetricsSubtab, string> = {
+    catalog: 'Chat Metrics Catalog',
+    vllm: 'vLLM Metrics',
+    openshift: 'OpenShift Metrics',
   };
 
   const handleDownload = () => {
@@ -54,14 +61,16 @@ export const MetricsSettingsTab: React.FC = () => {
           </TextContent>
         </FlexItem>
         <FlexItem>
-          <Button
-            variant="secondary"
-            icon={<DownloadIcon />}
-            onClick={handleDownload}
-            aria-label="Download metrics as markdown"
-          >
-            Download
-          </Button>
+          <Tooltip content={`Download ${subtabLabels[activeSubtab]} as markdown`}>
+            <Button
+              variant="secondary"
+              icon={<DownloadIcon />}
+              onClick={handleDownload}
+              aria-label={`Download ${subtabLabels[activeSubtab]} as markdown`}
+            >
+              Download
+            </Button>
+          </Tooltip>
         </FlexItem>
       </Flex>
 
