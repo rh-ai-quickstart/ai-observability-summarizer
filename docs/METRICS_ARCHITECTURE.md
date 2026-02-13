@@ -13,11 +13,12 @@ This document describes the metrics catalog system: how metrics are pre-loaded, 
 5. [Non-GPU Catalog Validation (Sync)](#non-gpu-catalog-validation-sync)
 6. [Categories and Keywords](#categories-and-keywords)
 7. [Query Flow: From User Question to PromQL](#query-flow-from-user-question-to-promql)
-8. [Frontend — Metrics Catalog Search & Caching](#frontend--metrics-catalog-search--caching)
-9. [Frontend — Metric Categories in AI Chat](#frontend--metric-categories-in-ai-chat)
-10. [Architecture Decision Records](#architecture-decision-records)
-11. [Configuration Reference](#configuration-reference)
-12. [Appendix: File Reference](#appendix-file-reference)
+8. [Canonical Questions and Chat Enhancements](#canonical-questions-and-chat-enhancements)
+9. [Frontend — Metrics Catalog Search & Caching](#frontend--metrics-catalog-search--caching)
+10. [Frontend — Metric Categories in AI Chat](#frontend--metric-categories-in-ai-chat)
+11. [Architecture Decision Records](#architecture-decision-records)
+12. [Configuration Reference](#configuration-reference)
+13. [Appendix: File Reference](#appendix-file-reference)
 
 ---
 
@@ -498,6 +499,103 @@ These tools return clean JSON responses for direct use by frontend components:
 | `get_category_metrics_detail` | When called **without** `category_id`: returns JSON array of all category summaries (id, name, icon, metric count, priority distribution). When called **with** `category_id`: returns that category's detailed metrics including name, type, help text, and keywords, grouped by priority. Used by the Metrics Catalog tab in Settings. |
 
 > **Note:** `get_metrics_categories` (AI) and `get_category_metrics_detail` (UI) serve similar data but in different formats. The AI tool includes markdown formatting and example queries for LLM reasoning. The UI tool returns structured JSON for rendering in PatternFly components. They are intentionally separate to keep each consumer's contract clean.
+
+---
+
+## Canonical Questions and Chat Enhancements
+
+This section covers how `chat_with_prometheus.py` handles a defined set of canonical question patterns and the vLLM-specific enhancements that improve metric discovery and PromQL generation for inference workloads.
+
+### Intent detection
+
+`extract_key_concepts()` analyzes the user's question and classifies it into one of 8 intent types. The original 4 intents (`current_value`, `count`, `average`, `percentile`) were extended with 4 new intents to cover common operational queries:
+
+| Intent Type | Trigger Keywords | Example Question |
+|-------------|-----------------|------------------|
+| `current_value` | "current", "now", "latest", "what is" | "What is the GPU temperature?" |
+| `count` | "how many", "count", "total" | "How many pods are running?" |
+| `average` | "average", "avg", "mean" | "What is the average CPU usage?" |
+| `percentile` | "p95", "p99", "percentile", "distribution" | "What is the P95 latency?" |
+| `top_n` | "top", "highest", "lowest", "busiest", "ranking" | "Which pods have the highest memory?" |
+| `comparison` | "compare", "vs", "versus", "difference between" | "Compare latency across models" |
+| `trend` | "over time", "changed", "increasing", "decreasing", "trend" | "How has GPU utilization changed?" |
+| `rate` | "rate", "per second", "throughput", "tokens per second" | "What is the token throughput rate?" |
+
+### Measurement types
+
+`extract_key_concepts()` also extracts measurement types from the question. In addition to the original types (temperature, memory, cpu, gpu, network, latency, usage), 5 vLLM-specific measurement types were added:
+
+| Measurement | Trigger Keywords | Maps to Metrics |
+|-------------|-----------------|-----------------|
+| `tokens` | "token", "tokens", "throughput" | `vllm:generation_tokens_total`, `vllm:prompt_tokens_total` |
+| `cache` | "cache", "kv cache", "prefix cache" | `vllm:gpu_cache_usage_perc`, `vllm:prefix_cache_*` |
+| `queue` | "queue", "waiting", "pending" | `vllm:num_requests_waiting`, `vllm:request_queue_time_seconds` |
+| `ttft` | "ttft", "time to first token" | `vllm:time_to_first_token_seconds` |
+| `tpot` | "tpot", "time per output token" | `vllm:inter_token_latency_seconds` |
+
+### vLLM-specific semantic scoring
+
+`calculate_semantic_score()` includes scoring rules that boost vLLM metrics when the user's question contains inference-related terms:
+
+| Pattern Match | Score Bonus | Example |
+|--------------|-------------|---------|
+| TTFT/TPOT/ITL abbreviation exact match | +20 | "ttft" intent + `vllm:time_to_first_token_seconds` |
+| vLLM/inference/model serving + `vllm:` metric | +15 | "vllm inference latency" + `vllm:e2e_request_latency_seconds` |
+| Token/throughput + token/generation metric | +12 | "token throughput" + `vllm:generation_tokens_total` |
+| Cache/kv cache + cache metric | +12 | "kv cache usage" + `vllm:gpu_cache_usage_perc` |
+
+These bonuses stack with the existing scoring (name match, type relevance, specificity), so a question like "What is the TTFT?" correctly selects `vllm:time_to_first_token_seconds` over other latency metrics.
+
+### PromQL generation for new intents
+
+`generate_metadata_driven_promql()` generates appropriate PromQL for each intent type based on the selected metric's type (counter, gauge, histogram):
+
+| Intent | Counter | Gauge | Histogram |
+|--------|---------|-------|-----------|
+| `rate` | `sum(rate(M[5m]))` | `rate(M[5m])` | `histogram_quantile(0.95, rate(M_bucket[5m]))` |
+| `trend` | `rate(M[5m])` | `avg_over_time(M[1h])` | `M` |
+| `top_n` | `topk(5, rate(M[5m]))` | `topk(5, M)` | `topk(5, M)` |
+| `comparison` | `sum by (model_name) (rate(M[5m]))` | `avg by (model_name) (M)` | `histogram_quantile(0.95, sum by (model_name, le) (rate(M_bucket[5m])))` |
+
+The `comparison` intent uses `model_name` as the default group-by label since the most common comparison is across vLLM model deployments.
+
+### Category hint extraction for vLLM
+
+`extract_category_hints()` in `metrics_catalog.py` maps user query keywords to metric categories. The `gpu_ai` category's keyword list was expanded to include vLLM-specific terms:
+
+- **Abbreviations:** ttft, tpot, itl, kv cache, prefix cache
+- **Latency phases:** decode, prefill, queue time, e2e latency, first token
+- **Throughput:** tokens per second, generation tokens, prompt tokens
+- **Model serving:** model serving, llm, serving, inference, cache hit, cache usage
+- **Scheduling:** preemption
+
+This ensures questions like "What is the TTFT?" or "Show prefix cache hit rate" correctly route to the `gpu_ai` category and return only GPU/inference metrics as candidates.
+
+### System prompt vLLM domain knowledge
+
+The system prompt in `base.py` includes a dedicated vLLM domain knowledge section that gives the LLM context about:
+
+- **Latency phases:** E2E, TTFT, queue time, prefill, decode -- and how they decompose (Queue + Prefill + Decode = E2E)
+- **Throughput metrics:** prompt tokens, generation tokens, and how to calculate tokens/sec with `rate()`
+- **KV cache and scheduling:** cache utilization gauges, running/waiting request counts, preemptions
+- **Prefix caching:** cache hit rate formula using `rate()` division
+- **Common abbreviations:** TTFT, TPOT, ITL, KV, E2E
+- **PromQL patterns:** P95 latency with `histogram_quantile`, per-model comparisons with `by (model_name)`, cache saturation checks
+
+This domain knowledge helps the LLM interpret metric results correctly and provide contextual explanations (e.g., "TTFT measures prompt processing + scheduling overhead").
+
+### Test coverage
+
+`tests/core/test_canonical_questions.py` provides parametrized tests covering the canonical question pipeline:
+
+| Test Class | What it Tests | Test Count |
+|------------|--------------|------------|
+| `TestExtractKeyConcepts` | Intent detection for all 8 types + measurement detection for vLLM types | ~25 |
+| `TestExtractCategoryHintsVLLM` | vLLM keywords mapping to `gpu_ai` category + no dangling `vllm` category | ~19 |
+| `TestGeneratePromQLNewIntents` | PromQL generation for 4 new intents across counter/gauge/histogram types + percentile rate wrapping | ~11 |
+| `TestSemanticScoreVLLM` | vLLM scoring bonuses (TTFT/TPOT/ITL +20, inference +15, token/cache +12) + negative cases | ~7 |
+
+The "no dangling vllm category" test verifies a bug fix: earlier, the keyword "vllm" mapped to a nonexistent `vllm` category instead of `gpu_ai`. The test confirms `extract_category_hints("vllm metrics")` returns `["gpu_ai"]` and does not include `"vllm"`.
 
 ### Frontend — Consolidated Metrics Settings Tab
 
