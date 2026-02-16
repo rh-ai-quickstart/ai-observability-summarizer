@@ -2582,6 +2582,17 @@ def build_correlated_context_from_metrics(
 
     Each line includes: pod, container, level, and the log message.
     """
+    import time
+    overall_start = time.perf_counter()
+
+    # Timing accumulators
+    time_extract_pairs = 0.0
+    time_fetch_korrel8r = 0.0
+    time_process_logs = 0.0
+    time_sort_logs = 0.0
+    time_filter_traces = 0.0
+    time_format_output = 0.0
+
     try:
         # Read MAX_NUM_TRACE_SPANS early to calculate trace fetch limit
         try:
@@ -2595,8 +2606,14 @@ def build_correlated_context_from_metrics(
         max_traces_limit = max_trace_spans * TRACE_FETCH_SAFETY_FACTOR
 
         # Gather all unique (namespace, pod) pairs from metrics
+        t_start = time.perf_counter()
         pairs = extract_namespace_pod_pairs_from_metrics(model_name, metric_dfs)
+        time_extract_pairs = time.perf_counter() - t_start
         logger.debug("In build_correlated_context_from_metrics: pairs=%s", pairs)
+        logger.info(
+            "build_correlated_context_from_metrics: Extracted %d namespace/pod pairs in %.3fs",
+            len(pairs), time_extract_pairs
+        )
         if not pairs:
             return ""
         goals = ["log:application", "log:infrastructure", "trace:span"]
@@ -2609,13 +2626,19 @@ def build_correlated_context_from_metrics(
                 if not query_str:
                     continue
                 logger.debug("In build_correlated_context_from_metrics: query_str=%s", query_str)
+
+                # Fetch correlated data from Korrel8r
+                t_start = time.perf_counter()
                 aggregated = fetch_goal_query_objects(
                     goals=goals,
                     query=query_str,
                     max_traces_per_query=max_traces_limit
                 )
+                time_fetch_korrel8r += time.perf_counter() - t_start
                 logger.debug("In build_correlated_context_from_metrics: aggregated=%s", aggregated)
+
                 # Logs
+                t_start = time.perf_counter()
                 for obj in aggregated.get("logs", []):
                     try:
                         message = obj.get("message") or obj.get("line") or ""
@@ -2628,6 +2651,8 @@ def build_correlated_context_from_metrics(
                         aggregated_logs.append(obj)
                     except Exception:
                         continue
+                time_process_logs += time.perf_counter() - t_start
+
                 # Traces (kept for potential downstream use)
                 try:
                     if isinstance(aggregated.get("traces", []), list):
@@ -2636,8 +2661,11 @@ def build_correlated_context_from_metrics(
                     pass
             except Exception:
                 continue
+
         # Sort aggregated logs by severity then timestamp
+        t_start = time.perf_counter()
         aggregated_logs_sorted = sort_logs_by_severity_then_time(aggregated_logs)
+        time_sort_logs = time.perf_counter() - t_start
         logger.debug("In build_correlated_context_from_metrics: aggregated_logs_sorted=%s", aggregated_logs_sorted)
         # Optionally log trace aggregate count for visibility
         try:
@@ -2648,6 +2676,7 @@ def build_correlated_context_from_metrics(
         except Exception:
             pass
         # Take top N (configurable) and build lines
+        t_start = time.perf_counter()
         try:
             max_rows = int(os.getenv("MAX_NUM_LOG_ROWS", "10"))
         except Exception:
@@ -2666,8 +2695,11 @@ def build_correlated_context_from_metrics(
                 continue
 
         result_str = "\n".join(lines)
+        time_format_output = time.perf_counter() - t_start
+
         # Filter error-like trace spans, then append top items using helper
         # (max_trace_spans already read at the beginning of the function)
+        t_start = time.perf_counter()
         filtered_spans = [s for s in aggregated_traces if isinstance(s, dict) and _span_is_error_like(s)]
         trace_lines_kv = []
         for span in filtered_spans[:max_trace_spans]:
@@ -2676,6 +2708,7 @@ def build_correlated_context_from_metrics(
         if trace_lines_kv:
             trace_section_str = "\n".join(trace_lines_kv)
             result_str = f"{result_str}\n{trace_section_str}" if result_str else trace_section_str
+        time_filter_traces = time.perf_counter() - t_start
         # Optionally inject a synthetic error log line for testing ONLY
         try:
             if os.getenv("INJECT_VLLM_ERROR_LOG_MSG"):
@@ -2686,6 +2719,25 @@ def build_correlated_context_from_metrics(
                 result_str = f"{result_str}\n{injected}" if result_str else injected
         except Exception:
             pass
+
+        # Log performance summary
+        overall_time = time.perf_counter() - overall_start
+        logger.info(
+            "build_correlated_context_from_metrics performance: total=%.3fs, breakdown: "
+            "extract_pairs=%.3fs, fetch_korrel8r=%.3fs (for %d pairs), "
+            "process_logs=%.3fs, sort_logs=%.3fs, filter_traces=%.3fs, format_output=%.3fs | "
+            "results: %d logs, %d trace spans",
+            overall_time,
+            time_extract_pairs,
+            time_fetch_korrel8r,
+            len(pairs),
+            time_process_logs,
+            time_sort_logs,
+            time_filter_traces,
+            time_format_output,
+            len(lines),
+            len(trace_lines_kv)
+        )
         logger.debug("In build_correlated_context_from_metrics: result=%s", result_str)
         return result_str
     except Exception:
