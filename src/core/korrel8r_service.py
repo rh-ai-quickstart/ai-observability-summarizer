@@ -12,9 +12,79 @@ from .tempo_service import TempoQueryService
 logger = get_python_logger()
 
 
-def _extract_unique_trace_ids(obj_result: Any) -> List[str]:
-    """Extract unique trace IDs from Korrel8r trace objects."""
+def _extract_timestamp_from_trace_obj(obj: Dict[str, Any]) -> int | None:
+    """
+    Extract timestamp (microseconds since epoch) from Korrel8r trace object.
+
+    Tries multiple field locations and formats:
+    - context.startTimeUnixNano (OTLP format)
+    - attributes.startTimeUnixNano
+    - attributes.startTime, timestamp, time
+
+    Returns None if no valid timestamp found.
+    """
+    try:
+        # Try context.startTimeUnixNano first (OTLP standard)
+        context = obj.get("context")
+        if isinstance(context, dict):
+            nano_ts = context.get("startTimeUnixNano")
+            if nano_ts is not None:
+                try:
+                    # Convert nanoseconds to microseconds
+                    return int(nano_ts) // 1000
+                except (ValueError, TypeError):
+                    pass
+
+        # Try attributes
+        attrs = obj.get("attributes")
+        if isinstance(attrs, dict):
+            # Try startTimeUnixNano
+            nano_ts = attrs.get("startTimeUnixNano")
+            if nano_ts is not None:
+                try:
+                    return int(nano_ts) // 1000
+                except (ValueError, TypeError):
+                    pass
+
+            # Try alternative field names
+            for field in ["startTime", "timestamp", "time"]:
+                ts_val = attrs.get(field)
+                if ts_val is not None:
+                    try:
+                        ts_int = int(ts_val)
+                        # Normalize to microseconds based on magnitude
+                        # Typical Unix epoch in nanoseconds: ~1.6e18 (year 2021)
+                        # Typical Unix epoch in microseconds: ~1.6e15 (year 2021)
+                        # Typical Unix epoch in milliseconds: ~1.6e12 (year 2021)
+                        if ts_int > 1_000_000_000_000_000_000:  # Nanoseconds (>1e18)
+                            return ts_int // 1000
+                        elif ts_int > 1_000_000_000_000_000:  # Microseconds (>1e15)
+                            return ts_int
+                        else:  # Milliseconds or smaller (<=1e15)
+                            return ts_int * 1000
+                    except (ValueError, TypeError):
+                        pass
+
+    except Exception as e:
+        logger.debug("Failed to extract timestamp from trace object: %s", e)
+
+    return None
+
+
+def _extract_unique_trace_ids(obj_result: Any, max_traces: int | None = None) -> List[str]:
+    """
+    Extract unique trace IDs from Korrel8r trace objects.
+
+    Args:
+        obj_result: Raw Korrel8r query_objects response
+        max_traces: Maximum trace IDs to return (None = all).
+                   Returns most recent N if timestamps available.
+
+    Returns:
+        List of unique trace IDs, sorted by timestamp desc if available.
+    """
     items: List[Dict[str, Any]] = []
+    logger.info("ZZZZ _extract_unique_trace_ids with obj_result=%s", obj_result)
     if isinstance(obj_result, list):
         items = [x for x in obj_result if isinstance(x, dict)]
     elif isinstance(obj_result, dict):
@@ -23,8 +93,11 @@ def _extract_unique_trace_ids(obj_result: Any) -> List[str]:
             items = [x for x in data if isinstance(x, dict)]
         else:
             items = [obj_result]
-    trace_ids: List[str] = []
+
+    # Extract trace IDs with timestamps
+    trace_data: List[tuple[str, int | None]] = []
     seen: Set[str] = set()
+
     for it in items:
         trace_id = None
         context = it.get("context") if isinstance(it, dict) else None
@@ -38,8 +111,39 @@ def _extract_unique_trace_ids(obj_result: Any) -> List[str]:
             )
         if isinstance(trace_id, str) and trace_id and trace_id not in seen:
             seen.add(trace_id)
-            trace_ids.append(trace_id)
-    return trace_ids
+            timestamp = _extract_timestamp_from_trace_obj(it)
+            trace_data.append((trace_id, timestamp))
+
+    # Sort by timestamp descending (most recent first)
+    # Items with timestamps come first, sorted by timestamp desc
+    # Items without timestamps come last, maintaining original order
+    trace_data_with_ts = [(tid, ts) for tid, ts in trace_data if ts is not None]
+    trace_data_without_ts = [(tid, ts) for tid, ts in trace_data if ts is None]
+
+    trace_data_with_ts.sort(key=lambda x: x[1], reverse=True)
+    sorted_trace_data = trace_data_with_ts + trace_data_without_ts
+
+    # Apply limit if specified
+    if max_traces is not None and max_traces >= 0:
+        total_count = len(sorted_trace_data)
+        sorted_trace_data = sorted_trace_data[:max_traces] if max_traces > 0 else []
+        limited_count = len(sorted_trace_data)
+
+        if total_count > 0:
+            logger.info(
+                "Extracted %d trace IDs from Korrel8r, limited to %d most recent (%.1f%% reduction)",
+                total_count,
+                limited_count,
+                100 * (1 - limited_count / total_count) if limited_count < total_count else 0
+            )
+            logger.debug(
+                "Timestamp availability: %d/%d traces have timestamps",
+                len(trace_data_with_ts),
+                total_count
+            )
+
+    # Return list of trace IDs
+    return [tid for tid, _ in sorted_trace_data]
 
 
 async def _fetch_trace_details_for_ids_async_all(trace_ids: List[str], concurrency: int = 10) -> List[Dict[str, Any]]:
@@ -192,12 +296,22 @@ def _simplify_trace_detail_to_spans(detail: Dict[str, Any], related_objects: Any
     return simplified_spans
 
  
-def fetch_goal_query_objects(goals: List[str], query: str) -> Dict[str, List[Any]]:
+def fetch_goal_query_objects(
+    goals: List[str],
+    query: str,
+    max_traces_per_query: int | None = None
+) -> Dict[str, List[Any]]:
     """Resolve Korrel8r goals from a start query and aggregate related objects by signal type.
 
     Builds a Start model from the provided query, requests goal-specific queries
     from Korrel8r, executes each query via query_objects, and aggregates results.
     Returns a dict with 'logs' and 'traces' keys to separate signal types.
+
+    Args:
+        goals: Korrel8r goal class names (e.g., ["trace:span"])
+        query: Korrel8r start query string
+        max_traces_per_query: Max trace IDs to fetch details for.
+                             None = fetch all. Recommended: 2-3x MAX_NUM_TRACE_SPANS.
     """
     start_payload: Dict[str, Any] = {"queries": [query]}
 
@@ -241,7 +355,7 @@ def fetch_goal_query_objects(goals: List[str], query: str) -> Dict[str, List[Any
                                 continue
                         # For traces: extract unique IDs, fetch Tempo details, simplify to spans (no filtering)
                         if bucket == "traces":
-                            trace_ids = _extract_unique_trace_ids(obj_result)
+                            trace_ids = _extract_unique_trace_ids(obj_result, max_traces=max_traces_per_query)
                             logger.debug("fetch_goal_query_objects trace_ids=%s", trace_ids)
                             # Remove ones we've already processed
                             ids_to_fetch = [tid for tid in trace_ids if tid not in seen_trace_ids]

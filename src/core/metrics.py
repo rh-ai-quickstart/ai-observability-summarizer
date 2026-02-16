@@ -2583,6 +2583,17 @@ def build_correlated_context_from_metrics(
     Each line includes: pod, container, level, and the log message.
     """
     try:
+        # Read MAX_NUM_TRACE_SPANS early to calculate trace fetch limit
+        try:
+            max_trace_spans = int(os.getenv("MAX_NUM_TRACE_SPANS", "10"))
+        except Exception:
+            max_trace_spans = 10
+
+        # Define safety factor to fetch extra traces for error filtering
+        TRACE_FETCH_SAFETY_FACTOR = 2  # Fetch 2x to account for error filtering
+
+        max_traces_limit = max_trace_spans * TRACE_FETCH_SAFETY_FACTOR
+
         # Gather all unique (namespace, pod) pairs from metrics
         pairs = extract_namespace_pod_pairs_from_metrics(model_name, metric_dfs)
         logger.debug("In build_correlated_context_from_metrics: pairs=%s", pairs)
@@ -2598,7 +2609,11 @@ def build_correlated_context_from_metrics(
                 if not query_str:
                     continue
                 logger.debug("In build_correlated_context_from_metrics: query_str=%s", query_str)
-                aggregated = fetch_goal_query_objects(goals, query_str)
+                aggregated = fetch_goal_query_objects(
+                    goals=goals,
+                    query=query_str,
+                    max_traces_per_query=max_traces_limit
+                )
                 logger.debug("In build_correlated_context_from_metrics: aggregated=%s", aggregated)
                 # Logs
                 for obj in aggregated.get("logs", []):
@@ -2652,10 +2667,7 @@ def build_correlated_context_from_metrics(
 
         result_str = "\n".join(lines)
         # Filter error-like trace spans, then append top items using helper
-        try:
-            max_trace_spans = int(os.getenv("MAX_NUM_TRACE_SPANS", "10"))
-        except Exception:
-            max_trace_spans = 10
+        # (max_trace_spans already read at the beginning of the function)
         filtered_spans = [s for s in aggregated_traces if isinstance(s, dict) and _span_is_error_like(s)]
         trace_lines_kv = []
         for span in filtered_spans[:max_trace_spans]:
