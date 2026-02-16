@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from threading import Thread
 from typing import Any, Dict, List, Set
 
@@ -83,6 +84,7 @@ def _extract_unique_trace_ids(obj_result: Any, max_traces: int | None = None) ->
     Returns:
         List of unique trace IDs, sorted by timestamp desc if available.
     """
+    start_time = time.perf_counter()
     items: List[Dict[str, Any]] = []
     logger.info("ZZZZ _extract_unique_trace_ids with obj_result=%s", obj_result)
     if isinstance(obj_result, list):
@@ -95,6 +97,7 @@ def _extract_unique_trace_ids(obj_result: Any, max_traces: int | None = None) ->
             items = [obj_result]
 
     # Extract trace IDs with timestamps
+    extraction_start = time.perf_counter()
     trace_data: List[tuple[str, int | None]] = []
     seen: Set[str] = set()
 
@@ -114,14 +117,18 @@ def _extract_unique_trace_ids(obj_result: Any, max_traces: int | None = None) ->
             timestamp = _extract_timestamp_from_trace_obj(it)
             trace_data.append((trace_id, timestamp))
 
+    extraction_time = time.perf_counter() - extraction_start
+
     # Sort by timestamp descending (most recent first)
     # Items with timestamps come first, sorted by timestamp desc
     # Items without timestamps come last, maintaining original order
+    sorting_start = time.perf_counter()
     trace_data_with_ts = [(tid, ts) for tid, ts in trace_data if ts is not None]
     trace_data_without_ts = [(tid, ts) for tid, ts in trace_data if ts is None]
 
     trace_data_with_ts.sort(key=lambda x: x[1], reverse=True)
     sorted_trace_data = trace_data_with_ts + trace_data_without_ts
+    sorting_time = time.perf_counter() - sorting_start
 
     # Apply limit if specified
     if max_traces is not None and max_traces >= 0:
@@ -143,6 +150,11 @@ def _extract_unique_trace_ids(obj_result: Any, max_traces: int | None = None) ->
             )
 
     # Return list of trace IDs
+    total_time = time.perf_counter() - start_time
+    logger.debug(
+        "_extract_unique_trace_ids timing: total=%.3fs (extraction=%.3fs, sorting=%.3fs)",
+        total_time, extraction_time, sorting_time
+    )
     return [tid for tid, _ in sorted_trace_data]
 
 
@@ -176,8 +188,16 @@ def _get_trace_details_sync(trace_ids: List[str]) -> List[Dict[str, Any]]:
     """Synchronous wrapper to fetch ALL trace details with async Tempo service, handling running loops."""
     if not trace_ids:
         return []
+    start_time = time.perf_counter()
+    trace_count = len(trace_ids)
     try:
-        return asyncio.run(_fetch_trace_details_for_ids_async_all(trace_ids))
+        result = asyncio.run(_fetch_trace_details_for_ids_async_all(trace_ids))
+        elapsed = time.perf_counter() - start_time
+        logger.info(
+            "_get_trace_details_sync: Fetched %d traces from Tempo in %.3fs (avg %.3fs per trace)",
+            trace_count, elapsed, elapsed / trace_count if trace_count > 0 else 0
+        )
+        return result
     except RuntimeError:
         result: List[Dict[str, Any]] = []
         def runner() -> None:
@@ -186,6 +206,11 @@ def _get_trace_details_sync(trace_ids: List[str]) -> List[Dict[str, Any]]:
         t = Thread(target=runner, daemon=True)
         t.start()
         t.join()
+        elapsed = time.perf_counter() - start_time
+        logger.info(
+            "_get_trace_details_sync: Fetched %d traces from Tempo in %.3fs (avg %.3fs per trace) [thread mode]",
+            trace_count, elapsed, elapsed / trace_count if trace_count > 0 else 0
+        )
         return result
 
 
@@ -194,6 +219,7 @@ def _simplify_trace_detail_to_spans(detail: Dict[str, Any], related_objects: Any
     Simplify a Tempo/Jaeger trace detail response to a list of spans (no error filtering).
     Keeps tags as a flattened dict where possible and enriches with namespace/pod if available.
     """
+    start_time = time.perf_counter()
     logger.debug("_simplify_trace_detail_to_spans with detail=%s, related_objects=%s", detail, related_objects)
     simplified_spans: List[Dict[str, Any]] = []
     try:
@@ -291,7 +317,11 @@ def _simplify_trace_detail_to_spans(detail: Dict[str, Any], related_objects: Any
                     pass
                 simplified_spans.append(one_span)
     except Exception:
+        elapsed = time.perf_counter() - start_time
+        logger.debug("_simplify_trace_detail_to_spans: Processed to %d spans in %.3fs", len(simplified_spans), elapsed)
         return simplified_spans
+    elapsed = time.perf_counter() - start_time
+    logger.debug("_simplify_trace_detail_to_spans: Processed to %d spans in %.3fs", len(simplified_spans), elapsed)
     logger.debug("_simplify_trace_detail_to_spans returns simplified_spans=%s", simplified_spans)
     return simplified_spans
 
@@ -313,10 +343,20 @@ def fetch_goal_query_objects(
         max_traces_per_query: Max trace IDs to fetch details for.
                              None = fetch all. Recommended: 2-3x MAX_NUM_TRACE_SPANS.
     """
+    overall_start = time.perf_counter()
     start_payload: Dict[str, Any] = {"queries": [query]}
 
+    # Timing accumulators
+    time_korrel8r_list_goals = 0.0
+    time_korrel8r_query_objects = 0.0
+    time_extract_trace_ids = 0.0
+    time_fetch_trace_details = 0.0
+    time_simplify_spans = 0.0
+
     client = Korrel8rClient()
+    t_start = time.perf_counter()
     goals_result = client.list_goals(goals=goals, start=start_payload)
+    time_korrel8r_list_goals = time.perf_counter() - t_start
     logger.debug("fetch_goal_query_objects with goals=%s, query=%s, goals_result=%s", goals, query, goals_result)
     aggregated: Dict[str, List[Any]] = {"logs": [], "traces": []}
     seen_trace_ids: Set[str] = set()
@@ -346,7 +386,9 @@ def fetch_goal_query_objects(
                         qstr = q.get("query") if isinstance(q, dict) else None
                         if not qstr:
                             continue
+                        t_start = time.perf_counter()
                         obj_result = client.query_objects(qstr)
+                        time_korrel8r_query_objects += time.perf_counter() - t_start
                         # For logs, attempt to simplify log objects
                         if bucket == "logs":
                             simplified = client.simplify_log_objects(obj_result)
@@ -355,19 +397,25 @@ def fetch_goal_query_objects(
                                 continue
                         # For traces: extract unique IDs, fetch Tempo details, simplify to spans (no filtering)
                         if bucket == "traces":
+                            t_start = time.perf_counter()
                             trace_ids = _extract_unique_trace_ids(obj_result, max_traces=max_traces_per_query)
+                            time_extract_trace_ids += time.perf_counter() - t_start
                             logger.debug("fetch_goal_query_objects trace_ids=%s", trace_ids)
                             # Remove ones we've already processed
                             ids_to_fetch = [tid for tid in trace_ids if tid not in seen_trace_ids]
                             seen_trace_ids.update(ids_to_fetch)
                             logger.debug("fetch_goal_query_objects ids_to_fetch=%s", ids_to_fetch)
                             if ids_to_fetch:
+                                t_start = time.perf_counter()
                                 all_traces = _get_trace_details_sync(ids_to_fetch)
+                                time_fetch_trace_details += time.perf_counter() - t_start
                                 logger.debug("fetch_goal_query_objects all_traces=%s", all_traces)
                                 if isinstance(all_traces, list):
                                     simplified_spans_all: List[Dict[str, Any]] = []
                                     for dt in all_traces:
+                                        t_start = time.perf_counter()
                                         simplified_spans_all.extend(_simplify_trace_detail_to_spans(dt, obj_result))
+                                        time_simplify_spans += time.perf_counter() - t_start
                                     aggregated[bucket].extend(simplified_spans_all)
                                 continue
                         # Fallback/default aggregation
@@ -383,6 +431,23 @@ def fetch_goal_query_objects(
                         continue
             except Exception:
                 continue
+
+    # Log performance summary
+    overall_time = time.perf_counter() - overall_start
+    logger.info(
+        "fetch_goal_query_objects performance: total=%.3fs, breakdown: "
+        "korrel8r_list_goals=%.3fs, korrel8r_query_objects=%.3fs, "
+        "extract_trace_ids=%.3fs, fetch_trace_details=%.3fs, simplify_spans=%.3fs | "
+        "results: %d logs, %d trace spans",
+        overall_time,
+        time_korrel8r_list_goals,
+        time_korrel8r_query_objects,
+        time_extract_trace_ids,
+        time_fetch_trace_details,
+        time_simplify_spans,
+        len(aggregated.get("logs", [])),
+        len(aggregated.get("traces", []))
+    )
     logger.debug("fetch_goal_query_objects returns aggregated=%s", aggregated)
     return aggregated
 
