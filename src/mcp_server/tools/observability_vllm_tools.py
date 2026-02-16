@@ -722,32 +722,64 @@ def analyze_vllm(
 
         # Return as plain JSON string (not wrapped in MCP format)
         return json.dumps(structured_response)
-        
+
     except PrometheusError as e:
-        return e.to_mcp_response()
+        # Extract text from MCP response and return as JSON string
+        mcp_response = e.to_mcp_response()
+        error_text = mcp_response[0]["text"] if mcp_response and mcp_response[0].get("text") else str(e.message)
+        return json.dumps({
+            "model_name": model_name,
+            "summary": error_text,
+            "time_range": time_range or "",
+        })
     except LLMServiceError as e:
-        return e.to_mcp_response()
+        # Extract text from MCP response and return as JSON string
+        mcp_response = e.to_mcp_response()
+        error_text = mcp_response[0]["text"] if mcp_response and mcp_response[0].get("text") else str(e.message)
+        return json.dumps({
+            "model_name": model_name,
+            "summary": error_text,
+            "time_range": time_range or "",
+        })
     except TimeoutError as e:
         error = MCPException(
             message=f"Analysis timed out: {str(e)}",
             error_code=MCPErrorCode.TIMEOUT_ERROR,
             recovery_suggestion="The AI analysis took too long. Try using a faster model or reducing the time range."
         )
-        return error.to_mcp_response()
+        mcp_response = error.to_mcp_response()
+        error_text = mcp_response[0]["text"] if mcp_response and mcp_response[0].get("text") else str(error.message)
+        return json.dumps({
+            "model_name": model_name,
+            "summary": error_text,
+            "time_range": time_range or "",
+        })
     except ConnectionError as e:
         error = MCPException(
             message=f"Connection failed: {str(e)}",
             error_code=MCPErrorCode.CONNECTION_ERROR,
             recovery_suggestion="Failed to connect to the AI service. Check your network connection and API endpoint."
         )
-        return error.to_mcp_response()
+        mcp_response = error.to_mcp_response()
+        error_text = mcp_response[0]["text"] if mcp_response and mcp_response[0].get("text") else str(error.message)
+        return json.dumps({
+            "model_name": model_name,
+            "summary": error_text,
+            "time_range": time_range or "",
+        })
     except Exception as e:
         error = MCPException(
             message=f"Analysis failed: {str(e)}",
             error_code=MCPErrorCode.INTERNAL_ERROR,
             recovery_suggestion="Please try again. If the problem persists, contact support."
         )
-        return error.to_mcp_response()
+        mcp_response = error.to_mcp_response()
+        error_text = mcp_response[0]["text"] if mcp_response and mcp_response[0].get("text") else str(error.message)
+        return json.dumps({
+            "model_name": model_name,
+            "summary": error_text,
+            "time_range": time_range or "",
+        })
 
 
 def calculate_metrics(
