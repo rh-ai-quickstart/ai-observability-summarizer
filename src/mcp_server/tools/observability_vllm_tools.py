@@ -28,6 +28,7 @@ import json
 import math
 import os
 import re
+import time
 import pandas as pd
 from typing import Dict, Any, List, Optional
 from datetime import datetime
@@ -576,7 +577,19 @@ def analyze_vllm(
     Returns:
         JSON string: {"model_name": "...", "summary": "...", "time_range": "..."}
     """
+    overall_start = time.perf_counter()
+
+    # Timing accumulators
+    time_validation = 0.0
+    time_time_range_resolution = 0.0
+    time_fetch_metrics = 0.0
+    time_korrel8r_context = 0.0
+    time_build_prompt = 0.0
+    time_api_key_resolution = 0.0
+    time_llm_summarization = 0.0
+
     # Validate required parameters
+    t_start = time.perf_counter()
     try:
         validate_required_params(model_name=model_name, summarize_model_id=summarize_model_id)
     except ValidationError as e:
@@ -588,8 +601,10 @@ def analyze_vllm(
             recovery_suggestion="Please check the input parameters and try again."
         )
         return error.to_mcp_response()
+    time_validation = time.perf_counter() - t_start
 
     # Resolve time range → start_ts/end_ts via common helper
+    t_start = time.perf_counter()
     try:
         resolved_start, resolved_end = resolve_time_range(
             time_range=time_range,
@@ -616,16 +631,25 @@ def analyze_vllm(
             recovery_suggestion="Please check the time range and try again."
         )
         return error.to_mcp_response()
+    time_time_range_resolution = time.perf_counter() - t_start
 
     # Collect metrics and perform analysis
     try:
+        # Fetch metrics from Prometheus
+        t_start = time.perf_counter()
         vllm_metrics = get_vllm_metrics()
         metric_dfs: Dict[str, Any] = {
             label: fetch_metrics(query, model_name, resolved_start, resolved_end)
                 for label, query in vllm_metrics.items()
         }
+        time_fetch_metrics = time.perf_counter() - t_start
+        logger.info(
+            "analyze_vllm: Fetched %d metrics from Prometheus in %.3fs",
+            len(metric_dfs), time_fetch_metrics
+        )
 
-        # --- Phase 1: Korrel8r enrichment (logs only) ---
+        # --- Phase 1: Korrel8r enrichment (logs and traces) ---
+        t_start = time.perf_counter()
         korrel8r_section: Dict[str, Any] = {}
         korrel8r_prompt_note: str = ""
         log_trace_data: str = ""
@@ -635,19 +659,58 @@ def analyze_vllm(
             start_ts=resolved_start,
             end_ts=resolved_end,
         )
+        time_korrel8r_context = time.perf_counter() - t_start
+        logger.info(
+            "analyze_vllm: Built Korrel8r context (logs/traces) in %.3fs",
+            time_korrel8r_context
+        )
 
         # Build prompt base and summarize (Korrel8r enrichment may augment prompt later)
+        t_start = time.perf_counter()
         prompt = build_prompt(metric_dfs, model_name, log_trace_data)
+        time_build_prompt = time.perf_counter() - t_start
+        logger.debug(
+            "analyze_vllm: Built prompt (%d chars) in %.3fs",
+            len(prompt), time_build_prompt
+        )
 
         # Resolve API key with fallback logic (same as analyze_openshift and chat)
         # Priority: 1) Provided api_key (from UI), 2) Kubernetes secret
+        t_start = time.perf_counter()
         resolved_api_key = resolve_api_key(api_key=api_key, model_id=summarize_model_id)
+        time_api_key_resolution = time.perf_counter() - t_start
 
+        # LLM summarization (typically the most time-consuming step)
+        t_start = time.perf_counter()
         summary = summarize_with_llm(
             prompt,
             summarize_model_id,
             ResponseType.VLLM_ANALYSIS,
             resolved_api_key,
+        )
+        time_llm_summarization = time.perf_counter() - t_start
+        logger.info(
+            "analyze_vllm: LLM summarization (%s) completed in %.3fs",
+            summarize_model_id, time_llm_summarization
+        )
+
+        # Log overall performance summary
+        overall_time = time.perf_counter() - overall_start
+        logger.info(
+            "analyze_vllm performance: total=%.3fs, breakdown: "
+            "validation=%.3fs, time_range=%.3fs, fetch_metrics=%.3fs, "
+            "korrel8r_context=%.3fs, build_prompt=%.3fs, api_key=%.3fs, "
+            "llm_summarization=%.3fs | model=%s, metrics_count=%d",
+            overall_time,
+            time_validation,
+            time_time_range_resolution,
+            time_fetch_metrics,
+            time_korrel8r_context,
+            time_build_prompt,
+            time_api_key_resolution,
+            time_llm_summarization,
+            model_name,
+            len(metric_dfs)
         )
 
         # Return only the AI summary - metrics data comes from fetch_vllm_metrics_data
