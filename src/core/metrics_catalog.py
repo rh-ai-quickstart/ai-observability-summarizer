@@ -684,7 +684,7 @@ class MetricsCatalog:
         """
         query_lower = query.lower()
 
-        # Category keyword mapping (supports multiple GPU vendors)
+        # Category keyword mapping — IDs must match the catalog JSON exactly
         category_keywords = {
             "gpu_ai": [
                 "gpu", "nvidia", "cuda", "dcgm",  # NVIDIA
@@ -704,17 +704,18 @@ class MetricsCatalog:
             "etcd": ["etcd", "consensus", "key-value", "database"],
             "api_server": ["api", "apiserver", "kubernetes api"],
             "scheduler": ["schedule", "scheduling", "pending"],
-            "networking": ["network", "tcp", "udp", "packet", "bandwidth", "ingress", "egress"],
+            "networking": ["network", "tcp", "udp", "packet", "bandwidth", "ingress", "egress",
+                           "mesh", "istio", "service mesh", "route", "router"],
             "storage": ["storage", "pv", "pvc", "volume", "persistent"],
-            "registry": ["registry", "image", "container image"],
-            "authentication": ["auth", "authentication", "rbac", "oauth"],
-            "build": ["build", "buildconfig", "builder"],
-            "route": ["route", "router", "openshift router"],
-            "service_mesh": ["mesh", "istio", "service mesh"],
-            "monitoring": ["monitor", "prometheus", "alert"],
-            "operator": ["operator", "olm"],
+            "observability": ["monitor", "prometheus", "alert", "alertmanager", "grafana", "thanos"],
+            "security": ["auth", "authentication", "authorization", "rbac", "oauth", "security"],
+            "image_registry": ["registry", "image", "container image", "build", "buildconfig", "imageregistry"],
             "kubelet": ["kubelet"],
-            "controller": ["controller"],
+            "controller_manager": ["controller", "controller manager", "reconcile"],
+            "openshift_specific": ["openshift", "csv", "operator", "olm", "deploymentconfig"],
+            "backup_dr": ["backup", "restore", "velero", "disaster recovery"],
+            "go_runtime": ["go runtime", "goroutine", "gc", "garbage collection"],
+            "http_grpc": ["http", "grpc", "request duration", "proxy"],
         }
 
         # Find matching categories

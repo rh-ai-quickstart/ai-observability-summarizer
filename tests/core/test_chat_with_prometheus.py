@@ -114,6 +114,27 @@ class TestSemanticAnalysis:
         concepts = extract_key_concepts("How many tokens generated?")
         assert "tokens" in concepts["measurements"]
 
+    def test_semantic_score_multi_vendor_gpu(self):
+        """Test semantic scoring for Intel and AMD GPU vendors."""
+        from core.chat_with_prometheus import calculate_semantic_score
+
+        # Intel Gaudi intent + habanalabs metric
+        assert calculate_semantic_score("gaudi utilization", "habanalabs_utilization") > 0
+        assert calculate_semantic_score("habana temperature", "habanalabs_temperature_onchip") > 0
+        assert calculate_semantic_score("intel gpu", "habanalabs_power_mW") > 0
+
+        # AMD ROCm intent + amdgpu/rocm metric
+        assert calculate_semantic_score("amd gpu usage", "amdgpu_gpu_busy_percent") > 0
+        assert calculate_semantic_score("rocm temperature", "rocm_smi_temperature") > 0
+
+        # Cross-vendor: Intel intent should not match NVIDIA metric via GPU term
+        # (both contain "gpu" so this should still score > 0)
+        assert calculate_semantic_score("intel gpu", "DCGM_FI_DEV_GPU_TEMP") > 0
+
+        # Non-matching: GPU vendor intent with unrelated metric
+        assert calculate_semantic_score("habana", "kube_pod_status") == 0
+        assert calculate_semantic_score("rocm", "node_cpu_seconds_total") == 0
+
     def test_semantic_score_vllm_patterns(self):
         """Test vLLM-specific semantic scoring."""
         from core.chat_with_prometheus import calculate_semantic_score

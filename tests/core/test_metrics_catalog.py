@@ -331,6 +331,105 @@ class TestCategoryHintExtraction:
             for cat in expected_categories:
                 assert cat in hints, f"Expected {cat} in hints for query: {query}"
 
+    def test_corrected_category_ids(self, temp_catalog_file):
+        """Test that category IDs match actual catalog entries."""
+        catalog = MetricsCatalog(catalog_path=temp_catalog_file)
+
+        # observability (was incorrectly "monitoring")
+        hints = catalog.extract_category_hints("prometheus alert rules")
+        assert "observability" in hints
+        assert "monitoring" not in hints
+
+        hints = catalog.extract_category_hints("alertmanager notifications")
+        assert "observability" in hints
+
+        # security (was incorrectly "authentication")
+        hints = catalog.extract_category_hints("authentication rbac policies")
+        assert "security" in hints
+        assert "authentication" not in hints
+
+        hints = catalog.extract_category_hints("oauth authorization")
+        assert "security" in hints
+
+        # image_registry (was incorrectly "registry"; also absorbed "build")
+        hints = catalog.extract_category_hints("container image registry")
+        assert "image_registry" in hints
+        assert "registry" not in hints
+
+        hints = catalog.extract_category_hints("buildconfig pipeline")
+        assert "image_registry" in hints
+        assert "build" not in hints
+
+        # controller_manager (was incorrectly "controller")
+        hints = catalog.extract_category_hints("controller reconcile errors")
+        assert "controller_manager" in hints
+        assert "controller" not in hints
+
+        # networking absorbed route and service_mesh
+        hints = catalog.extract_category_hints("istio service mesh")
+        assert "networking" in hints
+        assert "service_mesh" not in hints
+
+        hints = catalog.extract_category_hints("openshift router")
+        assert "networking" in hints
+        assert "route" not in hints
+
+    def test_new_category_keywords(self, temp_catalog_file):
+        """Test keywords for newly added categories."""
+        catalog = MetricsCatalog(catalog_path=temp_catalog_file)
+
+        # openshift_specific (absorbed "operator"/"olm")
+        hints = catalog.extract_category_hints("operator olm subscription")
+        assert "openshift_specific" in hints
+        assert "operator" not in hints
+
+        hints = catalog.extract_category_hints("openshift deploymentconfig")
+        assert "openshift_specific" in hints
+
+        # backup_dr
+        hints = catalog.extract_category_hints("velero backup status")
+        assert "backup_dr" in hints
+
+        hints = catalog.extract_category_hints("disaster recovery restore")
+        assert "backup_dr" in hints
+
+        # go_runtime
+        hints = catalog.extract_category_hints("goroutine count")
+        assert "go_runtime" in hints
+
+        hints = catalog.extract_category_hints("garbage collection pauses")
+        assert "go_runtime" in hints
+
+        # http_grpc
+        hints = catalog.extract_category_hints("grpc request errors")
+        assert "http_grpc" in hints
+
+    def test_no_fabricated_category_ids_returned(self, temp_catalog_file):
+        """Verify that no old/fabricated category IDs are ever returned."""
+        catalog = MetricsCatalog(catalog_path=temp_catalog_file)
+
+        # These category IDs should never appear in hints
+        fabricated_ids = {"monitoring", "authentication", "registry",
+                         "controller", "build", "route", "service_mesh", "operator"}
+
+        test_queries = [
+            "prometheus monitoring alert",
+            "authentication oauth rbac",
+            "container image registry",
+            "controller reconcile",
+            "buildconfig builder",
+            "openshift router route",
+            "istio service mesh",
+            "operator olm",
+        ]
+
+        for query in test_queries:
+            hints = catalog.extract_category_hints(query)
+            returned_fabricated = fabricated_ids.intersection(hints)
+            assert not returned_fabricated, (
+                f"Query '{query}' returned fabricated category IDs: {returned_fabricated}"
+            )
+
 
 class TestCategoryHintsVLLMKeywords:
     """Test that vLLM-specific keywords correctly map to gpu_ai."""

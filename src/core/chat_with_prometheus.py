@@ -514,8 +514,8 @@ def calculate_semantic_score(intent: str, metric: str) -> int:
     metric_lower = metric.lower()
 
     # GPU/Hardware patterns
-    if any(gpu_term in intent for gpu_term in ["gpu", "graphics", "cuda", "nvidia"]):
-        if any(gpu_term in metric.lower() for gpu_term in ["gpu", "dcgm", "nvidia", "cuda"]):
+    if any(gpu_term in intent for gpu_term in ["gpu", "graphics", "cuda", "nvidia", "intel", "gaudi", "habana", "amd", "rocm"]):
+        if any(gpu_term in metric.lower() for gpu_term in ["gpu", "dcgm", "nvidia", "cuda", "habana", "habanalabs", "rocm", "amdgpu", "intel_gpu"]):
             score += 15
     
     # Temperature patterns
