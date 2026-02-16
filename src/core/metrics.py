@@ -436,7 +436,11 @@ def extract_namespace_pod_pairs_from_metrics(
     Uses DataFrame label columns when available and falls back to parsing
     namespace from model name formatted as "namespace | model". Deduplicates pairs.
     """
+    import time
+    start_time = time.perf_counter()
+
     pairs: Set[NamespacePodPair] = set()
+    total_rows_processed = 0
     try:
         for _label, df in metric_dfs.items():
             if df is None or not isinstance(df, pd.DataFrame) or df.empty:
@@ -445,11 +449,26 @@ def extract_namespace_pod_pairs_from_metrics(
             has_pod = "pod" in df.columns
             try:
                 if has_ns and has_pod:
-                    for _, row in df[["namespace", "pod"]].dropna(how="all").iterrows():
-                        ns_val = str(row["namespace"]).strip() if pd.notna(row.get("namespace")) else None
-                        pod_val = str(row["pod"]).strip() if pd.notna(row.get("pod")) else None
-                        if ns_val or pod_val:
-                            pairs.add(NamespacePodPair(namespace=ns_val or "", pod=pod_val))
+                    # Use vectorized pandas operations - much faster than iterrows()
+                    subset = df[["namespace", "pod"]].dropna(how="all")
+                    total_rows_processed += len(subset)
+
+                    # Get unique pairs efficiently using pandas - avoid iterrows()
+                    unique_pairs = subset.drop_duplicates()
+
+                    # Convert to strings and strip whitespace using vectorized operations
+                    if not unique_pairs.empty:
+                        unique_pairs = unique_pairs.copy()
+                        unique_pairs["namespace"] = unique_pairs["namespace"].astype(str).str.strip()
+                        unique_pairs["pod"] = unique_pairs["pod"].astype(str).str.strip()
+
+                        # Convert to set of NamespacePodPair objects
+                        for ns_val, pod_val in zip(unique_pairs["namespace"], unique_pairs["pod"]):
+                            # Skip nan/None values that became strings
+                            if ns_val and ns_val != "nan" and ns_val != "None":
+                                pairs.add(NamespacePodPair(namespace=ns_val, pod=pod_val))
+                            elif pod_val and pod_val != "nan" and pod_val != "None":
+                                pairs.add(NamespacePodPair(namespace="", pod=pod_val))
             except Exception:
                 continue
     except Exception:
@@ -462,6 +481,13 @@ def extract_namespace_pod_pairs_from_metrics(
                 pairs.add(NamespacePodPair(namespace=parts[0], pod=None))
     except Exception:
         pass
+
+    elapsed = time.perf_counter() - start_time
+    logger.info(
+        "extract_namespace_pod_pairs_from_metrics: Processed %d rows across %d metrics, "
+        "found %d unique pairs in %.3fs",
+        total_rows_processed, len(metric_dfs), len(pairs), elapsed
+    )
     logger.debug("extract_namespace_pod_pairs_from_metrics: pairs=%s", pairs)
     return pairs
 
