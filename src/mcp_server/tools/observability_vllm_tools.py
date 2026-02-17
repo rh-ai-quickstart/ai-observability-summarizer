@@ -593,14 +593,28 @@ def analyze_vllm(
     try:
         validate_required_params(model_name=model_name, summarize_model_id=summarize_model_id)
     except ValidationError as e:
-        return e.to_mcp_response()
+        mcp_response = e.to_mcp_response()
+        error_text = mcp_response[0]["text"] if mcp_response and mcp_response[0].get("text") else str(e.message)
+        return json.dumps({
+            "model_name": model_name,
+            "summary": error_text,
+            "time_range": time_range or "",
+            "is_error": True,
+        })
     except Exception as e:
         error = MCPException(
             message=f"Parameter validation failed: {str(e)}",
             error_code=MCPErrorCode.INVALID_INPUT,
             recovery_suggestion="Please check the input parameters and try again."
         )
-        return error.to_mcp_response()
+        mcp_response = error.to_mcp_response()
+        error_text = mcp_response[0]["text"] if mcp_response and mcp_response[0].get("text") else str(error.message)
+        return json.dumps({
+            "model_name": model_name,
+            "summary": error_text,
+            "time_range": time_range or "",
+            "is_error": True,
+        })
     time_validation = time.perf_counter() - t_start
 
     # Resolve time range → start_ts/end_ts via common helper
@@ -617,20 +631,41 @@ def analyze_vllm(
             error_code=MCPErrorCode.INVALID_INPUT,
             recovery_suggestion="Please check the time range parameters and try again."
         )
-        return error.to_mcp_response()
+        mcp_response = error.to_mcp_response()
+        error_text = mcp_response[0]["text"] if mcp_response and mcp_response[0].get("text") else str(error.message)
+        return json.dumps({
+            "model_name": model_name,
+            "summary": error_text,
+            "time_range": time_range or "",
+            "is_error": True,
+        })
 
     # Validate time range
     try:
         validate_time_range(resolved_start, resolved_end)
     except ValidationError as e:
-        return e.to_mcp_response()
+        mcp_response = e.to_mcp_response()
+        error_text = mcp_response[0]["text"] if mcp_response and mcp_response[0].get("text") else str(e.message)
+        return json.dumps({
+            "model_name": model_name,
+            "summary": error_text,
+            "time_range": time_range or "",
+            "is_error": True,
+        })
     except Exception as e:
         error = MCPException(
             message=f"Time range validation failed: {str(e)}",
             error_code=MCPErrorCode.INVALID_INPUT,
             recovery_suggestion="Please check the time range and try again."
         )
-        return error.to_mcp_response()
+        mcp_response = error.to_mcp_response()
+        error_text = mcp_response[0]["text"] if mcp_response and mcp_response[0].get("text") else str(error.message)
+        return json.dumps({
+            "model_name": model_name,
+            "summary": error_text,
+            "time_range": time_range or "",
+            "is_error": True,
+        })
     time_time_range_resolution = time.perf_counter() - t_start
 
     # Collect metrics and perform analysis

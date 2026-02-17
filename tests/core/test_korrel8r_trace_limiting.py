@@ -85,6 +85,16 @@ class TestExtractTimestampFromTraceObj:
         result = _extract_timestamp_from_trace_obj(obj)
         assert result == 1609459200123000  # Converted to microseconds
 
+    def test_extract_seconds_to_microseconds(self):
+        """Test that seconds are converted to microseconds."""
+        obj = {
+            "attributes": {
+                "time": 1609459200,  # Seconds (Unix epoch)
+            }
+        }
+        result = _extract_timestamp_from_trace_obj(obj)
+        assert result == 1609459200000000  # Converted to microseconds (× 1,000,000)
+
     def test_missing_timestamp_returns_none(self):
         """Test that missing timestamp returns None."""
         obj = {

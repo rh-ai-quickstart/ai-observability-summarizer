@@ -54,15 +54,19 @@ def _extract_timestamp_from_trace_obj(obj: Dict[str, Any]) -> Optional[int]:
                     try:
                         ts_int = int(ts_val)
                         # Normalize to microseconds based on magnitude
-                        # Typical Unix epoch in nanoseconds: ~1.6e18 (year 2021)
-                        # Typical Unix epoch in microseconds: ~1.6e15 (year 2021)
-                        # Typical Unix epoch in milliseconds: ~1.6e12 (year 2021)
+                        # Typical Unix epoch values (Feb 2026):
+                        # - Nanoseconds: ~1.7e18
+                        # - Microseconds: ~1.7e15
+                        # - Milliseconds: ~1.7e12
+                        # - Seconds: ~1.7e9
                         if ts_int > 1_000_000_000_000_000_000:  # Nanoseconds (>1e18)
                             return ts_int // 1000
                         elif ts_int > 1_000_000_000_000_000:  # Microseconds (>1e15)
                             return ts_int
-                        else:  # Milliseconds or smaller (<=1e15)
+                        elif ts_int > 1_000_000_000_000:  # Milliseconds (>1e12)
                             return ts_int * 1000
+                        else:  # Seconds (<=1e12)
+                            return ts_int * 1_000_000
                     except (ValueError, TypeError):
                         pass
 
