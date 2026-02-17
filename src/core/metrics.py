@@ -459,20 +459,13 @@ def extract_namespace_pod_pairs_from_metrics(
                     if not unique_pairs.empty:
                         unique_pairs = unique_pairs.copy()
 
-                        # Filter out rows where both namespace and pod are NaN/None
-                        # Keep rows where at least one field has a valid value
-                        ns_valid = unique_pairs["namespace"].notna()
-                        pod_valid = unique_pairs["pod"].notna()
-                        unique_pairs = unique_pairs[ns_valid | pod_valid]
-
-                        # Convert to strings and strip whitespace using vectorized operations
-                        # fillna ensures NaN/None become empty strings
+                        # Convert NaN/None to empty strings, then strip whitespace
                         unique_pairs["namespace"] = unique_pairs["namespace"].fillna("").astype(str).str.strip()
                         unique_pairs["pod"] = unique_pairs["pod"].fillna("").astype(str).str.strip()
 
                         # Convert to set of NamespacePodPair objects
+                        # Skip rows where both namespace and pod are empty (were NaN/None)
                         for ns_val, pod_val in zip(unique_pairs["namespace"], unique_pairs["pod"]):
-                            # Skip empty strings (which came from NaN/None after fillna)
                             if ns_val:
                                 pairs.add(NamespacePodPair(namespace=ns_val, pod=pod_val))
                             elif pod_val:
