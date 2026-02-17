@@ -1204,32 +1204,44 @@ def discover_vllm_metrics():
         # Phase 3: Prefix cache metrics (counters - use increase() for totals during window)
         if "vllm:prefix_cache_hit_total" in vllm_metrics:
             metric_mapping["Prefix Cache Hits Total"] = "sum(increase(vllm:prefix_cache_hit_total[5m]))"
+        elif "vllm:prefix_cache_hits_total" in vllm_metrics:
+            metric_mapping["Prefix Cache Hits Total"] = "sum(increase(vllm:prefix_cache_hits_total[5m]))"
         elif "vllm:cache_prefix_hits_total" in vllm_metrics:
             metric_mapping["Prefix Cache Hits Total"] = "sum(increase(vllm:cache_prefix_hits_total[5m]))"
 
         if "vllm:prefix_cache_query_total" in vllm_metrics:
             metric_mapping["Prefix Cache Queries Total"] = "sum(increase(vllm:prefix_cache_query_total[5m]))"
+        elif "vllm:prefix_cache_queries_total" in vllm_metrics:
+            metric_mapping["Prefix Cache Queries Total"] = "sum(increase(vllm:prefix_cache_queries_total[5m]))"
         elif "vllm:cache_prefix_queries_total" in vllm_metrics:
             metric_mapping["Prefix Cache Queries Total"] = "sum(increase(vllm:cache_prefix_queries_total[5m]))"
 
         if "vllm:gpu_prefix_cache_hit_total" in vllm_metrics:
             metric_mapping["Gpu Prefix Cache Hits Total"] = "sum(increase(vllm:gpu_prefix_cache_hit_total[5m]))"
+        elif "vllm:gpu_prefix_cache_hits_total" in vllm_metrics:
+            metric_mapping["Gpu Prefix Cache Hits Total"] = "sum(increase(vllm:gpu_prefix_cache_hits_total[5m]))"
         elif "vllm:gpu_cache_prefix_hits_total" in vllm_metrics:
             metric_mapping["Gpu Prefix Cache Hits Total"] = "sum(increase(vllm:gpu_cache_prefix_hits_total[5m]))"
 
         if "vllm:gpu_prefix_cache_query_total" in vllm_metrics:
             metric_mapping["Gpu Prefix Cache Queries Total"] = "sum(increase(vllm:gpu_prefix_cache_query_total[5m]))"
+        elif "vllm:gpu_prefix_cache_queries_total" in vllm_metrics:
+            metric_mapping["Gpu Prefix Cache Queries Total"] = "sum(increase(vllm:gpu_prefix_cache_queries_total[5m]))"
         elif "vllm:gpu_cache_prefix_queries_total" in vllm_metrics:
             metric_mapping["Gpu Prefix Cache Queries Total"] = "sum(increase(vllm:gpu_cache_prefix_queries_total[5m]))"
 
         # Cache hit/query rates (per second)
         if "vllm:gpu_prefix_cache_hit_total" in vllm_metrics:
             metric_mapping["Gpu Prefix Cache Hits Created"] = "rate(vllm:gpu_prefix_cache_hit_total[5m])"
+        elif "vllm:gpu_prefix_cache_hits_total" in vllm_metrics:
+            metric_mapping["Gpu Prefix Cache Hits Created"] = "rate(vllm:gpu_prefix_cache_hits_total[5m])"
         elif "vllm:gpu_cache_prefix_hits_total" in vllm_metrics:
             metric_mapping["Gpu Prefix Cache Hits Created"] = "rate(vllm:gpu_cache_prefix_hits_total[5m])"
 
         if "vllm:gpu_prefix_cache_query_total" in vllm_metrics:
             metric_mapping["Gpu Prefix Cache Queries Created"] = "rate(vllm:gpu_prefix_cache_query_total[5m])"
+        elif "vllm:gpu_prefix_cache_queries_total" in vllm_metrics:
+            metric_mapping["Gpu Prefix Cache Queries Created"] = "rate(vllm:gpu_prefix_cache_queries_total[5m])"
         elif "vllm:gpu_cache_prefix_queries_total" in vllm_metrics:
             metric_mapping["Gpu Prefix Cache Queries Created"] = "rate(vllm:gpu_cache_prefix_queries_total[5m])"
 
@@ -1298,11 +1310,15 @@ def discover_vllm_metrics():
                 "vllm:kv_cache_free_bytes",
                 "vllm:gpu_cache_free_bytes",
                 "vllm:prefix_cache_hit_total",
+                "vllm:prefix_cache_hits_total",
                 "vllm:prefix_cache_query_total",
+                "vllm:prefix_cache_queries_total",
                 "vllm:cache_prefix_hits_total",
                 "vllm:cache_prefix_queries_total",
                 "vllm:gpu_prefix_cache_hit_total",
+                "vllm:gpu_prefix_cache_hits_total",
                 "vllm:gpu_prefix_cache_query_total",
+                "vllm:gpu_prefix_cache_queries_total",
                 "vllm:gpu_cache_prefix_hits_total",
                 "vllm:gpu_cache_prefix_queries_total",
                 # Scheduling metrics
