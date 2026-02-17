@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+import warnings
 from threading import Thread
 from typing import Any, Dict, List, Set
 
@@ -9,6 +10,9 @@ from common.pylogger import get_python_logger
 from .korrel8r_client import Korrel8rClient
 from .tempo_service import TempoQueryService
 
+# Suppress false positive RuntimeWarning for coroutines in async/thread execution
+# This warning can occur when using asyncio.run() in threads due to GC timing
+warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*coroutine.*was never awaited.*")
 
 logger = get_python_logger()
 
@@ -198,14 +202,29 @@ def _get_trace_details_sync(trace_ids: List[str]) -> List[Dict[str, Any]]:
             trace_count, elapsed, elapsed / trace_count if trace_count > 0 else 0
         )
         return result
-    except RuntimeError:
+    except RuntimeError as e:
+        # RuntimeError: asyncio.run() cannot be called from a running event loop
+        # Fall back to running in a separate thread
+        logger.debug("Event loop already running, using thread for async execution: %s", e)
         result: List[Dict[str, Any]] = []
+        exception_holder = [None]  # Use list to store exception from thread
+
         def runner() -> None:
             nonlocal result
-            result = asyncio.run(_fetch_trace_details_for_ids_async_all(trace_ids))
+            try:
+                result = asyncio.run(_fetch_trace_details_for_ids_async_all(trace_ids))
+            except Exception as ex:
+                exception_holder[0] = ex
+
         t = Thread(target=runner, daemon=True)
         t.start()
         t.join()
+
+        # Re-raise any exception from the thread
+        if exception_holder[0]:
+            logger.error("Error in thread execution: %s", exception_holder[0])
+            raise exception_holder[0]
+
         elapsed = time.perf_counter() - start_time
         logger.info(
             "_get_trace_details_sync: Fetched %d traces from Tempo in %.3fs (avg %.3fs per trace) [thread mode]",
