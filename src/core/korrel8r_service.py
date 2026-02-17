@@ -90,7 +90,6 @@ def _extract_unique_trace_ids(obj_result: Any, max_traces: int | None = None) ->
     """
     start_time = time.perf_counter()
     items: List[Dict[str, Any]] = []
-    logger.info("ZZZZ _extract_unique_trace_ids with obj_result=%s", obj_result)
     if isinstance(obj_result, list):
         items = [x for x in obj_result if isinstance(x, dict)]
     elif isinstance(obj_result, dict):
@@ -141,7 +140,7 @@ def _extract_unique_trace_ids(obj_result: Any, max_traces: int | None = None) ->
         limited_count = len(sorted_trace_data)
 
         if total_count > 0:
-            logger.info(
+            logger.debug(
                 "Extracted %d trace IDs from Korrel8r, limited to %d most recent (%.1f%% reduction)",
                 total_count,
                 limited_count,
@@ -197,7 +196,7 @@ def _get_trace_details_sync(trace_ids: List[str]) -> List[Dict[str, Any]]:
     try:
         result = asyncio.run(_fetch_trace_details_for_ids_async_all(trace_ids))
         elapsed = time.perf_counter() - start_time
-        logger.info(
+        logger.debug(
             "_get_trace_details_sync: Fetched %d traces from Tempo in %.3fs (avg %.3fs per trace)",
             trace_count, elapsed, elapsed / trace_count if trace_count > 0 else 0
         )
@@ -226,7 +225,7 @@ def _get_trace_details_sync(trace_ids: List[str]) -> List[Dict[str, Any]]:
             raise exception_holder[0]
 
         elapsed = time.perf_counter() - start_time
-        logger.info(
+        logger.debug(
             "_get_trace_details_sync: Fetched %d traces from Tempo in %.3fs (avg %.3fs per trace) [thread mode]",
             trace_count, elapsed, elapsed / trace_count if trace_count > 0 else 0
         )
@@ -453,7 +452,7 @@ def fetch_goal_query_objects(
 
     # Log performance summary
     overall_time = time.perf_counter() - overall_start
-    logger.info(
+    logger.debug(
         "fetch_goal_query_objects performance: total=%.3fs, breakdown: "
         "korrel8r_list_goals=%.3fs, korrel8r_query_objects=%.3fs, "
         "extract_trace_ids=%.3fs, fetch_trace_details=%.3fs, simplify_spans=%.3fs | "

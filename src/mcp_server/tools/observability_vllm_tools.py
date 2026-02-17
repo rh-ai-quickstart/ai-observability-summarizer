@@ -643,7 +643,7 @@ def analyze_vllm(
                 for label, query in vllm_metrics.items()
         }
         time_fetch_metrics = time.perf_counter() - t_start
-        logger.info(
+        logger.debug(
             "analyze_vllm: Fetched %d metrics from Prometheus in %.3fs",
             len(metric_dfs), time_fetch_metrics
         )
@@ -660,7 +660,7 @@ def analyze_vllm(
             end_ts=resolved_end,
         )
         time_korrel8r_context = time.perf_counter() - t_start
-        logger.info(
+        logger.debug(
             "analyze_vllm: Built Korrel8r context (logs/traces) in %.3fs",
             time_korrel8r_context
         )
@@ -689,14 +689,14 @@ def analyze_vllm(
             resolved_api_key,
         )
         time_llm_summarization = time.perf_counter() - t_start
-        logger.info(
+        logger.debug(
             "analyze_vllm: LLM summarization (%s) completed in %.3fs",
             summarize_model_id, time_llm_summarization
         )
 
         # Log overall performance summary
         overall_time = time.perf_counter() - overall_start
-        logger.info(
+        logger.debug(
             "analyze_vllm performance: total=%.3fs, breakdown: "
             "validation=%.3fs, time_range=%.3fs, fetch_metrics=%.3fs, "
             "korrel8r_context=%.3fs, build_prompt=%.3fs, api_key=%.3fs, "

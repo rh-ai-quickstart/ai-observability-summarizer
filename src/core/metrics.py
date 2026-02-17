@@ -483,7 +483,7 @@ def extract_namespace_pod_pairs_from_metrics(
         pass
 
     elapsed = time.perf_counter() - start_time
-    logger.info(
+    logger.debug(
         "extract_namespace_pod_pairs_from_metrics: Processed %d rows across %d metrics, "
         "found %d unique pairs in %.3fs",
         total_rows_processed, len(metric_dfs), len(pairs), elapsed
@@ -2636,7 +2636,7 @@ def build_correlated_context_from_metrics(
         pairs = extract_namespace_pod_pairs_from_metrics(model_name, metric_dfs)
         time_extract_pairs = time.perf_counter() - t_start
         logger.debug("In build_correlated_context_from_metrics: pairs=%s", pairs)
-        logger.info(
+        logger.debug(
             "build_correlated_context_from_metrics: Extracted %d namespace/pod pairs in %.3fs",
             len(pairs), time_extract_pairs
         )
@@ -2748,7 +2748,7 @@ def build_correlated_context_from_metrics(
 
         # Log performance summary
         overall_time = time.perf_counter() - overall_start
-        logger.info(
+        logger.debug(
             "build_correlated_context_from_metrics performance: total=%.3fs, breakdown: "
             "extract_pairs=%.3fs, fetch_korrel8r=%.3fs (for %d pairs), "
             "process_logs=%.3fs, sort_logs=%.3fs, filter_traces=%.3fs, format_output=%.3fs | "
