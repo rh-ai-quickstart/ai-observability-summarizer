@@ -17,13 +17,52 @@ def _extract_timestamp_from_trace_obj(obj: Dict[str, Any]) -> Optional[int]:
     """
     Extract timestamp (microseconds since epoch) from Korrel8r trace object.
 
-    Tries multiple field locations and formats:
-    - context.startTimeUnixNano (OTLP format)
-    - attributes.startTimeUnixNano
-    - attributes.startTime, timestamp, time
-
-    Returns None if no valid timestamp found.
+    Uses field name hints and validates results are within reasonable bounds (1970-2100).
+    Returns None if no valid timestamp found or out of bounds.
     """
+    # Reasonable timestamp bounds (Unix epoch 1970 to year 2100 in microseconds)
+    MIN_VALID_TIMESTAMP_US = 0  # Unix epoch (Jan 1, 1970) or later
+    MAX_VALID_TIMESTAMP_US = 4_102_444_800_000_000  # Jan 1, 2100
+
+    def normalize_timestamp(value: int, field_name: str = "") -> Optional[int]:
+        """Normalize timestamp to microseconds using field name hints and validation."""
+        # Use field name hints for unit detection (only for very explicit names)
+        field_lower = field_name.lower()
+
+        # Explicit nanosecond fields (highest priority)
+        if "nano" in field_lower:
+            result = value // 1000
+        # Explicit millisecond fields
+        elif "milli" in field_lower or "ms" in field_lower:
+            result = value * 1000
+        # Explicit second fields (only very specific names, not generic "time")
+        elif "second" in field_lower and field_lower != "time":
+            result = value * 1_000_000
+        # Generic fields or ambiguous names - use magnitude with tighter bounds
+        else:
+            # Use tighter bounds to avoid misclassification
+            if value > 1_000_000_000_000_000_000:  # > 1e18: nanoseconds
+                result = value // 1000
+            elif value > 100_000_000_000_000:  # > 1e14: microseconds (tighter than 1e15)
+                result = value
+            elif value > 100_000_000_000:  # > 1e11: milliseconds (tighter than 1e12)
+                result = value * 1000
+            elif value > 100_000_000:  # > 1e8: seconds (tighter than 1e9)
+                result = value * 1_000_000
+            else:
+                # Too small - likely invalid or wrong unit
+                return None
+
+        # Validate result is within reasonable bounds (1970-2100)
+        if MIN_VALID_TIMESTAMP_US <= result <= MAX_VALID_TIMESTAMP_US:
+            return result
+        else:
+            logger.debug(
+                "Timestamp out of bounds (Unix epoch to year 2100): %d µs (field=%s, value=%d)",
+                result, field_name, value
+            )
+            return None
+
     try:
         # Try context.startTimeUnixNano first (OTLP standard)
         context = obj.get("context")
@@ -31,8 +70,9 @@ def _extract_timestamp_from_trace_obj(obj: Dict[str, Any]) -> Optional[int]:
             nano_ts = context.get("startTimeUnixNano")
             if nano_ts is not None:
                 try:
-                    # Convert nanoseconds to microseconds
-                    return int(nano_ts) // 1000
+                    result = normalize_timestamp(int(nano_ts), "startTimeUnixNano")
+                    if result:
+                        return result
                 except (ValueError, TypeError):
                     pass
 
@@ -43,7 +83,9 @@ def _extract_timestamp_from_trace_obj(obj: Dict[str, Any]) -> Optional[int]:
             nano_ts = attrs.get("startTimeUnixNano")
             if nano_ts is not None:
                 try:
-                    return int(nano_ts) // 1000
+                    result = normalize_timestamp(int(nano_ts), "startTimeUnixNano")
+                    if result:
+                        return result
                 except (ValueError, TypeError):
                     pass
 
@@ -52,21 +94,9 @@ def _extract_timestamp_from_trace_obj(obj: Dict[str, Any]) -> Optional[int]:
                 ts_val = attrs.get(field)
                 if ts_val is not None:
                     try:
-                        ts_int = int(ts_val)
-                        # Normalize to microseconds based on magnitude
-                        # Typical Unix epoch values (Feb 2026):
-                        # - Nanoseconds: ~1.7e18
-                        # - Microseconds: ~1.7e15
-                        # - Milliseconds: ~1.7e12
-                        # - Seconds: ~1.7e9
-                        if ts_int > 1_000_000_000_000_000_000:  # Nanoseconds (>1e18)
-                            return ts_int // 1000
-                        elif ts_int > 1_000_000_000_000_000:  # Microseconds (>1e15)
-                            return ts_int
-                        elif ts_int > 1_000_000_000_000:  # Milliseconds (>1e12)
-                            return ts_int * 1000
-                        else:  # Seconds (<=1e12)
-                            return ts_int * 1_000_000
+                        result = normalize_timestamp(int(ts_val), field)
+                        if result:
+                            return result
                     except (ValueError, TypeError):
                         pass
 
