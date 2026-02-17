@@ -38,6 +38,9 @@ class DeterministicChatBot(BaseChatBot):
         conversation_history: Optional[List[Dict[str, str]]] = None
     ) -> str:
         """Chat using deterministic parsing approach."""
+        # Set active namespace for tool argument injection
+        self._active_namespace = namespace
+
         # Note: Deterministic bot doesn't use conversation history as it's rule-based
         if progress_callback:
             progress_callback("🔍 Analyzing your question...")

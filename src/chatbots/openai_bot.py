@@ -96,6 +96,9 @@ class OpenAIChatBot(BaseChatBot):
         logger.info(f"🎯 OpenAIChatBot.chat() - Using OpenAI API with model: {self.model_name}")
 
         try:
+            # Set active namespace for tool argument injection
+            self._active_namespace = namespace
+
             # Create system prompt
             system_prompt = self._create_system_prompt(namespace)
 

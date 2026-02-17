@@ -130,6 +130,9 @@ For Pod Status queries:
             return "Error: OpenAI SDK not installed. Please install it with: pip install openai"
 
         try:
+            # Set active namespace for tool argument injection
+            self._active_namespace = namespace
+
             # Create system prompt
             system_prompt = self._create_system_prompt(namespace)
 

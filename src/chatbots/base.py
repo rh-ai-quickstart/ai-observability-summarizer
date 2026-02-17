@@ -56,6 +56,17 @@ class BaseChatBot(ABC):
         # Store tool executor (dependency injection)
         self.tool_executor = tool_executor
 
+        # Active namespace for the current chat session (set by chat() implementations)
+        self._active_namespace: Optional[str] = None
+
+        # Tools that accept a namespace parameter for scoping Prometheus queries
+        self._namespace_aware_tools = {
+            'execute_promql', 'search_metrics', 'get_metric_metadata',
+            'get_label_values', 'suggest_queries', 'explain_results',
+            'search_metrics_by_category', 'find_best_metric_with_metadata',
+            'fetch_openshift_metrics_data', 'analyze_openshift', 'chat_openshift',
+        }
+
         logger.info(f"{self.__class__.__name__} initialized with model: {self.model_name}")
 
     @abstractmethod
@@ -218,8 +229,109 @@ class BaseChatBot(ABC):
         """
         return 5000
 
+    def _inject_namespace_into_promql(self, query: str, namespace: str) -> str:
+        """Inject a namespace label filter into a PromQL query string.
+
+        Handles common PromQL patterns:
+        - metric_name → metric_name{namespace="ns"}
+        - metric_name{existing="label"} → metric_name{existing="label",namespace="ns"}
+        - sum(metric_name) → sum(metric_name{namespace="ns"})
+        - sum(rate(metric_name[5m])) → sum(rate(metric_name{namespace="ns"}[5m]))
+
+        If the query already contains a namespace filter, it is left unchanged.
+        """
+        # Don't inject if namespace filter is already present
+        if f'namespace="' in query or f"namespace='" in query or 'namespace=~' in query:
+            logger.info(f"📌 PromQL query already has namespace filter, skipping injection")
+            return query
+
+        original = query
+
+        # PromQL functions, keywords, and common label names that should NOT
+        # get namespace injected — only actual metric names should.
+        promql_skip = {
+            # Aggregation operators
+            'sum', 'avg', 'min', 'max', 'count', 'stddev', 'stdvar',
+            'topk', 'bottomk', 'quantile', 'count_values',
+            # Rate/counter functions
+            'rate', 'irate', 'increase', 'delta', 'idelta',
+            # Histogram functions
+            'histogram_quantile', 'histogram_count', 'histogram_sum',
+            # Label functions
+            'label_replace', 'label_join',
+            # Math functions
+            'abs', 'ceil', 'floor', 'round', 'clamp', 'clamp_min', 'clamp_max',
+            'exp', 'ln', 'log2', 'log10', 'sqrt',
+            # Sort/utility functions
+            'sort', 'sort_desc', 'time', 'timestamp',
+            'vector', 'scalar', 'sgn',
+            # Range functions
+            'changes', 'resets', 'deriv', 'predict_linear',
+            'absent', 'absent_over_time', 'present_over_time',
+            # Date functions
+            'day_of_month', 'day_of_week', 'days_in_month',
+            'hour', 'minute', 'month', 'year',
+            # Keywords and operators
+            'by', 'without', 'on', 'ignoring', 'group_left', 'group_right',
+            'bool', 'offset', 'and', 'or', 'unless',
+            # Over-time functions
+            'avg_over_time', 'min_over_time', 'max_over_time',
+            'sum_over_time', 'count_over_time', 'stddev_over_time',
+            'last_over_time', 'quantile_over_time',
+            # Common Kubernetes label names (appear in by/without/grouping clauses)
+            'pod', 'namespace', 'container', 'node', 'instance', 'job',
+            'service', 'deployment', 'daemonset', 'statefulset', 'replicaset',
+            'phase', 'reason', 'condition', 'type', 'resource', 'unit',
+            'device', 'interface', 'mode', 'cpu', 'endpoint', 'alertname',
+            'alertstate', 'severity', 'le', 'model_name',
+            # Numeric literals used in comparisons (won't match our regex, but safe)
+            'inf', 'nan',
+        }
+
+        # Pattern: find metric names followed by optional labels and/or range vector
+        # This regex matches: metric_name, metric_name{...}, metric_name[5m], metric_name{...}[5m]
+        # We inject namespace into the label set of each metric selector.
+        def inject_ns(match):
+            metric = match.group(1)
+            labels = match.group(2) or ''   # existing {labels} or empty
+            rest = match.group(3) or ''     # trailing [range] or empty
+
+            # Skip PromQL functions/keywords/label names — they aren't metric selectors
+            if metric.lower() in promql_skip:
+                return match.group(0)
+
+            if labels:
+                # Has existing labels: metric{existing="val"} → metric{existing="val",namespace="ns"}
+                inner = labels[1:-1].strip()  # strip { }
+                if inner:
+                    return f'{metric}{{{inner},namespace="{namespace}"}}{rest}'
+                else:
+                    return f'{metric}{{namespace="{namespace}"}}{rest}'
+            else:
+                # No existing labels: metric → metric{namespace="ns"}
+                return f'{metric}{{namespace="{namespace}"}}{rest}'
+
+        # Match metric selectors: word chars and colons (for namespaced metrics like vllm:xxx)
+        # followed by optional {labels} and optional [range]
+        modified = re.sub(
+            r'([a-zA-Z_:][a-zA-Z0-9_:]*)'   # group 1: metric name
+            r'(\{[^}]*\})?'                   # group 2: optional label matchers
+            r'(\[[^\]]*\])?',                  # group 3: optional range vector
+            inject_ns,
+            query
+        )
+
+        if modified != original:
+            logger.info(f"📌 Injected namespace '{namespace}' into PromQL: {original} → {modified}")
+        return modified
+
     def _get_tool_result(self, tool_name: str, tool_args: Dict[str, Any]) -> str:
         """Execute tool call and truncate result if needed.
+
+        For execute_promql: injects namespace filter directly into the PromQL
+        query string (since execute_promql doesn't accept a namespace parameter).
+
+        For other namespace-aware tools: injects namespace as an argument.
 
         Args:
             tool_name: Name of the tool to call
@@ -228,6 +340,20 @@ class BaseChatBot(ABC):
         Returns:
             Tool result, truncated if it exceeds max length
         """
+        # Inject active namespace for namespace-scoped queries
+        if self._active_namespace and tool_name in self._namespace_aware_tools:
+            if tool_name == 'execute_promql' and 'query' in tool_args:
+                # For execute_promql: modify the PromQL query string itself
+                tool_args = dict(tool_args)
+                tool_args['query'] = self._inject_namespace_into_promql(
+                    tool_args['query'], self._active_namespace
+                )
+            elif not tool_args.get('namespace'):
+                # For other tools: inject namespace as an argument
+                tool_args = dict(tool_args)
+                tool_args['namespace'] = self._active_namespace
+                logger.info(f"📌 Injected namespace '{self._active_namespace}' into {tool_name} args")
+
         # Log tool request with arguments
         logger.info(f"🔧 Requesting tool: {tool_name} with args: {tool_args}")
 
@@ -278,9 +404,18 @@ You have access to monitoring tools and should provide focused, targeted respons
 
 **Your Environment:**
 - Cluster: OpenShift with AI/ML workloads, GPUs, and comprehensive monitoring
-- Scope: {namespace if namespace else 'Cluster-wide analysis'}
+- Scope: {f'**NAMESPACE-SCOPED: {namespace}** — ALL queries MUST be filtered to this namespace only' if namespace else 'Cluster-wide analysis'}
 - Tools: Direct access to Prometheus/Thanos metrics via MCP tools
 - **Enhanced Metrics Catalog**: Smart discovery of 2,037 High/Medium priority OpenShift metrics across 19 categories (GPU/AI, Cluster Health, Networking, Storage, etcd, etc.)
+{"" if not namespace else f"""
+**🚨 NAMESPACE SCOPE REQUIREMENT — MANDATORY:**
+You are operating in NAMESPACE-SCOPED mode for namespace **"{namespace}"**.
+- You MUST call tools (execute_promql, search_metrics, etc.) to get FRESH data for this namespace.
+- Do NOT reuse or reference results from previous queries — they may be from a different scope.
+- The system will automatically inject namespace="{namespace}" into your PromQL queries.
+- If a previous conversation shows cluster-wide data, IGNORE it and query fresh data for "{namespace}".
+- Every answer must reflect data from namespace "{namespace}" ONLY.
+"""}
 
 **Available Tools:**
 

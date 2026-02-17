@@ -45,6 +45,7 @@ import { SuggestedQuestionsPopover } from '../components/SuggestedQuestionsPopov
 import { MetricCategoriesPopover } from '../components/MetricCategoriesPopover';
 import { MetricCategoriesInline } from '../components/MetricCategoriesInline';
 import { ConfigurationRequiredAlert } from '../components/ConfigurationRequiredAlert';
+import { NamespaceScopeSelector } from '../components/NamespaceScopeSelector';
 import '../styles/chat-markdown.css';
 
 const AIChatPage: React.FC = () => {
@@ -66,6 +67,8 @@ const AIChatPage: React.FC = () => {
   const [copySuccess, setCopySuccess] = React.useState(false);
   const [editingMessageId, setEditingMessageId] = React.useState<string | null>(null);
   const [editValue, setEditValue] = React.useState('');
+  const [chatScope, setChatScope] = React.useState<'cluster_wide' | 'namespace_scoped'>('cluster_wide');
+  const [selectedNamespace, setSelectedNamespace] = React.useState<string | null>(null);
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
   const isMountedRef = React.useRef(true);
@@ -219,7 +222,8 @@ const AIChatPage: React.FC = () => {
         config.ai_model,
         userMessage.content,
         {
-          scope: 'cluster_wide',
+          scope: chatScope,
+          namespace: selectedNamespace || undefined,
           apiKey: config.api_key,
           conversationHistory,
         }
@@ -397,18 +401,38 @@ const AIChatPage: React.FC = () => {
             </TextContent>
           </FlexItem>
           <FlexItem>
-            {chatSettings.suggestedQuestionsLocation === 'header' && (
-              <SuggestedQuestionsPopover onSelectQuestion={(question) => handleSend(question)} />
-            )}
-            {chatSettings.metricCategoriesLocation === 'header' && (
-              <MetricCategoriesPopover onSelectQuestion={(question) => handleSend(question)} />
-            )}
-            <Button variant="plain" onClick={handleExportConversation} title="Export conversation" style={{ marginRight: '8px' }}>
-              <DownloadIcon /> Export
-            </Button>
-            <Button variant="plain" onClick={handleClear} title="Clear chat">
-              <TrashIcon /> Clear
-            </Button>
+            <Flex alignItems={{ default: 'alignItemsCenter' }} spaceItems={{ default: 'spaceItemsSm' }}>
+              <FlexItem>
+                <NamespaceScopeSelector
+                  scope={chatScope}
+                  namespace={selectedNamespace}
+                  onScopeChange={(scope, namespace) => {
+                    setChatScope(scope);
+                    setSelectedNamespace(namespace);
+                  }}
+                />
+              </FlexItem>
+              {chatSettings.suggestedQuestionsLocation === 'header' && (
+                <FlexItem>
+                  <SuggestedQuestionsPopover onSelectQuestion={(question) => handleSend(question)} />
+                </FlexItem>
+              )}
+              {chatSettings.metricCategoriesLocation === 'header' && (
+                <FlexItem>
+                  <MetricCategoriesPopover onSelectQuestion={(question) => handleSend(question)} />
+                </FlexItem>
+              )}
+              <FlexItem>
+                <Button variant="plain" onClick={handleExportConversation} title="Export conversation" style={{ marginRight: '8px' }}>
+                  <DownloadIcon /> Export
+                </Button>
+              </FlexItem>
+              <FlexItem>
+                <Button variant="plain" onClick={handleClear} title="Clear chat">
+                  <TrashIcon /> Clear
+                </Button>
+              </FlexItem>
+            </Flex>
           </FlexItem>
         </Flex>
       </div>
@@ -482,7 +506,7 @@ const AIChatPage: React.FC = () => {
                       type="text"
                       value={editValue}
                       onChange={(_event, value) => setEditValue(value)}
-                      onKeyPress={(e) => {
+                      onKeyDown={(e) => {
                         if (e.key === 'Enter') {
                           handleSaveEdit(message.id);
                         } else if (e.key === 'Escape') {
@@ -768,7 +792,9 @@ const AIChatPage: React.FC = () => {
                 onKeyPress={handleKeyPress}
                 placeholder={selectedCategoryName
                   ? `Ask about ${selectedCategoryName}...`
-                  : 'Ask about your metrics...'}
+                  : selectedNamespace
+                    ? `Ask about metrics in ${selectedNamespace}...`
+                    : 'Ask about your metrics...'}
                 aria-label="Chat input"
                 isDisabled={isLoading}
               />

@@ -77,6 +77,9 @@ class AnthropicChatBot(BaseChatBot):
                 return f"Error: API key required for Anthropic model {self.model_name}. Please configure an API key in Settings."
 
         try:
+            # Set active namespace for tool argument injection
+            self._active_namespace = namespace
+
             # Create system prompt
             system_prompt = self._create_system_prompt(namespace)
 
