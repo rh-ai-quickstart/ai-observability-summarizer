@@ -642,10 +642,6 @@ export interface AnalysisResult {
   model_name: string;
   summary: string;
   time_range?: string;
-  is_error?: boolean;  // Indicates if this is an error response
-  error?: string;  // Optional error message for error cases
-  error_code?: string;  // Optional error code
-  recovery_suggestion?: string;  // Optional recovery suggestion
 }
 
 export async function analyzeVLLM(
@@ -674,27 +670,10 @@ export async function analyzeVLLM(
         return parsed;
       }
     } catch {
-      // Not JSON, might be formatted error text
+      // Not JSON - treat as formatted error text from MCP
     }
 
-    // If text looks like an MCP error response (check for structured error indicator first,
-    // then fall back to string matching for backward compatibility)
-    const isError = text.includes('"is_error":true') ||
-                    text.includes('"is_error": true') ||
-                    text.includes('Error (') ||
-                    text.includes('❌') ||
-                    text.includes('💡');
-
-    if (isError) {
-      return {
-        model_name: modelName,
-        summary: text,
-        time_range: timeRange,
-        is_error: true,
-      };
-    }
-
-    // Otherwise treat as raw summary text
+    // If not valid JSON, treat as MCP error response (already formatted with ❌ emoji)
     return {
       model_name: modelName,
       summary: text,
@@ -703,13 +682,12 @@ export async function analyzeVLLM(
   } catch (error) {
     console.error('Failed to analyze vLLM:', error);
 
-    // Check if error message contains error details
+    // Network/transport errors - return as summary for display
     const errorMessage = error instanceof Error ? error.message : String(error);
-
-    // Return error as summary for display
     return {
       model_name: modelName,
       summary: `Analysis failed: ${errorMessage}`,
+      time_range: timeRange,
     };
   }
 }
