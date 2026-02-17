@@ -456,18 +456,26 @@ def extract_namespace_pod_pairs_from_metrics(
                     # Get unique pairs efficiently using pandas - avoid iterrows()
                     unique_pairs = subset.drop_duplicates()
 
-                    # Convert to strings and strip whitespace using vectorized operations
                     if not unique_pairs.empty:
                         unique_pairs = unique_pairs.copy()
-                        unique_pairs["namespace"] = unique_pairs["namespace"].astype(str).str.strip()
-                        unique_pairs["pod"] = unique_pairs["pod"].astype(str).str.strip()
+
+                        # Filter out rows where both namespace and pod are NaN/None
+                        # Keep rows where at least one field has a valid value
+                        ns_valid = unique_pairs["namespace"].notna()
+                        pod_valid = unique_pairs["pod"].notna()
+                        unique_pairs = unique_pairs[ns_valid | pod_valid]
+
+                        # Convert to strings and strip whitespace using vectorized operations
+                        # fillna ensures NaN/None become empty strings
+                        unique_pairs["namespace"] = unique_pairs["namespace"].fillna("").astype(str).str.strip()
+                        unique_pairs["pod"] = unique_pairs["pod"].fillna("").astype(str).str.strip()
 
                         # Convert to set of NamespacePodPair objects
                         for ns_val, pod_val in zip(unique_pairs["namespace"], unique_pairs["pod"]):
-                            # Skip nan/None values that became strings
-                            if ns_val and ns_val != "nan" and ns_val != "None":
+                            # Skip empty strings (which came from NaN/None after fillna)
+                            if ns_val:
                                 pairs.add(NamespacePodPair(namespace=ns_val, pod=pod_val))
-                            elif pod_val and pod_val != "nan" and pod_val != "None":
+                            elif pod_val:
                                 pairs.add(NamespacePodPair(namespace="", pod=pod_val))
             except Exception:
                 continue
@@ -2642,10 +2650,14 @@ def build_correlated_context_from_metrics(
         except Exception:
             max_trace_spans = 10
 
-        # Define safety factor to fetch extra traces for error filtering
-        TRACE_FETCH_SAFETY_FACTOR = 2  # Fetch 2x to account for error filtering
+        # Read safety factor to fetch extra traces for error filtering
+        # This accounts for traces that may be filtered out during processing
+        try:
+            trace_fetch_safety_factor = int(os.getenv("TRACE_FETCH_SAFETY_FACTOR", "2"))
+        except Exception:
+            trace_fetch_safety_factor = 2
 
-        max_traces_limit = max_trace_spans * TRACE_FETCH_SAFETY_FACTOR
+        max_traces_limit = max_trace_spans * trace_fetch_safety_factor
 
         # Gather all unique (namespace, pod) pairs from metrics
         t_start = time.perf_counter()

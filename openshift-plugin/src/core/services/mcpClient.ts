@@ -642,6 +642,7 @@ export interface AnalysisResult {
   model_name: string;
   summary: string;
   time_range?: string;
+  is_error?: boolean;  // Indicates if this is an error response
   error?: string;  // Optional error message for error cases
   error_code?: string;  // Optional error code
   recovery_suggestion?: string;  // Optional recovery suggestion
@@ -673,12 +674,20 @@ export async function analyzeVLLM(
       // Not JSON, might be formatted error text
     }
 
-    // If text looks like an MCP error response (contains error markers), return as summary
-    if (text.includes('Error (') || text.includes('❌') || text.includes('💡')) {
+    // If text looks like an MCP error response (check for structured error indicator first,
+    // then fall back to string matching for backward compatibility)
+    const isError = text.includes('"is_error":true') ||
+                    text.includes('"is_error": true') ||
+                    text.includes('Error (') ||
+                    text.includes('❌') ||
+                    text.includes('💡');
+
+    if (isError) {
       return {
         model_name: modelName,
         summary: text,
         time_range: timeRange,
+        is_error: true,
       };
     }
 

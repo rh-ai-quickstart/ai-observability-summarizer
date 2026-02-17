@@ -4,20 +4,16 @@ import asyncio
 import time
 import warnings
 from threading import Thread
-from typing import Any, Dict, List, Set
+from typing import Any, Dict, List, Optional, Set
 
 from common.pylogger import get_python_logger
 from .korrel8r_client import Korrel8rClient
 from .tempo_service import TempoQueryService
 
-# Suppress false positive RuntimeWarning for coroutines in async/thread execution
-# This warning can occur when using asyncio.run() in threads due to GC timing
-warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*coroutine.*was never awaited.*")
-
 logger = get_python_logger()
 
 
-def _extract_timestamp_from_trace_obj(obj: Dict[str, Any]) -> int | None:
+def _extract_timestamp_from_trace_obj(obj: Dict[str, Any]) -> Optional[int]:
     """
     Extract timestamp (microseconds since epoch) from Korrel8r trace object.
 
@@ -76,7 +72,7 @@ def _extract_timestamp_from_trace_obj(obj: Dict[str, Any]) -> int | None:
     return None
 
 
-def _extract_unique_trace_ids(obj_result: Any, max_traces: int | None = None) -> List[str]:
+def _extract_unique_trace_ids(obj_result: Any, max_traces: Optional[int] = None) -> List[str]:
     """
     Extract unique trace IDs from Korrel8r trace objects.
 
@@ -100,9 +96,9 @@ def _extract_unique_trace_ids(obj_result: Any, max_traces: int | None = None) ->
             items = [obj_result]
 
     # Extract trace IDs with timestamps
+    # For duplicate trace IDs, keep the one with the most recent timestamp
     extraction_start = time.perf_counter()
-    trace_data: List[tuple[str, int | None]] = []
-    seen: Set[str] = set()
+    trace_map: Dict[str, Optional[int]] = {}  # trace_id -> timestamp
 
     for it in items:
         trace_id = None
@@ -115,10 +111,19 @@ def _extract_unique_trace_ids(obj_result: Any, max_traces: int | None = None) ->
                 or it.get("traceId")
                 or it.get("id")
             )
-        if isinstance(trace_id, str) and trace_id and trace_id not in seen:
-            seen.add(trace_id)
+        if isinstance(trace_id, str) and trace_id:
             timestamp = _extract_timestamp_from_trace_obj(it)
-            trace_data.append((trace_id, timestamp))
+            # Keep the most recent timestamp for duplicate trace IDs
+            if trace_id not in trace_map:
+                trace_map[trace_id] = timestamp
+            else:
+                existing_ts = trace_map[trace_id]
+                # Keep the higher (more recent) timestamp
+                if timestamp is not None and (existing_ts is None or timestamp > existing_ts):
+                    trace_map[trace_id] = timestamp
+
+    # Convert to list of tuples
+    trace_data = list(trace_map.items())
 
     extraction_time = time.perf_counter() - extraction_start
 
@@ -168,7 +173,7 @@ async def _fetch_trace_details_for_ids_async_all(trace_ids: List[str], concurren
     service = TempoQueryService()
     semaphore = asyncio.Semaphore(max(1, concurrency))
 
-    async def fetch_one(tid: str) -> Dict[str, Any] | None:
+    async def fetch_one(tid: str) -> Optional[Dict[str, Any]]:
         async with semaphore:
             try:
                 resp = await service.get_trace_details(tid)
@@ -215,9 +220,13 @@ def _get_trace_details_sync(trace_ids: List[str]) -> List[Dict[str, Any]]:
             except Exception as ex:
                 exception_holder[0] = ex
 
-        t = Thread(target=runner, daemon=True)
-        t.start()
-        t.join()
+        # Suppress false positive RuntimeWarning for coroutines in thread context
+        # This warning can occur when using asyncio.run() in threads due to GC timing
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*coroutine.*was never awaited.*")
+            t = Thread(target=runner, daemon=True)
+            t.start()
+            t.join()
 
         # Re-raise any exception from the thread
         if exception_holder[0]:

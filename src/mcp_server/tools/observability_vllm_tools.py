@@ -731,6 +731,7 @@ def analyze_vllm(
             "model_name": model_name,
             "summary": error_text,
             "time_range": time_range or "",
+            "is_error": True,
         })
     except LLMServiceError as e:
         # Extract text from MCP response and return as JSON string
@@ -740,6 +741,7 @@ def analyze_vllm(
             "model_name": model_name,
             "summary": error_text,
             "time_range": time_range or "",
+            "is_error": True,
         })
     except TimeoutError as e:
         error = MCPException(
@@ -753,6 +755,7 @@ def analyze_vllm(
             "model_name": model_name,
             "summary": error_text,
             "time_range": time_range or "",
+            "is_error": True,
         })
     except ConnectionError as e:
         error = MCPException(
@@ -766,6 +769,7 @@ def analyze_vllm(
             "model_name": model_name,
             "summary": error_text,
             "time_range": time_range or "",
+            "is_error": True,
         })
     except Exception as e:
         error = MCPException(
@@ -779,6 +783,7 @@ def analyze_vllm(
             "model_name": model_name,
             "summary": error_text,
             "time_range": time_range or "",
+            "is_error": True,
         })
 
 

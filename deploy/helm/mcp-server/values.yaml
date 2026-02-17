@@ -35,6 +35,7 @@ env:
   KORREL8R_URL: "https://korrel8r-summarizer.openshift-cluster-observability-operator.svc.cluster.local:9443"
   MAX_NUM_LOG_ROWS: 10
   MAX_NUM_TRACE_SPANS: 10
+  TRACE_FETCH_SAFETY_FACTOR: 2  # Multiplier for trace fetching to account for error filtering
   KORREL8R_TIMEOUT_SECONDS: 8
   LLM_TIMEOUT_SECONDS: 180
   # GPU Metrics Discovery - custom prefix overrides (comma-separated, additive to defaults)
