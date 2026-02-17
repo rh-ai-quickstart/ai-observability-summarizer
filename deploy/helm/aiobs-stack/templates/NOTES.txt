@@ -1,19 +1,9 @@
-{{- /*
-This NOTES.txt file also serves to set derived values for subcharts.
-Helm evaluates templates before rendering, so we can use this to convert
-boolean devMode to string DEV_MODE for the mcp-server subchart.
-*/ -}}
-
-{{- /* Convert devMode (boolean) to DEV_MODE (string "true"/"false") */ -}}
-{{- $_ := set .Values.mcpServer "env" (default dict .Values.mcpServer.env) -}}
-{{- $_ := set .Values.mcpServer.env "DEV_MODE" (ternary "true" "false" .Values.devMode) -}}
-
 AI Observability Summarizer installed successfully!
 
 Release: {{ .Release.Name }}
 Namespace: {{ .Release.Namespace }}
 
-{{- if .Values.devMode }}
+{{- if .Values.global.devMode }}
 
 ⚠️  DEVELOPMENT MODE ENABLED ⚠️
 This installation is running in development mode with browser-cached API keys.

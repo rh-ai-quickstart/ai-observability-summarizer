@@ -55,9 +55,13 @@ spec:
   alerting:
     enabled: false
 
-  # Development Mode - Enable for testing with browser-cached credentials
-  # Default: false (production mode)
-  devMode: false
+  # ==========================================================================
+  # Global Settings
+  # ==========================================================================
+  global:
+    # Development Mode - Enable for testing with browser-cached credentials
+    # Default: false (production mode)
+    devMode: false
 
   # ==========================================================================
   # Infrastructure Components
@@ -65,3 +69,10 @@ spec:
   # NOTE: All infrastructure components (TempoStack, LokiStack, OTEL Collector,
   # MinIO, Korrel8r) are always installed automatically.
   # Only one AIObservabilitySummarizer CR is allowed per cluster.
+
+  # Loki - Log aggregation storage configuration
+  loki:
+    lokiStack:
+      # Storage class for Loki persistent volumes
+      # Leave empty to use the cluster's default StorageClass
+      storageClassName: ""
