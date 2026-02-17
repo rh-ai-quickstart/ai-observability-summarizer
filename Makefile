@@ -456,8 +456,17 @@ install-mcp-server: namespace
 			-f $(GEN_MODEL_CONFIG_PREFIX)-for_helm.yaml; \
 	fi
 
+.PHONY: check-console-plugin-namespace
+check-console-plugin-namespace:
+	@PLUGIN_NAME=aiobs-console-plugin; \
+	existing_ns=$$(oc get consoleplugin $$PLUGIN_NAME -o jsonpath='{.spec.backend.service.namespace}' 2>/dev/null); \
+	if [ -n "$$existing_ns" ] && [ "$$existing_ns" != "$(NAMESPACE)" ]; then \
+		echo "⚠️  ConsolePlugin $$PLUGIN_NAME already points to namespace $$existing_ns (requested $(NAMESPACE))"; \
+		echo "   Consider uninstalling the old release or set NAMESPACE=$$existing_ns"; \
+	fi
+
 .PHONY: install-console-plugin
-install-console-plugin: namespace
+install-console-plugin: namespace check-console-plugin-namespace
 	@echo "Deploying OpenShift Console Plugin"
 	@cd deploy/helm && helm upgrade --install $(CONSOLE_PLUGIN_RELEASE_NAME) $(CONSOLE_PLUGIN_CHART_PATH) -n $(NAMESPACE) \
 		--set plugin.image.repository=$(CONSOLE_PLUGIN_IMAGE) \
