@@ -666,8 +666,11 @@ export async function analyzeVLLM(
     // Try to parse as JSON first (success case)
     try {
       const parsed = JSON.parse(text) as AnalysisResult;
-      // If it's valid JSON with expected structure, return it
-      if (parsed && (parsed.summary || parsed.error)) {
+      // Validate by shape: check for required string fields
+      // Don't use truthy checks (summary could be empty string "")
+      if (parsed &&
+          typeof parsed.model_name === 'string' &&
+          typeof parsed.summary === 'string') {
         return parsed;
       }
     } catch {

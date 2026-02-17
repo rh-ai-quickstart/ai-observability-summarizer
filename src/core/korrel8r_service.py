@@ -360,7 +360,7 @@ def _simplify_trace_detail_to_spans(detail: Dict[str, Any], related_objects: Any
 def fetch_goal_query_objects(
     goals: List[str],
     query: str,
-    max_traces_per_query: int | None = None
+    max_traces_per_query: Optional[int] = None
 ) -> Dict[str, List[Any]]:
     """Resolve Korrel8r goals from a start query and aggregate related objects by signal type.
 

@@ -256,21 +256,24 @@ class TestExtractUniqueTraceIds:
         assert result == ["trace4", "trace3", "trace2", "trace1", "trace0"]
 
     def test_extract_deduplicates_trace_ids(self):
-        """Test that duplicate trace IDs are removed."""
+        """Test that duplicate trace IDs are removed, keeping most recent timestamp."""
         obj_result = {
             "data": [
                 {"context": {"traceID": "trace1", "startTimeUnixNano": 1000000000000}},
                 {"context": {"traceID": "trace2", "startTimeUnixNano": 2000000000000}},
-                {"context": {"traceID": "trace1", "startTimeUnixNano": 3000000000000}},  # Duplicate
+                {"context": {"traceID": "trace1", "startTimeUnixNano": 3000000000000}},  # Duplicate with newer timestamp
                 {"context": {"traceID": "trace3", "startTimeUnixNano": 4000000000000}},
             ]
         }
 
         result = _extract_unique_trace_ids(obj_result, max_traces=None)
 
-        # Should only include unique trace IDs (first occurrence kept)
+        # Should only include unique trace IDs
         assert len(result) == 3
         assert set(result) == {"trace1", "trace2", "trace3"}
+        # Verify deduplication keeps most recent timestamp for trace1
+        # Expected order: trace3 (4000000000000), trace1 (3000000000000), trace2 (2000000000000)
+        assert result == ["trace3", "trace1", "trace2"]
 
     def test_extract_handles_list_input(self):
         """Test extraction from list input format."""
