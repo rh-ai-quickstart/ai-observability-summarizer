@@ -8,6 +8,7 @@ schedule: "*/1 * * * *" # cron job scheduled every minute
 slackWebhook:
   secretName: alerts-secrets
   secretKey: slack-webhook-url
+  url: ""  # Optional - Slack webhook URL for alert notifications
 
 serviceAccountName: alert-receiver
 
