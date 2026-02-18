@@ -31,17 +31,17 @@ When creating an official release, images receive additional tags:
 ### Tag Lifecycle
 ```
 Build workflow runs:
-  → aiobs-metrics-ui:1.1.0
-  → aiobs-metrics-ui:latest
+  → aiobs-react-ui:1.1.0
+  → aiobs-react-ui:latest
 
 Create release workflow runs:
-  → aiobs-metrics-ui:v1.1.0 (protected, never deleted)
-  → aiobs-metrics-ui:latest (updated)
+  → aiobs-react-ui:v1.1.0 (protected, never deleted)
+  → aiobs-react-ui:latest (updated)
 
 After 30 days (automated cleanup):
-  → aiobs-metrics-ui:1.1.0 (deleted)
-  → aiobs-metrics-ui:v1.1.0 (kept - protected by v-prefix)
-  → aiobs-metrics-ui:latest (kept - always protected)
+  → aiobs-react-ui:1.1.0 (deleted)
+  → aiobs-react-ui:v1.1.0 (kept - protected by v-prefix)
+  → aiobs-react-ui:latest (kept - always protected)
 ```
 
 **Why this matters:** The automated cleanup workflow (PR #169) deletes images older than 30 days, **except** those tagged with `v` prefix (e.g., `v1.0.0`) or `latest`. This ensures official releases are permanently available while development builds are cleaned up automatically.
@@ -101,7 +101,7 @@ After the workflow completes:
    - Expected version number
    - Links to verify images in Quay.io
 2. Verify all three images exist in Quay.io:
-   - `aiobs-metrics-ui:<version>`
+   - `aiobs-react-ui:<version>`
    - `aiobs-metrics-alerting:<version>`
    - `aiobs-mcp-server:<version>`
 3. If target branch was `dev`, check for the PR from `dev` to `main`:
@@ -175,8 +175,8 @@ Actions → Prepare Release → Run workflow
   → Creates commit "minor: prepare release 1.1.0"
   → Updates Helm charts and Makefile to version 1.1.0
   → Builds and pushes images to Quay.io:
-    • aiobs-metrics-ui:1.1.0
-    • aiobs-metrics-ui:latest
+    • aiobs-react-ui:1.1.0
+    • aiobs-react-ui:latest
     • aiobs-metrics-alerting:1.1.0
     • aiobs-metrics-alerting:latest
     • aiobs-mcp-server:1.1.0
@@ -188,8 +188,8 @@ Actions → Prepare Release → Run workflow
 ### 3. Verify Images and PR
 ```
 Verify images in Quay.io (both tags should exist):
-  ✓ quay.io/ecosystem-appeng/aiobs-metrics-ui:1.1.0
-  ✓ quay.io/ecosystem-appeng/aiobs-metrics-ui:latest
+  ✓ quay.io/ecosystem-appeng/aiobs-react-ui:1.1.0
+  ✓ quay.io/ecosystem-appeng/aiobs-react-ui:latest
   ✓ quay.io/ecosystem-appeng/aiobs-metrics-alerting:1.1.0
   ✓ quay.io/ecosystem-appeng/aiobs-metrics-alerting:latest
   ✓ quay.io/ecosystem-appeng/aiobs-mcp-server:1.1.0
@@ -220,7 +220,7 @@ Actions → Create Release → Run workflow
   - dry_run: false
   → Reads version from Makefile: 1.1.0
   → Tags images with v-prefix (official release):
-    • aiobs-metrics-ui:v1.1.0
+    • aiobs-react-ui:v1.1.0
     • aiobs-metrics-alerting:v1.1.0
     • aiobs-mcp-server:v1.1.0
   → Updates latest tag to point to v1.1.0

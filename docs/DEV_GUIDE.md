@@ -28,8 +28,6 @@ summarizer/
 │   │   ├── reports.py     # Report generation
 │   │   ├── promql_service.py # PromQL generation
 │   │   └── thanos_service.py # Thanos integration
-│   ├── ui/                # Streamlit UI
-│   │   └── ui.py         # Multi-dashboard interface
 │   ├── mcp_server/        # Model Context Protocol server
 │   │   ├── api.py         # MCP API implementation
 │   │   ├── main.py        # HTTP server entrypoint
@@ -48,7 +46,6 @@ summarizer/
 │       └── alert_receiver.py # Alert handling
 ├── deploy/helm/           # Helm charts for deployment
 │   ├── mcp-server/        # MCP server Helm chart
-│   ├── ui/                # UI Helm chart
 │   └── rag/               # RAG components (llama-stack, llm-service)
 ├── tests/                 # Test suite
 │   ├── mcp/               # MCP server tests
@@ -101,7 +98,7 @@ export DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib:$DYLD_FALLBACK_LIBRARY_PATH
 # - Port-forwarding to Model service (localhost:8080)
 # - Port-forwarding to Thanos (localhost:9090)
 # - MCP Server (localhost:8085)
-# - Streamlit UI (localhost:8501)
+# - React-UI (localhost:3000)
 
 # Examples:
 ./scripts/local-dev.sh -n default-ns                      # Default LLM
@@ -125,7 +122,7 @@ export DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib:$DYLD_FALLBACK_LIBRARY_PATH
      - **OpenAI GPT**: GPT-4o, GPT-4o-mini
      - **Google Gemini**: Gemini 2.0/2.5 Flash
      - **Local Llama**: Llama 3.1-8B, Llama 3.2-3B (via LlamaStack)
-2. **UI** (`src/ui/ui.py`): Streamlit multi-dashboard frontend with model selection dropdown
+2. **UI** (`openshift-plugin/`): OpenShift Console Plugin and React standalone frontend
 3. **Core Logic** (`src/core/`): Business logic modules for metrics processing and LLM integration
 4. **Alerting** (`src/alerting/`): Alert handling and Slack notifications
 5. **Helm Charts** (`deploy/helm/`): OpenShift deployment configuration
@@ -186,7 +183,6 @@ open htmlcov/index.html
 make build
 
 # Build individual components
-make build-ui            # Streamlit UI
 make build-alerting      # Alerting service
 make build-mcp-server    # MCP server
 
@@ -224,7 +220,8 @@ make install NAMESPACE=your-namespace \
 
 # Deploy individual components
 make install-mcp-server NAMESPACE=your-namespace    # MCP server only
-make install-metric-ui NAMESPACE=your-namespace     # UI only
+make install-console-plugin NAMESPACE=your-namespace # OpenShift console plugin only
+make install-react-ui NAMESPACE=your-namespace       # React UI only
 ```
 
 ### Observability Stack Management
@@ -530,7 +527,6 @@ oc port-forward $TEMPO_SERVICE 8082:8080 -n observability-hub &
 ### Logs
 ```bash
 # View pod logs (replace with your actual namespace)
-oc logs -f deployment/metric-ui -n <DEFAULT_NAMESPACE>
 oc logs -f deployment/mcp-server -n <DEFAULT_NAMESPACE>
 oc logs -f deployment/metric-alerting -n <DEFAULT_NAMESPACE>
 ```
@@ -551,7 +547,6 @@ oc port-forward svc/mcp-server 8085:8085 -n <DEFAULT_NAMESPACE>
 
 ### Building
 - `make build` - Build all container images
-- `make build-ui` - Build Streamlit UI
 - `make build-alerting` - Build alerting service
 - `make build-mcp-server` - Build MCP server
 
@@ -559,7 +554,8 @@ oc port-forward svc/mcp-server 8085:8085 -n <DEFAULT_NAMESPACE>
 - `make install` - Deploy to OpenShift
 - `make install-with-alerts` - Deploy with alerting
 - `make install-mcp-server` - Deploy MCP server only
-- `make install-metric-ui` - Deploy UI only
+- `make install-console-plugin` - Deploy OpenShift console plugin only
+- `make install-react-ui` - Deploy React UI only
 - `make status` - Check deployment status
 - `make uninstall` - Remove deployment
 
@@ -673,7 +669,7 @@ oc get events -n <DEFAULT_NAMESPACE> --sort-by='.lastTimestamp'
 ### File Locations
 - **MCP Server**: `src/mcp_server/main.py`
 - **Core Logic**: `src/core/llm_summary_service.py`
-- **UI**: `src/ui/ui.py`
+- **UI**: `openshift-plugin/`
 - **Tests**: `tests/`
 - **Helm Charts**: `deploy/helm/`
 

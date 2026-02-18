@@ -51,7 +51,7 @@ The workflow uses existing GitHub secrets (already configured for your build wor
 ### Images Managed
 
 The workflow processes these Summarizer container images:
-- `quay.io/ecosystem-appeng/aiobs-metrics-ui`
+- `quay.io/ecosystem-appeng/aiobs-react-ui`
 - `quay.io/ecosystem-appeng/aiobs-metrics-alerting`
 - `quay.io/ecosystem-appeng/aiobs-mcp-server`
 
@@ -115,7 +115,7 @@ This will protect:
 The workflow provides a summary for each image processed:
 
 ```
-🔍 Processing image: quay.io/ecosystem-appeng/aiobs-metrics-ui
+🔍 Processing image: quay.io/ecosystem-appeng/aiobs-react-ui
 📅 Retention policy: Keep images from last 30 days
 
 Found 45 tags total
@@ -282,10 +282,10 @@ If you prefer manual cleanup, you can use `skopeo` directly:
 echo "$QUAY_PASSWORD" | skopeo login quay.io --username "$QUAY_USERNAME" --password-stdin
 
 # List all tags
-skopeo list-tags docker://quay.io/ecosystem-appeng/aiobs-metrics-ui
+skopeo list-tags docker://quay.io/ecosystem-appeng/aiobs-react-ui
 
 # Delete specific tag
-skopeo delete docker://quay.io/ecosystem-appeng/aiobs-metrics-ui:old-tag
+skopeo delete docker://quay.io/ecosystem-appeng/aiobs-react-ui:old-tag
 
 # Logout
 skopeo logout quay.io

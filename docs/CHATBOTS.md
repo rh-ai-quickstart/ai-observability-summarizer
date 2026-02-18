@@ -217,7 +217,7 @@ response = chatbot.chat(
 
 #### Key Points
 
-- **Location**: Chatbots run in the UI process (Streamlit)
+- **Location**: Chatbots run in the frontend UI process
 - **Tool Execution**: Tools are executed via MCP protocol (HTTP/JSON-RPC)
 - **Adapter**: `MCPClientAdapter` wraps `MCPClientHelper` to provide `ToolExecutor` interface
 - **Benefits**: UI can use chatbots without importing MCP server code
@@ -416,7 +416,7 @@ class BaseChatBot(ABC):
 
 **UI usage (original architecture):**
 ```python
-# src/ui/ui.py (original architecture)
+# frontend app (original architecture)
 # UI imports chatbots FROM mcp_server package
 # Old location was: from mcp_server.chatbots import create_chatbot
 
@@ -516,7 +516,7 @@ class BaseChatBot(ABC):
 
 **UI usage (refactored architecture):**
 ```python
-# src/ui/ui.py (refactored architecture)
+# frontend app (refactored architecture)
 # UI imports from standalone chatbots package
 from chatbots import create_chatbot
 from ui.mcp_client_adapter import MCPClientAdapter

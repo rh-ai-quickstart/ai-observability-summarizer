@@ -26,10 +26,11 @@ The project uses 6 GitHub Actions workflows with the following execution order a
    - **Actions:**
    - **Analyzes PR labels and title first**, then falls back to commit messages for version bumps
    - Gets current version from Makefile (not git tags)
-   - Builds 3 container images (using `IMAGE_PREFIX`-component naming):
-     - aiobs-metrics-ui
-     - aiobs-metrics-alerting
-     - aiobs-mcp-server
+  - Builds container images (using `IMAGE_PREFIX`-component naming):
+    - aiobs-metrics-alerting
+    - aiobs-mcp-server
+    - aiobs-console-plugin
+    - aiobs-react-ui
      - Updates Helm charts and Makefile with new version (**non-main branches only**)
    - **Image tagging:** Each image is tagged with both:
      - Semantic version tag (e.g., `0.1.2`, `1.0.0`)
@@ -47,7 +48,7 @@ The project uses 6 GitHub Actions workflows with the following execution order a
      - Workflow_dispatch: Deploys to namespace matching the current branch name
      - Example: PR merged to `feature-x` → deploys to `feature-x` namespace
    - **Components deployed:**
-     - Application components (ui, mcp-server, alerting)
+    - Application components (console-plugin/react-ui, mcp-server, alerting)
      - Observability stack (MinIO + TempoStack + OTEL + tracing)
    - **Dependencies:** ✅ **Requires Build and Push workflow success**
 
@@ -61,7 +62,7 @@ The project uses 6 GitHub Actions workflows with the following execution order a
    - **Trigger:** Monthly schedule (1st day of month at midnight UTC) and manual workflow_dispatch
    - **Purpose:** Deletes old container images from Quay.io to manage storage
    - **Actions:**
-     - Processes 3 container images: aiobs-metrics-ui, aiobs-metrics-alerting, aiobs-mcp-server
+    - Processes container images: aiobs-metrics-alerting, aiobs-mcp-server, aiobs-console-plugin, aiobs-react-ui
      - Deletes tags older than retention period (default: 30 days)
      - Protects `latest` tag and all `v*` tags (official releases, e.g., `v1.0.0`)
      - Supports custom retention days and protected tags via inputs

@@ -30,7 +30,7 @@ export const CustomRangePickerModal: React.FC<CustomRangePickerModalProps> = ({
   const [endTime, setEndTime] = React.useState<string>('00:00');
   const [validationError, setValidationError] = React.useState<string>('');
 
-  // Initialize with simple defaults (matching Streamlit UI pattern)
+  // Initialize with simple defaults.
   React.useEffect(() => {
     if (isOpen) {
       const now = new Date();
@@ -40,7 +40,7 @@ export const CustomRangePickerModal: React.FC<CustomRangePickerModalProps> = ({
       const formatDate = (date: Date) => date.toLocaleDateString('en-CA');
       const formatTime = (date: Date) => `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
       
-      // Simple pattern: start = 1 hour ago, end = now (matching Streamlit)
+      // Simple pattern: start = 1 hour ago, end = now.
       setStartDate(formatDate(oneHourAgo));
       setEndDate(formatDate(now));
       setStartTime(formatTime(oneHourAgo));
@@ -56,7 +56,7 @@ export const CustomRangePickerModal: React.FC<CustomRangePickerModalProps> = ({
     }
   }, [isOpen]);
 
-  // No complex time adjustment logic - keep it simple like Streamlit UI
+  // No complex time adjustment logic - keep it simple.
   // Users can manually adjust times as needed
 
 

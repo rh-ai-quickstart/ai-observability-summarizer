@@ -111,7 +111,7 @@ The default configuration deploys:
 
 - **llm-service** - LLM inference
 - **llama-stack** - Backend API
-- **metric-ui** - Multi-dashboard Streamlit interface
+- **ui** - OpenShift console plugin or React standalone UI (depending on `DEV_MODE`)
 - **mcp-server** - Model Context Protocol server for metrics analysis, report generation, and AI assistant integration
 - **OpenTelemetry Collector** - Distributed tracing collection
 - **Tempo** - Trace storage and analysis
@@ -126,7 +126,7 @@ On terminal you can access the route with:
 oc get route
 
 NAME              HOST/PORT                                                               PATH   SERVICES        PORT   TERMINATION     WILDCARD
-metric-ui-route   metric-ui-route-llama-1.apps.tsisodia-spark.2vn8.p1.openshiftapps.com          metric-ui-svc   8501   edge/Redirect   None
+aiobs-react-ui    aiobs-react-ui-llama-1.apps.tsisodia-spark.2vn8.p1.openshiftapps.com            aiobs-react-ui  http   edge/Redirect   None
 ```
 
 ### OpenShift Summarizer Dashboard
@@ -156,7 +156,6 @@ make uninstall NAMESPACE=your-namespace
 - Built on [Prometheus](https://prometheus.io/) and [Thanos](https://thanos.io/) for metrics collection
 - Uses [Loki](https://grafana.com/oss/loki/) for centralized log aggregation
 - Uses [vLLM](https://github.com/vllm-project/vllm) for model serving
-- Powered by [Streamlit](https://streamlit.io/) for the web interface
 - Integrates with [OpenTelemetry](https://opentelemetry.io/) for distributed tracing and observability
 
 ## Tags
