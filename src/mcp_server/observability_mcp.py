@@ -110,9 +110,11 @@ class ObservabilityMCPServer:
         from .tools.korrel8r_tools import (
             korrel8r_query_objects,
             korrel8r_get_correlated,
+            get_correlated_logs,
         )
         self.mcp.tool()(korrel8r_query_objects)
         self.mcp.tool()(korrel8r_get_correlated)
+        self.mcp.tool()(get_correlated_logs)
 
         self.mcp.tool()(chat)
         self.mcp.tool()(validate_api_key)

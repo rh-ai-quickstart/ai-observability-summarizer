@@ -232,6 +232,7 @@ def fetch_goal_query_objects(goals: List[str], query: str) -> Dict[str, List[Any
                         qstr = q.get("query") if isinstance(q, dict) else None
                         if not qstr:
                             continue
+                        logger.debug("fetch_goal_query_objects executing goal query: %s (goal=%s, bucket=%s)", qstr, goal_name, bucket)
                         obj_result = client.query_objects(qstr)
                         # For logs, attempt to simplify log objects
                         if bucket == "logs":
