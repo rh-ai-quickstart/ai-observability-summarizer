@@ -35,7 +35,22 @@ env:
   KORREL8R_URL: "https://korrel8r-summarizer.openshift-cluster-observability-operator.svc.cluster.local:9443"
   MAX_NUM_LOG_ROWS: 10
   MAX_NUM_TRACE_SPANS: 10
-  TRACE_FETCH_SAFETY_FACTOR: 2  # Multiplier for trace fetching to account for error filtering
+
+  # TRACE_FETCH_SAFETY_FACTOR: Controls how many traces to fetch from Tempo
+  #
+  # The analyzer fetches (MAX_NUM_TRACE_SPANS × TRACE_FETCH_SAFETY_FACTOR) traces,
+  # then filters them to find error traces for analysis. The safety factor accounts
+  # for traces that will be filtered out.
+  #
+  # - Default: 2 (fetch 20 traces when MAX_NUM_TRACE_SPANS=10)
+  # - Higher values: Fetch more traces, better chance of finding errors, but slower
+  # - Lower values: Fetch fewer traces, faster but may miss error traces
+  #
+  # Tune this based on your workload's error rate:
+  # - Low error rate (~1%): Increase to 3-5 to ensure enough error traces
+  # - High error rate (~10%+): Can use 1-2 for faster analysis
+  TRACE_FETCH_SAFETY_FACTOR: 2
+
   KORREL8R_TIMEOUT_SECONDS: 8
   LLM_TIMEOUT_SECONDS: 180
   # GPU Metrics Discovery - custom prefix overrides (comma-separated, additive to defaults)
