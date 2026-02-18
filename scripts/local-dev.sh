@@ -27,7 +27,6 @@ LOKI_PORT_LOCALHOST=3100
 KORREL8R_PORT_LOCALHOST=$KORREL8R_SERVICE_PORT
 LLAMASTACK_PORT_LOCALHOST=$LLAMASTACK_SERVICE_PORT
 LLAMA_MODEL_PORT_LOCALHOST=8080
-UI_PORT_LOCALHOST=8501
 REACT_UI_PORT_LOCALHOST=3000
 MCP_PORT_LOCALHOST=${MCP_PORT:-8085}
 PLUGIN_PORT_LOCALHOST=9001
@@ -278,7 +277,6 @@ cleanup_straggler_processes() {
     pkill -f "oc port-forward.*$LLAMASTACK_PORT_LOCALHOST" 2>/dev/null || true
     pkill -f "oc port-forward.*$LLAMA_MODEL_PORT_LOCALHOST" 2>/dev/null || true
     pkill -f "mcp_server.main" 2>/dev/null || true
-    pkill -f "streamlit run ui.py" 2>/dev/null || true
     pkill -f "webpack serve" 2>/dev/null || true
     pkill -f "yarn.*start" 2>/dev/null || true
     pkill -f "yarn run start-console" 2>/dev/null || true
@@ -288,7 +286,6 @@ cleanup_straggler_processes() {
 free_all_ports() {
     echo -e "${BLUE}  → Ensuring ports are freed...${NC}"
     ensure_port_free "$MCP_PORT_LOCALHOST" "quiet"
-    ensure_port_free "$UI_PORT_LOCALHOST" "quiet"
     ensure_port_free "$TEMPO_PORT_LOCALHOST" "quiet"
     ensure_port_free "$PLUGIN_PORT_LOCALHOST" "quiet"
     ensure_port_free "$CONSOLE_PORT_LOCALHOST" "quiet"
@@ -742,18 +739,6 @@ start_local_services() {
         fi
     done
 
-    # Start Streamlit UI
-    echo -e "${BLUE}🎨 Starting Streamlit UI...${NC}"
-    (cd src/ui && \
-      MCP_SERVER_URL="http://localhost:$MCP_PORT_LOCALHOST" \
-      PYTHON_LOG_LEVEL="$PYTHON_LOG_LEVEL" \
-      streamlit run ui.py --server.port $UI_PORT_LOCALHOST --server.address 0.0.0.0 --server.headless true > /tmp/summarizer-ui.log 2>&1) &
-    UI_PID=$!
-    track_pid "$UI_PID" "Streamlit UI"
-
-    # Wait for UI to start
-    sleep 5
-
     # Start React-UI (OpenShift Console alternative UI)
     echo -e "${BLUE}🌐 Starting React-UI...${NC}"
     ensure_port_free "$REACT_UI_PORT_LOCALHOST"
@@ -783,7 +768,6 @@ start_local_services() {
     # Show log file locations for debugging
     echo -e "${GREEN}📋 Log files for debugging (all in /tmp):${NC}"
     echo -e "   🔧 MCP Server: /tmp/summarizer-mcp-server.log"
-    echo -e "   🎨 Streamlit UI: /tmp/summarizer-ui.log"
     echo -e "   🌐 React-UI: /tmp/summarizer-react-ui.log"
     echo -e "   🏥 Port-Forward Health: $HEALTH_LOG_FILE"
     if [ "$START_PLUGIN" = "true" ]; then
@@ -905,7 +889,6 @@ main() {
 
     echo -e "\n${GREEN}🎉 Setup complete! All services are running.${NC}"
     echo -e "\n${BLUE}📋 Services Available:${NC}"
-    echo -e "   ${YELLOW}🎨 Streamlit UI: http://localhost:$UI_PORT_LOCALHOST${NC}"
     echo -e "   ${YELLOW}🌐 React-UI: http://localhost:$REACT_UI_PORT_LOCALHOST${NC}"
     echo -e "   ${YELLOW}🧩 MCP Server (health): $MCP_URL/health${NC}"
     echo -e "   ${YELLOW}🧩 MCP HTTP Endpoint: $MCP_URL/mcp${NC}"
@@ -936,8 +919,7 @@ main() {
         echo -e "\n${GREEN}   Or use the -o flag to start everything together:${NC}"
         echo -e "   ${BLUE}$0 -n $DEFAULT_NAMESPACE -p -o${NC}"
     else
-        echo -e "\n${GREEN}🎯 Ready to use! Choose your UI:${NC}"
-        echo -e "   ${BLUE}Streamlit UI: http://localhost:$UI_PORT_LOCALHOST${NC}"
+        echo -e "\n${GREEN}🎯 Ready to use!${NC}"
         echo -e "   ${BLUE}React-UI: http://localhost:$REACT_UI_PORT_LOCALHOST${NC}"
     fi
     

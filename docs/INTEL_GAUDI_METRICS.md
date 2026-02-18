@@ -136,6 +136,7 @@ After installation, verify the deployment:
    Expected pods:
    - `llm-service-*` - LLM inference on Intel Gaudi
    - `llama-stack-*` - Backend API
+   - `aiobs-plugin-*` or `aiobs-react-ui-*` - UI components
    - `mcp-server-*` - Model Context Protocol server
 
 2. **Verify Intel Gaudi allocation**:
@@ -482,13 +483,13 @@ If Intel Gaudi metrics are not appearing:
    ```bash
    # Get the exporter pod name
    POD=$(oc get pods -n habana-ai-operator -l app.kubernetes.io/name=habana-ai -o name | head -n 1)
-   
+
    # Port-forward to the exporter (uses port 41611)
    oc port-forward -n habana-ai-operator $POD 41611:41611 &
-   
+
    # Query metrics directly
    curl http://localhost:41611/metrics | grep habanalabs
-   
+
    # Stop port-forward
    pkill -f "port-forward.*41611"
    ```
@@ -506,10 +507,10 @@ If metrics are available but not appearing in the observability stack:
    ```bash
    # Port-forward Thanos Querier
    oc port-forward -n openshift-monitoring svc/thanos-querier 9090:9091 &
-   
+
    # Query for Intel Gaudi metrics
    curl -s "http://localhost:9090/api/v1/label/__name__/values" | grep habanalabs
-   
+
    # Stop port-forward
    pkill -f "port-forward.*thanos-querier"
    ```
@@ -547,4 +548,3 @@ For issues specific to:
 - **Intel Gaudi exporter**: Refer to Intel Gaudi documentation
 - **Observability stack integration**: Create an issue in this repository
 - **Prometheus/Thanos**: Consult respective project documentation
-

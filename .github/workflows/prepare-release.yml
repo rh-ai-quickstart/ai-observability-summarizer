@@ -162,7 +162,6 @@ jobs:
           echo "Commit message: ${{ needs.compute-next-version.outputs.commit_message }}"
           echo ""
           echo "Files that would be updated:"
-          echo "  - deploy/helm/ui/values.yaml"
           echo "  - deploy/helm/alerting/values.yaml"
           echo "  - deploy/helm/mcp-server/values.yaml"
           echo "  - Makefile"
@@ -223,7 +222,6 @@ jobs:
           - **Commit:** ${{ needs.version-bump-commit.outputs.commit_sha }}
           
           ### Container Images
-          - \`${{ env.IMAGE_PREFIX }}-metrics-ui:$VERSION_NUMBER\`
           - \`${{ env.IMAGE_PREFIX }}-metrics-alerting:$VERSION_NUMBER\`
           - \`${{ env.IMAGE_PREFIX }}-mcp-server:$VERSION_NUMBER\`
           
@@ -310,7 +308,6 @@ jobs:
             echo "2. Commit would be created with message: \`${{ needs.compute-next-version.outputs.commit_message }}\`" >> $GITHUB_STEP_SUMMARY
             echo "3. Commit would be pushed to \`${{ inputs.target_branch }}\`" >> $GITHUB_STEP_SUMMARY
             echo "4. Images would be built with version \`${{ needs.compute-next-version.outputs.expected_version }}\`:" >> $GITHUB_STEP_SUMMARY
-            echo "   - \`${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-metrics-ui:${{ needs.compute-next-version.outputs.expected_version }}\`" >> $GITHUB_STEP_SUMMARY
             echo "   - \`${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-metrics-alerting:${{ needs.compute-next-version.outputs.expected_version }}\`" >> $GITHUB_STEP_SUMMARY
             echo "   - \`${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-mcp-server:${{ needs.compute-next-version.outputs.expected_version }}\`" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
@@ -325,7 +322,6 @@ jobs:
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "### Next Steps:" >> $GITHUB_STEP_SUMMARY
             echo "1. Verify images are built with version \`${{ needs.version-bump-commit.outputs.expected_version }}\`:" >> $GITHUB_STEP_SUMMARY
-            echo "   - [${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-metrics-ui:${{ needs.version-bump-commit.outputs.expected_version }}](https://${{ env.REGISTRY }}/repository/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-metrics-ui?tab=tags)" >> $GITHUB_STEP_SUMMARY
             echo "   - [${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-metrics-alerting:${{ needs.version-bump-commit.outputs.expected_version }}](https://${{ env.REGISTRY }}/repository/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-metrics-alerting?tab=tags)" >> $GITHUB_STEP_SUMMARY
             echo "   - [${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-mcp-server:${{ needs.version-bump-commit.outputs.expected_version }}](https://${{ env.REGISTRY }}/repository/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-mcp-server?tab=tags)" >> $GITHUB_STEP_SUMMARY
             if [ "${{ inputs.target_branch }}" = "dev" ]; then

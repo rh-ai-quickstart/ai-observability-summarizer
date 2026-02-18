@@ -256,4 +256,3 @@ make uninstall NAMESPACE=your-namespace
 - **Business challenge:** Adopt and scale AI
 - **Product:** OpenShift AI
 - **Use case:** AI Operations, Observability, Monitoring
-

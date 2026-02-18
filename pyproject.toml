@@ -42,7 +42,6 @@ dev = [
     "black>=23.0.0",
     "ruff>=0.1.0",
     "matplotlib>=3.10.3",
-    "streamlit>=1.47.0",
     "uvicorn>=0.35.0",
     "weasyprint>=65.1",
 ]
@@ -52,7 +51,6 @@ packages = [
   "src/common",
   "src/core",
   "src/mcp_server",
-  "src/ui",
   "src/alerting",
   "src/chatbots",
 ]
@@ -66,7 +64,6 @@ omit = [
     "*/__init__.py",
     "src/api/report_assets/report_config.py",
     "src/api/report_assets/report_renderer.py",
-    "src/ui/ui.py",
 ]
 
 [tool.coverage.report]

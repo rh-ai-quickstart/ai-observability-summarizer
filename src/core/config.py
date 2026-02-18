@@ -2,7 +2,7 @@
 Configuration management for OpenShift AI Observability
 
 Centralizes all environment variables and configuration settings
-that are shared across FastAPI, Streamlit UI, and MCP servers.
+that are shared across backend services and MCP server components.
 """
 
 import os

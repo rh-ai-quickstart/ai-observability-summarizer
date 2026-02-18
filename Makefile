@@ -3,7 +3,7 @@
 
 # NAMESPACE validation for deployment targets
 ifeq ($(NAMESPACE),)
-ifeq (,$(filter install-local depend install-ingestion-pipeline list-models% generate-model-config help build build-ui build-alerting build-mcp-server build-console-plugin build-react-ui push push-ui push-alerting push-mcp-server push-console-plugin push-react-ui clean config test test-python test-react check-observability-drift install-operators uninstall-operators check-operators verify-operators-ready cleanup-loki-clusterroles install-cluster-observability-operator install-opentelemetry-operator install-tempo-operator install-logging-operator install-loki-operator uninstall-cluster-observability-operator uninstall-opentelemetry-operator uninstall-tempo-operator uninstall-logging-operator uninstall-loki-operator enable-tracing-ui disable-tracing-ui enable-logging-ui disable-logging-ui install-loki uninstall-loki upgrade-observability install-korrel8r uninstall-korrel8r,$(MAKECMDGOALS)))
+ifeq (,$(filter install-local depend install-ingestion-pipeline list-models% generate-model-config help build build-alerting build-mcp-server build-console-plugin build-react-ui push push-alerting push-mcp-server push-console-plugin push-react-ui clean config test test-python test-react check-observability-drift install-operators uninstall-operators check-operators verify-operators-ready cleanup-loki-clusterroles install-cluster-observability-operator install-opentelemetry-operator install-tempo-operator install-logging-operator install-loki-operator uninstall-cluster-observability-operator uninstall-opentelemetry-operator uninstall-tempo-operator uninstall-logging-operator uninstall-loki-operator enable-tracing-ui disable-tracing-ui enable-logging-ui disable-logging-ui install-loki uninstall-loki upgrade-observability install-korrel8r uninstall-korrel8r,$(MAKECMDGOALS)))
 $(error NAMESPACE is not set)
 endif
 endif
@@ -24,7 +24,6 @@ GPU_PREFIX_INTEL ?=
 GPU_PREFIX_AMD ?=
 
 # Container image names
-METRICS_UI_IMAGE = $(REGISTRY)/$(ORG)/$(IMAGE_PREFIX)-metrics-ui
 METRICS_ALERTING_IMAGE = $(REGISTRY)/$(ORG)/$(IMAGE_PREFIX)-metrics-alerting
 MCP_SERVER_IMAGE = $(REGISTRY)/$(ORG)/$(IMAGE_PREFIX)-mcp-server
 CONSOLE_PLUGIN_IMAGE = $(REGISTRY)/$(ORG)/$(IMAGE_PREFIX)-console-plugin
@@ -73,8 +72,6 @@ HF_TOKEN ?= $(shell \
 RAG_CHART := rag
 MINIO_CHART := minio-observability-storage
 MINIO_CHART_PATH := minio
-METRICS_UI_RELEASE_NAME ?= ui
-METRICS_UI_CHART_PATH ?= ui
 MCP_SERVER_RELEASE_NAME ?= mcp-server
 MCP_SERVER_CHART_PATH ?= mcp-server
 # Console plugin chart
@@ -191,13 +188,11 @@ help:
 	@echo ""
 	@echo "Build & Push:"
 	@echo "  build              - Build all container images"
-	@echo "  build-ui           - Build Streamlit UI (metric-ui)"
 	@echo "  build-alerting     - Build Alerting Service (metric-alerting)"
 	@echo "  build-mcp-server   - Build MCP Server (mcp-server)"
 	@echo "  build-console-plugin - Build OpenShift Console Plugin"
 	@echo "  build-react-ui     - Build React UI standalone application"
 	@echo "  push               - Push all container images to registry"
-	@echo "  push-ui            - Push metric-ui image"
 	@echo "  push-alerting      - Push metric-alerting image"
 	@echo "  push-mcp-server    - Push mcp-server image"
 	@echo "  push-console-plugin - Push console-plugin image"
@@ -210,7 +205,6 @@ help:
 	@echo "  install-with-alerts - Deploy with alerting enabled"
 	@echo "  install-local      - Set up local development environment"
 	@echo "  install-rag        - Install RAG backend services only"
-	@echo "  install-metric-ui  - Install UI only"
 	@echo "  install-mcp-server - Install MCP server only"
 	@echo "  install-console-plugin - Install OpenShift Console Plugin"
 	@echo "  uninstall-console-plugin - Uninstall OpenShift Console Plugin"
@@ -310,17 +304,8 @@ help:
 	@echo ""
 
 .PHONY: build
-build: build-ui build-alerting build-mcp-server build-console-plugin build-react-ui
+build: build-alerting build-mcp-server build-console-plugin build-react-ui
 	@echo "✅ All container images built successfully"
-
-.PHONY: build-ui
-build-ui:
-	@echo "🔨 Building Streamlit UI (metric-ui)..."
-	@$(BUILD_TOOL) buildx build --platform $(PLATFORM) \
-		-f src/ui/Dockerfile \
-		-t $(METRICS_UI_IMAGE):$(VERSION) \
-		src
-	@echo "✅ metrics-ui image built: $(METRICS_UI_IMAGE):$(VERSION)"
 
 .PHONY: build-alerting
 build-alerting:
@@ -369,14 +354,8 @@ build-react-ui:
 	@echo "✅ react-ui image built: $(REACT_UI_IMAGE):$(VERSION)"
 
 .PHONY: push
-push: push-ui push-alerting push-mcp-server push-console-plugin push-react-ui
+push: push-alerting push-mcp-server push-console-plugin push-react-ui
 	@echo "✅ All container images pushed successfully"
-
-.PHONY: push-ui
-push-ui:
-	@echo "📤 Pushing metric-ui image..."
-	@$(BUILD_TOOL) push $(METRICS_UI_IMAGE):$(VERSION)
-	@echo "✅ metric-ui image pushed"
 
 .PHONY: push-alerting
 push-alerting:
@@ -425,13 +404,6 @@ depend:
 	@echo "Updating Helm dependencies (for $(MINIO_CHART))..."
 	@cd deploy/helm && helm dependency update $(MINIO_CHART_PATH) || exit 1
 
-
-.PHONY: install-metric-ui
-install-metric-ui: namespace
-	@echo "Deploying Metric UI"
-	@cd deploy/helm && helm upgrade --install $(METRICS_UI_RELEASE_NAME) $(METRICS_UI_CHART_PATH) -n $(NAMESPACE) \
-		--set image.repository=$(METRICS_UI_IMAGE) \
-		--set image.tag=$(VERSION)
 
 .PHONY: install-mcp-server
 install-mcp-server: namespace
@@ -554,7 +526,7 @@ install-rag: namespace
 
 
 .PHONY: install
-install: namespace enable-user-workload-monitoring depend validate-llm install-operators install-observability-stack install-metric-ui install-mcp-server delete-jobs
+install: namespace enable-user-workload-monitoring depend validate-llm install-operators install-observability-stack install-mcp-server delete-jobs
 	@echo "DEV_MODE is set to: $(DEV_MODE)"
 	@if [ "$(DEV_MODE)" = "true" ]; then \
 		echo "→ DEV_MODE=true: Installing React UI standalone application only"; \
@@ -581,7 +553,7 @@ install-with-alerts:
 		exit 1; \
 	fi
 	@echo "🚀 Deploying to OpenShift namespace: $(NAMESPACE) with alerting"
-	@$(MAKE) namespace depend validate-llm install-observability-stack install-rag install-metric-ui install-mcp-server delete-jobs install-alerts NAMESPACE=$(NAMESPACE)
+	@$(MAKE) namespace depend validate-llm install-observability-stack install-rag install-mcp-server delete-jobs install-alerts NAMESPACE=$(NAMESPACE)
 	@echo "✅ Deployment with alerting completed"
 
 # Delete all jobs in the namespace
@@ -636,8 +608,6 @@ uninstall:
 		$(MAKE) uninstall-alerts NAMESPACE=$(NAMESPACE); \
 	fi
 
-	@echo "Uninstalling $(METRICS_UI_RELEASE_NAME) helm chart"
-	- @helm -n $(NAMESPACE) uninstall $(METRICS_UI_RELEASE_NAME) --ignore-not-found
 	@echo "Uninstalling $(MCP_SERVER_RELEASE_NAME) helm chart (if installed)"
 	- @helm -n $(NAMESPACE) uninstall $(MCP_SERVER_RELEASE_NAME) --ignore-not-found
 	@echo "Uninstalling UI components (both Console Plugin and React UI if they exist)"
@@ -708,10 +678,6 @@ install-local:
 clean:
 	@echo "🧹 Cleaning up local images..."
 	@ERRORS=0; \
-	if ! $(BUILD_TOOL) rmi $(METRICS_UI_IMAGE):$(VERSION) 2>/dev/null; then \
-		echo "⚠️  Could not remove $(METRICS_UI_IMAGE):$(VERSION) (may not exist)"; \
-		ERRORS=$$((ERRORS + 1)); \
-	fi; \
 	if ! $(BUILD_TOOL) rmi $(METRICS_ALERTING_IMAGE):$(VERSION) 2>/dev/null; then \
 		echo "⚠️  Could not remove $(METRICS_ALERTING_IMAGE):$(VERSION) (may not exist)"; \
 		ERRORS=$$((ERRORS + 1)); \
@@ -785,7 +751,6 @@ config:
 	@echo "  Version: $(VERSION)"
 	@echo "  Platform: $(PLATFORM)"
 	@echo "  Build Tool: $(BUILD_TOOL)"
-	@echo "  Metric UI Image: $(METRICS_UI_IMAGE):$(VERSION)"
 	@echo "  Metric Alerting Image: $(METRICS_ALERTING_IMAGE):$(VERSION)"
 	@echo "  MCP Server Image: $(MCP_SERVER_IMAGE):$(VERSION)"
 	@echo "  Console Plugin Image: $(CONSOLE_PLUGIN_IMAGE):$(VERSION)"

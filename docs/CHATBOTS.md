@@ -225,7 +225,50 @@ The refactored design introduces a **ToolExecutor interface** with **Adapter pat
 
 **Import Chain** (MCP Server): Chatbots package → ToolExecutor → MCPServerAdapter.
 
-**Current code structure:** See `src/chatbots/` for the refactored layout.
+**Current code structure:**
+```python
+# src/chatbots/base.py (refactored architecture)
+from chatbots.tool_executor import ToolExecutor
+
+class BaseChatBot(ABC):
+    def __init__(
+        self,
+        model_name: str,
+        api_key: Optional[str] = None,
+        tool_executor: ToolExecutor = None  # REQUIRED parameter
+    ):
+        if tool_executor is None:
+            raise ValueError(
+                "tool_executor is required. Pass a ToolExecutor implementation"
+            )
+
+        self.model_name = model_name
+        self.api_key = api_key if api_key is not None else self._get_api_key()
+
+        # Uses dependency injection instead of direct instantiation
+        self.tool_executor = tool_executor
+```
+
+**UI usage (refactored architecture):**
+```python
+# src/ui/ui.py (refactored architecture)
+# UI imports from standalone chatbots package
+from chatbots import create_chatbot
+from ui.mcp_client_adapter import MCPClientAdapter
+from ui.mcp_client_helper import MCPClientHelper
+
+# Create adapter for MCP client (dependency injection)
+mcp_client = MCPClientHelper()
+tool_executor = MCPClientAdapter(mcp_client)
+
+# Create chatbot with injected tool executor
+chatbot = create_chatbot(
+    model_name=model_name,
+    api_key=api_key,
+    tool_executor=tool_executor
+)
+response = chatbot.chat(question)
+```
 
 **Improvements in this approach:**
 

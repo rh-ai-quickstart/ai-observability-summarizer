@@ -64,7 +64,7 @@ Perfect for AI operations teams, platform engineers, and business stakeholders w
 - Dynamic DCGM GPU metrics discovery (temperature, power, memory)
 - Real-time performance analysis and anomaly detection
 
-### **2. OpenShift Fleet Monitoring** 
+### **2. OpenShift Fleet Monitoring**
 - Cluster-wide and namespace-scoped metric analysis
 - GPU & Accelerators fleet monitoring with comprehensive DCGM metrics
 - Workloads, Storage, Networking, and Application Services monitoring
@@ -82,7 +82,7 @@ Perfect for AI operations teams, platform engineers, and business stakeholders w
 - Automated metric calculations and trend analysis
 
 ### **5. Alerting & Notifications**
-- Set up alerts for vLLM models and OpenShift metrics  
+- Set up alerts for vLLM models and OpenShift metrics
 - Slack notifications when alerts are triggered
 - Custom alert thresholds and conditions
 
@@ -121,7 +121,7 @@ Ask questions like: *"How many pods are running?"*, *"What's the GPU temperature
 ### **DCGM Metrics Support**
 Automatically discovers and monitors:
 - **Temperature**: GPU core and memory temperature (°C)
-- **Power**: Real-time power consumption (Watts)  
+- **Power**: Real-time power consumption (Watts)
 - **Memory**: GPU memory usage (GB) and utilization (%)
 - **Energy**: Total energy consumption (Joules)
 - **Performance**: GPU utilization, clock speeds (MHz)
@@ -257,7 +257,7 @@ model: llama-guard-3-8b (meta-llama/Llama-Guard-3-8B)
 ```
 You can use the `LLM` flag during installation to set a model from this list for deployment:
 ```
-make install NAMESPACE=your-namespace LLM=llama-3-2-3b-instruct 
+make install NAMESPACE=your-namespace LLM=llama-3-2-3b-instruct
 ```
 
 ### With GPU tolerations
@@ -362,7 +362,7 @@ Access via the OpenShift route: `oc get route`
 
 #### **vLLM Metric Summarizer**
 1. Select your AI model and namespace
-2. Choose time range for analysis  
+2. Choose time range for analysis
 3. Click **Analyze Metrics** for AI-powered insights
 4. Download reports in HTML/PDF/Markdown format
 
@@ -379,7 +379,7 @@ Access via the OpenShift route: `oc get route`
 
 #### **Key Monitoring Categories**
 - **Fleet Overview**: Pods, CPU, Memory, GPU temperature
-- **GPU & Accelerators**: Temperature, power, utilization, memory (GB)  
+- **GPU & Accelerators**: Temperature, power, utilization, memory (GB)
 - **Workloads & Pods**: Container metrics, restarts, failures
 - **Storage & Networking**: I/O rates, network throughput
 - **Application Services**: HTTP metrics, endpoints, errors
@@ -431,7 +431,6 @@ make push
 make push VERSION=v1.0.0
 
 # Push individual components
-make push-ui
 make push-alerting
 make push-mcp-server
 make push-console-plugin
@@ -665,6 +664,7 @@ PYTHON_LOG_LEVEL=WARN ./scripts/local-dev.sh -n <DEFAULT_NAMESPACE>    # Warning
 - ✅ **Port forwards LLM server** (localhost:8321)
 - ✅ **Port forwards Model service** (localhost:8080)
 - ✅ **Starts MCP server** (localhost:8085)
+- ✅ **Starts React UI** (localhost:3000)
 - ✅ **Configures environment** for MCP server development
 - ✅ **Sets configurable logging** (PYTHON_LOG_LEVEL=INFO by default, override with env var)
 
@@ -717,7 +717,7 @@ obs-mcp-server --test-config
 The output should look like this:
 ![Command Output](docs/img/local-dev-expected.png)
 
- 
+
 
 ## Running Tests with Pytest
 

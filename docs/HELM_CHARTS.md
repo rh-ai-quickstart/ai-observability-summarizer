@@ -11,11 +11,12 @@ This directory contains Helm charts for deploying the AI Observability Summarize
 1. **Repository and version defined in Makefile**:
 
    - `VERSION ?= <automatically-updated>` (updated on each successful PR merge to `dev`/`main`)
-   - `METRICS_UI_IMAGE = $(REGISTRY)/$(ORG)/$(IMAGE_PREFIX)-metrics-ui`
    - `METRICS_ALERTING_IMAGE = $(REGISTRY)/$(ORG)/$(IMAGE_PREFIX)-metrics-alerting`
    - `MCP_SERVER_IMAGE = $(REGISTRY)/$(ORG)/$(IMAGE_PREFIX)-mcp-server`
+   - `CONSOLE_PLUGIN_IMAGE = $(REGISTRY)/$(ORG)/$(IMAGE_PREFIX)-console-plugin`
+   - `REACT_UI_IMAGE = $(REGISTRY)/$(ORG)/$(IMAGE_PREFIX)-react-ui`
 
-   **Note**: The observability charts (MinIO, Tempo, OTEL Collector) and RAG charts use external images and are not automatically updated by the CI/CD pipeline. Only the application charts (ui, mcp-server, alerting) are automatically versioned.
+   **Note**: The observability charts (MinIO, Tempo, OTEL Collector) and RAG charts use external images and are not automatically updated by the CI/CD pipeline. Application charts for alerting, mcp-server, console-plugin, and react-ui are automatically versioned.
 
 2. **Helm commands use `--set` for both repository and tag**:
 
