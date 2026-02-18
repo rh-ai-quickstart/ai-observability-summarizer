@@ -416,7 +416,6 @@ make build
 make build VERSION=v1.0.0
 
 # Build individual components
-make build-ui              # Streamlit UI
 make build-alerting        # Alerting Service
 make build-mcp-server      # MCP Server
 make build-console-plugin  # Console Plugin (OpenShift Console integration)
@@ -433,7 +432,6 @@ make push
 make push VERSION=v1.0.0
 
 # Push individual components
-make push-ui
 make push-alerting
 make push-mcp-server
 make push-console-plugin
@@ -667,7 +665,7 @@ PYTHON_LOG_LEVEL=WARN ./scripts/local-dev.sh -n <DEFAULT_NAMESPACE>    # Warning
 - ✅ **Port forwards LLM server** (localhost:8321)
 - ✅ **Port forwards Model service** (localhost:8080)
 - ✅ **Starts MCP server** (localhost:8085)
-- ✅ **Starts Streamlit UI** (localhost:8501)
+- ✅ **Starts React UI** (localhost:3000)
 - ✅ **Configures environment** for MCP server development
 - ✅ **Sets configurable logging** (PYTHON_LOG_LEVEL=INFO by default, override with env var)
 
@@ -943,7 +941,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for full contribution guidelines.
 - [CNCF Landscape](https://landscape.cncf.io/)
 - [OpenShift AI](https://www.redhat.com/en/technologies/cloud-computing/openshift/openshift-ai)
 - [Prometheus](https://prometheus.io/)
-- [Streamlit](https://streamlit.io/)
 
 ---
 

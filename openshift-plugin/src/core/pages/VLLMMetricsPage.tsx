@@ -48,7 +48,7 @@ import { listModels, listNamespaces, ModelInfo, NamespaceInfo, fetchVLLMMetrics,
 import { ConfigurationRequiredAlert } from '../components/ConfigurationRequiredAlert';
 import { MetricsChatPanel } from '../components/MetricsChatPanel';
 
-// Key Metrics - Priority metrics from Streamlit (displayed prominently at top)
+// Key Metrics - Priority metrics from the legacy UI (displayed prominently at top)
 const KEY_METRICS_CONFIG = [
   { key: 'GPU Temperature (°C)', label: 'GPU Temperature', unit: '°C', priority: 1 },
   { key: 'GPU Power Usage (Watts)', label: 'GPU Power Usage', unit: 'W', priority: 2 },
@@ -347,7 +347,7 @@ const MetricCard: React.FC<MetricCardProps> = ({ label, value, unit = '', descri
   );
 };
 
-// Key Metric Card Component - Shows Average + Max values (Streamlit-style)
+// Key Metric Card Component - Shows Average + Max values (legacy-style)
 interface KeyMetricCardProps {
   label: string;
   avgValue: number | null;
@@ -552,7 +552,7 @@ const KeyMetricsSection: React.FC<KeyMetricsSectionProps> = ({ data, loading, ti
     return 3600; // Default to 1 hour
   };
 
-  // Calculate avg and max from time series data (with NaN filtering like Streamlit)
+  // Calculate avg and max from time series data with strict NaN/null filtering.
   const getAvgAndMax = (key: string): { avg: number | null; max: number | null } => {
     const metricData = data[key];
 
@@ -599,7 +599,7 @@ const KeyMetricsSection: React.FC<KeyMetricsSectionProps> = ({ data, loading, ti
     if (!metricData || !metricData.time_series || metricData.time_series.length === 0) {
       const latestValue = metricData?.latest_value;
 
-      // Filter out NaN, null, and infinite values (matches Streamlit behavior)
+      // Filter out NaN, null, and infinite values.
       if (latestValue === null || latestValue === undefined ||
           isNaN(latestValue) || !isFinite(latestValue)) {
         return { avg: null, max: null };
@@ -609,7 +609,6 @@ const KeyMetricsSection: React.FC<KeyMetricsSectionProps> = ({ data, loading, ti
     }
 
     // Filter out NaN, null, and infinite values from time series
-    // This matches the Streamlit UI's behavior in mcp_client_helper.py:720
     const validValues = metricData.time_series
       .map(p => p.value)
       .filter(v => v !== null && v !== undefined && !isNaN(v) && isFinite(v));

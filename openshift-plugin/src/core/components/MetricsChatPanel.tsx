@@ -272,7 +272,7 @@ export const MetricsChatPanel: React.FC<MetricsChatPanelProps> = ({
 
         responseContent = result.response;
       } else {
-        // Call OpenShift-specific chat API (matching Streamlit implementation)
+        // Call OpenShift-specific chat API for dashboard context.
         const result = await chatOpenShift(
           category,
           question,

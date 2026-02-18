@@ -10,11 +10,12 @@ This directory contains Helm charts for deploying the AI Observability Summarize
 
 1. **Repository and version defined in Makefile**: 
    - `VERSION ?= <automatically-updated>` (updated on each successful PR merge to `dev`/`main`)
-   - `METRICS_UI_IMAGE = $(REGISTRY)/$(ORG)/$(IMAGE_PREFIX)-metrics-ui`
    - `METRICS_ALERTING_IMAGE = $(REGISTRY)/$(ORG)/$(IMAGE_PREFIX)-metrics-alerting`
    - `MCP_SERVER_IMAGE = $(REGISTRY)/$(ORG)/$(IMAGE_PREFIX)-mcp-server`
+   - `CONSOLE_PLUGIN_IMAGE = $(REGISTRY)/$(ORG)/$(IMAGE_PREFIX)-console-plugin`
+   - `REACT_UI_IMAGE = $(REGISTRY)/$(ORG)/$(IMAGE_PREFIX)-react-ui`
 
-   **Note**: The observability charts (MinIO, Tempo, OTEL Collector) and RAG charts use external images and are not automatically updated by the CI/CD pipeline. Only the application charts (ui, mcp-server, alerting) are automatically versioned.
+   **Note**: The observability charts (MinIO, Tempo, OTEL Collector) and RAG charts use external images and are not automatically updated by the CI/CD pipeline. Application charts for alerting, mcp-server, console-plugin, and react-ui are automatically versioned.
 
 2. **Helm commands use `--set` for both repository and tag**:
    - `--set image.repository=$(MCP_SERVER_IMAGE)`
@@ -46,21 +47,6 @@ make install NAMESPACE=my-namespace
 VERSION=1.0.0 make install NAMESPACE=my-namespace
 ```
 
-### Configure UI Log Level
-
-The UI chart supports configuring the Python log level via `env.PYTHON_LOG_LEVEL` (DEBUG, INFO, WARNING, ERROR). This is passed to the container as the `PYTHON_LOG_LEVEL` environment variable and picked up by the UI to initialize structured logging.
-
-Example:
-```bash
-helm upgrade --install aiobs-ui deploy/helm/ui \
-  --namespace my-namespace \
-  --create-namespace \
-  --set env.PYTHON_LOG_LEVEL=DEBUG
-```
-
-Notes:
-- You can also set the default in `deploy/helm/ui/values.yaml` under `env.PYTHON_LOG_LEVEL`.
-
 ## File Structure
 
 ```
@@ -71,9 +57,12 @@ deploy/helm/
 ├── mcp-server/
 │   ├── Chart.yaml
 │   └── values.yaml            # Default values (edit this)
-├── ui/
+├── openshift-console-plugin/
 │   ├── Chart.yaml
-│   └── values.yaml            # Default values (edit this)
+│   └── values.yaml            # Console plugin deployment
+├── react-ui-app/
+│   ├── Chart.yaml
+│   └── values.yaml            # Standalone React UI deployment
 ├── rag/
 │   ├── Chart.yaml
 │   └── values.yaml            # RAG components (llama-stack, llm-service)
