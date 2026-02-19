@@ -232,7 +232,8 @@ def list_provider_models(
                         models.append({
                             "id": model_id,
                             "name": model.get("display_name") or model_id,
-                            "created": model.get("created_at", ""),
+                            # Omit 'created' field - API returns string but UI expects number
+                            # Field is optional and not currently used, avoiding type mismatch
                         })
 
             except requests.exceptions.Timeout:

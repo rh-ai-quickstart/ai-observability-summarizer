@@ -498,10 +498,12 @@ async getConfiguredModels(): Promise<string[]> {
 ```
 
 **Model Discovery**:
-- No public API for listing models
-- Returns curated list of current Claude models
+- **API-backed**: Fetches models dynamically from `GET https://api.anthropic.com/v1/models`
+- **Runtime Dependency**: Requires network connectivity to Anthropic's API endpoint
+- **Auto-updating**: New models appear automatically when Anthropic releases them
+- Returns only models with `type: "model"` (excludes non-chat model types)
 
-**Supported Models**:
+**Example Models** (current as of update):
 - claude-opus-4-5-20250929
 - claude-sonnet-4-5-20250929
 - claude-haiku-4-5-20251001
@@ -511,6 +513,11 @@ async getConfiguredModels(): Promise<string[]> {
 **Authentication**:
 - Header: `x-api-key: <api_key>`
 - Header: `anthropic-version: 2023-06-01`
+
+**Error Handling**:
+- Network failures: Graceful error messages, empty model list returned
+- Invalid API key: 401 error with user-friendly message
+- Rate limiting: 429 status handled appropriately
 
 #### Google
 
