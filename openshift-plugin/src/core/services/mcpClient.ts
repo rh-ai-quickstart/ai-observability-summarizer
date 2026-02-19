@@ -215,7 +215,11 @@ export async function callMcpTool<T = unknown>(
 /**
  * Call MCP tool and get raw text response
  */
-export async function callMcpToolText(toolName: string, args: Record<string, unknown> = {}): Promise<string> {
+export async function callMcpToolText(
+  toolName: string,
+  args: Record<string, unknown> = {},
+  signal?: AbortSignal
+): Promise<string> {
   // Auto-inject dev credentials if in dev mode
   const enhancedArgs = await injectDevCredentials(toolName, args);
 
@@ -235,6 +239,7 @@ export async function callMcpToolText(toolName: string, args: Record<string, unk
       },
       id: ++requestId,
     }),
+    signal,
   });
 
   if (!response.ok) {
