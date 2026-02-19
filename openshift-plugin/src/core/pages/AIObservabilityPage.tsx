@@ -96,11 +96,23 @@ const OverviewDashboard: React.FC = () => {
   );
 };
 
+interface AIObservabilityPageProps {
+  activeTab?: number;
+  onTabChange?: (tabIndex: number) => void;
+}
+
 // Main Page with Tabs
-const AIObservabilityPage: React.FC = () => {
-  const [activeTabKey, setActiveTabKey] = React.useState<number>(0);
+const AIObservabilityPage: React.FC<AIObservabilityPageProps> = ({
+  activeTab: externalActiveTab,
+  onTabChange: externalOnTabChange,
+}) => {
+  const [internalActiveTab, setInternalActiveTab] = React.useState<number>(0);
   const [isSettingsOpen, setIsSettingsOpen] = React.useState(false);
   const [configuredModel, setConfiguredModel] = React.useState<string>('');
+
+  // Use external props if provided (React UI), otherwise use internal state (console plugin)
+  const activeTabKey = externalActiveTab !== undefined ? externalActiveTab : internalActiveTab;
+  const setActiveTabKey = externalOnTabChange || setInternalActiveTab;
 
   React.useEffect(() => {
     // Initialize runtime config on first load
@@ -131,7 +143,7 @@ const AIObservabilityPage: React.FC = () => {
       window.removeEventListener('open-settings', handleOpenSettings);
       window.removeEventListener('quick-action-navigate', handleQuickActionNavigate);
     };
-  }, []);
+  }, [setActiveTabKey]);
 
   const handleTabClick = (
     _event: React.MouseEvent<HTMLElement, MouseEvent>,

@@ -1,5 +1,4 @@
 import * as React from 'react';
-import { useHistory, useLocation } from 'react-router-dom';
 import { Nav, NavList, NavItem } from '@patternfly/react-core';
 import {
   TachometerAltIcon,
@@ -9,52 +8,44 @@ import {
   CommentIcon,
 } from '@patternfly/react-icons';
 
-const Navigation: React.FC = () => {
-  const history = useHistory();
-  const location = useLocation();
+interface NavigationProps {
+  activeTab: number;
+  onTabChange: (tabIndex: number) => void;
+}
 
+const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
   const navItems = [
     {
       id: 'overview',
       title: 'Overview',
-      path: '/',
+      tabIndex: 0,
       icon: <TachometerAltIcon />,
     },
     {
       id: 'vllm',
       title: 'vLLM Metrics',
-      path: '/vllm',
+      tabIndex: 1,
       icon: <ServerIcon />,
     },
     {
       id: 'devices',
       title: 'Hardware Accelerators',
-      path: '/devices',
+      tabIndex: 2,
       icon: <CubeIcon />,
     },
     {
       id: 'openshift',
       title: 'OpenShift',
-      path: '/openshift',
+      tabIndex: 3,
       icon: <CubesIcon />,
     },
     {
       id: 'chat',
       title: 'Chat with Prometheus',
-      path: '/chat',
+      tabIndex: 4,
       icon: <CommentIcon />,
     },
   ];
-
-  const getActiveItem = () => {
-    const item = navItems.find((item) => {
-      if (item.path === '/') {
-        return location.pathname === '/';
-      }
-      return location.pathname.startsWith(item.path);
-    });
-    return item ? item.id : 'overview';
-  };
 
   return (
     <Nav aria-label="AI Observability Navigation" theme="dark">
@@ -63,8 +54,8 @@ const Navigation: React.FC = () => {
           <NavItem
             key={item.id}
             itemId={item.id}
-            isActive={getActiveItem() === item.id}
-            onClick={() => history.push(item.path)}
+            isActive={activeTab === item.tabIndex}
+            onClick={() => onTabChange(item.tabIndex)}
           >
             {item.icon && (
               <span style={{ marginRight: '8px' }}>{item.icon}</span>
