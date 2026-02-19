@@ -184,38 +184,78 @@ def list_provider_models(
 
         elif provider_lower == "anthropic":
             # Query Anthropic models API
-            url = "https://api.anthropic.com/v1/models"
-            headers = {
-                "x-api-key": api_key,
-                "anthropic-version": "2023-06-01"
-            }
-            r = requests.get(url, headers=headers, timeout=timeout)
+            # Using API version 2023-06-01 (stable version for models endpoint)
+            try:
+                url = "https://api.anthropic.com/v1/models"
+                headers = {
+                    "x-api-key": api_key,
+                    "anthropic-version": "2023-06-01"
+                }
+                r = requests.get(url, headers=headers, timeout=timeout)
 
-            if r.status_code == 401:
+                if r.status_code == 401:
+                    error_result = {
+                        "error": True,
+                        "message": "Invalid Anthropic API key. Please check your API key in the API Keys tab.",
+                        "models": []
+                    }
+                    return make_mcp_text_response(json.dumps(error_result))
+                if r.status_code != 200:
+                    error_result = {
+                        "error": True,
+                        "message": f"Anthropic API error: {r.status_code}. Please try again later.",
+                        "models": []
+                    }
+                    return make_mcp_text_response(json.dumps(error_result))
+
+                # Parse JSON response with error handling
+                try:
+                    data = r.json()
+                except json.JSONDecodeError as e:
+                    error_result = {
+                        "error": True,
+                        "message": f"Invalid JSON response from Anthropic API: {str(e)}",
+                        "models": []
+                    }
+                    return make_mcp_text_response(json.dumps(error_result))
+
+                # Filter to chat models only (type: "model") with field validation
+                for model in data.get("data", []):
+                    # Only include models of type "model" (excludes other types if any)
+                    if model.get("type") == "model":
+                        model_id = model.get("id")
+                        # Validate required field - skip models without IDs
+                        if not model_id:
+                            logger.warning("Skipping Anthropic model with missing ID: %s", model)
+                            continue
+
+                        models.append({
+                            "id": model_id,
+                            "name": model.get("display_name") or model_id,
+                            "created": model.get("created_at", ""),
+                        })
+
+            except requests.exceptions.Timeout:
                 error_result = {
                     "error": True,
-                    "message": "Invalid Anthropic API key. Please check your API key in the API Keys tab.",
+                    "message": "Connection to Anthropic API timed out. Please try again later.",
                     "models": []
                 }
                 return make_mcp_text_response(json.dumps(error_result))
-            if r.status_code != 200:
+            except requests.exceptions.ConnectionError as e:
                 error_result = {
                     "error": True,
-                    "message": f"Anthropic API error: {r.status_code}. Please try again later.",
+                    "message": f"Failed to connect to Anthropic API: {str(e)}",
                     "models": []
                 }
                 return make_mcp_text_response(json.dumps(error_result))
-
-            data = r.json()
-            # Filter to chat models only (type: "model")
-            for model in data.get("data", []):
-                # Only include models of type "model" (excludes other types if any)
-                if model.get("type") == "model":
-                    models.append({
-                        "id": model.get("id"),
-                        "name": model.get("display_name", model.get("id")),
-                        "created": model.get("created_at"),
-                    })
+            except requests.exceptions.RequestException as e:
+                error_result = {
+                    "error": True,
+                    "message": f"Anthropic API request failed: {str(e)}",
+                    "models": []
+                }
+                return make_mcp_text_response(json.dumps(error_result))
 
         elif provider_lower == "google":
             # Query Google models API
