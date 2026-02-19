@@ -122,7 +122,7 @@ export DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib:$DYLD_FALLBACK_LIBRARY_PATH
 ### Core Components
 1. **MCP Server** (`src/mcp_server/`): Model Context Protocol server for metrics analysis, report generation, and AI assistant integration
    - **Chatbot Architecture** (`src/mcp_server/chatbots/`): Multi-provider LLM support with factory pattern
-     - **Anthropic Claude**: Claude Sonnet 4, Claude 3.5 Haiku, Claude 3 Opus
+     - **Anthropic Claude**: Claude Sonnet 4, Claude Haiku 4.5, Claude 3 Opus
      - **OpenAI GPT**: GPT-4o, GPT-4o-mini
      - **Google Gemini**: Gemini 2.0/2.5 Flash
      - **Local Llama**: Llama 3.1-8B, Llama 3.2-3B (via LlamaStack)

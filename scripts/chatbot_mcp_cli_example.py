@@ -61,7 +61,7 @@ MODEL_CONFIGS = {
         "display_name": "Local Llama Model",
     },
     "anthropic": {
-        "model_name": "anthropic/claude-3-5-haiku-20241022",
+        "model_name": "anthropic/claude-haiku-4-5-20251001",
         "requires_api_key": True,
         "api_key_provider": "Anthropic",
         "display_name": "Anthropic Claude",

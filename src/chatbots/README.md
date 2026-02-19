@@ -27,7 +27,7 @@ print(response)
 
 ## Available Implementations
 
-- **AnthropicChatBot** - Anthropic Claude models (claude-3-5-sonnet, claude-3-5-haiku, etc.)
+- **AnthropicChatBot** - Anthropic Claude models (claude-3-5-sonnet, claude-haiku-4-5, etc.)
 - **OpenAIChatBot** - OpenAI GPT models (gpt-4o, gpt-4o-mini, o1-mini, etc.)
 - **GoogleChatBot** - Google Gemini models (gemini-2.0-flash, etc.)
 - **LlamaChatBot** - Local Llama models (3.1/3.3 with tool calling support)
@@ -42,7 +42,7 @@ from chatbots import create_chatbot
 
 # External models (requires API key)
 chatbot = create_chatbot(
-    model_name="anthropic/claude-3-5-haiku-20241022",
+    model_name="anthropic/claude-haiku-4-5-20251001",
     api_key="sk-ant-...",
     tool_executor=tool_executor
 )
@@ -141,7 +141,7 @@ response = chatbot.chat(
 
 ### External Providers
 
-- **Anthropic**: `anthropic/claude-3-5-sonnet-20241022`, `anthropic/claude-3-5-haiku-20241022`
+- **Anthropic**: `anthropic/claude-3-5-sonnet-20241022`, `anthropic/claude-haiku-4-5-20251001`
 - **OpenAI**: `openai/gpt-4o`, `openai/gpt-4o-mini`, `openai/o1-mini`
 - **Google**: `google/gemini-2.0-flash`, `google/gemini-1.5-pro`
 

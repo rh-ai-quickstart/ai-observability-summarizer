@@ -58,7 +58,7 @@ def validate_api_key(provider: str, api_key: str, endpoint: Optional[str] = None
                     "Content-Type": "application/json",
                     "anthropic-version": "2023-06-01",
                 },
-                json={"model": "claude-3-haiku-20240307", "max_tokens": 1, "messages": [{"role": "user", "content": "hi"}]},
+                json={"model": "claude-haiku-4-5-20251001", "max_tokens": 1, "messages": [{"role": "user", "content": "hi"}]},
                 timeout=timeout,
             )
             ok = r.status_code in (200, 429)

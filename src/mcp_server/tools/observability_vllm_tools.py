@@ -152,18 +152,13 @@ def list_models() -> List[Dict[str, Any]]:
 
 def list_vllm_namespaces() -> List[Dict[str, Any]]:
     """Get list of monitored vLLM Kubernetes namespaces.
-    
+
     Retrieves all vLLMnamespaces that have vLLM deployed and observability data available
     in the Prometheus/Thanos monitoring system.
-    
+
     Returns:
         List of vLLM namespace names with monitoring status
     """
-    # Check if RAG infrastructure is available
-    rag_error = check_rag_availability()
-    if rag_error:
-        return rag_error
-    
     try:
         namespaces = get_vllm_namespaces_helper()
         if not namespaces:

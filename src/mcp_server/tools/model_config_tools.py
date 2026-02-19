@@ -183,40 +183,39 @@ def list_provider_models(
                         })
 
         elif provider_lower == "anthropic":
-            # Anthropic doesn't have a public models list API
-            # Return curated list of current models
-            models = [
-                {
-                    "id": "claude-opus-4-5-20250929",
-                    "name": "Claude Opus 4.5",
-                    "description": "Most capable model for complex tasks",
-                    "context_length": 200000,
-                },
-                {
-                    "id": "claude-sonnet-4-5-20250929",
-                    "name": "Claude Sonnet 4.5",
-                    "description": "Balanced performance and speed",
-                    "context_length": 200000,
-                },
-                {
-                    "id": "claude-3-5-haiku-20241022",
-                    "name": "Claude 3.5 Haiku",
-                    "description": "Fast and efficient",
-                    "context_length": 200000,
-                },
-                {
-                    "id": "claude-opus-4-1-20250805",
-                    "name": "Claude Opus 4.1",
-                    "description": "Previous generation flagship",
-                    "context_length": 200000,
-                },
-                {
-                    "id": "claude-sonnet-4-20250514",
-                    "name": "Claude Sonnet 4",
-                    "description": "Previous generation balanced model",
-                    "context_length": 200000,
-                },
-            ]
+            # Query Anthropic models API
+            url = "https://api.anthropic.com/v1/models"
+            headers = {
+                "x-api-key": api_key,
+                "anthropic-version": "2023-06-01"
+            }
+            r = requests.get(url, headers=headers, timeout=timeout)
+
+            if r.status_code == 401:
+                error_result = {
+                    "error": True,
+                    "message": "Invalid Anthropic API key. Please check your API key in the API Keys tab.",
+                    "models": []
+                }
+                return make_mcp_text_response(json.dumps(error_result))
+            if r.status_code != 200:
+                error_result = {
+                    "error": True,
+                    "message": f"Anthropic API error: {r.status_code}. Please try again later.",
+                    "models": []
+                }
+                return make_mcp_text_response(json.dumps(error_result))
+
+            data = r.json()
+            # Filter to chat models only (type: "model")
+            for model in data.get("data", []):
+                # Only include models of type "model" (excludes other types if any)
+                if model.get("type") == "model":
+                    models.append({
+                        "id": model.get("id"),
+                        "name": model.get("display_name", model.get("id")),
+                        "created": model.get("created_at"),
+                    })
 
         elif provider_lower == "google":
             # Query Google models API

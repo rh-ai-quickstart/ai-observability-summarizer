@@ -28,7 +28,7 @@ tool_executor = MCPClientAdapter(mcp_client)
 
 # Create chatbot (tool_executor is REQUIRED)
 chatbot = create_chatbot(
-    model_name="anthropic/claude-3-5-haiku-20241022",
+    model_name="anthropic/claude-haiku-4-5-20251001",
     api_key=user_api_key,
     tool_executor=tool_executor
 )
@@ -200,7 +200,7 @@ tool_executor = MCPClientAdapter(mcp_client)
 
 # Create chatbot with user's API key
 chatbot = create_chatbot(
-    model_name="anthropic/claude-3-5-haiku-20241022",
+    model_name="anthropic/claude-haiku-4-5-20251001",
     api_key=user_api_key,
     tool_executor=tool_executor  # REQUIRED parameter
 )
