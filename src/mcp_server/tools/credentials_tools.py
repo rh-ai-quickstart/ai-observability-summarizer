@@ -50,17 +50,18 @@ def validate_api_key(provider: str, api_key: str, endpoint: Optional[str] = None
             ok = r.status_code in (200, 401, 403) and r.status_code != 401  # 401 indicates invalid
             details["status"] = r.status_code
         elif provider_lower == "anthropic":
-            # Minimal chat call; accept 200 or 429 (rate limited) as valid
-            r = requests.post(
-                ep,
+            # Validate API key by listing models (avoids coupling to specific model ID)
+            # This validates key authenticity without requiring access to a specific model
+            models_url = "https://api.anthropic.com/v1/models"
+            r = requests.get(
+                models_url,
                 headers={
                     "x-api-key": api_key,
-                    "Content-Type": "application/json",
                     "anthropic-version": "2023-06-01",
                 },
-                json={"model": "claude-3-haiku-20240307", "max_tokens": 1, "messages": [{"role": "user", "content": "hi"}]},
                 timeout=timeout,
             )
+            # 200 = valid key, 401 = invalid key, 429 = rate limited (but key is valid)
             ok = r.status_code in (200, 429)
             details["status"] = r.status_code
         elif provider_lower == "google":

@@ -67,7 +67,7 @@ def test_get_model_config_empty(mock_getenv):
 @patch("src.mcp_server.tools.observability_vllm_tools.resolve_time_range", return_value=(1000, 2000))
 def test_analyze_vllm_success(_, __, ___, mock_range_queries, ____):
     import json
-    
+
     # Mock range query results (time series data)
     mock_range_queries.return_value = {
         "latency": {
@@ -79,11 +79,13 @@ def test_analyze_vllm_success(_, __, ___, mock_range_queries, ____):
             "time_series": [{"timestamp": "2024-01-01T10:00:00", "value": 100}]
         }
     }
-    
+
     out = tools.analyze_vllm("model", "summarizer", time_range="1h")
-    
-    # analyze_vllm now returns a JSON string
-    result = json.loads(out)
+
+    # analyze_vllm now returns MCP response, extract text and parse JSON
+    texts = _texts(out)
+    assert len(texts) == 1
+    result = json.loads(texts[0])
     assert result["model_name"] == "model"
     assert result["summary"] == "SUMMARY"
     assert "time_range" in result
@@ -211,14 +213,16 @@ def test_analyze_vllm_with_structured_data():
                         }
                         
                         result = tools.analyze_vllm("test-model", "test-summarizer", time_range="1h")
-                        
-                        # analyze_vllm now returns a JSON string directly
-                        structured = json.loads(result)
-                        
+
+                        # analyze_vllm now returns MCP response, extract text and parse JSON
+                        texts = _texts(result)
+                        assert len(texts) == 1
+                        structured = json.loads(texts[0])
+
                         assert "model_name" in structured
                         assert "summary" in structured
                         assert "time_range" in structured
-                        
+
                         assert structured["model_name"] == "test-model"
                         assert structured["summary"] == "TEST_SUMMARY"
 

@@ -341,9 +341,13 @@ class MetricsCatalog:
                     ssl_verify=VERIFY_SSL,
                     auth_token=THANOS_TOKEN,
                 )
+                # Snapshot lookup to avoid RuntimeError if GPU discovery
+                # mutates self._lookup concurrently during iteration.
+                with self._catalog_lock:
+                    lookup_snapshot = dict(self._lookup)
                 result = validator.validate(
                     categories=self._categories,
-                    lookup=self._lookup,
+                    lookup=lookup_snapshot,
                     timeout=self._catalog_validation_timeout,
                 )
 
@@ -690,7 +694,7 @@ class MetricsCatalog:
                 "gpu", "nvidia", "cuda", "dcgm",  # NVIDIA
                 "gaudi", "habana", "intel", "xpu",  # Intel
                 "amd", "rocm", "amdgpu",  # AMD
-                "accelerator", "ai", "ml", "vllm", "inference",  # General AI/ML
+                "accelerator", "vllm", "inference",  # General AI/ML
                 "ttft", "tpot", "itl", "kv cache", "prefix cache",  # vLLM abbreviations
                 "preemption", "tokens per second", "model serving",  # vLLM concepts
                 "decode", "prefill", "queue time",  # Latency phases

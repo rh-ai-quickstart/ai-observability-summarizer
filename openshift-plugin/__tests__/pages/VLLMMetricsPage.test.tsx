@@ -412,7 +412,8 @@ describe('VLLMMetricsPage', () => {
           'vllm-namespace-1 | llama-2-7b',
           'claude-3-opus',
           '1h',
-          'test-key'
+          'test-key',
+          expect.any(Object) // AbortSignal from AbortController
         );
       });
     });

@@ -336,7 +336,7 @@ Review resource requests to optimize cluster utilization.`,
     });
 
     it('should handle different AI models', async () => {
-      const models = ['gpt-4', 'gpt-3.5-turbo', 'claude-3-sonnet', 'claude-3-haiku'];
+      const models = ['gpt-4', 'gpt-3.5-turbo', 'claude-3-sonnet', 'claude-haiku-4-5'];
 
       for (const model of models) {
         mockFetch.mockResolvedValueOnce({

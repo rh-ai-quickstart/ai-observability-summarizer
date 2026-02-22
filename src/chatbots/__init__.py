@@ -14,7 +14,7 @@ Usage:
     # Or import specific implementations
     from chatbots import AnthropicChatBot, OpenAIChatBot
 
-    anthropic_bot = AnthropicChatBot("claude-3-5-haiku", api_key="sk-ant-...")
+    anthropic_bot = AnthropicChatBot("claude-haiku-4-5", api_key="sk-ant-...")
     openai_bot = OpenAIChatBot("gpt-4o-mini", api_key="sk-...")
 
 Architecture:

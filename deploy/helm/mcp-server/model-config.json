@@ -47,13 +47,13 @@
       "output_rate": 0.000015
     }
   },
-  "anthropic/claude-3-5-haiku-20241022": {
+  "anthropic/claude-haiku-4-5-20251001": {
     "external": true,
     "requiresApiKey": true,
     "serviceName": null,
-    "provider": "anthropic", 
+    "provider": "anthropic",
     "apiUrl": "https://api.anthropic.com/v1/messages",
-    "modelName": "claude-3-5-haiku-20241022",
+    "modelName": "claude-haiku-4-5-20251001",
     "cost": {
       "prompt_rate": 0.000001,
       "output_rate": 0.000005

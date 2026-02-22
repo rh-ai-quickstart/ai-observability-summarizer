@@ -711,6 +711,108 @@ class TestGPUDiscoveryIntegration:
         result = catalog.wait_for_gpu_discovery(timeout=1.0)
         assert result is True
 
+    def test_concurrent_gpu_merge_and_lookup_iteration(self, base_catalog_file):
+        """Test that iterating _lookup while GPU discovery merges doesn't raise.
+
+        Without the snapshot fix in _start_catalog_validation, iterating
+        self._lookup (via set(lookup.keys())) while _merge_gpu_metrics
+        inserts keys concurrently would raise RuntimeError:
+        'dictionary changed size during iteration'.
+        """
+        import threading
+        from core.gpu_metrics_discovery import GPUDiscoveryResult, GPUVendor
+
+        catalog = MetricsCatalog(
+            catalog_path=base_catalog_file,
+            enable_gpu_discovery=False,
+        )
+        catalog._load_catalog()
+
+        # Build a large GPU result so the merge takes measurable time
+        gpu_metrics = [
+            {"name": f"gpu_metric_{i}", "type": "gauge",
+             "help": f"GPU metric {i}", "keywords": ["gpu"]}
+            for i in range(500)
+        ]
+        gpu_result = GPUDiscoveryResult(
+            vendor=GPUVendor.NVIDIA,
+            metrics_high=gpu_metrics,
+            metrics_medium=[],
+            total_discovered=len(gpu_metrics),
+            discovery_time_ms=0.0,
+            error=None,
+        )
+
+        errors = []
+
+        def iterate_lookup():
+            """Simulate what CatalogValidator.validate() does."""
+            try:
+                for _ in range(200):
+                    # This is the line (catalog_validator.py:293) that would
+                    # fail without the snapshot fix.
+                    _ = set(catalog._lookup.keys())
+            except RuntimeError as e:
+                errors.append(e)
+
+        def merge_gpu():
+            """Simulate GPU discovery merging metrics."""
+            try:
+                catalog._merge_gpu_metrics(gpu_result)
+            except RuntimeError as e:
+                errors.append(e)
+
+        # Run both concurrently — repeat several times to increase the
+        # chance of hitting the race window.
+        for _ in range(10):
+            t_iter = threading.Thread(target=iterate_lookup)
+            t_merge = threading.Thread(target=merge_gpu)
+            t_iter.start()
+            t_merge.start()
+            t_iter.join(timeout=5)
+            t_merge.join(timeout=5)
+
+        assert errors == [], f"Race condition triggered: {errors}"
+
+    def test_validation_uses_lookup_snapshot(self, base_catalog_file):
+        """Test that _start_catalog_validation snapshots _lookup under lock.
+
+        Patches CatalogValidator.validate to capture the lookup arg and
+        verify it's a copy (different identity) of catalog._lookup.
+        """
+        from core.catalog_validator import CatalogValidator, CatalogValidationResult
+
+        captured_lookups = []
+        original_validate = CatalogValidator.validate
+
+        def spy_validate(self_val, categories, lookup, **kwargs):
+            """Intercept validate() to capture the lookup arg."""
+            captured_lookups.append(lookup)
+            return CatalogValidationResult(error="test-skip")
+
+        catalog = MetricsCatalog(
+            catalog_path=base_catalog_file,
+            enable_gpu_discovery=False,
+        )
+        catalog._load_catalog()
+
+        # Patch the validate method on the class itself so the local
+        # import inside _validate() still resolves to our spy.
+        with patch.object(CatalogValidator, 'validate', spy_validate):
+            catalog._prometheus_url = "http://test:9090"
+            catalog._catalog_validation_timeout = 30
+            catalog._start_catalog_validation()
+            catalog._catalog_validation_thread.join(timeout=5)
+
+        assert len(captured_lookups) == 1, (
+            f"Expected validate() to be called once, got {len(captured_lookups)} calls"
+        )
+        # The validator must receive a different dict object (a snapshot),
+        # not the same reference as catalog._lookup.
+        assert captured_lookups[0] is not catalog._lookup
+        # But the contents should match what was in _lookup at snapshot time.
+        assert captured_lookups[0] == catalog._lookup
+
 
 class TestGetCategoryMetricsDetail:
     """Test get_category_metrics_detail method."""

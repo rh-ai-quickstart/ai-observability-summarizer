@@ -647,6 +647,7 @@ const VLLMMetricsPage: React.FC = () => {
   const [ragAvailable, setRagAvailable] = React.useState<boolean | null>(null);
   const [analysisLoading, setAnalysisLoading] = React.useState(false);
   const [analysisResult, setAnalysisResult] = React.useState<AnalysisResult | null>(null);
+  const [analysisController, setAnalysisController] = React.useState<AbortController | null>(null);
   const [metricsData, setMetricsData] = React.useState<Record<string, MetricDataValue>>({});
   const fetchIdRef = React.useRef(0);
   const [chatPanelOpen, setChatPanelOpen] = React.useState(false);
@@ -744,22 +745,38 @@ const VLLMMetricsPage: React.FC = () => {
   const handleAnalyze = async () => {
     if (!model) return;
 
+    // Cancel any existing analysis
+    if (analysisController) {
+      analysisController.abort();
+    }
+
+    // Create new abort controller
+    const controller = new AbortController();
+    setAnalysisController(controller);
+
     setAnalysisLoading(true);
     setAnalysisResult(null);
     setError(null);
     try {
       const config = getSessionConfig();
       console.log('[Analyze] Session config:', config);
-      
+
       if (!config.ai_model) {
         setError('Please configure an AI model in Settings first');
+        setAnalysisLoading(false);
+        setAnalysisController(null);
         return;
       }
-      
+
       console.log('[Analyze] Calling analyzeVLLM with:', { model, aiModel: config.ai_model, timeRange });
-      const result = await analyzeVLLM(model, config.ai_model, timeRange, config.api_key);
+      const result = await analyzeVLLM(model, config.ai_model, timeRange, config.api_key, controller.signal);
       console.log('[Analyze] Result received:', result);
-      
+
+      // Check if request was cancelled
+      if (controller.signal.aborted) {
+        return;
+      }
+
       if (result && result.summary) {
         setAnalysisResult(result);
       } else {
@@ -767,11 +784,28 @@ const VLLMMetricsPage: React.FC = () => {
         setError('Analysis returned invalid format. Check browser console for details.');
       }
     } catch (err) {
+      // Don't show error if request was cancelled
+      if (err instanceof Error && err.name === 'AbortError') {
+        return;
+      }
+
       console.error('[Analyze] Failed:', err);
       setError(`Failed to analyze metrics: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
-      setAnalysisLoading(false);
+      if (!controller.signal.aborted) {
+        setAnalysisLoading(false);
+        setAnalysisController(null);
+      }
     }
+  };
+
+  const handleCancelAnalysis = () => {
+    if (analysisController) {
+      analysisController.abort();
+      setAnalysisController(null);
+    }
+    setAnalysisLoading(false);
+    setAnalysisResult(null);
   };
 
   const handleRefresh = () => {
@@ -1030,7 +1064,7 @@ const VLLMMetricsPage: React.FC = () => {
             )}
 
             {/* AI Analysis Result */}
-            {analysisResult && (
+            {(analysisResult || analysisLoading) && (
               <Card style={{ marginBottom: '16px', background: 'linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%)', border: '1px solid #c4b5fd' }}>
                 <CardTitle>
                   <Flex alignItems={{ default: 'alignItemsCenter' }}>
@@ -1044,9 +1078,27 @@ const VLLMMetricsPage: React.FC = () => {
                   </Flex>
                 </CardTitle>
                 <CardBody>
-                  <div style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', margin: 0, lineHeight: 1.6 }}>
-                    {analysisResult.summary}
-                  </div>
+                  {analysisLoading ? (
+                    <Bullseye style={{ minHeight: '100px' }}>
+                      <div style={{ textAlign: 'center' }}>
+                        <Spinner size="lg" />
+                        <Text component={TextVariants.p} style={{ marginTop: '12px', color: 'var(--pf-v5-global--Color--200)' }}>
+                          Analyzing {model}...
+                        </Text>
+                        <Button
+                          variant="link"
+                          onClick={handleCancelAnalysis}
+                          style={{ marginTop: '16px', color: 'var(--pf-v5-global--danger-color--100)' }}
+                        >
+                          Cancel Analysis
+                        </Button>
+                      </div>
+                    </Bullseye>
+                  ) : analysisResult ? (
+                    <div style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', margin: 0, lineHeight: 1.6 }}>
+                      {analysisResult.summary}
+                    </div>
+                  ) : null}
                 </CardBody>
               </Card>
             )}
