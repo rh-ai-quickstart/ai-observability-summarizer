@@ -237,8 +237,23 @@ def select_queries_directly(question: str, namespace: Optional[str], model_name:
             detected_phase = "Succeeded"
         
         logger.debug("Detected pod phase: %s", detected_phase)
-        
-        if is_fleet_wide:
+
+        if detected_phase == "Failed":
+            # Pod failure detection requires multiple metrics — kube_pod_status_phase
+            # only catches pods in the "Failed" phase, but most common failures
+            # (CrashLoopBackOff, ImagePullBackOff, OOMKilled, Error) keep the pod
+            # in Running or Pending phase.  Query container-level metrics as well.
+            ns_filter = f'namespace="{namespace}", ' if not is_fleet_wide else ''
+            queries.append(f'kube_pod_status_phase{{{ns_filter}phase="Failed"}} == 1')
+            queries.append(
+                f'kube_pod_container_status_waiting_reason{{{ns_filter}'
+                f'reason=~"CrashLoopBackOff|ImagePullBackOff|ErrImagePull|CreateContainerConfigError"}} == 1'
+            )
+            queries.append(
+                f'kube_pod_container_status_terminated_reason{{{ns_filter}'
+                f'reason=~"Error|OOMKilled"}} == 1'
+            )
+        elif is_fleet_wide:
             queries.append(f'sum(kube_pod_status_phase{{phase="{detected_phase}"}})')
         else:
             queries.append(f'sum(kube_pod_status_phase{{phase="{detected_phase}", namespace="{namespace}"}})')

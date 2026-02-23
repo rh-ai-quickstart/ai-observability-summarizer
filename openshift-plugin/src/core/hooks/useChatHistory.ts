@@ -31,6 +31,8 @@ export interface Message {
   error?: boolean;
   progressLog?: ProgressEntry[];
   originalUserMessage?: string; // Store original user message for retry functionality
+  scope?: 'cluster_wide' | 'namespace_scoped';
+  namespace?: string;
 }
 
 const getInitialGreeting = (): Message => ({

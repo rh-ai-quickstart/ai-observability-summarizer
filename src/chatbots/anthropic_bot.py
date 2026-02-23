@@ -158,9 +158,8 @@ class AnthropicChatBot(BaseChatBot):
                         "content": tool_results
                     })
 
-                    # Limit conversation history
-                    if len(messages) > 8:
-                        messages = messages[-8:]
+                    # Truncate conversation safely (preserves tool-call/result pairs)
+                    messages = self._truncate_messages(messages, keep_system_prompt=False)
 
                     # Continue loop
                     continue

@@ -163,6 +163,9 @@ const AIChatPage: React.FC = () => {
     let textToSend = messageText || inputValue.trim();
     if (!textToSend || isLoading) return;
 
+    const currentScope = chatScope;
+    const currentNamespace = selectedNamespace;
+
     // Auto-prefix with category context when user types in the main input
     if (!messageText && selectedCategoryName) {
       textToSend = `Regarding ${selectedCategoryName} metrics: ${textToSend}`;
@@ -199,6 +202,8 @@ const AIChatPage: React.FC = () => {
       role: 'user',
       content: textToSend,
       timestamp: new Date(),
+      scope: currentScope,
+      namespace: currentNamespace || undefined,
     };
 
     setMessages(prev => [...prev, userMessage]);
@@ -210,20 +215,24 @@ const AIChatPage: React.FC = () => {
       // Build conversation history from previous messages (exclude current and error messages)
       // Limit to last N messages based on settings
       const conversationHistory = messages
-        .filter(msg => !msg.error) // Exclude error messages
-        .slice(-chatSettings.conversationContextLimit) // Apply context limit from settings
-        .map(msg => ({
-          role: msg.role,
-          content: msg.content,
-        }));
+        .filter(msg => !msg.error)
+        .filter(msg => {
+          const msgScope = msg.scope || 'cluster_wide';
+          if (currentScope === 'namespace_scoped') {
+            return msgScope === 'namespace_scoped' && msg.namespace === currentNamespace;
+          }
+          return msgScope === 'cluster_wide';
+        })
+        .slice(-chatSettings.conversationContextLimit)
+        .map(msg => ({ role: msg.role, content: msg.content }));
 
       // Call real MCP chat endpoint with conversation history
       const { response, progressLog } = await chat(
         config.ai_model,
         userMessage.content,
         {
-          scope: chatScope,
-          namespace: selectedNamespace || undefined,
+          scope: currentScope,
+          namespace: currentNamespace || undefined,
           apiKey: config.api_key,
           conversationHistory,
         }
@@ -240,6 +249,8 @@ const AIChatPage: React.FC = () => {
         content: response,
         timestamp: new Date(),
         progressLog: progressLog && progressLog.length > 0 ? progressLog : undefined,
+        scope: currentScope,
+        namespace: currentNamespace || undefined,
       };
 
       setMessages(prev => [...prev, assistantMessage]);
@@ -261,7 +272,9 @@ const AIChatPage: React.FC = () => {
         content: `❌ I encountered an error: ${error.message}`,
         timestamp: new Date(),
         error: true,
-        originalUserMessage: userMessage.content, // Store original message for retry
+        originalUserMessage: userMessage.content,
+        scope: currentScope,
+        namespace: currentNamespace || undefined,
       };
 
       setMessages(prev => [...prev, errorMessage]);

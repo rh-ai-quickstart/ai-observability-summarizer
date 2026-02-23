@@ -373,6 +373,110 @@ class BaseChatBot(ABC):
 
         return tool_result
 
+    def _truncate_messages(
+        self,
+        messages: list,
+        keep_system_prompt: bool = True,
+        max_messages: int = 20,
+        target_messages: int = 14,
+    ) -> list:
+        """Truncate messages while keeping tool-call/result pairs atomic.
+
+        Groups assistant messages that contain tool_calls together with their
+        corresponding tool-result messages, so truncation never orphans a
+        tool call from its results (which causes LLMs to hallucinate).
+
+        Supports two message formats:
+        - OpenAI/LlamaStack: tool results are separate {"role": "tool", ...} messages
+        - Anthropic: tool results are a single {"role": "user", "content": [{"type": "tool_result", ...}]} message
+
+        Args:
+            messages: The current message list (mutated in-place style; returns new list).
+            keep_system_prompt: If True, preserves messages[0] as the system prompt.
+            max_messages: Trigger truncation when len(messages) exceeds this.
+            target_messages: Keep this many messages (plus optional system prompt) after truncation.
+
+        Returns:
+            Truncated message list.
+        """
+        if len(messages) <= max_messages:
+            return messages
+
+        # Separate system prompt if needed
+        if keep_system_prompt and messages:
+            system = [messages[0]]
+            body = messages[1:]
+        else:
+            system = []
+            body = list(messages)
+
+        # Build atomic groups from body messages.
+        # A "group" is either:
+        #   1. A standalone message (user or assistant without tool_calls)
+        #   2. An assistant message with tool_calls + all subsequent tool-result messages
+        groups: list[list] = []
+        i = 0
+        while i < len(body):
+            msg = body[i]
+
+            # Detect assistant message with tool_calls (OpenAI/Llama format)
+            has_tool_calls = (
+                isinstance(msg, dict)
+                and msg.get("role") == "assistant"
+                and msg.get("tool_calls")
+            )
+
+            if has_tool_calls:
+                group = [msg]
+                i += 1
+                # Collect subsequent tool-result messages
+                while i < len(body):
+                    next_msg = body[i]
+                    is_tool_result = False
+
+                    # OpenAI format: {"role": "tool", ...}
+                    if isinstance(next_msg, dict) and next_msg.get("role") == "tool":
+                        is_tool_result = True
+
+                    # Anthropic format: {"role": "user", "content": [{"type": "tool_result", ...}]}
+                    if (
+                        isinstance(next_msg, dict)
+                        and next_msg.get("role") == "user"
+                        and isinstance(next_msg.get("content"), list)
+                        and any(
+                            isinstance(c, dict) and c.get("type") == "tool_result"
+                            for c in next_msg["content"]
+                        )
+                    ):
+                        is_tool_result = True
+
+                    if is_tool_result:
+                        group.append(next_msg)
+                        i += 1
+                    else:
+                        break
+                groups.append(group)
+            else:
+                groups.append([msg])
+                i += 1
+
+        # Drop oldest groups until we're at or below target
+        total = sum(len(g) for g in groups)
+        while groups and (len(system) + total) > target_messages:
+            dropped = groups.pop(0)
+            total -= len(dropped)
+
+        # Reconstruct
+        result = system[:]
+        for g in groups:
+            result.extend(g)
+
+        logger.info(
+            f"✂️ Truncated messages from {len(messages)} to {len(result)} "
+            f"({len(groups)} atomic groups preserved)"
+        )
+        return result
+
     def _get_model_specific_instructions(self) -> str:
         """Override this in subclasses for model-specific guidance.
 
@@ -579,6 +683,15 @@ The system now has intelligent metric discovery with category-aware filtering:
 - **Show detailed breakdowns** not just summary totals
 - List top consumers by pod and namespace with actual names
 - Categorize by workload type such as AI/ML versus Infrastructure
+
+**Pod Health & Failure Detection:**
+- `kube_pod_status_phase` only tracks pod-level phases (Pending, Running, Succeeded, Failed, Unknown)
+- Most common failures (CrashLoopBackOff, ImagePullBackOff, OOMKilled, Error) are NOT in the "Failed" phase
+- To find ALL unhealthy pods, you MUST check multiple metrics:
+  - `kube_pod_container_status_waiting_reason{{reason=~"CrashLoopBackOff|ImagePullBackOff|ErrImagePull|CreateContainerConfigError"}}` — containers stuck in waiting state
+  - `kube_pod_container_status_terminated_reason{{reason=~"Error|OOMKilled"}}` — containers that terminated with errors
+  - `kube_pod_status_phase{{phase="Failed"}}` — pods in Failed phase
+- When a user asks about "failing", "unhealthy", "problem", or "broken" pods, ALWAYS query container-level metrics, not just pod phase
 
 **CORE PRINCIPLES:**
 - **BE THOROUGH BUT FOCUSED**: Use as many tools as needed to answer comprehensively

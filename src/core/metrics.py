@@ -2324,8 +2324,10 @@ def build_log_trace_context_for_pod_issues(
             return ""
 
         pod_issue_query = (
-            "max by (namespace, pod) ((kube_pod_status_phase{phase=\"Failed\"} == 1) "
-            "or (kube_pod_container_status_waiting_reason{reason=\"CrashLoopBackOff\"} == 1))"
+            'max by (namespace, pod) ('
+            '(kube_pod_status_phase{phase="Failed"} == 1) or '
+            '(kube_pod_container_status_waiting_reason{reason=~"CrashLoopBackOff|ImagePullBackOff|ErrImagePull|CreateContainerConfigError"} == 1) or '
+            '(kube_pod_container_status_terminated_reason{reason=~"Error|OOMKilled"} == 1))'
         )
         pairs_df = fetch_openshift_metrics(
             pod_issue_query,
