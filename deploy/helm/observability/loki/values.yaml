@@ -152,10 +152,9 @@ clusterLogging:
   logForwarder:
     enabled: true
 
-    # Service account for log collection
+    # Service account for log collection (created by rbac.collector.create setting above)
     serviceAccount:
       name: collector
-      create: false # Use existing service account from OpenShift Logging
 
     # Target LokiStack configuration
     target:

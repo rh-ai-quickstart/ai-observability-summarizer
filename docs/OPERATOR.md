@@ -8,8 +8,8 @@ A Helm-based Kubernetes Operator for deploying the complete AI Observability sta
 
 - OpenShift 4.12+
 - Cluster admin access
-- GPU node (for LLM deployment)
-- HuggingFace API token: https://huggingface.co/settings/tokens
+- GPU node (optional, only if RAG Stack is enabled)
+- HuggingFace API token (optional, only if RAG Stack is enabled): https://huggingface.co/settings/tokens
 
 ### Installation (3 Steps)
 
@@ -40,9 +40,10 @@ Option B - Via OpenShift Console:
 **3. Create AIObservabilitySummarizer CR**
 - Go to **Installed Operators → AI Observability Summarizer**
 - Click **Create AIObservabilitySummarizer**
-- Enter your **HuggingFace Token** (required)
-- Select **Model** (default: Llama 3.1 8B - 16GB VRAM)
-- Choose **Device Type** (default: gpu)
+- **Enable RAG Stack** (default: enabled)
+  - If enabled, enter your **HuggingFace Token** (required)
+  - Select **Model** (default: Llama 3.1 8B - 16GB VRAM)
+  - Choose **Device Type** (default: gpu)
 - Click **Create**
 
 **Done!** The operator will automatically deploy all components and configure your cluster.
@@ -55,12 +56,12 @@ Option B - Via OpenShift Console:
 
 | Component | Purpose | Configuration |
 |-----------|---------|---------------|
-| **MCP Server** | Model Context Protocol server for AI queries | TLS-enabled, 1 replica |
-| **Console Plugin** | Native OpenShift Console integration | 2 replicas |
-| **LlamaStack** | LLM orchestration layer | Manages RAG pipeline |
-| **LLM Service** | KServe InferenceService with vLLM | GPU-accelerated model serving |
-| **PGVector** | Vector database for RAG | Persistent storage |
-| **Alert CronJob** | Automated alert analysis (optional) | Disabled by default |
+| **MCP Server** | Model Context Protocol server for AI queries | Always deployed, TLS-enabled, 1 replica |
+| **Console Plugin** | Native OpenShift Console integration | Always deployed, 2 replicas |
+| **LlamaStack** | LLM orchestration layer (RAG Stack) | Optional, enabled by default |
+| **LLM Service** | KServe InferenceService with vLLM (RAG Stack) | Optional, GPU-accelerated model serving |
+| **PGVector** | Vector database for RAG (RAG Stack) | Optional, persistent storage |
+| **Alert CronJob** | Automated alert analysis | Optional, disabled by default |
 
 ### Infrastructure Components (Multi-namespace)
 
@@ -72,7 +73,7 @@ Option B - Via OpenShift Console:
 | **MinIO** | observability-hub | S3-compatible object storage |
 | **Korrel8r** | openshift-cluster-observability-operator | Signal correlation engine |
 
-> **Note:** Infrastructure components are **always installed** and shared across the cluster. Only **one CR** allowed per cluster.
+> **Note:** Infrastructure components are **always deployed** to fixed namespaces and shared across the cluster. Only **one CR** is allowed per cluster (singleton pattern enforced by the operator).
 
 ### Dependency Operators (Auto-installed by OLM)
 
@@ -114,8 +115,11 @@ Choose **ONE** model via the OLM UI form:
 
 | Feature | Default | Description |
 |---------|---------|-------------|
-| **Alert Analysis** | Disabled | CronJob that analyzes and summarizes alerts using the LLM |
+| **RAG Stack** | Enabled | LLM deployment with LlamaStack, vLLM InferenceService, and PGVector. When disabled, model selection and HuggingFace token are not required. |
+| **Alert Analysis** | Disabled | CronJob that analyzes and summarizes alerts using the LLM. Slack webhook URL is optional. |
 | **Development Mode** | Disabled | Enables browser-cached API keys (testing only, NOT for production) |
+
+> **Note:** All infrastructure components (Tempo, Loki, OTEL, MinIO, Korrel8r) automatically use the cluster's default StorageClass for persistent volumes.
 
 ---
 
@@ -258,7 +262,17 @@ oc get pods -n openshift-user-workload-monitoring | grep alertmanager
    - Find **AI Observability Summarizer**
    - Click **⋮ → Uninstall Operator**
 
-3. **Delete CatalogSource** (optional)
+3. **Uninstall Dependency Operators** (optional)
+   - The following operators were auto-installed by OLM and can be uninstalled from the UI if no longer needed:
+     - Cluster Observability Operator
+     - OpenTelemetry Operator
+     - Tempo Operator
+     - Cluster Logging Operator
+     - Loki Operator
+   - Go to **Operators → Installed Operators**
+   - For each operator: Click **⋮ → Uninstall Operator**
+
+4. **Delete CatalogSource** (optional)
    ```bash
    oc delete catalogsource aiobs-operator-catalog -n openshift-marketplace
    ```
@@ -271,6 +285,17 @@ oc delete aiobservabilitysummarizer cluster-ai-observability -n ai-observability
 # Delete operator subscription and CSV
 oc delete subscription aiobs-operator -n ai-observability
 oc delete csv -l operators.coreos.com/aiobs-operator.ai-observability -n ai-observability
+
+# Uninstall dependency operators (optional - if no longer needed)
+# List all installed operators to find dependency operators
+oc get csv -n ai-observability
+
+# Delete each dependency operator (example for Tempo)
+oc delete subscription tempo-operator -n ai-observability
+oc delete csv tempo-operator.v0.16.0 -n ai-observability
+
+# Repeat for: cluster-observability-operator, opentelemetry-operator,
+# cluster-logging, loki-operator
 
 # Delete catalog source (optional)
 oc delete catalogsource aiobs-operator-catalog -n openshift-marketplace
@@ -443,7 +468,7 @@ The operator uses Helm charts under the hood. To customize values beyond the CR 
 
 ## Version Information
 
-**Current Version:** v1.1.10-operator
+**Current Version:** v1.4.0-operator
 **Operator SDK:** v1.37.0
 **Helm Operator Pattern:** Pure Helm wrapper (no custom Go code)
 **OLM Support:** Full OperatorHub integration with dependency management
