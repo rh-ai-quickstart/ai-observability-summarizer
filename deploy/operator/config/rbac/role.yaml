@@ -16,6 +16,8 @@ rules:
   - list
   - watch
   - create
+  - patch
+  - update
 # We need to manage Helm release secrets
 - apiGroups:
   - ""

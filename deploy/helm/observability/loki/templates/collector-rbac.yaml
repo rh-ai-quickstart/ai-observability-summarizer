@@ -3,14 +3,12 @@
 {{/*
 Collector Service Account and RBAC for OpenShift Logging.
 This creates the necessary service account and permissions for log collection.
-Uses lookup to skip resources that already exist (e.g., created by Logging Operator).
 
 NOTE: Set rbac.collector.create=false if using OLM-managed Logging Operator,
 as it will create these resources automatically.
 */}}
 
 {{/* ServiceAccount */}}
-{{- if not (lookup "v1" "ServiceAccount" "openshift-logging" "collector") }}
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -21,10 +19,8 @@ metadata:
     {{- include "loki-stack.labels" . | nindent 4 }}
   annotations:
     helm.sh/resource-policy: keep
-{{- end }}
 
 {{/* ClusterRole: collect-application-logs */}}
-{{- if not (lookup "rbac.authorization.k8s.io/v1" "ClusterRole" "" "collect-application-logs") }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -32,6 +28,8 @@ metadata:
   name: collect-application-logs
   labels:
     {{- include "loki-stack.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
 rules:
 - apiGroups:
   - logging.openshift.io
@@ -42,10 +40,8 @@ rules:
   - logs
   verbs:
   - collect
-{{- end }}
 
 {{/* ClusterRole: collect-infrastructure-logs */}}
-{{- if not (lookup "rbac.authorization.k8s.io/v1" "ClusterRole" "" "collect-infrastructure-logs") }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -53,6 +49,8 @@ metadata:
   name: collect-infrastructure-logs
   labels:
     {{- include "loki-stack.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
 rules:
 - apiGroups:
   - logging.openshift.io
@@ -63,10 +61,8 @@ rules:
   - logs
   verbs:
   - collect
-{{- end }}
 
 {{/* ClusterRole: collect-audit-logs */}}
-{{- if not (lookup "rbac.authorization.k8s.io/v1" "ClusterRole" "" "collect-audit-logs") }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -74,6 +70,8 @@ metadata:
   name: collect-audit-logs
   labels:
     {{- include "loki-stack.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
 rules:
 - apiGroups:
   - logging.openshift.io
@@ -84,10 +82,8 @@ rules:
   - logs
   verbs:
   - collect
-{{- end }}
 
 {{/* ClusterRole: logging-collector-logs-writer */}}
-{{- if not (lookup "rbac.authorization.k8s.io/v1" "ClusterRole" "" "logging-collector-logs-writer") }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -95,14 +91,14 @@ metadata:
   name: logging-collector-logs-writer
   labels:
     {{- include "loki-stack.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
 rules:
 - apiGroups: ["loki.grafana.com"]
   resources: ["application", "infrastructure", "audit"]
   verbs: ["create"]
-{{- end }}
 
 {{/* ClusterRoleBinding: collect-application-logs */}}
-{{- if not (lookup "rbac.authorization.k8s.io/v1" "ClusterRoleBinding" "" "collect-application-logs") }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -110,6 +106,8 @@ metadata:
   name: collect-application-logs
   labels:
     {{- include "loki-stack.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
@@ -118,10 +116,8 @@ subjects:
 - kind: ServiceAccount
   name: collector
   namespace: openshift-logging
-{{- end }}
 
 {{/* ClusterRoleBinding: collect-infrastructure-logs */}}
-{{- if not (lookup "rbac.authorization.k8s.io/v1" "ClusterRoleBinding" "" "collect-infrastructure-logs") }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -129,6 +125,8 @@ metadata:
   name: collect-infrastructure-logs
   labels:
     {{- include "loki-stack.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
@@ -137,10 +135,8 @@ subjects:
 - kind: ServiceAccount
   name: collector
   namespace: openshift-logging
-{{- end }}
 
 {{/* ClusterRoleBinding: collect-audit-logs */}}
-{{- if not (lookup "rbac.authorization.k8s.io/v1" "ClusterRoleBinding" "" "collect-audit-logs") }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -148,6 +144,8 @@ metadata:
   name: collect-audit-logs
   labels:
     {{- include "loki-stack.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
@@ -156,10 +154,8 @@ subjects:
 - kind: ServiceAccount
   name: collector
   namespace: openshift-logging
-{{- end }}
 
 {{/* ClusterRoleBinding: logging-collector-logs-writer */}}
-{{- if not (lookup "rbac.authorization.k8s.io/v1" "ClusterRoleBinding" "" "logging-collector-logs-writer") }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -167,6 +163,8 @@ metadata:
   name: logging-collector-logs-writer
   labels:
     {{- include "loki-stack.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
@@ -175,7 +173,6 @@ subjects:
 - kind: ServiceAccount
   name: collector
   namespace: openshift-logging
-{{- end }}
 
 {{- end }}{{/* end rbac.collector.create */}}
 {{- end }}{{/* end rbac.create */}}
