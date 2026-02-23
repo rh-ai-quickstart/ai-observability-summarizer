@@ -1,0 +1,46 @@
+{{/*
+Create required namespaces for infrastructure components.
+- openshift-logging: Managed by OpenShift Logging Operator (DO NOT CREATE)
+- openshift-cluster-observability-operator: Created if it doesn't exist (for Korrel8r)
+- observability-hub: Created by this chart for Tempo, OTEL, MinIO
+*/}}
+
+{{/* observability-hub namespace for Tempo, OTEL, MinIO - this is ours to manage */}}
+{{- if or .Values.tempo.enabled .Values.otelCollector.enabled .Values.minio.enabled }}
+{{- if not (lookup "v1" "Namespace" "" .Values.global.observabilityNamespace) }}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.global.observabilityNamespace }}
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/part-of: aiobs-operator
+    app.kubernetes.io/created-by: aiobs-stack
+  annotations:
+    openshift.io/description: "AI Observability infrastructure components (Tempo, OTEL, MinIO)"
+{{- end }}
+{{- end }}
+
+{{/* openshift-cluster-observability-operator namespace for Korrel8r - create if doesn't exist */}}
+{{- if .Values.korrel8r.enabled }}
+{{- if not (lookup "v1" "Namespace" "" .Values.global.korrel8rNamespace) }}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.global.korrel8rNamespace }}
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/part-of: aiobs-operator
+    app.kubernetes.io/created-by: aiobs-stack
+  annotations:
+    openshift.io/description: "Cluster Observability Operator namespace for Korrel8r"
+{{- end }}
+{{- end }}
+
+{{/*
+NOTE: openshift-logging namespace is NOT created by this chart.
+It must be pre-existing (created by OpenShift Logging Operator).
+*/}}
+

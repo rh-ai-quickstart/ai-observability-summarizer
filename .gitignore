@@ -189,3 +189,9 @@ charts/
 
 # TMP directory (if any)
 TMP/
+
+# Operator build artifacts
+deploy/operator/bundle_tmp*/
+deploy/operator/index.Dockerfile*
+deploy/operator/bin/
+deploy/operator/helm-charts/

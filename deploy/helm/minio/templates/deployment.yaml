@@ -1,0 +1,63 @@
+{{/*
+MinIO Deployment - Deployed to observability-hub namespace
+*/}}
+{{- $namespace := include "minio.namespace" . }}
+{{- $deploymentName := include "minio.fullname" . }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $deploymentName }}
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "minio.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "minio.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "minio.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.minio.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: minio
+        image: quay.io/minio/minio:latest
+        args:
+        - server
+        - /data
+        - --console-address
+        - ":9090"
+        ports:
+        - name: api
+          containerPort: 9000
+          protocol: TCP
+        - name: webui
+          containerPort: 9090
+          protocol: TCP
+        env:
+        - name: MINIO_ROOT_USER
+          value: {{ .Values.minio.secret.user | quote }}
+        - name: MINIO_ROOT_PASSWORD
+          value: {{ .Values.minio.secret.password | quote }}
+        {{- with .Values.minio.containerSecurityContext }}
+        securityContext:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        volumeMounts:
+        - name: data
+          mountPath: /data
+      volumes:
+      - name: data
+        emptyDir: {}
