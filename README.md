@@ -116,7 +116,7 @@ Without this project, teams typically:
 
 ### Minimum software requirements
 
-- **OpenShift**: 4.16.24+
+- **OpenShift**: 4.18.33+
 - **OpenShift AI**: 2.16.2+
 - **CLI tools**:
   - `oc`
