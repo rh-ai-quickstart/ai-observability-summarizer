@@ -5,6 +5,7 @@ This module provides Anthropic Claude-specific implementation using the official
 """
 
 import os
+import re
 from typing import Optional, Callable, List, Dict
 
 from .base import BaseChatBot
@@ -61,6 +62,26 @@ class AnthropicChatBot(BaseChatBot):
 - Leverage your strong reasoning for comprehensive analysis
 - Provide detailed pod-level and namespace-level breakdowns
 - Use your tool calling reliability for multi-step analysis"""
+
+    # Regex to strip <function_calls>...</function_calls> XML that the model
+    # sometimes emits as text instead of using the native tool_use API.
+    _FUNCTION_CALLS_RE = re.compile(
+        r'<function_calls>\s*(?:\[.*?\])?\s*</function_calls>',
+        re.DOTALL,
+    )
+
+    def _strip_xml_tool_calls(self, text: str) -> str:
+        """Remove spurious <function_calls> XML blocks from response text.
+
+        Anthropic models occasionally output tool calls as XML text alongside
+        (or instead of) proper tool_use content blocks. Since Anthropic uses
+        the native tool_use API, any <function_calls> XML in a text block is
+        always artefact noise that should be stripped.
+        """
+        cleaned = self._FUNCTION_CALLS_RE.sub('', text).strip()
+        if cleaned != text.strip():
+            logger.warning("Stripped <function_calls> XML from Anthropic text response")
+        return cleaned
 
     def chat(
         self,
@@ -172,7 +193,7 @@ class AnthropicChatBot(BaseChatBot):
                             final_response += content_block.text
 
                     logger.info(f"Anthropic tool calling completed in {iteration} iterations")
-                    return final_response
+                    return self._strip_xml_tool_calls(final_response)
 
             # Hit max iterations
             logger.warning(f"Hit max iterations ({max_iterations})")
