@@ -238,12 +238,19 @@ class BaseChatBot(ABC):
         - sum(metric_name) → sum(metric_name{namespace="ns"})
         - sum(rate(metric_name[5m])) → sum(rate(metric_name{namespace="ns"}[5m]))
 
-        If the query already contains a namespace filter, it is left unchanged.
+        If the query already contains a namespace filter, it is replaced with
+        the active namespace to ensure the UI dropdown selection takes precedence.
         """
-        # Don't inject if namespace filter is already present
+        # If namespace filter already present, replace it with the active namespace
         if f'namespace="' in query or f"namespace='" in query or 'namespace=~' in query:
-            logger.info(f"📌 PromQL query already has namespace filter, skipping injection")
-            return query
+            modified = re.sub(
+                r'namespace\s*=~?\s*["\'][^"\']*["\']',
+                f'namespace="{namespace}"',
+                query
+            )
+            if modified != query:
+                logger.info(f"📌 Replaced namespace in PromQL: {query} → {modified}")
+            return modified
 
         original = query
 
@@ -516,9 +523,10 @@ You have access to monitoring tools and should provide focused, targeted respons
 You are operating in NAMESPACE-SCOPED mode for namespace **"{namespace}"**.
 - You MUST call tools (execute_promql, search_metrics, etc.) to get FRESH data for this namespace.
 - Do NOT reuse or reference results from previous queries — they may be from a different scope.
-- The system will automatically inject namespace="{namespace}" into your PromQL queries.
+- Do NOT add namespace filters to your PromQL queries — the system automatically injects namespace="{namespace}" for you.
 - If a previous conversation shows cluster-wide data, IGNORE it and query fresh data for "{namespace}".
 - Every answer must reflect data from namespace "{namespace}" ONLY.
+- If the user mentions a different namespace in their question, still answer the question but use "{namespace}" — the active namespace selected in the UI always takes precedence.
 """}
 
 **Available Tools:**
