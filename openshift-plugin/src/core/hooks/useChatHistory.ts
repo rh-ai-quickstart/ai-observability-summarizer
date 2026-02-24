@@ -125,7 +125,7 @@ export function useChatHistory() {
       })
       .join('\n');
 
-    return `# AI Chat History\n\n${markdown}`;
+    return `# Chat with Prometheus - History\n\n${markdown}`;
   }, [messages]);
 
   return {

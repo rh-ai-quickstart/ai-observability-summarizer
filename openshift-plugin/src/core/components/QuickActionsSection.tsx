@@ -139,7 +139,7 @@ export const QuickActionsSection: React.FC = () => (
       </GridItem>
       <GridItem md={6} sm={12}>
         <QuickActionCard
-          title="AI Chat"
+          title="Chat with Prometheus"
           description="Ask questions about your metrics and get AI-powered insights"
           icon={<CommentIcon style={{ fontSize: '20px' }} />}
           iconColor="#7c3aed"

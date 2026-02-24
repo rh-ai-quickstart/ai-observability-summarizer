@@ -33,7 +33,7 @@ export const PROVIDER_TEMPLATES: Record<Provider, ProviderTemplate> = {
     requiresApiKey: true,
     iconClass: 'fa-robot',
     color: '#d97706',
-    commonModels: ['claude-3-opus', 'claude-3-sonnet', 'claude-3-haiku', 'claude-3-5-sonnet'],
+    commonModels: ['claude-3-opus', 'claude-3-sonnet', 'claude-haiku-4-5', 'claude-3-5-sonnet'],
     documentationUrl: 'https://docs.anthropic.com/claude/reference/getting-started-with-the-api',
   },
   google: {

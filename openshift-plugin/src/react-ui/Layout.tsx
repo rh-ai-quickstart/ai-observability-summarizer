@@ -16,9 +16,11 @@ import Navigation from './Navigation';
 
 interface LayoutProps {
   children: React.ReactNode;
+  activeTab?: number;
+  onTabChange?: (tabIndex: number) => void;
 }
 
-const Layout: React.FC<LayoutProps> = ({ children }) => {
+const Layout: React.FC<LayoutProps> = ({ children, activeTab = 0, onTabChange = () => {} }) => {
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(true);
 
   const onSidebarToggle = () => {
@@ -52,7 +54,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const Sidebar = (
     <PageSidebar isSidebarOpen={isSidebarOpen}>
       <PageSidebarBody>
-        <Navigation />
+        <Navigation activeTab={activeTab} onTabChange={onTabChange} />
       </PageSidebarBody>
     </PageSidebar>
   );

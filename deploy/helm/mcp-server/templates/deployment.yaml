@@ -63,6 +63,8 @@ spec:
               value: "{{ .Values.env.MAX_NUM_LOG_ROWS }}"
             - name: MAX_NUM_TRACE_SPANS
               value: "{{ .Values.env.MAX_NUM_TRACE_SPANS }}"
+            - name: TRACE_FETCH_SAFETY_FACTOR
+              value: "{{ .Values.env.TRACE_FETCH_SAFETY_FACTOR }}"
             - name: NAMESPACE
               value: "{{ .Release.Namespace }}"
             - name: THANOS_TOKEN
@@ -80,6 +82,18 @@ spec:
             {{- else }}
             - name: LLAMA_STACK_URL
               value: "http://llamastack.{{ .Release.Namespace }}.svc.cluster.local:8321/v1/openai/v1"
+            {{- end }}
+            {{- if .Values.env.GPU_METRICS_PREFIX_NVIDIA }}
+            - name: GPU_METRICS_PREFIX_NVIDIA
+              value: "{{ .Values.env.GPU_METRICS_PREFIX_NVIDIA }}"
+            {{- end }}
+            {{- if .Values.env.GPU_METRICS_PREFIX_INTEL }}
+            - name: GPU_METRICS_PREFIX_INTEL
+              value: "{{ .Values.env.GPU_METRICS_PREFIX_INTEL }}"
+            {{- end }}
+            {{- if .Values.env.GPU_METRICS_PREFIX_AMD }}
+            - name: GPU_METRICS_PREFIX_AMD
+              value: "{{ .Values.env.GPU_METRICS_PREFIX_AMD }}"
             {{- end }}
             - name: MODEL_CONFIG
               {{- if .Values.modelConfig }}

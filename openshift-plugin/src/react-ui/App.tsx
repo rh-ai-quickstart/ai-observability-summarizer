@@ -3,14 +3,11 @@ import { BrowserRouter as Router, Route, Switch, Redirect } from 'react-router-d
 import '@patternfly/react-core/dist/styles/base.css';
 import Layout from './Layout';
 import AIObservabilityPage from '../core/pages/AIObservabilityPage';
-import VLLMMetricsPage from '../core/pages/VLLMMetricsPage';
-import { OpenShiftMetricsPage } from '../core/pages/OpenShiftMetricsPage';
-import { AIChatPage } from '../core/pages/AIChatPage';
-import DeviceMetricsPage from '../core/pages/DeviceMetricsPage';
 import { initializeRuntimeConfig } from '../core/services/runtimeConfig';
 
 const App: React.FC = () => {
   const [configLoaded, setConfigLoaded] = React.useState(false);
+  const [activeTab, setActiveTab] = React.useState(0);
 
   // Initialize runtime config on mount and wait for it to complete
   React.useEffect(() => {
@@ -24,17 +21,17 @@ const App: React.FC = () => {
         setConfigLoaded(true);
       }
     };
-    
+
     loadConfig();
   }, []);
 
   // Don't render until config is loaded to prevent race conditions
   if (!configLoaded) {
     return (
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'center', 
-        alignItems: 'center', 
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
         height: '100vh',
         flexDirection: 'column',
         gap: '16px'
@@ -47,14 +44,12 @@ const App: React.FC = () => {
 
   return (
     <Router>
-      <Layout>
+      <Layout activeTab={activeTab} onTabChange={setActiveTab}>
         <Switch>
-          <Route exact path="/" component={AIObservabilityPage} />
-          <Route path="/vllm" component={VLLMMetricsPage} />
-          <Route path="/devices" component={DeviceMetricsPage} />
-          <Route path="/openshift" component={OpenShiftMetricsPage} />
-          <Route path="/chat" component={AIChatPage} />
-          <Redirect from="/overview" to="/" />
+          <Route exact path="/">
+            <AIObservabilityPage activeTab={activeTab} onTabChange={setActiveTab} />
+          </Route>
+          <Redirect from="*" to="/" />
         </Switch>
       </Layout>
     </Router>

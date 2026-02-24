@@ -165,7 +165,7 @@ class PrometheusError(MCPException):
 
 class LLMServiceError(MCPException):
     """Raised when LLM service operations fail."""
-    
+
     def __init__(self, message: str, model_id: Optional[str] = None, status_code: Optional[int] = None):
         details = {}
         if model_id:
@@ -173,16 +173,20 @@ class LLMServiceError(MCPException):
         is_int_status = isinstance(status_code, int)
         if is_int_status:
             details["http_status"] = status_code
-        
+
         recovery_suggestion = "Check LLM service availability and model configuration."
         if is_int_status:
             if status_code == 400:
                 recovery_suggestion = "Verify the model ID and request parameters."
+            elif status_code == 401 or status_code == 403:
+                recovery_suggestion = "Check your API key configuration and permissions."
             elif status_code == 404:
                 recovery_suggestion = "The specified model may not be available. Check model configuration."
+            elif status_code == 429:
+                recovery_suggestion = "Wait a few moments for the rate limit to reset, or select a different model with higher quota."
             elif status_code >= 500:
-                recovery_suggestion = "LLM service may be unavailable. Try again later."
-            
+                recovery_suggestion = "LLM service may be unavailable. Try again later or use a different model."
+
         super().__init__(
             message=message,
             error_code=MCPErrorCode.LLM_SERVICE_ERROR,

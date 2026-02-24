@@ -304,7 +304,7 @@ class TestLLMClientIntegration:
             "apiUrl": "https://api.anthropic.com/v1/messages",
             "external": True,
             "requiresApiKey": True,
-            "modelName": "claude-3-5-haiku-20241022"
+            "modelName": "claude-haiku-4-5-20251001"
         }
         
         with patch('src.core.llm_client.get_model_config', return_value={"test-model": model_config}):
@@ -319,7 +319,7 @@ class TestLLMClientIntegration:
         mock_client.messages.create.assert_called_once()
         call_args = mock_client.messages.create.call_args
         
-        assert call_args[1]["model"] == "claude-3-5-haiku-20241022"
+        assert call_args[1]["model"] == "claude-haiku-4-5-20251001"
         assert call_args[1]["max_tokens"] == 6000  # DEFAULT_MAX_TOKENS
         assert call_args[1]["temperature"] == 0  # DETERMINISTIC_TEMPERATURE
         assert len(call_args[1]["messages"]) == 1
@@ -347,7 +347,7 @@ class TestLLMClientIntegration:
             "apiUrl": "https://api.anthropic.com/v1/messages",
             "external": True,
             "requiresApiKey": True,
-            "modelName": "claude-3-5-haiku-20241022"
+            "modelName": "claude-haiku-4-5-20251001"
         }
         
         with patch('src.core.llm_client.get_model_config', return_value={"test-model": model_config}):

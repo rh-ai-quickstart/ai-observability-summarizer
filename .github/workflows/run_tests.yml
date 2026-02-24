@@ -3,12 +3,13 @@ name: Run Tests
 on:
   pull_request:
     types: [opened, synchronize, reopened]
-    branches: [ main, dev ]
+    branches: [main, dev, feature]
   push:
-    branches: [ main, dev ]
+    branches: [main, dev, feature]
 
 jobs:
   test:
+    name: make test
     runs-on: ubuntu-latest
 
     steps:
@@ -25,6 +26,7 @@ jobs:
           echo "Actor: ${{ github.actor }}"
           echo "::endgroup::"
 
+      # Python (for test-python: pytest)
       - name: Set up Python 3.11
         uses: actions/setup-python@v4
         with:
@@ -33,8 +35,13 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v3
 
-      - name: Install dependencies
-        run: uv sync --group test
+      # Node (for test-react: openshift-plugin yarn build + jest)
+      - name: Set up Node.js for openshift-plugin
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "yarn"
+          cache-dependency-path: openshift-plugin/yarn.lock
 
-      - name: Run tests
-        run: uv run pytest -v
+      - name: Run all tests (make test)
+        run: make test

@@ -513,11 +513,22 @@ monitor_port_forwards() {
     # Initialize log file
     log_health_event "=== Health monitor started ==="
 
+    # Track state to suppress repeated console output
+    # Console output strategy: only print when something genuinely new happens.
+    # - First restart event: print once
+    # - Repeated identical restart cycles: suppress (details always in log file)
+    # - Verification failure (not all restarted successfully): always print
+    # - "All healthy" after restarts: print once, then suppress
+    local has_printed_restart=false   # Have we already printed a restart message?
+    local has_printed_healthy=false   # Have we already printed a recovery message?
+    local consecutive_healthy=0       # How many consecutive all-healthy checks?
+
     while true; do
         sleep 30
 
         local failed_count=0
         local restarted_count=0
+        local verified_count=0
 
         for entry in "${PORT_FORWARD_METADATA[@]}"; do
             IFS=':' read -r pid resource_name local_port remote_port namespace description <<< "$entry"
@@ -530,6 +541,7 @@ monitor_port_forwards() {
                 # Restart the port-forward
                 oc port-forward "$resource_name" "$local_port:$remote_port" -n "$namespace" >/dev/null 2>&1 &
                 local new_pid=$!
+                ((restarted_count++))
                 log_health_event "🔄 Restarting $description → new PID: $new_pid (resource: $resource_name, namespace: $namespace)"
 
                 # Update metadata with new PID
@@ -566,22 +578,50 @@ monitor_port_forwards() {
                     # Check if port is listening
                     if lsof -nP -iTCP:"$local_port" -sTCP:LISTEN >/dev/null 2>&1; then
                         log_health_event "✅ Successfully restarted $description (verified on port $local_port)"
-                        ((restarted_count++))
+                        ((verified_count++))
                         verified=true
                         break
                     fi
                 done
 
                 if ! $verified; then
-                    log_health_event "❌ Failed to restart $description after $max_attempts attempts"
+                    log_health_event "❌ Failed to verify $description after $max_attempts attempts (restart was attempted)"
                 fi
             fi
         done
 
-        # Log summary and show on console only if there were failures
+        # Always log to file; only print to console when genuinely noteworthy
         if [ $failed_count -gt 0 ]; then
-            log_health_event "📊 Health check summary: $failed_count failed, $restarted_count restarted"
-            echo -e "${BLUE}🏥 Health check: $failed_count failed, $restarted_count restarted (details: $HEALTH_LOG_FILE)${NC}" >&2
+            log_health_event "📊 Health check summary: $failed_count died, $restarted_count restarted, $verified_count verified"
+            consecutive_healthy=0
+            has_printed_healthy=false
+
+            if [ $verified_count -lt $restarted_count ]; then
+                # Some restarts failed verification — always report this
+                echo -e "${RED}🏥 Health check: $failed_count died → $restarted_count restarted (only $verified_count verified!) (details: $HEALTH_LOG_FILE)${NC}" >&2
+                has_printed_restart=true
+            elif ! $has_printed_restart; then
+                # First time seeing restarts — print once
+                echo -e "${BLUE}🏥 Health check: $failed_count died → $restarted_count restarted ($verified_count verified) (details: $HEALTH_LOG_FILE)${NC}" >&2
+                has_printed_restart=true
+            fi
+            # Subsequent identical restart cycles: silently handled, details in log file
+        else
+            log_health_event "📊 Health check: all port-forwards healthy"
+            ((consecutive_healthy++))
+
+            if $has_printed_restart && ! $has_printed_healthy; then
+                # First healthy check after restarts — confirm recovery once
+                echo -e "${GREEN}🏥 Health check: all port-forwards healthy${NC}" >&2
+                has_printed_healthy=true
+            fi
+
+            # After sustained healthy period, reset restart tracking so future
+            # issues are reported again
+            if [ $consecutive_healthy -ge 3 ]; then
+                has_printed_restart=false
+                has_printed_healthy=false
+            fi
         fi
     done
 }

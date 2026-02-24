@@ -762,7 +762,7 @@ Before running the E2E test, ensure the following components are deployed:
 2. **Observability Stack** - MinIO, Tempo, Loki, OpenTelemetry Collector, Korrel8r
 3. **User Workload Monitoring** - Enabled in the cluster to fetch user workload metrics and alerts
 4. **Alert Example Application** - Sample app that generates intentional failures
-5. **Anthropic API Key** - For accessing Claude 3.5 Haiku model
+5. **Anthropic API Key** - For accessing Claude Haiku 4.5 model
 
 ### Step 1: Deploy the Alert Example Application
 
@@ -788,7 +788,7 @@ The `install-alert-example` target will:
 
 Both applications will generate traces and logs showing configuration errors that can be correlated.
 
-### Step 2: Configure the UI to Use Anthropic Claude 3.5 Haiku
+### Step 2: Configure the UI to Use Anthropic Claude Haiku 4.5
 
 1. **Access the UI**:
    - **Console Plugin** (production mode): Navigate to **OpenShift Console → OpenShift AI Observability** in the left navigation
@@ -800,7 +800,7 @@ Both applications will generate traces and logs showing configuration errors tha
    - Enter your Anthropic API key and save it
    - Switch to the **Available Models** tab
    - In the model selection dropdown, choose **Anthropic** as the provider
-   - Select **Claude 3.5 Haiku** (`claude-3-5-haiku-20241022`) as the model
+   - Select **Claude Haiku 4.5** (`claude-haiku-4-5-20251001`) as the model
    - Save the configuration
 
 ### Step 3: Test Alert Investigation via AI Chat
@@ -811,7 +811,7 @@ This test verifies that the system can analyze alerts, correlate logs, and analy
 
 1. **Navigate to AI Chat**:
    - Go to the **AI Chat** tab in the UI
-   - Ensure you're using the Anthropic Claude 3.5 Haiku model configured in Step 2
+   - Ensure you're using the Anthropic Claude Haiku 4.5 model configured in Step 2
 
 2. **Ask About Alerts**:
    - In the chat interface, ask: *"Any alerts are firing in jianrong namespace?"*
@@ -881,7 +881,7 @@ If the AI Chat conversation above produces the expected results across all steps
 - **Correlation** - Korrel8r is successfully correlating alerts with logs and traces
 - **MCP Server** - Backend is properly querying observability data sources (Prometheus, Tempo, Loki)
 - **AI Chat Integration** - Console Plugin/React UI is correctly integrating with external AI models
-- **External AI Model** - Anthropic Claude 3.5 Haiku is providing intelligent analysis of observability data
+- **External AI Model** - Anthropic Claude Haiku 4.5 is providing intelligent analysis of observability data
 - **End-to-End Analysis Pipeline** - Complete workflow from alert detection to root cause analysis is functional
 
 ### Cleanup

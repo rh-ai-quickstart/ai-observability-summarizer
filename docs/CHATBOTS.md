@@ -16,10 +16,55 @@ The chatbots then use AI models to provide natural language responses with conte
 
 ## Quick Start
 
-- **UI usage**: create a chatbot with the UI MCP adapter to call tools over HTTP.
-- **MCP server usage**: create a chatbot with the server adapter for direct tool execution.
+### Using Chatbots in UI
 
-See `src/chatbots/README.md` for working examples and `src/mcp_server/README.md` for MCP tool usage.
+```python
+from chatbots import create_chatbot
+from ui.mcp_client_adapter import MCPClientAdapter
+from ui.mcp_client_helper import MCPClientHelper
+
+# Create MCP client and adapter
+mcp_client = MCPClientHelper()
+tool_executor = MCPClientAdapter(mcp_client)
+
+# Create chatbot (tool_executor is REQUIRED)
+chatbot = create_chatbot(
+    model_name="anthropic/claude-haiku-4-5-20251001",
+    api_key=user_api_key,
+    tool_executor=tool_executor
+)
+
+# Use chatbot
+response = chatbot.chat(
+    user_question="What's the CPU usage?",
+    namespace=None,  # Cluster-wide
+    progress_callback=update_progress
+)
+```
+
+### Using Chatbots in MCP Server (via `chat` tool)
+
+```python
+from chatbots import create_chatbot
+from mcp_server.mcp_tools_adapter import MCPServerAdapter
+
+# Get server instance and create adapter
+from mcp_server.observability_mcp import _server_instance
+tool_executor = MCPServerAdapter(_server_instance)
+
+# Create chatbot
+chatbot = create_chatbot(
+    model_name="openai/gpt-4o-mini",
+    api_key=api_key,
+    tool_executor=tool_executor
+)
+
+# Execute chat
+response = chatbot.chat(
+    user_question="Show me firing alerts",
+    namespace="production"
+)
+```
 
 ## Architecture
 
@@ -45,6 +90,105 @@ The UI creates chatbots directly and uses them to answer user questions about ob
 #### Sequence Diagram
 
 ![Chatbot UI Flow](images/chatbot-ui-flow.png)
+
+<details>
+<summary>View Mermaid source code</summary>
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant UI
+    participant Chatbot
+    participant MCPClientAdapter
+    participant MCPClientHelper
+    participant MCPServer
+
+    User->>UI: Ask question about metrics
+    UI->>UI: Create MCPClientHelper
+    UI->>UI: Create MCPClientAdapter(MCPClientHelper)
+    UI->>Chatbot: create_chatbot(model, api_key, MCPClientAdapter)
+    User->>UI: Submit question
+    UI->>Chatbot: chatbot.chat(question)
+
+    loop Tool Execution Loop
+        Chatbot->>Chatbot: Decide to use tool
+        Chatbot->>MCPClientAdapter: call_tool(tool_name, args)
+        MCPClientAdapter->>MCPClientHelper: call_tool_sync(tool_name, args)
+        MCPClientHelper->>MCPServer: HTTP POST /mcp (JSON-RPC)
+        MCPServer->>MCPServer: Execute tool
+        MCPServer-->>MCPClientHelper: Tool result
+        MCPClientHelper-->>MCPClientAdapter: Result
+        MCPClientAdapter-->>Chatbot: Tool result string
+        Chatbot->>Chatbot: Process result, continue conversation
+    end
+
+    Chatbot-->>UI: Final response
+    UI-->>User: Display response
+```
+
+</details>
+
+
+<details>
+<summary>ASCII Sequence Diagram</summary>
+
+```
+User → UI: Ask question about metrics
+UI → UI: Create MCPClientHelper
+UI → UI: Create MCPClientAdapter(MCPClientHelper)
+UI → Chatbot: create_chatbot(model, api_key, MCPClientAdapter)
+User → UI: Submit question
+UI → Chatbot: chatbot.chat(question)
+
+[Tool Execution Loop - repeats as needed]
+  Chatbot → Chatbot: Decide to use tool
+  Chatbot → MCPClientAdapter: call_tool(tool_name, args)
+  MCPClientAdapter → MCPClientHelper: call_tool_sync(tool_name, args)
+  MCPClientHelper → MCPServer: HTTP POST /mcp (JSON-RPC)
+  MCPServer → MCPServer: Execute tool
+  MCPServer ⤶ MCPClientHelper: Tool result
+  MCPClientHelper ⤶ MCPClientAdapter: Result
+  MCPClientAdapter ⤶ Chatbot: Tool result string
+  Chatbot → Chatbot: Process result, continue conversation
+
+Chatbot ⤶ UI: Final response
+UI ⤶ User: Display response
+```
+
+</details>
+
+
+#### Code Example
+
+<details>
+<summary>Click to expand or collapse</summary>
+
+```python
+# In UI (ui/ui.py)
+from chatbots import create_chatbot
+from ui.mcp_client_helper import MCPClientHelper
+from ui.mcp_client_adapter import MCPClientAdapter
+
+# Initialize MCP client and adapter
+mcp_client = MCPClientHelper()
+tool_executor = MCPClientAdapter(mcp_client)
+
+# Create chatbot with user's API key
+chatbot = create_chatbot(
+    model_name="anthropic/claude-haiku-4-5-20251001",
+    api_key=user_api_key,
+    tool_executor=tool_executor  # REQUIRED parameter
+)
+
+# Use chatbot to answer questions
+response = chatbot.chat(
+    user_question="What's the CPU usage?",
+    namespace=None,  # Cluster-wide
+    progress_callback=update_progress
+)
+```
+
+</details>
 
 #### Key Points
 

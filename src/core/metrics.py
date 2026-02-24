@@ -436,7 +436,11 @@ def extract_namespace_pod_pairs_from_metrics(
     Uses DataFrame label columns when available and falls back to parsing
     namespace from model name formatted as "namespace | model". Deduplicates pairs.
     """
+    import time
+    start_time = time.perf_counter()
+
     pairs: Set[NamespacePodPair] = set()
+    total_rows_processed = 0
     try:
         for _label, df in metric_dfs.items():
             if df is None or not isinstance(df, pd.DataFrame) or df.empty:
@@ -445,11 +449,27 @@ def extract_namespace_pod_pairs_from_metrics(
             has_pod = "pod" in df.columns
             try:
                 if has_ns and has_pod:
-                    for _, row in df[["namespace", "pod"]].dropna(how="all").iterrows():
-                        ns_val = str(row["namespace"]).strip() if pd.notna(row.get("namespace")) else None
-                        pod_val = str(row["pod"]).strip() if pd.notna(row.get("pod")) else None
-                        if ns_val or pod_val:
-                            pairs.add(NamespacePodPair(namespace=ns_val or "", pod=pod_val))
+                    # Use vectorized pandas operations - much faster than iterrows()
+                    subset = df[["namespace", "pod"]].dropna(how="all")
+                    total_rows_processed += len(subset)
+
+                    # Get unique pairs efficiently using pandas - avoid iterrows()
+                    unique_pairs = subset.drop_duplicates()
+
+                    if not unique_pairs.empty:
+                        unique_pairs = unique_pairs.copy()
+
+                        # Convert NaN/None to empty strings, then strip whitespace
+                        unique_pairs["namespace"] = unique_pairs["namespace"].fillna("").astype(str).str.strip()
+                        unique_pairs["pod"] = unique_pairs["pod"].fillna("").astype(str).str.strip()
+
+                        # Convert to set of NamespacePodPair objects
+                        # Skip rows where both namespace and pod are empty (were NaN/None)
+                        for ns_val, pod_val in zip(unique_pairs["namespace"], unique_pairs["pod"]):
+                            if ns_val:
+                                pairs.add(NamespacePodPair(namespace=ns_val, pod=pod_val))
+                            elif pod_val:
+                                pairs.add(NamespacePodPair(namespace="", pod=pod_val))
             except Exception:
                 continue
     except Exception:
@@ -462,6 +482,13 @@ def extract_namespace_pod_pairs_from_metrics(
                 pairs.add(NamespacePodPair(namespace=parts[0], pod=None))
     except Exception:
         pass
+
+    elapsed = time.perf_counter() - start_time
+    logger.debug(
+        "extract_namespace_pod_pairs_from_metrics: Processed %d rows across %d metrics, "
+        "found %d unique pairs in %.3fs",
+        total_rows_processed, len(metric_dfs), len(pairs), elapsed
+    )
     logger.debug("extract_namespace_pod_pairs_from_metrics: pairs=%s", pairs)
     return pairs
 
@@ -1178,32 +1205,44 @@ def discover_vllm_metrics():
         # Phase 3: Prefix cache metrics (counters - use increase() for totals during window)
         if "vllm:prefix_cache_hit_total" in vllm_metrics:
             metric_mapping["Prefix Cache Hits Total"] = "sum(increase(vllm:prefix_cache_hit_total[5m]))"
+        elif "vllm:prefix_cache_hits_total" in vllm_metrics:
+            metric_mapping["Prefix Cache Hits Total"] = "sum(increase(vllm:prefix_cache_hits_total[5m]))"
         elif "vllm:cache_prefix_hits_total" in vllm_metrics:
             metric_mapping["Prefix Cache Hits Total"] = "sum(increase(vllm:cache_prefix_hits_total[5m]))"
 
         if "vllm:prefix_cache_query_total" in vllm_metrics:
             metric_mapping["Prefix Cache Queries Total"] = "sum(increase(vllm:prefix_cache_query_total[5m]))"
+        elif "vllm:prefix_cache_queries_total" in vllm_metrics:
+            metric_mapping["Prefix Cache Queries Total"] = "sum(increase(vllm:prefix_cache_queries_total[5m]))"
         elif "vllm:cache_prefix_queries_total" in vllm_metrics:
             metric_mapping["Prefix Cache Queries Total"] = "sum(increase(vllm:cache_prefix_queries_total[5m]))"
 
         if "vllm:gpu_prefix_cache_hit_total" in vllm_metrics:
             metric_mapping["Gpu Prefix Cache Hits Total"] = "sum(increase(vllm:gpu_prefix_cache_hit_total[5m]))"
+        elif "vllm:gpu_prefix_cache_hits_total" in vllm_metrics:
+            metric_mapping["Gpu Prefix Cache Hits Total"] = "sum(increase(vllm:gpu_prefix_cache_hits_total[5m]))"
         elif "vllm:gpu_cache_prefix_hits_total" in vllm_metrics:
             metric_mapping["Gpu Prefix Cache Hits Total"] = "sum(increase(vllm:gpu_cache_prefix_hits_total[5m]))"
 
         if "vllm:gpu_prefix_cache_query_total" in vllm_metrics:
             metric_mapping["Gpu Prefix Cache Queries Total"] = "sum(increase(vllm:gpu_prefix_cache_query_total[5m]))"
+        elif "vllm:gpu_prefix_cache_queries_total" in vllm_metrics:
+            metric_mapping["Gpu Prefix Cache Queries Total"] = "sum(increase(vllm:gpu_prefix_cache_queries_total[5m]))"
         elif "vllm:gpu_cache_prefix_queries_total" in vllm_metrics:
             metric_mapping["Gpu Prefix Cache Queries Total"] = "sum(increase(vllm:gpu_cache_prefix_queries_total[5m]))"
 
         # Cache hit/query rates (per second)
         if "vllm:gpu_prefix_cache_hit_total" in vllm_metrics:
             metric_mapping["Gpu Prefix Cache Hits Created"] = "rate(vllm:gpu_prefix_cache_hit_total[5m])"
+        elif "vllm:gpu_prefix_cache_hits_total" in vllm_metrics:
+            metric_mapping["Gpu Prefix Cache Hits Created"] = "rate(vllm:gpu_prefix_cache_hits_total[5m])"
         elif "vllm:gpu_cache_prefix_hits_total" in vllm_metrics:
             metric_mapping["Gpu Prefix Cache Hits Created"] = "rate(vllm:gpu_cache_prefix_hits_total[5m])"
 
         if "vllm:gpu_prefix_cache_query_total" in vllm_metrics:
             metric_mapping["Gpu Prefix Cache Queries Created"] = "rate(vllm:gpu_prefix_cache_query_total[5m])"
+        elif "vllm:gpu_prefix_cache_queries_total" in vllm_metrics:
+            metric_mapping["Gpu Prefix Cache Queries Created"] = "rate(vllm:gpu_prefix_cache_queries_total[5m])"
         elif "vllm:gpu_cache_prefix_queries_total" in vllm_metrics:
             metric_mapping["Gpu Prefix Cache Queries Created"] = "rate(vllm:gpu_cache_prefix_queries_total[5m])"
 
@@ -1272,11 +1311,15 @@ def discover_vllm_metrics():
                 "vllm:kv_cache_free_bytes",
                 "vllm:gpu_cache_free_bytes",
                 "vllm:prefix_cache_hit_total",
+                "vllm:prefix_cache_hits_total",
                 "vllm:prefix_cache_query_total",
+                "vllm:prefix_cache_queries_total",
                 "vllm:cache_prefix_hits_total",
                 "vllm:cache_prefix_queries_total",
                 "vllm:gpu_prefix_cache_hit_total",
+                "vllm:gpu_prefix_cache_hits_total",
                 "vllm:gpu_prefix_cache_query_total",
+                "vllm:gpu_prefix_cache_queries_total",
                 "vllm:gpu_cache_prefix_hits_total",
                 "vllm:gpu_cache_prefix_queries_total",
                 # Scheduling metrics
@@ -2582,10 +2625,42 @@ def build_correlated_context_from_metrics(
 
     Each line includes: pod, container, level, and the log message.
     """
+    import time
+    overall_start = time.perf_counter()
+
+    # Timing accumulators
+    time_extract_pairs = 0.0
+    time_fetch_korrel8r = 0.0
+    time_process_logs = 0.0
+    time_sort_logs = 0.0
+    time_filter_traces = 0.0
+    time_format_output = 0.0
+
     try:
+        # Read MAX_NUM_TRACE_SPANS early to calculate trace fetch limit
+        try:
+            max_trace_spans = int(os.getenv("MAX_NUM_TRACE_SPANS", "10"))
+        except Exception:
+            max_trace_spans = 10
+
+        # Read safety factor to fetch extra traces for error filtering
+        # This accounts for traces that may be filtered out during processing
+        try:
+            trace_fetch_safety_factor = int(os.getenv("TRACE_FETCH_SAFETY_FACTOR", "2"))
+        except Exception:
+            trace_fetch_safety_factor = 2
+
+        max_traces_limit = max_trace_spans * trace_fetch_safety_factor
+
         # Gather all unique (namespace, pod) pairs from metrics
+        t_start = time.perf_counter()
         pairs = extract_namespace_pod_pairs_from_metrics(model_name, metric_dfs)
+        time_extract_pairs = time.perf_counter() - t_start
         logger.debug("In build_correlated_context_from_metrics: pairs=%s", pairs)
+        logger.debug(
+            "build_correlated_context_from_metrics: Extracted %d namespace/pod pairs in %.3fs",
+            len(pairs), time_extract_pairs
+        )
         if not pairs:
             return ""
         goals = ["log:application", "log:infrastructure", "trace:span"]
@@ -2598,9 +2673,19 @@ def build_correlated_context_from_metrics(
                 if not query_str:
                     continue
                 logger.debug("In build_correlated_context_from_metrics: query_str=%s", query_str)
-                aggregated = fetch_goal_query_objects(goals, query_str)
+
+                # Fetch correlated data from Korrel8r
+                t_start = time.perf_counter()
+                aggregated = fetch_goal_query_objects(
+                    goals=goals,
+                    query=query_str,
+                    max_traces_per_query=max_traces_limit
+                )
+                time_fetch_korrel8r += time.perf_counter() - t_start
                 logger.debug("In build_correlated_context_from_metrics: aggregated=%s", aggregated)
+
                 # Logs
+                t_start = time.perf_counter()
                 for obj in aggregated.get("logs", []):
                     try:
                         message = obj.get("message") or obj.get("line") or ""
@@ -2613,6 +2698,8 @@ def build_correlated_context_from_metrics(
                         aggregated_logs.append(obj)
                     except Exception:
                         continue
+                time_process_logs += time.perf_counter() - t_start
+
                 # Traces (kept for potential downstream use)
                 try:
                     if isinstance(aggregated.get("traces", []), list):
@@ -2621,8 +2708,11 @@ def build_correlated_context_from_metrics(
                     pass
             except Exception:
                 continue
+
         # Sort aggregated logs by severity then timestamp
+        t_start = time.perf_counter()
         aggregated_logs_sorted = sort_logs_by_severity_then_time(aggregated_logs)
+        time_sort_logs = time.perf_counter() - t_start
         logger.debug("In build_correlated_context_from_metrics: aggregated_logs_sorted=%s", aggregated_logs_sorted)
         # Optionally log trace aggregate count for visibility
         try:
@@ -2633,6 +2723,7 @@ def build_correlated_context_from_metrics(
         except Exception:
             pass
         # Take top N (configurable) and build lines
+        t_start = time.perf_counter()
         try:
             max_rows = int(os.getenv("MAX_NUM_LOG_ROWS", "10"))
         except Exception:
@@ -2651,11 +2742,11 @@ def build_correlated_context_from_metrics(
                 continue
 
         result_str = "\n".join(lines)
+        time_format_output = time.perf_counter() - t_start
+
         # Filter error-like trace spans, then append top items using helper
-        try:
-            max_trace_spans = int(os.getenv("MAX_NUM_TRACE_SPANS", "10"))
-        except Exception:
-            max_trace_spans = 10
+        # (max_trace_spans already read at the beginning of the function)
+        t_start = time.perf_counter()
         filtered_spans = [s for s in aggregated_traces if isinstance(s, dict) and _span_is_error_like(s)]
         trace_lines_kv = []
         for span in filtered_spans[:max_trace_spans]:
@@ -2664,6 +2755,7 @@ def build_correlated_context_from_metrics(
         if trace_lines_kv:
             trace_section_str = "\n".join(trace_lines_kv)
             result_str = f"{result_str}\n{trace_section_str}" if result_str else trace_section_str
+        time_filter_traces = time.perf_counter() - t_start
         # Optionally inject a synthetic error log line for testing ONLY
         try:
             if os.getenv("INJECT_VLLM_ERROR_LOG_MSG"):
@@ -2674,6 +2766,25 @@ def build_correlated_context_from_metrics(
                 result_str = f"{result_str}\n{injected}" if result_str else injected
         except Exception:
             pass
+
+        # Log performance summary
+        overall_time = time.perf_counter() - overall_start
+        logger.debug(
+            "build_correlated_context_from_metrics performance: total=%.3fs, breakdown: "
+            "extract_pairs=%.3fs, fetch_korrel8r=%.3fs (for %d pairs), "
+            "process_logs=%.3fs, sort_logs=%.3fs, filter_traces=%.3fs, format_output=%.3fs | "
+            "results: %d logs, %d trace spans",
+            overall_time,
+            time_extract_pairs,
+            time_fetch_korrel8r,
+            len(pairs),
+            time_process_logs,
+            time_sort_logs,
+            time_filter_traces,
+            time_format_output,
+            len(lines),
+            len(trace_lines_kv)
+        )
         logger.debug("In build_correlated_context_from_metrics: result=%s", result_str)
         return result_str
     except Exception:

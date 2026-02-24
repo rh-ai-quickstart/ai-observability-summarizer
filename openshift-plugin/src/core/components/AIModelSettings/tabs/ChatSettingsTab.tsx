@@ -31,6 +31,12 @@ export const ChatSettingsTab: React.FC<ChatSettingsTabProps> = ({
   onResetSettings,
 }) => {
   const [showResetConfirm, setShowResetConfirm] = React.useState(false);
+  const [previewLengthInput, setPreviewLengthInput] = React.useState(String(settings.collapsedPreviewLength));
+
+  // Keep local input in sync when settings change externally (e.g. reset)
+  React.useEffect(() => {
+    setPreviewLengthInput(String(settings.collapsedPreviewLength));
+  }, [settings.collapsedPreviewLength]);
 
   const handleReset = () => {
     onResetSettings();
@@ -42,7 +48,7 @@ export const ChatSettingsTab: React.FC<ChatSettingsTabProps> = ({
       <TextContent style={{ marginBottom: '24px' }}>
         <Text component={TextVariants.h3}>Chat Interface Settings</Text>
         <Text component={TextVariants.p}>
-          Customize how the AI Chat interface behaves and displays information.
+          Customize how the Chat with Prometheus interface behaves and displays information.
         </Text>
       </TextContent>
 
@@ -100,11 +106,16 @@ export const ChatSettingsTab: React.FC<ChatSettingsTabProps> = ({
               <TextInput
                 id="collapsed-preview-length"
                 type="number"
-                value={settings.collapsedPreviewLength}
-                onChange={(_, value) => {
-                  const num = parseInt(value, 10);
-                  if (!isNaN(num) && num >= 100 && num <= 500) {
-                    onUpdateSettings({ collapsedPreviewLength: num });
+                value={previewLengthInput}
+                onChange={(_, value) => setPreviewLengthInput(value)}
+                onBlur={() => {
+                  const num = parseInt(previewLengthInput, 10);
+                  if (!isNaN(num)) {
+                    const clamped = Math.max(100, Math.min(500, num));
+                    onUpdateSettings({ collapsedPreviewLength: clamped });
+                    setPreviewLengthInput(String(clamped));
+                  } else {
+                    setPreviewLengthInput(String(settings.collapsedPreviewLength));
                   }
                 }}
                 min={100}
@@ -165,6 +176,36 @@ export const ChatSettingsTab: React.FC<ChatSettingsTabProps> = ({
             </Text>
           </FormGroup>
         )}
+
+        <Divider style={{ margin: '24px 0' }} />
+
+        {/* Metric Categories Section */}
+        <TextContent style={{ marginBottom: '16px' }}>
+          <Text component={TextVariants.h4}>Metric Categories</Text>
+        </TextContent>
+
+        <FormGroup
+          label="Location"
+          fieldId="metric-categories-location"
+        >
+          <Radio
+            id="metric-categories-location-header"
+            name="metric-categories-location"
+            label="Header (button with popover)"
+            description="Show as a button in the chat header. Click to browse categories in a popover menu."
+            isChecked={settings.metricCategoriesLocation === 'header'}
+            onChange={() => onUpdateSettings({ metricCategoriesLocation: 'header' })}
+          />
+          <Radio
+            id="metric-categories-location-inline"
+            name="metric-categories-location"
+            label="Inline (below messages)"
+            description="Show below chat messages in an expandable section."
+            isChecked={settings.metricCategoriesLocation === 'inline'}
+            onChange={() => onUpdateSettings({ metricCategoriesLocation: 'inline' })}
+            style={{ marginTop: '12px' }}
+          />
+        </FormGroup>
 
         <Divider style={{ margin: '24px 0' }} />
 

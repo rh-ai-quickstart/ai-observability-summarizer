@@ -19,6 +19,7 @@ import {
   KeyIcon,
   PlusCircleIcon,
   CogIcon,
+  ListIcon,
 } from '@patternfly/react-icons';
 
 import { AIModelState } from './types/models';
@@ -28,6 +29,7 @@ import { ModelsTab } from './tabs/ModelsTab';
 import { APIKeysTab } from './tabs/APIKeysTab';
 import { AddModelTab } from './tabs/AddModelTab';
 import { ChatSettingsTab } from './tabs/ChatSettingsTab';
+import { MetricsSettingsTab } from './tabs/MetricsSettingsTab';
 import { isDevMode } from '../../services/devCredentials';
 import { useChatSettings } from '../../hooks/useChatSettings';
 
@@ -267,6 +269,8 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
             onResetSettings={resetChatSettings}
           />
         );
+      case 'metrics':
+        return <MetricsSettingsTab />;
       default:
         return null;
     }
@@ -403,6 +407,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
           activeKey={state.activeTab}
           onSelect={handleTabSelect}
           aria-label="AI Model Settings Tabs"
+          isOverflowHorizontal
         >
           <Tab
             eventKey="models"
@@ -454,6 +459,19 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
             aria-label="Chat Settings"
           >
             {state.activeTab === 'chatsettings' && renderTabContent()}
+          </Tab>
+
+          <Tab
+            eventKey="metrics"
+            title={
+              <TabTitleText>
+                <ListIcon style={{ marginRight: '8px' }} />
+                Metrics
+              </TabTitleText>
+            }
+            aria-label="Metrics"
+          >
+            {state.activeTab === 'metrics' && renderTabContent()}
           </Tab>
         </Tabs>
       </div>

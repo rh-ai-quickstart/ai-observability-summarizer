@@ -31,6 +31,7 @@ import {
   EditIcon,
   AngleDownIcon,
   AngleUpIcon,
+  TimesIcon,
 } from '@patternfly/react-icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -41,6 +42,8 @@ import { useChatSettings } from '../hooks/useChatSettings';
 import { useSettings } from '../hooks/useSettings';
 import { SuggestedQuestions } from '../components/SuggestedQuestions';
 import { SuggestedQuestionsPopover } from '../components/SuggestedQuestionsPopover';
+import { MetricCategoriesPopover } from '../components/MetricCategoriesPopover';
+import { MetricCategoriesInline } from '../components/MetricCategoriesInline';
 import { ConfigurationRequiredAlert } from '../components/ConfigurationRequiredAlert';
 import '../styles/chat-markdown.css';
 
@@ -53,8 +56,10 @@ const AIChatPage: React.FC = () => {
   const [isLoading, setIsLoading] = React.useState(false);
   const [configError, setConfigError] = React.useState<string | null>(null);
   const [configErrorType, setConfigErrorType] = React.useState<string | null>(null);
-  const [replayMessage, setReplayMessage] = React.useState<string>('');
+
   const [questionsExpanded, setQuestionsExpanded] = React.useState(chatSettings.suggestedQuestionsExpanded);
+  const [categoriesExpanded, setCategoriesExpanded] = React.useState(false);
+  const [selectedCategoryName, setSelectedCategoryName] = React.useState<string | null>(null);
   const [collapsedMessages, setCollapsedMessages] = React.useState<Set<string>>(new Set());
   const [expandedProgressLogs, setExpandedProgressLogs] = React.useState<Set<string>>(new Set());
   const [copiedMessageId, setCopiedMessageId] = React.useState<string | null>(null);
@@ -152,23 +157,35 @@ const AIChatPage: React.FC = () => {
   }, []);
 
   const handleSend = async (messageText?: string) => {
-    const textToSend = messageText || inputValue.trim();
+    let textToSend = messageText || inputValue.trim();
     if (!textToSend || isLoading) return;
+
+    // Auto-prefix with category context when user types in the main input
+    if (!messageText && selectedCategoryName) {
+      textToSend = `Regarding ${selectedCategoryName} metrics: ${textToSend}`;
+    }
 
     // Check configuration at the moment of sending
     const config = getSessionConfig();
-    
+
     if (!config.ai_model) {
       setConfigError('Please configure an AI model in Settings first');
       setConfigErrorType(AI_CONFIG_WARNING);
       return;
     }
 
-    // Collapse suggested questions when a question is sent (inline mode only)
-    if (messageText && chatSettings.suggestedQuestionsLocation === 'inline') {
-      // This is from suggested questions - collapse immediately
-      setQuestionsExpanded(false);
+    // Collapse inline sections when a question is sent
+    if (messageText) {
+      if (chatSettings.suggestedQuestionsLocation === 'inline') {
+        setQuestionsExpanded(false);
+      }
+      if (chatSettings.metricCategoriesLocation === 'inline') {
+        setCategoriesExpanded(false);
+      }
     }
+
+    // Clear the selected category after sending (the context has been applied)
+    setSelectedCategoryName(null);
 
     // Collapse all expanded progress logs when sending new question
     setExpandedProgressLogs(new Set());
@@ -213,22 +230,6 @@ const AIChatPage: React.FC = () => {
 
       stopProgress();
 
-      // Replay progress log entries (show what the chatbot actually did)
-      if (progressLog && progressLog.length > 0) {
-        for (const entry of progressLog) {
-          if (!isMountedRef.current) return;
-          setReplayMessage(entry.message);
-          // Show each entry for 300ms to create replay effect
-          await new Promise(resolve => setTimeout(resolve, 300));
-        }
-
-        // Clear replay message
-        if (!isMountedRef.current) return;
-        setReplayMessage('');
-      }
-
-      if (!isMountedRef.current) return;
-
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
@@ -244,10 +245,6 @@ const AIChatPage: React.FC = () => {
         setExpandedProgressLogs(prev => new Set([...prev, assistantMessage.id]));
       }
 
-      // Auto-expand suggested questions after response for easy follow-up (inline mode only)
-      if (chatSettings.suggestedQuestionsLocation === 'inline') {
-        setQuestionsExpanded(true);
-      }
     } catch (error) {
       // Only update state if component is still mounted
       if (!isMountedRef.current) return;
@@ -264,11 +261,6 @@ const AIChatPage: React.FC = () => {
       };
 
       setMessages(prev => [...prev, errorMessage]);
-
-      // Auto-expand suggested questions even on error (inline mode only)
-      if (chatSettings.suggestedQuestionsLocation === 'inline') {
-        setQuestionsExpanded(true);
-      }
     } finally {
       if (isMountedRef.current) {
         setIsLoading(false);
@@ -344,22 +336,14 @@ const AIChatPage: React.FC = () => {
     setEditValue('');
   };
 
-  const handleSaveEdit = (messageId: string) => {
+  const handleSaveEdit = (_messageId: string) => {
     if (!editValue.trim()) return;
-
-    // Find the message index
-    const messageIndex = messages.findIndex(m => m.id === messageId);
-    if (messageIndex === -1) return;
-
-    // Remove all messages from this point forward (the edited message and all responses after it)
-    const newMessages = messages.slice(0, messageIndex);
-    setMessages(newMessages);
 
     // Clear edit state
     setEditingMessageId(null);
     setEditValue('');
 
-    // Re-send the edited message
+    // Append the edited message as a new message (keep all history)
     handleSend(editValue);
   };
 
@@ -387,6 +371,7 @@ const AIChatPage: React.FC = () => {
     try {
       const firstTime = new Date(progressLog[0].timestamp).getTime();
       const lastTime = new Date(progressLog[progressLog.length - 1].timestamp).getTime();
+      if (isNaN(firstTime) || isNaN(lastTime)) return '0.0s';
       const diffMs = lastTime - firstTime;
       const diffSec = (diffMs / 1000).toFixed(1);
       return `${diffSec}s`;
@@ -403,7 +388,7 @@ const AIChatPage: React.FC = () => {
           <FlexItem>
             <Title headingLevel="h2" size="xl">
               <RobotIcon style={{ marginRight: '8px', color: '#7c3aed' }} />
-              AI Chat Assistant
+              Chat with Prometheus
             </Title>
             <TextContent>
               <Text component={TextVariants.small} style={{ color: 'var(--pf-v5-global--Color--200)' }}>
@@ -414,6 +399,9 @@ const AIChatPage: React.FC = () => {
           <FlexItem>
             {chatSettings.suggestedQuestionsLocation === 'header' && (
               <SuggestedQuestionsPopover onSelectQuestion={(question) => handleSend(question)} />
+            )}
+            {chatSettings.metricCategoriesLocation === 'header' && (
+              <MetricCategoriesPopover onSelectQuestion={(question) => handleSend(question)} />
             )}
             <Button variant="plain" onClick={handleExportConversation} title="Export conversation" style={{ marginRight: '8px' }}>
               <DownloadIcon /> Export
@@ -693,7 +681,31 @@ const AIChatPage: React.FC = () => {
               <SuggestedQuestions
                 onSelectQuestion={(question) => handleSend(question)}
                 isExpanded={questionsExpanded}
-                onToggle={(expanded) => setQuestionsExpanded(expanded)}
+                onToggle={(expanded) => {
+                  setQuestionsExpanded(expanded);
+                  // Collapse metric categories when suggested questions is expanded
+                  if (expanded && chatSettings.metricCategoriesLocation === 'inline') {
+                    setCategoriesExpanded(false);
+                  }
+                }}
+              />
+            </div>
+          )}
+
+          {/* Metric Categories - inline mode only */}
+          {chatSettings.metricCategoriesLocation === 'inline' && (
+            <div style={{ marginTop: messages.length > 1 ? '16px' : '24px', marginBottom: '16px' }}>
+              <MetricCategoriesInline
+                onSelectQuestion={(question) => handleSend(question)}
+                onCategorySelect={(name) => setSelectedCategoryName(name)}
+                isExpanded={categoriesExpanded}
+                onToggle={(expanded) => {
+                  setCategoriesExpanded(expanded);
+                  // Collapse suggested questions when metric categories is expanded
+                  if (expanded && chatSettings.suggestedQuestionsLocation === 'inline') {
+                    setQuestionsExpanded(false);
+                  }
+                }}
               />
             </div>
           )}
@@ -722,7 +734,7 @@ const AIChatPage: React.FC = () => {
                     <span></span>
                   </div>
                   <Text>
-                    {replayMessage || progressMessage || 'Analyzing...'}
+                    {progressMessage || 'Analyzing...'}
                   </Text>
                 </Flex>
               </div>
@@ -735,6 +747,17 @@ const AIChatPage: React.FC = () => {
         <Divider />
         
         <CardFooter>
+          {selectedCategoryName && (
+            <div style={{ marginBottom: '8px' }}>
+              <Label
+                color="purple"
+                onClose={() => setSelectedCategoryName(null)}
+                icon={<TimesIcon />}
+              >
+                Category: {selectedCategoryName}
+              </Label>
+            </div>
+          )}
           <Flex>
             <FlexItem flex={{ default: 'flex_1' }}>
               <TextInput
@@ -743,7 +766,9 @@ const AIChatPage: React.FC = () => {
                 value={inputValue}
                 onChange={(_event, value) => setInputValue(value)}
                 onKeyPress={handleKeyPress}
-                placeholder="Ask about your metrics..."
+                placeholder={selectedCategoryName
+                  ? `Ask about ${selectedCategoryName}...`
+                  : 'Ask about your metrics...'}
                 aria-label="Chat input"
                 isDisabled={isLoading}
               />
