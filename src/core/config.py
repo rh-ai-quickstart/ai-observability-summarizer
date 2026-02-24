@@ -197,3 +197,14 @@ GRAFANA_BASE_URL: str = os.getenv("GRAFANA_BASE_URL", "")
 TEMPO_BASE_URL: str = os.getenv("TEMPO_BASE_URL", "")
 TEMPO_DATASOURCE_UID: str = os.getenv("TEMPO_DATASOURCE_UID", "")
 LOKI_DATASOURCE_UID: str = os.getenv("LOKI_DATASOURCE_UID", "")
+
+
+# Tools that accept a namespace parameter for scoping Prometheus/log queries
+# Used by chatbots to automatically inject namespace into tool arguments
+NAMESPACE_AWARE_TOOLS = frozenset({
+    'execute_promql', 'search_metrics', 'get_metric_metadata',
+    'get_label_values', 'suggest_queries', 'explain_results',
+    'search_metrics_by_category', 'find_best_metric_with_metadata',
+    'fetch_openshift_metrics_data', 'analyze_openshift', 'chat_openshift',
+    'get_correlated_logs',
+})

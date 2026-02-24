@@ -1,6 +1,5 @@
 """Tests for MCPServerAdapter — verifies FastMCP 3.x list_tools() integration."""
 
-import asyncio
 from unittest.mock import AsyncMock, Mock
 
 from mcp_server.mcp_tools_adapter import MCPServerAdapter

@@ -46,6 +46,7 @@ import { MetricCategoriesPopover } from '../components/MetricCategoriesPopover';
 import { MetricCategoriesInline } from '../components/MetricCategoriesInline';
 import { ConfigurationRequiredAlert } from '../components/ConfigurationRequiredAlert';
 import { NamespaceScopeSelector } from '../components/NamespaceScopeSelector';
+import { ChatScope } from '../data/namespaceDefaults';
 import '../styles/chat-markdown.css';
 
 const AIChatPage: React.FC = () => {
@@ -67,7 +68,7 @@ const AIChatPage: React.FC = () => {
   const [copySuccess, setCopySuccess] = React.useState(false);
   const [editingMessageId, setEditingMessageId] = React.useState<string | null>(null);
   const [editValue, setEditValue] = React.useState('');
-  const [chatScope, setChatScope] = React.useState<'cluster_wide' | 'namespace_scoped'>('cluster_wide');
+  const [chatScope, setChatScope] = React.useState<ChatScope>('cluster_wide');
   const [selectedNamespace, setSelectedNamespace] = React.useState<string | null>(null);
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
@@ -266,10 +267,11 @@ const AIChatPage: React.FC = () => {
 
       stopProgress();
 
+      const errorMsg = error instanceof Error ? error.message : String(error);
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: `❌ I encountered an error: ${error.message}`,
+        content: `❌ I encountered an error: ${errorMsg}`,
         timestamp: new Date(),
         error: true,
         originalUserMessage: userMessage.content,
@@ -285,7 +287,7 @@ const AIChatPage: React.FC = () => {
     }
   };
 
-  const handleKeyPress = (event: React.KeyboardEvent) => {
+  const handleKeyDown = (event: React.KeyboardEvent) => {
     // Enter - Send message
     if (event.key === 'Enter') {
       event.preventDefault();
@@ -802,7 +804,7 @@ const AIChatPage: React.FC = () => {
                 type="text"
                 value={inputValue}
                 onChange={(_event, value) => setInputValue(value)}
-                onKeyPress={handleKeyPress}
+                onKeyDown={handleKeyDown}
                 placeholder={selectedCategoryName
                   ? `Ask about ${selectedCategoryName}...`
                   : selectedNamespace

@@ -134,9 +134,6 @@ For Pod Status queries:
             return "Error: OpenAI SDK not installed. Please install it with: pip install openai"
 
         try:
-            # Set active namespace for tool argument injection
-            self._active_namespace = namespace
-
             # Create system prompt
             system_prompt = self._create_system_prompt(namespace)
 
@@ -223,7 +220,7 @@ For Pod Status queries:
                             progress_callback(f"🔧 Using tool: {tool_name}")
 
                         # Get tool result with automatic truncation (logging handled in base class)
-                        tool_result = self._get_tool_result(tool_name, tool_args)
+                        tool_result = self._get_tool_result(tool_name, tool_args, namespace=namespace)
 
                         tool_results.append({
                             "role": "tool",

@@ -212,9 +212,6 @@ class GoogleChatBot(BaseChatBot):
                 return f"Error: API key required for Google model {self.model_name}. Please configure an API key in Settings."
 
         try:
-            # Set active namespace for tool argument injection
-            self._active_namespace = namespace
-
             # Create system prompt
             system_prompt = self._create_system_prompt(namespace)
 
@@ -324,7 +321,7 @@ class GoogleChatBot(BaseChatBot):
                                 progress_callback(f"🔧 Using tool: {tool_name}")
 
                             # Get tool result with automatic truncation (logging handled in base class)
-                            tool_result = self._get_tool_result(tool_name, tool_args)
+                            tool_result = self._get_tool_result(tool_name, tool_args, namespace=namespace)
 
                             # Create function response for Gemini SDK
                             function_responses.append(
@@ -385,7 +382,7 @@ class GoogleChatBot(BaseChatBot):
                                             if progress_callback:
                                                 progress_callback(f"🔧 Using tool: {tool_name}")
 
-                                            tool_result = self._get_tool_result(tool_name, tool_args)
+                                            tool_result = self._get_tool_result(tool_name, tool_args, namespace=namespace)
 
                                             function_responses.append(
                                                 self.genai.protos.Part(

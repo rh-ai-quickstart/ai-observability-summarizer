@@ -10,7 +10,13 @@ from typing import Dict, Any, List, Optional
 from enum import Enum
 
 
-_NAMESPACE_EXCLUSIONS = {'scoped', 'specific', 'mode', 'level', 'wide', 'filter'}
+_NAMESPACE_EXCLUSIONS = {
+    'scoped', 'specific', 'mode', 'level', 'wide', 'filter',
+    'is', 'to', 'or', 'in', 'the', 'a', 'an', 'for', 'of', 'on',
+    'and', 'not', 'all', 'any', 'my', 'our', 'your', 'its',
+    'information', 'details', 'query', 'queries', 'data',
+    'support', 'based', 'aware', 'related', 'scoping',
+}
 
 _NAMESPACE_PATTERNS = [
     # "in namespace ai-observability", "in the namespace llm-serving"

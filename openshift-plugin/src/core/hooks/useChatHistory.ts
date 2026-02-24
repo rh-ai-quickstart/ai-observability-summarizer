@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { ChatScope } from '../data/namespaceDefaults';
 
 const STORAGE_KEY = 'openshift_ai_chat_history';
 const SETTINGS_KEY = 'openshift_ai_chat_settings';
@@ -31,7 +32,7 @@ export interface Message {
   error?: boolean;
   progressLog?: ProgressEntry[];
   originalUserMessage?: string; // Store original user message for retry functionality
-  scope?: 'cluster_wide' | 'namespace_scoped';
+  scope?: ChatScope;
   namespace?: string;
 }
 

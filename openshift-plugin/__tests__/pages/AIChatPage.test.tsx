@@ -246,24 +246,12 @@ describe('AIChatPage', () => {
 
       const input = screen.getByPlaceholderText('Ask about your metrics...');
       fireEvent.change(input, { target: { value: 'Test message' } });
-      fireEvent.keyPress(input, { key: 'Enter', code: 'Enter', charCode: 13 });
+      fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
 
       await waitFor(() => {
         expect(mockChat).toHaveBeenCalled();
       });
     });
-
-    // Note: Shift+Enter is not currently handled differently in the implementation
-    // This test is commented out as it was aspirational
-    // it('should not send message when Shift+Enter pressed', () => {
-    //   render(<AIChatPage />);
-    //
-    //   const input = screen.getByPlaceholderText('Ask about your metrics...');
-    //   fireEvent.change(input, { target: { value: 'Test message' } });
-    //   fireEvent.keyPress(input, { key: 'Enter', code: 'Enter', charCode: 13, shiftKey: true });
-    //
-    //   expect(mockChat).not.toHaveBeenCalled();
-    // });
 
     it('should not send empty message', () => {
       render(<AIChatPage />);

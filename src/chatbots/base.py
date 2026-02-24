@@ -14,6 +14,48 @@ from common.pylogger import get_python_logger
 
 logger = get_python_logger()
 
+# PromQL functions, keywords, and common label names that should NOT get
+# namespace injected — only actual metric names should.  Module-level constant
+# to avoid rebuilding on every call.
+_PROMQL_SKIP = frozenset({
+    # Aggregation operators
+    'sum', 'avg', 'min', 'max', 'count', 'stddev', 'stdvar',
+    'topk', 'bottomk', 'quantile', 'count_values',
+    # Rate/counter functions
+    'rate', 'irate', 'increase', 'delta', 'idelta',
+    # Histogram functions
+    'histogram_quantile', 'histogram_count', 'histogram_sum',
+    # Label functions
+    'label_replace', 'label_join',
+    # Math functions
+    'abs', 'ceil', 'floor', 'round', 'clamp', 'clamp_min', 'clamp_max',
+    'exp', 'ln', 'log2', 'log10', 'sqrt',
+    # Sort/utility functions
+    'sort', 'sort_desc', 'time', 'timestamp',
+    'vector', 'scalar', 'sgn',
+    # Range functions
+    'changes', 'resets', 'deriv', 'predict_linear',
+    'absent', 'absent_over_time', 'present_over_time',
+    # Date functions
+    'day_of_month', 'day_of_week', 'days_in_month',
+    'hour', 'minute', 'month', 'year',
+    # Keywords and operators
+    'by', 'without', 'on', 'ignoring', 'group_left', 'group_right',
+    'bool', 'offset', 'and', 'or', 'unless',
+    # Over-time functions
+    'avg_over_time', 'min_over_time', 'max_over_time',
+    'sum_over_time', 'count_over_time', 'stddev_over_time',
+    'last_over_time', 'quantile_over_time',
+    # Common Kubernetes label names (appear in by/without/grouping clauses)
+    'pod', 'namespace', 'container', 'node', 'instance', 'job',
+    'service', 'deployment', 'daemonset', 'statefulset', 'replicaset',
+    'phase', 'reason', 'condition', 'type', 'resource', 'unit',
+    'device', 'interface', 'mode', 'cpu', 'endpoint', 'alertname',
+    'alertstate', 'severity', 'le', 'model_name',
+    # Numeric literals used in comparisons (won't match our regex, but safe)
+    'inf', 'nan',
+})
+
 
 class BaseChatBot(ABC):
     """Base class for all chat bot implementations with common functionality."""
@@ -56,16 +98,8 @@ class BaseChatBot(ABC):
         # Store tool executor (dependency injection)
         self.tool_executor = tool_executor
 
-        # Active namespace for the current chat session (set by chat() implementations)
-        self._active_namespace: Optional[str] = None
-
-        # Tools that accept a namespace parameter for scoping Prometheus queries
-        self._namespace_aware_tools = {
-            'execute_promql', 'search_metrics', 'get_metric_metadata',
-            'get_label_values', 'suggest_queries', 'explain_results',
-            'search_metrics_by_category', 'find_best_metric_with_metadata',
-            'fetch_openshift_metrics_data', 'analyze_openshift', 'chat_openshift',
-        }
+        from core.config import NAMESPACE_AWARE_TOOLS
+        self._namespace_aware_tools = NAMESPACE_AWARE_TOOLS
 
         logger.info(f"{self.__class__.__name__} initialized with model: {self.model_name}")
 
@@ -254,47 +288,6 @@ class BaseChatBot(ABC):
 
         original = query
 
-        # PromQL functions, keywords, and common label names that should NOT
-        # get namespace injected — only actual metric names should.
-        promql_skip = {
-            # Aggregation operators
-            'sum', 'avg', 'min', 'max', 'count', 'stddev', 'stdvar',
-            'topk', 'bottomk', 'quantile', 'count_values',
-            # Rate/counter functions
-            'rate', 'irate', 'increase', 'delta', 'idelta',
-            # Histogram functions
-            'histogram_quantile', 'histogram_count', 'histogram_sum',
-            # Label functions
-            'label_replace', 'label_join',
-            # Math functions
-            'abs', 'ceil', 'floor', 'round', 'clamp', 'clamp_min', 'clamp_max',
-            'exp', 'ln', 'log2', 'log10', 'sqrt',
-            # Sort/utility functions
-            'sort', 'sort_desc', 'time', 'timestamp',
-            'vector', 'scalar', 'sgn',
-            # Range functions
-            'changes', 'resets', 'deriv', 'predict_linear',
-            'absent', 'absent_over_time', 'present_over_time',
-            # Date functions
-            'day_of_month', 'day_of_week', 'days_in_month',
-            'hour', 'minute', 'month', 'year',
-            # Keywords and operators
-            'by', 'without', 'on', 'ignoring', 'group_left', 'group_right',
-            'bool', 'offset', 'and', 'or', 'unless',
-            # Over-time functions
-            'avg_over_time', 'min_over_time', 'max_over_time',
-            'sum_over_time', 'count_over_time', 'stddev_over_time',
-            'last_over_time', 'quantile_over_time',
-            # Common Kubernetes label names (appear in by/without/grouping clauses)
-            'pod', 'namespace', 'container', 'node', 'instance', 'job',
-            'service', 'deployment', 'daemonset', 'statefulset', 'replicaset',
-            'phase', 'reason', 'condition', 'type', 'resource', 'unit',
-            'device', 'interface', 'mode', 'cpu', 'endpoint', 'alertname',
-            'alertstate', 'severity', 'le', 'model_name',
-            # Numeric literals used in comparisons (won't match our regex, but safe)
-            'inf', 'nan',
-        }
-
         # Pattern: find metric names followed by optional labels and/or range vector
         # This regex matches: metric_name, metric_name{...}, metric_name[5m], metric_name{...}[5m]
         # We inject namespace into the label set of each metric selector.
@@ -304,7 +297,7 @@ class BaseChatBot(ABC):
             rest = match.group(3) or ''     # trailing [range] or empty
 
             # Skip PromQL functions/keywords/label names — they aren't metric selectors
-            if metric.lower() in promql_skip:
+            if metric.lower() in _PROMQL_SKIP:
                 return match.group(0)
 
             if labels:
@@ -332,7 +325,7 @@ class BaseChatBot(ABC):
             logger.info(f"📌 Injected namespace '{namespace}' into PromQL: {original} → {modified}")
         return modified
 
-    def _get_tool_result(self, tool_name: str, tool_args: Dict[str, Any]) -> str:
+    def _get_tool_result(self, tool_name: str, tool_args: Dict[str, Any], namespace: Optional[str] = None) -> str:
         """Execute tool call and truncate result if needed.
 
         For execute_promql: injects namespace filter directly into the PromQL
@@ -343,23 +336,24 @@ class BaseChatBot(ABC):
         Args:
             tool_name: Name of the tool to call
             tool_args: Arguments to pass to the tool
+            namespace: Optional namespace to inject into tool args
 
         Returns:
             Tool result, truncated if it exceeds max length
         """
-        # Inject active namespace for namespace-scoped queries
-        if self._active_namespace and tool_name in self._namespace_aware_tools:
+        # Inject namespace for namespace-scoped queries
+        if namespace and tool_name in self._namespace_aware_tools:
             if tool_name == 'execute_promql' and 'query' in tool_args:
                 # For execute_promql: modify the PromQL query string itself
                 tool_args = dict(tool_args)
                 tool_args['query'] = self._inject_namespace_into_promql(
-                    tool_args['query'], self._active_namespace
+                    tool_args['query'], namespace
                 )
             elif not tool_args.get('namespace'):
                 # For other tools: inject namespace as an argument
                 tool_args = dict(tool_args)
-                tool_args['namespace'] = self._active_namespace
-                logger.info(f"📌 Injected namespace '{self._active_namespace}' into {tool_name} args")
+                tool_args['namespace'] = namespace
+                logger.info(f"📌 Injected namespace '{namespace}' into {tool_name} args")
 
         # Log tool request with arguments
         logger.info(f"🔧 Requesting tool: {tool_name} with args: {tool_args}")

@@ -8,11 +8,12 @@ import {
 } from '@patternfly/react-core';
 import { ClusterIcon, CubeIcon } from '@patternfly/react-icons';
 import { NamespaceDropdown } from './NamespaceDropdown';
+import { ChatScope } from '../data/namespaceDefaults';
 
 export interface NamespaceScopeSelectorProps {
-  scope: 'cluster_wide' | 'namespace_scoped';
+  scope: ChatScope;
   namespace: string | null;
-  onScopeChange: (scope: 'cluster_wide' | 'namespace_scoped', namespace: string | null) => void;
+  onScopeChange: (scope: ChatScope, namespace: string | null) => void;
 }
 
 export const NamespaceScopeSelector: React.FC<NamespaceScopeSelectorProps> = ({

@@ -78,6 +78,7 @@ def test_health_protocol_switch_runtime():
 def test_sse_transport_wiring_on_import():
     import mcp_server.settings as settings_mod
 
+    original_protocol = settings_mod.settings.MCP_TRANSPORT_PROTOCOL
     # Reload module with protocol forced to sse and SSE app patched
     api = _reload_api_with_mocks(protocol="sse")
     try:
@@ -86,8 +87,8 @@ def test_sse_transport_wiring_on_import():
         assert resp.status_code == 200
         assert resp.json()["transport_protocol"] == "sse"
     finally:
-        # Restore protocol to prevent polluting other tests
-        settings_mod.settings.MCP_TRANSPORT_PROTOCOL = "http"
+        # Restore original protocol to prevent polluting other tests
+        settings_mod.settings.MCP_TRANSPORT_PROTOCOL = original_protocol
 
 
 def test_report_endpoints_in_health():

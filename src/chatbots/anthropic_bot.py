@@ -66,7 +66,7 @@ class AnthropicChatBot(BaseChatBot):
     # Regex to strip <function_calls>...</function_calls> XML that the model
     # sometimes emits as text instead of using the native tool_use API.
     _FUNCTION_CALLS_RE = re.compile(
-        r'<function_calls>\s*(?:\[.*?\])?\s*</function_calls>',
+        r'<function_calls>.*?</function_calls>',
         re.DOTALL,
     )
 
@@ -98,9 +98,6 @@ class AnthropicChatBot(BaseChatBot):
                 return f"Error: API key required for Anthropic model {self.model_name}. Please configure an API key in Settings."
 
         try:
-            # Set active namespace for tool argument injection
-            self._active_namespace = namespace
-
             # Create system prompt
             system_prompt = self._create_system_prompt(namespace)
 
@@ -165,7 +162,7 @@ class AnthropicChatBot(BaseChatBot):
                                 progress_callback(f"🔧 Using tool: {tool_name}")
 
                             # Get tool result with automatic truncation (logging handled in base class)
-                            tool_result = self._get_tool_result(tool_name, tool_args)
+                            tool_result = self._get_tool_result(tool_name, tool_args, namespace=namespace)
 
                             tool_results.append({
                                 "type": "tool_result",

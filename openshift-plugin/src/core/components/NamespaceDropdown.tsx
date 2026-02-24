@@ -38,24 +38,6 @@ export const NamespaceDropdown: React.FC<NamespaceDropdownProps> = ({
   const toggleRef = React.useRef<HTMLButtonElement>(null);
   const menuRef = React.useRef<HTMLDivElement>(null);
 
-  const loadNamespaces = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await listOpenShiftNamespaces();
-      loadedRef.current = true;
-      if (result.length === 0) {
-        setError('No namespaces found');
-      } else {
-        setNamespaces(result);
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load namespaces');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const filteredNamespaces = React.useMemo(
     () =>
       namespaces
@@ -65,9 +47,32 @@ export const NamespaceDropdown: React.FC<NamespaceDropdownProps> = ({
   );
 
   React.useEffect(() => {
+    let isCancelled = false;
     if (isOpen && !loadedRef.current) {
-      loadNamespaces();
+      const doLoad = async () => {
+        setLoading(true);
+        setError(null);
+        try {
+          const result = await listOpenShiftNamespaces();
+          if (isCancelled) return;
+          loadedRef.current = true;
+          if (result.length === 0) {
+            setError('No namespaces found');
+          } else {
+            setNamespaces(result);
+          }
+        } catch (e) {
+          if (isCancelled) return;
+          setError(e instanceof Error ? e.message : 'Failed to load namespaces');
+        } finally {
+          if (!isCancelled) {
+            setLoading(false);
+          }
+        }
+      };
+      doLoad();
     }
+    return () => { isCancelled = true; };
   }, [isOpen]);
 
   // Auto-focus search input when dropdown opens
@@ -84,6 +89,24 @@ export const NamespaceDropdown: React.FC<NamespaceDropdownProps> = ({
       return () => clearTimeout(timer);
     }
   }, [isOpen]);
+
+  // Close dropdown when clicking outside
+  React.useEffect(() => {
+    if (!isOpen) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (
+        menuRef.current && !menuRef.current.contains(target) &&
+        toggleRef.current && !toggleRef.current.contains(target)
+      ) {
+        onToggle(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen, onToggle]);
 
   // Reset focused index when filtered list changes
   React.useEffect(() => {
@@ -108,6 +131,11 @@ export const NamespaceDropdown: React.FC<NamespaceDropdownProps> = ({
         onToggle(false);
         return;
       }
+
+      // Only handle arrow/enter keys when focus is within the dropdown
+      const isWithinDropdown = menuRef.current?.contains(document.activeElement) ||
+                                toggleRef.current?.contains(document.activeElement);
+      if (!isWithinDropdown) return;
 
       if (event.key === 'ArrowDown') {
         event.preventDefault();

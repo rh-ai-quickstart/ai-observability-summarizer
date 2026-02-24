@@ -8,3 +8,6 @@ export const DEFAULT_NAMESPACE_NAMES = ['default', 'openshift'];
 export const isDefaultNamespace = (ns: string): boolean =>
   DEFAULT_NAMESPACE_PREFIXES.some(prefix => ns.startsWith(prefix)) ||
   DEFAULT_NAMESPACE_NAMES.includes(ns);
+
+/** Chat scope type — matches backend constants CLUSTER_WIDE / NAMESPACE_SCOPED */
+export type ChatScope = 'cluster_wide' | 'namespace_scoped';
