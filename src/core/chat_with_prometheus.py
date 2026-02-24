@@ -494,12 +494,14 @@ def find_best_metric_with_metadata(
         "concepts_detected": concepts
     }
 
-    # Add catalog metadata if available
+    # Add concise catalog info if available
     if catalog.is_available():
-        result["catalog_used"] = True
-        result["catalog_metadata"] = catalog.get_metadata()
-    else:
-        result["catalog_used"] = False
+        meta = catalog.get_metadata()
+        result["catalog_info"] = (
+            f"catalog_type: {meta.get('catalog_type', 'unknown')}, "
+            f"total_metrics: {meta.get('total_metrics', 0)}, "
+            f"validated: {meta.get('catalog_validated', False)}"
+        )
 
     return result
 

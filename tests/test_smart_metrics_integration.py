@@ -148,9 +148,10 @@ class TestSmartMetricsIntegration:
                     # Test GPU-related query
                     result = find_best_metric_with_metadata("What is the GPU temperature?", max_candidates=5)
 
-                    # Verify catalog was used
-                    assert result.get("catalog_used") is True
-                    assert "catalog_metadata" in result
+                    # Verify catalog was used (catalog_info present means catalog was used)
+                    assert "catalog_info" in result
+                    assert "catalog_type" in result["catalog_info"]
+                    assert "total_metrics" in result["catalog_info"]
 
                     # Verify best metric selection
                     best_metric = result["best_metric"]
@@ -291,8 +292,8 @@ class TestSmartMetricsIntegration:
 
                     result = find_best_metric_with_metadata("cpu usage", max_candidates=5)
 
-                    # Verify fallback worked
-                    assert result.get("catalog_used") is False
+                    # Verify fallback worked (no catalog_info when catalog unavailable)
+                    assert "catalog_info" not in result
                     assert "best_metric" in result
 
     def test_category_aware_filtering_reduces_search_space(self, sample_catalog_with_real_metrics):
@@ -374,4 +375,4 @@ class TestBackwardCompatibility:
                     assert "concepts_detected" in result
 
                     # New fields should be additive only
-                    assert "catalog_used" in result
+                    assert "catalog_info" in result

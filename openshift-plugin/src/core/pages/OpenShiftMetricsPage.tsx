@@ -717,7 +717,8 @@ export const OpenShiftMetricsPage: React.FC = () => {
         scope === 'namespace_scoped' ? selectedNamespace : undefined,
         config.ai_model,
         apiKey,
-        apiTimeRange
+        apiTimeRange,
+        controller.signal
       );
       
       // Check if request was cancelled

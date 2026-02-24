@@ -595,7 +595,8 @@ export async function analyzeOpenShift(
   namespace?: string,
   summarizeModelId?: string,
   apiKey?: string,
-  timeRange?: string
+  timeRange?: string,
+  signal?: AbortSignal
 ): Promise<OpenShiftAnalysisResult> {
   try {
     console.log('[OpenShift] Analyzing:', { category, scope, namespace, summarizeModelId });
@@ -606,7 +607,7 @@ export async function analyzeOpenShift(
       summarize_model_id: summarizeModelId || undefined,
       api_key: apiKey || undefined,
       time_range: timeRange || '1h',
-    });
+    }, signal);
 
     console.log('[OpenShift] Analysis response length:', text.length);
 

@@ -517,7 +517,7 @@ You have access to monitoring tools and should provide focused, targeted respons
 - Cluster: OpenShift with AI/ML workloads, GPUs, and comprehensive monitoring
 - Scope: {f'**NAMESPACE-SCOPED: {namespace}** — ALL queries MUST be filtered to this namespace only' if namespace else 'Cluster-wide analysis'}
 - Tools: Direct access to Prometheus/Thanos metrics via MCP tools
-- **Enhanced Metrics Catalog**: Smart discovery of 2,037 High/Medium priority OpenShift metrics across 19 categories (GPU/AI, Cluster Health, Networking, Storage, etcd, etc.)
+- **Enhanced Metrics Catalog**: Smart category-aware metric discovery via catalog tools
 {"" if not namespace else f"""
 **🚨 NAMESPACE SCOPE REQUIREMENT — MANDATORY:**
 You are operating in NAMESPACE-SCOPED mode for namespace **"{namespace}"**.
@@ -649,18 +649,8 @@ use the `vllm:` prefix and live in the `gpu_ai` category. Key concepts:
   - Per-instance breakdown: add `by (instance)` to aggregations
   - Cache saturation check: `vllm:gpu_cache_usage_perc > 0.9`
 
-**📚 Enhanced Metrics Catalog Features:**
-
-The system now has intelligent metric discovery with category-aware filtering:
-- **19 Categories**: GPU/AI, Cluster Health, Node Hardware, Pods/Containers, Networking, Storage, etcd, API Server, and more
-- **Priority-Based Selection**: Automatically focuses on High/Medium priority metrics (2,037 metrics) for faster, more relevant results
-- **Smart Category Detection**: Automatically identifies relevant categories from your question (e.g., "GPU temperature" → gpu_ai category)
-- **70% Faster Discovery**: Pre-filtered catalog reduces discovery time from 3.7s to 1.1s
-
-**When to Use Enhanced Catalog Tools:**
-- Use `get_metrics_categories` when you want to explore available metric categories
-- Use `search_metrics_by_category` when you need metrics from a specific category (e.g., all GPU metrics, all etcd metrics)
-- The standard tools (search_metrics, get_metric_metadata) automatically benefit from smart catalog filtering
+**📚 Enhanced Metrics Catalog:**
+Use `get_metrics_categories` to explore available categories and `search_metrics_by_category` for targeted category-specific queries (e.g., all GPU metrics, all etcd metrics). Standard tools (search_metrics, get_metric_metadata) also benefit from catalog filtering automatically.
 
 **Your Workflow (FOCUSED & DIRECT):**
 1. 🎯 **STOP AND THINK**: What exactly is the user asking for?
@@ -700,6 +690,11 @@ The system now has intelligent metric discovery with category-aware filtering:
   - `kube_pod_container_status_terminated_reason{{reason=~"Error|OOMKilled"}}` — containers that terminated with errors
   - `kube_pod_status_phase{{phase="Failed"}}` — pods in Failed phase
 - When a user asks about "failing", "unhealthy", "problem", or "broken" pods, ALWAYS query container-level metrics, not just pod phase
+- IMPORTANT: Always append `== 1` to kube-state-metrics status queries (e.g., `kube_pod_status_phase{{phase="Failed"}} == 1`). Without `== 1`, Prometheus returns stale time series for pods that were PREVIOUSLY in that state (value=0) alongside currently-active ones (value=1), causing false positives.
+
+**PromQL Pod/Container Name Matching:**
+- When querying by pod name, always use regex matching (e.g., `pod=~"name.*"`) instead of exact match (`pod="name"`), because Kubernetes pod names include deployment and replicaset hash suffixes (e.g., `my-app-6d5f8b7c4-x9k2m`).
+- Apply the same regex pattern for container and deployment names that may have generated suffixes.
 
 **CORE PRINCIPLES:**
 - **BE THOROUGH BUT FOCUSED**: Use as many tools as needed to answer comprehensively

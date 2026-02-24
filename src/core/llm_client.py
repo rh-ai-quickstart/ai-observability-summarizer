@@ -670,6 +670,8 @@ Use time range syntax `[{time_range_syntax}]` in PromQL queries where appropriat
 - Containers: `count(count by (image)(container_spec_image))`, `sum(kube_pod_container_status_running)`
 - Workloads: `sum(kube_daemonset_status_number_ready)`, `sum(kube_statefulset_status_replicas_ready)`
 
+**Note:** When filtering by pod, container, or deployment name, use regex matching (e.g., `pod=~"name.*"`) because Kubernetes names include generated hash suffixes.
+
 """
 
     return f"""

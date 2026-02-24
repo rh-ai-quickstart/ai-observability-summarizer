@@ -288,21 +288,10 @@ def find_best_metric_with_metadata_v2(
 # =============================================================================
 
 def get_category_metrics_detail(category_id: Optional[str] = None) -> List[Dict[str, Any]]:
-    """Get metrics catalog data as clean JSON for UI consumption.
-
-    Serves two purposes depending on whether category_id is provided:
-
-    Without category_id:
-        Returns a JSON array of all category summaries including
-        ID, name, description, icon, metric count, and priority distribution.
-
-    With category_id:
-        Returns detailed metrics for a single category including
-        name, type, help text, and keywords, grouped by priority.
+    """Get category summaries or detailed metrics for a single category.
 
     Args:
-        category_id: Optional category identifier (e.g., "gpu_ai", "cluster_health").
-                     If omitted, returns all category summaries.
+        category_id: Category identifier. If omitted, returns all category summaries.
     """
     try:
         catalog = get_metrics_catalog()
@@ -347,16 +336,7 @@ def get_category_metrics_detail(category_id: Optional[str] = None) -> List[Dict[
 
 
 def get_metrics_categories() -> List[Dict[str, Any]]:
-    """Get all metric categories with summary information.
-
-    Returns a list of all available metric categories including:
-    - Category ID and name
-    - Description and icon
-    - Metric count and priority distribution
-    - Example queries for each category
-
-    This is useful for exploring what categories of metrics are available.
-    """
+    """Get all metric categories with summary information including counts, priorities, and example queries."""
     try:
         catalog = get_metrics_catalog()
 
@@ -418,19 +398,9 @@ def search_metrics_by_category(
     """Search metrics filtered by category and priority.
 
     Args:
-        category_ids: List of category IDs to filter by (e.g., ["gpu_ai", "cluster_health"]).
-                     If None, searches all categories.
-        priorities: List of priorities to include (e.g., ["High", "Medium"]).
-                   If None, includes High and Medium by default.
-        max_results: Maximum number of metrics to return (1-500).
-
-    Returns:
-        List of metrics with detailed information including category, priority, type, and description.
-
-    Example usage:
-    - Get all GPU metrics: category_ids=["gpu_ai"]
-    - Get High priority metrics only: priorities=["High"]
-    - Get all etcd metrics: category_ids=["etcd"]
+        category_ids: Category IDs to filter by. If None, searches all categories.
+        priorities: Priorities to include (e.g., ["High", "Medium"]). Defaults to High and Medium.
+        max_results: Maximum metrics to return (1-500).
     """
     try:
         if max_results <= 0 or max_results > 500:
