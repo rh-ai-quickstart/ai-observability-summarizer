@@ -735,6 +735,58 @@ def test_no_claude_integration_references(mock_mcp_tools):
         f"Found references to PrometheusChatBot: {result.stdout}"
 
 
+class TestGeminiTextToolCallDetection:
+    """Test detection of text-based tool calls in Gemini responses."""
+
+    def test_detect_text_tool_call_with_function_syntax(self, mock_mcp_tools):
+        """Test that tool_name(...) in markdown code block triggers detection."""
+        from chatbots import GoogleChatBot
+
+        bot = GoogleChatBot(GEMINI_FLASH, api_key="test", tool_executor=mock_mcp_tools)
+        text = '**Tool Call:**\n```python\nexecute_promql(query="up")\n```'
+        tool_names = ["execute_promql", "get_label_values"]
+
+        assert bot._detect_text_tool_calls(text, tool_names) is True
+
+    def test_detect_text_tool_call_with_header(self, mock_mcp_tools):
+        """Test that 'Tool Call:' header triggers detection."""
+        from chatbots import GoogleChatBot
+
+        bot = GoogleChatBot(GEMINI_FLASH, api_key="test", tool_executor=mock_mcp_tools)
+        text = "I need to use the following:\nTool Call:\nget_label_values with label=namespace"
+        tool_names = ["execute_promql", "get_label_values"]
+
+        assert bot._detect_text_tool_calls(text, tool_names) is True
+
+    def test_no_false_positive_normal_text(self, mock_mcp_tools):
+        """Test that mentioning a tool name in prose does NOT trigger detection."""
+        from chatbots import GoogleChatBot
+
+        bot = GoogleChatBot(GEMINI_FLASH, api_key="test", tool_executor=mock_mcp_tools)
+        text = "I used the execute_promql tool to query your cluster metrics and found 5 targets."
+        tool_names = ["execute_promql", "get_label_values"]
+
+        assert bot._detect_text_tool_calls(text, tool_names) is False
+
+    def test_no_false_positive_empty_text(self, mock_mcp_tools):
+        """Test that empty string returns False."""
+        from chatbots import GoogleChatBot
+
+        bot = GoogleChatBot(GEMINI_FLASH, api_key="test", tool_executor=mock_mcp_tools)
+
+        assert bot._detect_text_tool_calls("", ["execute_promql"]) is False
+
+    def test_detect_inline_call(self, mock_mcp_tools):
+        """Test that execute_promql(query='up') inline triggers detection."""
+        from chatbots import GoogleChatBot
+
+        bot = GoogleChatBot(GEMINI_FLASH, api_key="test", tool_executor=mock_mcp_tools)
+        text = "Let me run execute_promql(query='up') to check."
+        tool_names = ["execute_promql", "get_label_values"]
+
+        assert bot._detect_text_tool_calls(text, tool_names) is True
+
+
 if __name__ == "__main__":
     # Run with: python -m pytest tests/mcp_server/test_chatbots.py -v
     pytest.main([__file__, "-v"])
