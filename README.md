@@ -91,7 +91,6 @@ Without this project, teams typically:
 - **UI**
   - **OpenShift Console Plugin** (default, `DEV_MODE=false`)
   - **Standalone React UI** (`DEV_MODE=true`)
-  - **Streamlit Metric UI** (`metric-ui`) for multi-dashboard views
 
 ### Architecture diagrams
 

@@ -28,8 +28,6 @@ summarizer/
 │   │   ├── reports.py     # Report generation
 │   │   ├── promql_service.py # PromQL generation
 │   │   └── thanos_service.py # Thanos integration
-│   ├── ui/                # Streamlit Metric UI (metric dashboard tool)
-│   │   └── ui.py         # Multi-dashboard interface
 │   ├── chatbots/          # Multi-provider chatbot architecture (standalone)
 │   │   ├── base.py           # Abstract base class with common functionality
 │   │   ├── factory.py        # Model-to-bot routing
@@ -53,7 +51,6 @@ summarizer/
 │   └── Dockerfile.react-ui # React UI container
 ├── deploy/helm/           # Helm charts for deployment
 │   ├── mcp-server/        # MCP server Helm chart
-│   ├── ui/                # Streamlit Metric UI Helm chart
 │   ├── openshift-console-plugin/ # Console Plugin Helm chart
 │   ├── react-ui-app/      # React UI Helm chart
 │   └── rag/               # RAG components (llama-stack, llm-service)
@@ -83,7 +80,7 @@ For installation, build/deploy, and test commands, refer to:
    - **OpenAI GPT**: GPT-4o, GPT-4o-mini
    - **Google Gemini**: Gemini 2.0/2.5 Flash
    - **Local Llama**: Llama 3.1-8B, Llama 3.2-3B (via LlamaStack)
-3. **UI Options**: Console Plugin (OpenShift Console integration), React UI (standalone), Streamlit Metric UI (`metric-ui`) multi-dashboard tool
+3. **UI Options**: Console Plugin (OpenShift Console integration), React UI (standalone)
 4. **Core Logic** (`src/core/`): Business logic modules for metrics processing and LLM integration
 5. **Alerting** (`src/alerting/`): Alert handling and Slack notifications
 6. **Helm Charts** (`deploy/helm/`): OpenShift deployment configuration
@@ -240,7 +237,6 @@ oc port-forward svc/mcp-server 8085:8085 -n <DEFAULT_NAMESPACE>
 
 ### Building
 - `make build` - Build all container images
-- `make build-ui` - Build Streamlit Metric UI (metric-ui)
 - `make build-console-plugin` - Build Console Plugin
 - `make build-react-ui` - Build React UI
 - `make build-alerting` - Build alerting service
@@ -250,7 +246,6 @@ oc port-forward svc/mcp-server 8085:8085 -n <DEFAULT_NAMESPACE>
 - `make install` - Deploy to OpenShift (Console Plugin by default, React UI with DEV_MODE=true)
 - `make install-with-alerts` - Deploy with alerting
 - `make install-mcp-server` - Deploy MCP server only
-- `make install-ui` - Deploy Streamlit Metric UI only
 - `make status` - Check deployment status
 - `make uninstall` - Remove deployment
 
@@ -334,7 +329,6 @@ oc get events -n <DEFAULT_NAMESPACE> --sort-by='.lastTimestamp'
 - **MCP Server**: `src/mcp_server/main.py`
 - **Chatbots**: `src/chatbots/` (see [CHATBOTS.md](CHATBOTS.md))
 - **Core Logic**: `src/core/llm_summary_service.py`
-- **Streamlit Metric UI**: `src/ui/ui.py` (multi-dashboard)
 - **Console Plugin & React UI**: `openshift-plugin/` (TypeScript/React source for both UIs)
 - **Tests**: `tests/`
 - **Helm Charts**: `deploy/helm/`
