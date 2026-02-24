@@ -16,55 +16,12 @@ The chatbots then use AI models to provide natural language responses with conte
 
 ## Quick Start
 
-### Using Chatbots in UI
+For working code examples, API reference, and usage patterns, see:
 
-```python
-from chatbots import create_chatbot
-from ui.mcp_client_adapter import MCPClientAdapter
-from ui.mcp_client_helper import MCPClientHelper
+- **[src/chatbots/README.md](../src/chatbots/README.md)** - Package documentation with runnable examples
+- **[src/mcp_server/README.md](../src/mcp_server/README.md)** - MCP server setup and tool usage
 
-# Create MCP client and adapter
-mcp_client = MCPClientHelper()
-tool_executor = MCPClientAdapter(mcp_client)
-
-# Create chatbot (tool_executor is REQUIRED)
-chatbot = create_chatbot(
-    model_name="anthropic/claude-haiku-4-5-20251001",
-    api_key=user_api_key,
-    tool_executor=tool_executor
-)
-
-# Use chatbot
-response = chatbot.chat(
-    user_question="What's the CPU usage?",
-    namespace=None,  # Cluster-wide
-    progress_callback=update_progress
-)
-```
-
-### Using Chatbots in MCP Server (via `chat` tool)
-
-```python
-from chatbots import create_chatbot
-from mcp_server.mcp_tools_adapter import MCPServerAdapter
-
-# Get server instance and create adapter
-from mcp_server.observability_mcp import _server_instance
-tool_executor = MCPServerAdapter(_server_instance)
-
-# Create chatbot
-chatbot = create_chatbot(
-    model_name="openai/gpt-4o-mini",
-    api_key=api_key,
-    tool_executor=tool_executor
-)
-
-# Execute chat
-response = chatbot.chat(
-    user_question="Show me firing alerts",
-    namespace="production"
-)
-```
+This document focuses on **architecture** and **design decisions**.
 
 ## Architecture
 
@@ -192,7 +149,7 @@ response = chatbot.chat(
 
 #### Key Points
 
-- **Location**: Chatbots run in the UI process (Streamlit)
+- **Location**: Chatbots run in the UI process (Console Plugin or React UI)
 - **Tool Execution**: Tools are executed via MCP protocol (HTTP/JSON-RPC)
 - **Adapter**: `MCPClientAdapter` wraps `MCPClientHelper` to provide `ToolExecutor` interface
 - **Benefits**: UI can use chatbots without importing MCP server code
@@ -320,54 +277,21 @@ The refactor moved chatbots into a standalone package and introduced the `ToolEx
 
 ## Supported Models
 
-The chatbot factory (`chatbots/factory.py`) supports multiple AI providers:
+The chatbot factory supports multiple AI providers with automatic model selection. For detailed model names, parameters, and examples, see [src/chatbots/README.md](../src/chatbots/README.md#model-name-patterns).
 
-### External Providers
+### Provider Categories
 
-- **Anthropic**: Claude models (e.g., `anthropic/claude-3-5-sonnet-20241022`)
-- **OpenAI**: GPT models (e.g., `openai/gpt-4o-mini`)
-- **Google**: Gemini models (e.g., `google/gemini-2.0-flash`)
-
-### Local Models
-
-- **Llama 3.1/3.3**: Uses `LlamaChatBot` (tool calling capable)
-- **Llama 3.2**: Uses `DeterministicChatBot` (deterministic parsing)
-- **Unknown Models**: Falls back to `DeterministicChatBot`
-
-## Tool Execution
-
-Chatbots can execute any MCP tool available on the server. Common tools include:
-
-- `search_metrics`: Pattern-based metric search
-- `execute_promql`: Execute PromQL queries
-- `get_metric_metadata`: Get metric details
-- `get_label_values`: Get available label values
-- `suggest_queries`: Get PromQL suggestions
-- `explain_results`: Human-readable explanations
-- `korrel8r_query_objects`: Query observability objects
-- `korrel8r_get_correlated`: Get correlated data
-
-## Best Practices
-
-1. **Always Provide Tool Executor**: Chatbots require a `ToolExecutor` instance.
-
-2. **Use Appropriate Adapter**: Choose the right adapter for your context
-
-   - UI process → `MCPClientAdapter`
-   - MCP server process → `MCPServerAdapter`
-
-3. **Handle Progress Callbacks**: Use progress callbacks for better UX.
-
-4. **Namespace Filtering**: Use namespace parameter for scoped queries.
+- **External Providers**: Anthropic Claude, OpenAI GPT, Google Gemini
+- **Local Models**: Llama 3.1/3.3 (tool calling), Llama 3.2 (deterministic parsing)
+- **Fallback**: Unknown models use deterministic parsing
 
 ## Related Documentation
 
-- [MCP Server README](../src/mcp_server/README.md) - MCP server setup and configuration
-- [Observability Overview](OBSERVABILITY_OVERVIEW.md) - Overall system architecture
-- [Developer Guide](DEV_GUIDE.md) - Development setup and workflows
+### For Implementation & Usage
+- **[src/chatbots/README.md](../src/chatbots/README.md)** - Package API, examples, error handling, and model reference
+- **[src/mcp_server/README.md](../src/mcp_server/README.md)** - MCP server setup, configuration, and available tools
 
-## Further Documentation
-
-For runnable examples and full setup steps, see:
-- `src/chatbots/README.md`
-- `src/mcp_server/README.md`
+### For Architecture & Development
+- **[OBSERVABILITY_OVERVIEW.md](OBSERVABILITY_OVERVIEW.md)** - Overall system architecture
+- **[DEV_GUIDE.md](DEV_GUIDE.md)** - Development setup and workflows
+- **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** - Common issues and solutions

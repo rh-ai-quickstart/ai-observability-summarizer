@@ -28,27 +28,30 @@ summarizer/
 │   │   ├── reports.py     # Report generation
 │   │   ├── promql_service.py # PromQL generation
 │   │   └── thanos_service.py # Thanos integration
-│   ├── ui/                # Streamlit UI
+│   ├── ui/                # metric-ui (Streamlit multi-dashboard tool)
 │   │   └── ui.py         # Multi-dashboard interface
+│   ├── chatbots/          # Multi-provider chatbot architecture (standalone)
+│   │   ├── base.py           # Abstract base class with common functionality
+│   │   ├── factory.py        # Model-to-bot routing
+│   │   ├── tool_executor.py  # ToolExecutor interface
+│   │   ├── anthropic_bot.py  # Anthropic Claude support
+│   │   ├── openai_bot.py     # OpenAI GPT support
+│   │   ├── google_bot.py     # Google Gemini support
+│   │   ├── llama_bot.py      # Local Llama support
+│   │   └── deterministic_bot.py # Fallback implementation
 │   ├── mcp_server/        # Model Context Protocol server
 │   │   ├── api.py         # MCP API implementation
 │   │   ├── main.py        # HTTP server entrypoint
 │   │   ├── stdio_server.py # STDIO server for AI assistants
 │   │   ├── tools/         # MCP tools (observability_tools.py)
-│   │   ├── integrations/  # AI assistant integration configs
-│   │   └── chatbots/      # Multi-provider chatbot implementations
-│   │       ├── base.py           # Abstract base class with common functionality
-│   │       ├── factory.py        # Model-to-bot routing
-│   │       ├── anthropic_bot.py  # Anthropic Claude support
-│   │       ├── openai_bot.py     # OpenAI GPT support
-│   │       ├── google_bot.py     # Google Gemini support
-│   │       ├── llama_bot.py      # Local Llama models
-│   │       └── deterministic_bot.py # Deterministic parsing for Llama 3.2
+│   │   └── integrations/  # AI assistant integration configs
 │   └── alerting/          # Alerting service
 │       └── alert_receiver.py # Alert handling
 ├── deploy/helm/           # Helm charts for deployment
 │   ├── mcp-server/        # MCP server Helm chart
-│   ├── ui/                # UI Helm chart
+│   ├── metric-ui/         # metric-ui Helm chart (Streamlit multi-dashboard)
+│   ├── console-plugin/    # Console Plugin Helm chart
+│   ├── react-ui/          # React UI Helm chart
 │   └── rag/               # RAG components (llama-stack, llm-service)
 ├── tests/                 # Test suite
 │   ├── mcp/               # MCP server tests
@@ -71,15 +74,15 @@ For installation, build/deploy, and test commands, refer to:
 
 ### Core Components
 1. **MCP Server** (`src/mcp_server/`): Model Context Protocol server for metrics analysis, report generation, and AI assistant integration
-   - **Chatbot Architecture** (`src/mcp_server/chatbots/`): Multi-provider LLM support with factory pattern
-     - **Anthropic Claude**: Claude Sonnet 4, Claude Haiku 4.5, Claude 3 Opus
-     - **OpenAI GPT**: GPT-4o, GPT-4o-mini
-     - **Google Gemini**: Gemini 2.0/2.5 Flash
-     - **Local Llama**: Llama 3.1-8B, Llama 3.2-3B (via LlamaStack)
-2. **UI** (`src/ui/ui.py`): Streamlit multi-dashboard frontend with model selection dropdown
-3. **Core Logic** (`src/core/`): Business logic modules for metrics processing and LLM integration
-4. **Alerting** (`src/alerting/`): Alert handling and Slack notifications
-5. **Helm Charts** (`deploy/helm/`): OpenShift deployment configuration
+2. **Chatbots** (`src/chatbots/`): Multi-provider LLM chatbot architecture with factory pattern (see [CHATBOTS.md](CHATBOTS.md))
+   - **Anthropic Claude**: Claude Sonnet 4, Claude Haiku 4.5, Claude 3 Opus
+   - **OpenAI GPT**: GPT-4o, GPT-4o-mini
+   - **Google Gemini**: Gemini 2.0/2.5 Flash
+   - **Local Llama**: Llama 3.1-8B, Llama 3.2-3B (via LlamaStack)
+3. **UI Options**: Console Plugin (OpenShift Console integration), React UI (standalone), metric-ui (multi-dashboard tool)
+4. **Core Logic** (`src/core/`): Business logic modules for metrics processing and LLM integration
+5. **Alerting** (`src/alerting/`): Alert handling and Slack notifications
+6. **Helm Charts** (`deploy/helm/`): OpenShift deployment configuration
 
 ### Data Flow
 1. **Natural Language Question** → PromQL generation via LLM
@@ -233,15 +236,17 @@ oc port-forward svc/mcp-server 8085:8085 -n <DEFAULT_NAMESPACE>
 
 ### Building
 - `make build` - Build all container images
-- `make build-ui` - Build Streamlit UI
+- `make build-metric-ui` - Build metric-ui (Streamlit multi-dashboard)
+- `make build-console-plugin` - Build Console Plugin
+- `make build-react-ui` - Build React UI
 - `make build-alerting` - Build alerting service
 - `make build-mcp-server` - Build MCP server
 
 ### Deployment
-- `make install` - Deploy to OpenShift
+- `make install` - Deploy to OpenShift (Console Plugin by default, React UI with DEV_MODE=true)
 - `make install-with-alerts` - Deploy with alerting
 - `make install-mcp-server` - Deploy MCP server only
-- `make install-metric-ui` - Deploy UI only
+- `make install-metric-ui` - Deploy metric-ui only
 - `make status` - Check deployment status
 - `make uninstall` - Remove deployment
 
@@ -323,8 +328,11 @@ oc get events -n <DEFAULT_NAMESPACE> --sort-by='.lastTimestamp'
 
 ### File Locations
 - **MCP Server**: `src/mcp_server/main.py`
+- **Chatbots**: `src/chatbots/` (see [CHATBOTS.md](CHATBOTS.md))
 - **Core Logic**: `src/core/llm_summary_service.py`
-- **UI**: `src/ui/ui.py`
+- **metric-ui**: `src/ui/ui.py` (Streamlit multi-dashboard)
+- **Console Plugin**: `openshift-plugin/` (OpenShift Console integration)
+- **React UI**: `react-ui/` (standalone application)
 - **Tests**: `tests/`
 - **Helm Charts**: `deploy/helm/`
 

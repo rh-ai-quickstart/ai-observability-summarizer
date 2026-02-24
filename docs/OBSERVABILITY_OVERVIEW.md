@@ -158,9 +158,8 @@ For detailed troubleshooting steps, common issues, and diagnostic commands, see:
 
 For installation, configuration, troubleshooting, and GPU-specific details, see:
 
-- `README.md`
-- `docs/DEV_GUIDE.md`
-- `deploy/helm/observability/tempo/README.md`
-- `deploy/helm/observability/otel-collector/README.md`
-- `deploy/helm/minio/README.md`
-- `docs/INTEL_GAUDI_METRICS.md`
+- `README.md` - Main project documentation
+- `docs/DEV_GUIDE.md` - Development workflows and architecture
+- `docs/INTEL_GAUDI_METRICS.md` - Intel Gaudi accelerator metrics
+- `deploy/helm/observability/tempo/README.md` - Tempo configuration
+- `deploy/helm/observability/otel-collector/README.md` - OpenTelemetry Collector configuration
