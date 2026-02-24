@@ -124,7 +124,7 @@ class MCPServerAdapter(ToolExecutor):
         try:
             logger.info("📋 MCPServerAdapter listing available tools")
 
-            # Use FastMCP's public get_tools() method
+            # Use FastMCP's list_tools() method (renamed from get_tools() in 3.x)
             # Need to handle async context
             try:
                 loop = asyncio.get_running_loop()
@@ -143,7 +143,7 @@ class MCPServerAdapter(ToolExecutor):
                         new_loop = asyncio.new_event_loop()
                         asyncio.set_event_loop(new_loop)
                         try:
-                            tools = new_loop.run_until_complete(self.mcp_server.mcp.get_tools())
+                            tools = new_loop.run_until_complete(self.mcp_server.mcp.list_tools())
                             result_future.set_result(tools)
                         finally:
                             new_loop.close()
@@ -156,12 +156,12 @@ class MCPServerAdapter(ToolExecutor):
                 fastmcp_tools = result_future.result()
             else:
                 # No running loop
-                fastmcp_tools = asyncio.run(self.mcp_server.mcp.get_tools())
+                fastmcp_tools = asyncio.run(self.mcp_server.mcp.list_tools())
 
-            # Convert FastMCP Tool dict to MCPTool objects
-            # get_tools() returns a dict: {tool_name: FunctionTool}
+            # Convert FastMCP FunctionTool objects to MCPTool objects
+            # list_tools() returns a list of FunctionTool objects
             mcp_tools = []
-            for tool_name, tool in fastmcp_tools.items():
+            for tool in fastmcp_tools:
                 mcp_tool = MCPTool(
                     name=tool.name,
                     description=tool.description or "",
