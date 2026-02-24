@@ -143,7 +143,7 @@ Monitor GPU health across your entire OpenShift cluster:
 - **Prometheus/Thanos**: Metrics collection and long-term storage
 - **vLLM**: Model serving with /metrics endpoint
 - **DCGM**: GPU monitoring and telemetry
-- **UI Options**: Console Plugin (integrated) or React UI (standalone), plus metric-ui for multi-dashboard views
+- **UI Options**: Console Plugin (integrated) or React UI (standalone), plus Streamlit Metric UI (`metric-ui`) for multi-dashboard views
 - **MCP Server**: Model Context Protocol server for metrics analysis, report generation, and AI assistant integration
 - **Chatbots**: Multi-provider AI chatbot architecture in `src/chatbots/` package (Anthropic, OpenAI, Google, Local Llama)
 - **LLM Stack**: Llama models for AI-powered insights and summaries
@@ -415,7 +415,7 @@ make build
 make build VERSION=v1.0.0
 
 # Build individual components
-make build-metric-ui       # Metric UI (Streamlit-based multi-dashboard)
+make build-ui              # Streamlit Metric UI (metric-ui)
 make build-alerting        # Alerting Service
 make build-mcp-server      # MCP Server
 make build-console-plugin  # Console Plugin (OpenShift Console integration)
@@ -432,7 +432,7 @@ make push
 make push VERSION=v1.0.0
 
 # Push individual components
-make push-metric-ui
+make push-ui
 make push-alerting
 make push-mcp-server
 make push-console-plugin
@@ -666,7 +666,7 @@ PYTHON_LOG_LEVEL=WARN ./scripts/local-dev.sh -n <DEFAULT_NAMESPACE>    # Warning
 - ✅ **Port forwards LLM server** (localhost:8321)
 - ✅ **Port forwards Model service** (localhost:8080)
 - ✅ **Starts MCP server** (localhost:8085)
-- ✅ **Starts metric-ui** (localhost:8501) - Streamlit-based multi-dashboard interface
+- ✅ **Starts Streamlit Metric UI** (localhost:8501) - Multi-dashboard interface
 - ✅ **Configures environment** for MCP server development
 - ✅ **Sets configurable logging** (PYTHON_LOG_LEVEL=INFO by default, override with env var)
 
