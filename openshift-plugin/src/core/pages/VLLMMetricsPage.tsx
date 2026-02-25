@@ -37,6 +37,12 @@ import {
   AngleRightIcon,
   RobotIcon,
   TimesIcon,
+  ChartLineIcon,
+  ClockIcon,
+  MemoryIcon,
+  ListIcon,
+  NetworkIcon,
+  CogIcon,
 } from '@patternfly/react-icons';
 import { listModels, listNamespaces, ModelInfo, NamespaceInfo, fetchVLLMMetrics, analyzeVLLM, getSessionConfig, AnalysisResult } from '../services/mcpClient';
 import { ConfigurationRequiredAlert } from '../components/ConfigurationRequiredAlert';
