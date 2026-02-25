@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "openshift-ai-observability-summarizer"
 version = "0.1.0"
 description = "AI Observability Metric Summarizer"
-requires-python = ">=3.11"
+requires-python = "==3.11.*"
 
 dependencies = [
     "fastapi>=0.116.1",

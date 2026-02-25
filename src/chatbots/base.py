@@ -499,6 +499,31 @@ class BaseChatBot(ABC):
             return f"{base_prompt}\n\n{model_specific}"
         return base_prompt
 
+    def _format_scope_line(self, namespace: Optional[str]) -> str:
+        """Format the Scope line for the system prompt."""
+        if namespace:
+            return (
+                "**NAMESPACE-SCOPED: %s** — ALL queries MUST be filtered "
+                "to this namespace only" % namespace
+            )
+        return "Cluster-wide analysis"
+
+    def _format_namespace_directive(self, namespace: Optional[str]) -> str:
+        """Format the namespace scoping directive for the system prompt."""
+        if not namespace:
+            return ""
+        return (
+            "\n**NAMESPACE SCOPE REQUIREMENT — MANDATORY:**\n"
+            'You are operating in NAMESPACE-SCOPED mode for namespace **"%s"**.\n'
+            "- You MUST call tools (execute_promql, search_metrics, etc.) to get FRESH data for this namespace.\n"
+            "- Do NOT reuse or reference results from previous queries — they may be from a different scope.\n"
+            '- Do NOT add namespace filters to your PromQL queries — the system automatically injects namespace="%s" for you.\n'
+            '- If a previous conversation shows cluster-wide data, IGNORE it and query fresh data for "%s".\n'
+            '- Every answer must reflect data from namespace "%s" ONLY.\n'
+            '- If the user mentions a different namespace in their question, still answer the question but use "%s"'
+            " — the active namespace selected in the UI always takes precedence.\n"
+        ) % (namespace, namespace, namespace, namespace, namespace)
+
     def _get_base_prompt(self, namespace: Optional[str] = None) -> str:
         """Create base system prompt shared by all models."""
         prompt = f"""You are an expert Kubernetes and Prometheus observability assistant.
@@ -509,19 +534,10 @@ You have access to monitoring tools and should provide focused, targeted respons
 
 **Your Environment:**
 - Cluster: OpenShift with AI/ML workloads, GPUs, and comprehensive monitoring
-- Scope: {f'**NAMESPACE-SCOPED: {namespace}** — ALL queries MUST be filtered to this namespace only' if namespace else 'Cluster-wide analysis'}
+- Scope: {self._format_scope_line(namespace)}
 - Tools: Direct access to Prometheus/Thanos metrics via MCP tools
 - **Enhanced Metrics Catalog**: Smart category-aware metric discovery via catalog tools
-{"" if not namespace else f"""
-**🚨 NAMESPACE SCOPE REQUIREMENT — MANDATORY:**
-You are operating in NAMESPACE-SCOPED mode for namespace **"{namespace}"**.
-- You MUST call tools (execute_promql, search_metrics, etc.) to get FRESH data for this namespace.
-- Do NOT reuse or reference results from previous queries — they may be from a different scope.
-- Do NOT add namespace filters to your PromQL queries — the system automatically injects namespace="{namespace}" for you.
-- If a previous conversation shows cluster-wide data, IGNORE it and query fresh data for "{namespace}".
-- Every answer must reflect data from namespace "{namespace}" ONLY.
-- If the user mentions a different namespace in their question, still answer the question but use "{namespace}" — the active namespace selected in the UI always takes precedence.
-"""}
+{self._format_namespace_directive(namespace)}
 
 **Available Tools:**
 
