@@ -182,7 +182,7 @@ class OpenAIChatBot(BaseChatBot):
                             progress_callback(f"🔧 Using tool: {tool_name}")
 
                         # Get tool result with automatic truncation (logging handled in base class)
-                        tool_result = self._get_tool_result(tool_name, tool_args)
+                        tool_result = self._get_tool_result(tool_name, tool_args, namespace=namespace)
 
                         tool_results.append({
                             "role": "tool",
@@ -193,9 +193,8 @@ class OpenAIChatBot(BaseChatBot):
                     # Add tool results to conversation
                     messages.extend(tool_results)
 
-                    # Limit conversation history
-                    if len(messages) > 10:
-                        messages = [messages[0]] + messages[-8:]
+                    # Truncate conversation safely (preserves tool-call/result pairs)
+                    messages = self._truncate_messages(messages, keep_system_prompt=True)
 
                     # Continue loop
                     continue

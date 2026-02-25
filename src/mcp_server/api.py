@@ -29,6 +29,12 @@ except ImportError as e:
 
 server = ObservabilityMCPServer()
 
+# Eagerly initialize metrics catalog so GPU discovery and catalog validation
+# start immediately rather than on first query
+from core.metrics_catalog import get_metrics_catalog
+_catalog = get_metrics_catalog()
+_catalog.is_available()
+
 # Select transport protocol
 if settings.MCP_TRANSPORT_PROTOCOL == "sse":
     from fastmcp.server.http import create_sse_app  # type: ignore

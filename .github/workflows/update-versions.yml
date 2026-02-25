@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       version:
-        description: 'Version to update in Makefile and Helm charts (may include suffix like -feature for feature branch)'
+        description: 'Version to update in files'
         required: true
         type: string
       commit_message:

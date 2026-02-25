@@ -136,7 +136,6 @@ After installation, verify the deployment:
    Expected pods:
    - `llm-service-*` - LLM inference on Intel Gaudi
    - `llama-stack-*` - Backend API
-   - `metric-ui-*` - Streamlit dashboard
    - `mcp-server-*` - Model Context Protocol server
 
 2. **Verify Intel Gaudi allocation**:
@@ -149,7 +148,7 @@ After installation, verify the deployment:
    oc get route -n your-namespace
    ```
 
-   Navigate to the route URL to access the Streamlit dashboard.
+   Navigate to the route URL to access the application (Console Plugin or React UI).
 
 4. **Check logs for Gaudi initialization**:
    ```bash

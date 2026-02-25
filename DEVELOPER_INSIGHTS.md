@@ -28,6 +28,14 @@ Perfect for AI operations teams, platform engineers, and business stakeholders w
 
 ---
 
+> **Note**: This document provides comprehensive developer documentation. For production deployment and end-user documentation, see **[README.md](README.md)**. For specific topics, see:
+> - **[docs/DEV_GUIDE.md](docs/DEV_GUIDE.md)** - Development workflows and architecture
+> - **[docs/CHATBOTS.md](docs/CHATBOTS.md)** - Chatbot architecture and design decisions
+> - **[docs/OBSERVABILITY_OVERVIEW.md](docs/OBSERVABILITY_OVERVIEW.md)** - Observability stack architecture
+> - **[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)** - Common issues and solutions
+
+---
+
 ## Table of Contents
 
 - [Features](#features)
@@ -64,8 +72,9 @@ Perfect for AI operations teams, platform engineers, and business stakeholders w
 
 ### **3. AI-Powered Insights**
 - Generate summaries using multiple LLM providers (Anthropic Claude, OpenAI GPT, Google Gemini, Local Llama)
-- Chat with an MLOps assistant based on real metrics
+- Chat with an AI assistant based on real metrics
 - Flexible model selection with support for both internal and external LLM models
+- Multi-provider chatbot architecture in standalone `src/chatbots/` package
 
 ### **4. Report Generation**
 - Export analysis as HTML, PDF, or Markdown reports
@@ -88,13 +97,13 @@ Perfect for AI operations teams, platform engineers, and business stakeholders w
 - **Real-time data access** - connects directly to Prometheus/Thanos
 - **AI-powered insights** - full LLM integration for intelligent metric analysis
 
-Supports stdio and HTTP (SSE) transports. See `src/mcp_server/README.md` for configuration examples.
+Supports stdio and HTTP (SSE) transports. See [src/mcp_server/README.md](src/mcp_server/README.md) for configuration examples.
 
-📖 **Quick Setup**: 
+📖 **Quick Setup**:
 ```bash
 cd src/mcp_server && python setup_integration.py
 ```
-See [`src/mcp_server/README.md`](src/mcp_server/README.md) for complete documentation.
+See [src/mcp_server/README.md](src/mcp_server/README.md) for complete documentation.
 
 ### **8. 🤖 Chat with Prometheus - AI-Powered Intelligence**
 - **AI-powered interface** with autonomous tool calling and real-time progress visibility (works with all supported LLM providers)
@@ -136,6 +145,7 @@ Monitor GPU health across your entire OpenShift cluster:
 - **DCGM**: GPU monitoring and telemetry
 - **UI Options**: Console Plugin (integrated) or React UI (standalone)
 - **MCP Server**: Model Context Protocol server for metrics analysis, report generation, and AI assistant integration
+- **Chatbots**: Multi-provider AI chatbot architecture in `src/chatbots/` package (Anthropic, OpenAI, Google, Local Llama)
 - **LLM Stack**: Llama models for AI-powered insights and summaries
 
 ### **UI Deployment Options**
@@ -170,7 +180,7 @@ See [Build & Deploy](#build--deploy) section for image build commands.
 ### **Key Features**
 1. **vLLM Dashboard**: Monitor model performance, GPU usage, latency
 2. **OpenShift Dashboard**: Fleet monitoring with cluster-wide and namespace views
-3. **Chat Interface**: Interactive Q&A with metrics-aware AI assistant
+3. **Chat Interface**: Interactive Q&A with metrics-aware AI assistant (see [docs/CHATBOTS.md](docs/CHATBOTS.md) for architecture)
 4. **MCP Server**: AI assistant integration via Model Context Protocol
 5. **Report Generator**: Automated analysis reports in multiple formats
 
@@ -333,18 +343,7 @@ NAME                       HOST/PORT                                            
 aiobs-react-ui  aiobs-react-ui-your-namespace.apps.cluster.example.com       react-ui    8080   edge          None
 ```
 
-### OpenShift Summarizer Dashboard 
-![UI](docs/images/os.png)
-
-### vLLM Summarizer Dashboard 
-![UI](docs/images/vllm.png)
-
-### Chat with Prometheus 
-![UI](docs/images/chat.png)
-
-### Report Generated 
-![UI](docs/images/report.png)
-
+For UI screenshots and usage examples, see the main [README.md](README.md#usage) documentation.
 
 To uninstall:
 
@@ -416,7 +415,6 @@ make build
 make build VERSION=v1.0.0
 
 # Build individual components
-make build-ui              # Streamlit UI
 make build-alerting        # Alerting Service
 make build-mcp-server      # MCP Server
 make build-console-plugin  # Console Plugin (OpenShift Console integration)
@@ -667,7 +665,6 @@ PYTHON_LOG_LEVEL=WARN ./scripts/local-dev.sh -n <DEFAULT_NAMESPACE>    # Warning
 - ✅ **Port forwards LLM server** (localhost:8321)
 - ✅ **Port forwards Model service** (localhost:8080)
 - ✅ **Starts MCP server** (localhost:8085)
-- ✅ **Starts Streamlit UI** (localhost:8501)
 - ✅ **Configures environment** for MCP server development
 - ✅ **Sets configurable logging** (PYTHON_LOG_LEVEL=INFO by default, override with env var)
 
@@ -762,7 +759,7 @@ Before running the E2E test, ensure the following components are deployed:
 2. **Observability Stack** - MinIO, Tempo, Loki, OpenTelemetry Collector, Korrel8r
 3. **User Workload Monitoring** - Enabled in the cluster to fetch user workload metrics and alerts
 4. **Alert Example Application** - Sample app that generates intentional failures
-5. **Anthropic API Key** - For accessing Claude 3.5 Haiku model
+5. **Anthropic API Key** - For accessing Claude Haiku 4.5 model
 
 ### Step 1: Deploy the Alert Example Application
 
@@ -788,7 +785,7 @@ The `install-alert-example` target will:
 
 Both applications will generate traces and logs showing configuration errors that can be correlated.
 
-### Step 2: Configure the UI to Use Anthropic Claude 3.5 Haiku
+### Step 2: Configure the UI to Use Anthropic Claude Haiku 4.5
 
 1. **Access the UI**:
    - **Console Plugin** (production mode): Navigate to **OpenShift Console → OpenShift AI Observability** in the left navigation
@@ -800,7 +797,7 @@ Both applications will generate traces and logs showing configuration errors tha
    - Enter your Anthropic API key and save it
    - Switch to the **Available Models** tab
    - In the model selection dropdown, choose **Anthropic** as the provider
-   - Select **Claude 3.5 Haiku** (`claude-3-5-haiku-20241022`) as the model
+   - Select **Claude Haiku 4.5** (`claude-haiku-4-5-20251001`) as the model
    - Save the configuration
 
 ### Step 3: Test Alert Investigation via AI Chat
@@ -811,7 +808,7 @@ This test verifies that the system can analyze alerts, correlate logs, and analy
 
 1. **Navigate to AI Chat**:
    - Go to the **AI Chat** tab in the UI
-   - Ensure you're using the Anthropic Claude 3.5 Haiku model configured in Step 2
+   - Ensure you're using the Anthropic Claude Haiku 4.5 model configured in Step 2
 
 2. **Ask About Alerts**:
    - In the chat interface, ask: *"Any alerts are firing in jianrong namespace?"*
@@ -881,7 +878,7 @@ If the AI Chat conversation above produces the expected results across all steps
 - **Correlation** - Korrel8r is successfully correlating alerts with logs and traces
 - **MCP Server** - Backend is properly querying observability data sources (Prometheus, Tempo, Loki)
 - **AI Chat Integration** - Console Plugin/React UI is correctly integrating with external AI models
-- **External AI Model** - Anthropic Claude 3.5 Haiku is providing intelligent analysis of observability data
+- **External AI Model** - Anthropic Claude Haiku 4.5 is providing intelligent analysis of observability data
 - **End-to-End Analysis Pipeline** - Complete workflow from alert detection to root cause analysis is functional
 
 ### Cleanup
@@ -901,7 +898,7 @@ This will remove both the `alert-example` and `my-app-example` deployments, alon
 
 Automated workflows cover testing, building, deploying, and undeploying. Configure OpenShift and registry secrets, and the pipelines will run on PRs and merges.
 
-📖 See [docs/GITHUB_ACTIONS.md](docs/GITHUB_ACTIONS.md) for full workflow details and setup.
+📖 See **[docs/GITHUB_ACTIONS.md](docs/GITHUB_ACTIONS.md)** for full workflow details and setup.
 
 ---
 
@@ -909,7 +906,7 @@ Automated workflows cover testing, building, deploying, and undeploying. Configu
 
 Semantic versions are derived automatically from PR labels/titles, falling back to commit messages.
 
-📖 See [docs/SEMANTIC_VERSIONING.md](docs/SEMANTIC_VERSIONING.md) for complete rules and examples.
+📖 See **[docs/SEMANTIC_VERSIONING.md](docs/SEMANTIC_VERSIONING.md)** for complete rules and examples.
 
 ---
 
@@ -921,7 +918,7 @@ The project uses Helm charts for OpenShift deployment with centralized image man
 - **Image versions**: Controlled via the `VERSION` variable
 - **Helm overrides**: `--set image.repository=$(IMAGE_NAME)` and `--set image.tag=$(VERSION)`
 
-📖 **[Complete Helm Charts Documentation](docs/HELM_CHARTS.md)** - Detailed information about Helm chart structure, image management, deployment patterns, and customization options.
+📖 See **[docs/HELM_CHARTS.md](docs/HELM_CHARTS.md)** for detailed information about Helm chart structure, image management, deployment patterns, and customization options.
 
 ### Logging
 
@@ -931,9 +928,9 @@ All services use centralized structured logging. Control verbosity via the `PYTH
 
 ## Contributing
 
-We welcome contributions and feedback! Please open issues or submit PRs to improve this dashboard or expand model compatibility.
+We welcome contributions and feedback! Please open issues or submit PRs to improve this platform or expand model compatibility.
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for full contribution guidelines.
+See **[CONTRIBUTING.md](CONTRIBUTING.md)** for full contribution guidelines.
 
 ---
 
@@ -943,7 +940,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for full contribution guidelines.
 - [CNCF Landscape](https://landscape.cncf.io/)
 - [OpenShift AI](https://www.redhat.com/en/technologies/cloud-computing/openshift/openshift-ai)
 - [Prometheus](https://prometheus.io/)
-- [Streamlit](https://streamlit.io/)
+- [Tempo](https://grafana.com/oss/tempo/)
+- [Loki](https://grafana.com/oss/loki/)
 
 ---
 

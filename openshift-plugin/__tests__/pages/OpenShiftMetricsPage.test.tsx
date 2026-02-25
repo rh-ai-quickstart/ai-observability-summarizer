@@ -340,7 +340,8 @@ describe('OpenShiftMetricsPage', () => {
         undefined,
         'gpt-4',
         'test-key',
-        '1h'
+        '1h',
+        expect.any(Object) // AbortSignal from AbortController
       );
 
       await waitFor(() => {

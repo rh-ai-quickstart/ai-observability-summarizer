@@ -5,7 +5,7 @@ deployment:
 
 image:
   repository: quay.io/ecosystem-appeng/aiobs-mcp-server
-  tag: 1.2.1-feature
+  tag: 1.2.0
   pullPolicy: IfNotPresent
 
 service:
@@ -35,8 +35,28 @@ env:
   KORREL8R_URL: "https://korrel8r-summarizer.openshift-cluster-observability-operator.svc.cluster.local:9443"
   MAX_NUM_LOG_ROWS: 10
   MAX_NUM_TRACE_SPANS: 10
+
+  # TRACE_FETCH_SAFETY_FACTOR: Controls how many traces to fetch from Tempo
+  #
+  # The analyzer fetches (MAX_NUM_TRACE_SPANS × TRACE_FETCH_SAFETY_FACTOR) traces,
+  # then filters them to find error traces for analysis. The safety factor accounts
+  # for traces that will be filtered out.
+  #
+  # - Default: 2 (fetch 20 traces when MAX_NUM_TRACE_SPANS=10)
+  # - Higher values: Fetch more traces, better chance of finding errors, but slower
+  # - Lower values: Fetch fewer traces, faster but may miss error traces
+  #
+  # Tune this based on your workload's error rate:
+  # - Low error rate (~1%): Increase to 3-5 to ensure enough error traces
+  # - High error rate (~10%+): Can use 1-2 for faster analysis
+  TRACE_FETCH_SAFETY_FACTOR: 2
+
   KORREL8R_TIMEOUT_SECONDS: 8
   LLM_TIMEOUT_SECONDS: 180
+  # GPU Metrics Discovery - custom prefix overrides (comma-separated, additive to defaults)
+  GPU_METRICS_PREFIX_NVIDIA: ""
+  GPU_METRICS_PREFIX_INTEL: ""
+  GPU_METRICS_PREFIX_AMD: ""
 
 # Name of the LLM used
 LLM_PREDICTOR: "llama-3-1-8b-instruct-predictor"

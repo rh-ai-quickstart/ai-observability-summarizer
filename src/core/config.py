@@ -143,6 +143,7 @@ MAX_PER_SERVICE_LIMIT = 50  # Maximum traces to fetch per service in wildcard qu
 DEFAULT_CHAT_QUERY_LIMIT = 50  # Default limit for chat tool queries
 DEFAULT_QUERY_LIMIT = 20  # Default limit for regular queries
 REQUEST_TIMEOUT_SECONDS = 30.0  # HTTP request timeout
+DISCOVERY_TIMEOUT_SECONDS = float(os.getenv("DISCOVERY_TIMEOUT_SECONDS", "10.0"))  # GPU discovery and catalog validation timeout
 LLM_TIMEOUT_SECONDS = float(os.getenv("LLM_TIMEOUT_SECONDS", "180.0"))  # LLM API request timeout
 
 # Load complex configurations
@@ -196,3 +197,14 @@ GRAFANA_BASE_URL: str = os.getenv("GRAFANA_BASE_URL", "")
 TEMPO_BASE_URL: str = os.getenv("TEMPO_BASE_URL", "")
 TEMPO_DATASOURCE_UID: str = os.getenv("TEMPO_DATASOURCE_UID", "")
 LOKI_DATASOURCE_UID: str = os.getenv("LOKI_DATASOURCE_UID", "")
+
+
+# Tools that accept a namespace parameter for scoping Prometheus/log queries
+# Used by chatbots to automatically inject namespace into tool arguments
+NAMESPACE_AWARE_TOOLS = frozenset({
+    'execute_promql', 'search_metrics', 'get_metric_metadata',
+    'get_label_values', 'suggest_queries', 'explain_results',
+    'search_metrics_by_category', 'find_best_metric_with_metadata',
+    'fetch_openshift_metrics_data', 'analyze_openshift', 'chat_openshift',
+    'get_correlated_logs',
+})

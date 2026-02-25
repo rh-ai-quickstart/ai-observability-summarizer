@@ -10,6 +10,45 @@ from typing import Dict, Any, List, Optional
 from enum import Enum
 
 
+_NAMESPACE_EXCLUSIONS = {
+    'scoped', 'specific', 'mode', 'level', 'wide', 'filter',
+    'is', 'to', 'or', 'in', 'the', 'a', 'an', 'for', 'of', 'on',
+    'and', 'not', 'all', 'any', 'my', 'our', 'your', 'its',
+    'information', 'details', 'query', 'queries', 'data',
+    'support', 'based', 'aware', 'related', 'scoping',
+}
+
+_NAMESPACE_PATTERNS = [
+    # "in namespace ai-observability", "in the namespace llm-serving"
+    r'in\s+(?:the\s+)?(?:namespace|ns)\s+[\'"]?([a-z0-9][-a-z0-9]{0,62})[\'"]?',
+    # "namespace ai-observability", "ns kube-system"
+    r'(?:namespace|ns)\s+[\'"]?([a-z0-9][-a-z0-9]{0,62})[\'"]?',
+    # "in ai-observability namespace"
+    r'in\s+[\'"]?([a-z0-9][-a-z0-9]{0,62})[\'"]?\s+(?:namespace|ns)',
+    # "namespace=ai-observability", "ns:default"
+    r'(?:namespace|ns)[=:]\s*[\'"]?([a-z0-9][-a-z0-9]{0,62})[\'"]?',
+    # "for namespace ai-observability", "for the namespace llm-serving"
+    r'for\s+(?:the\s+)?(?:namespace|ns)\s+[\'"]?([a-z0-9][-a-z0-9]{0,62})[\'"]?',
+    # "on namespace ai-observability", "on the namespace openshift-ai"
+    r'on\s+(?:the\s+)?(?:namespace|ns)\s+[\'"]?([a-z0-9][-a-z0-9]{0,62})[\'"]?',
+]
+
+
+def extract_namespace_from_question(question: str) -> Optional[str]:
+    """Extract a Kubernetes namespace from a natural language question.
+
+    Returns the first namespace found, or None if no namespace is detected.
+    """
+    question_lower = question.lower()
+    for pattern in _NAMESPACE_PATTERNS:
+        match = re.search(pattern, question_lower)
+        if match:
+            candidate = match.group(1)
+            if candidate not in _NAMESPACE_EXCLUSIONS:
+                return candidate
+    return None
+
+
 class QuestionType(Enum):
     """Enumeration of different question types for better query classification."""
     ERROR_TRACES = "error_traces"

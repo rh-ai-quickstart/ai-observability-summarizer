@@ -5,6 +5,7 @@ This module provides Anthropic Claude-specific implementation using the official
 """
 
 import os
+import re
 from typing import Optional, Callable, List, Dict
 
 from .base import BaseChatBot
@@ -61,6 +62,26 @@ class AnthropicChatBot(BaseChatBot):
 - Leverage your strong reasoning for comprehensive analysis
 - Provide detailed pod-level and namespace-level breakdowns
 - Use your tool calling reliability for multi-step analysis"""
+
+    # Regex to strip <function_calls>...</function_calls> XML that the model
+    # sometimes emits as text instead of using the native tool_use API.
+    _FUNCTION_CALLS_RE = re.compile(
+        r'<function_calls>.*?</function_calls>',
+        re.DOTALL,
+    )
+
+    def _strip_xml_tool_calls(self, text: str) -> str:
+        """Remove spurious <function_calls> XML blocks from response text.
+
+        Anthropic models occasionally output tool calls as XML text alongside
+        (or instead of) proper tool_use content blocks. Since Anthropic uses
+        the native tool_use API, any <function_calls> XML in a text block is
+        always artefact noise that should be stripped.
+        """
+        cleaned = self._FUNCTION_CALLS_RE.sub('', text).strip()
+        if cleaned != text.strip():
+            logger.warning("Stripped <function_calls> XML from Anthropic text response")
+        return cleaned
 
     def chat(
         self,
@@ -141,7 +162,7 @@ class AnthropicChatBot(BaseChatBot):
                                 progress_callback(f"🔧 Using tool: {tool_name}")
 
                             # Get tool result with automatic truncation (logging handled in base class)
-                            tool_result = self._get_tool_result(tool_name, tool_args)
+                            tool_result = self._get_tool_result(tool_name, tool_args, namespace=namespace)
 
                             tool_results.append({
                                 "type": "tool_result",
@@ -155,9 +176,8 @@ class AnthropicChatBot(BaseChatBot):
                         "content": tool_results
                     })
 
-                    # Limit conversation history
-                    if len(messages) > 8:
-                        messages = messages[-8:]
+                    # Truncate conversation safely (preserves tool-call/result pairs)
+                    messages = self._truncate_messages(messages, keep_system_prompt=False)
 
                     # Continue loop
                     continue
@@ -170,7 +190,7 @@ class AnthropicChatBot(BaseChatBot):
                             final_response += content_block.text
 
                     logger.info(f"Anthropic tool calling completed in {iteration} iterations")
-                    return final_response
+                    return self._strip_xml_tool_calls(final_response)
 
             # Hit max iterations
             logger.warning(f"Hit max iterations ({max_iterations})")

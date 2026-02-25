@@ -48,7 +48,7 @@ class ObservabilityMCPServer:
         )
         from .tools.prometheus_tools import (
             search_metrics,                    # Search metrics by pattern
-            get_metric_metadata,              # Get metric metadata  
+            get_metric_metadata,              # Get metric metadata
             get_label_values,                 # Get label values
             execute_promql,                   # Execute PromQL queries
             explain_results,                  # Explain query results
@@ -56,6 +56,9 @@ class ObservabilityMCPServer:
             select_best_metric,               # Select best metric
             find_best_metric_with_metadata_v2,  # Smart metric selection v2
             find_best_metric_with_metadata,   # Smart metric selection v1
+            get_metrics_categories,           # Get metric categories (NEW)
+            search_metrics_by_category,       # Search by category (NEW)
+            get_category_metrics_detail,      # Get category catalog JSON for UI
         )
         from .tools.tempo_tools import (
             query_tempo_tool,
@@ -100,6 +103,9 @@ class ObservabilityMCPServer:
         self.mcp.tool()(select_best_metric)               # Select best metric
         self.mcp.tool()(find_best_metric_with_metadata_v2)  # Smart metric selection v2
         self.mcp.tool()(find_best_metric_with_metadata)   # Smart metric selection v1
+        self.mcp.tool()(get_metrics_categories)           # Get metric categories (NEW)
+        self.mcp.tool()(search_metrics_by_category)       # Search by category (NEW)
+        self.mcp.tool()(get_category_metrics_detail)      # Get category catalog JSON for UI
 
         # Register Tempo query tools
         self.mcp.tool()(query_tempo_tool)

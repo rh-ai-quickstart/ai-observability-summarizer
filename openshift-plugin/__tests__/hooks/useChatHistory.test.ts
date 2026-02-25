@@ -158,7 +158,7 @@ describe('useChatHistory', () => {
 
     const markdown = result.current.exportToMarkdown();
 
-    expect(markdown).toContain('# AI Chat History');
+    expect(markdown).toContain('# Chat with Prometheus - History');
     expect(markdown).toContain('**User**');
     expect(markdown).toContain('What is the GPU usage?');
     expect(markdown).toContain('**Assistant**');

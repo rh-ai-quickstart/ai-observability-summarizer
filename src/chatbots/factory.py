@@ -51,7 +51,7 @@ def create_chatbot(
         >>> from ui.mcp_client_adapter import MCPClientAdapter
         >>> mcp_client = MCPClientHelper()
         >>> tool_executor = MCPClientAdapter(mcp_client)
-        >>> chatbot = create_chatbot("anthropic/claude-3-5-haiku-20241022", api_key="sk-...", tool_executor=tool_executor)
+        >>> chatbot = create_chatbot("anthropic/claude-haiku-4-5-20251001", api_key="sk-...", tool_executor=tool_executor)
         >>> response = chatbot.chat("Check memory usage")
 
         # Example 3: Local model with MCPServerAdapter

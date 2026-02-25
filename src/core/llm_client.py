@@ -23,6 +23,7 @@ get_python_logger()
 
 logger = logging.getLogger(__name__)
 from .response_validator import ResponseValidator, ResponseType
+from mcp_server.exceptions import LLMServiceError
 
 # LLM Generation Configuration Constants
 DETERMINISTIC_TEMPERATURE = 0  # Zero temperature for consistent, deterministic output
@@ -36,18 +37,64 @@ FALLBACK_RATE_SYNTAX = "5m"  # Fallback PromQL time range for shorter queries
 
 
 def _make_api_request(
-    url: str, headers: dict, payload: dict, verify_ssl: bool = True, timeout: float = 120.0
+    url: str, headers: dict, payload: dict, verify_ssl: bool = True, timeout: float = 120.0, model_id: str = None
 ) -> dict:
     """Make API request with consistent error handling"""
     try:
         response = requests.post(url, headers=headers, json=payload, verify=verify_ssl, timeout=timeout)
         if response.status_code != 200:
             # Log the error response for debugging
+            error_message = ""
             try:
                 error_body = response.json()
                 logger.error(f"API request failed with status {response.status_code}: {error_body}")
+
+                # Extract user-friendly error message from response
+                if isinstance(error_body, dict):
+                    # Handle Google Gemini error format
+                    if "error" in error_body and isinstance(error_body["error"], dict):
+                        error_message = error_body["error"].get("message", "")
+                    # Handle OpenAI/generic error format
+                    elif "message" in error_body:
+                        error_message = error_body["message"]
+
             except Exception:
                 logger.error(f"API request failed with status {response.status_code}: {response.text}")
+                error_message = response.text
+
+            # Handle specific HTTP status codes with user-friendly messages
+            if response.status_code == 429:
+                # Rate limit exceeded
+                user_message = f"API rate limit exceeded for model {model_id or 'selected model'}."
+                if "retry" in error_message.lower() or "quota" in error_message.lower():
+                    user_message += " Please wait a few moments and try again, or switch to a different model."
+                else:
+                    user_message += " Please try again later or use a different model."
+
+                raise LLMServiceError(
+                    message=user_message,
+                    model_id=model_id,
+                    status_code=429
+                )
+            elif response.status_code == 401:
+                raise LLMServiceError(
+                    message=f"Authentication failed for model {model_id or 'selected model'}. Please check your API key.",
+                    model_id=model_id,
+                    status_code=401
+                )
+            elif response.status_code == 403:
+                raise LLMServiceError(
+                    message=f"Access forbidden for model {model_id or 'selected model'}. Please check your API key and permissions.",
+                    model_id=model_id,
+                    status_code=403
+                )
+            elif response.status_code >= 500:
+                raise LLMServiceError(
+                    message=f"AI service is temporarily unavailable (HTTP {response.status_code}). Please try again in a few moments.",
+                    model_id=model_id,
+                    status_code=response.status_code
+                )
+
         response.raise_for_status()
         return response.json()
     except requests.exceptions.Timeout:
@@ -56,9 +103,16 @@ def _make_api_request(
     except requests.exceptions.ConnectionError as e:
         logger.error(f"LLM API connection error: {e}")
         raise ConnectionError(f"Failed to connect to LLM API: {e}")
+    except LLMServiceError:
+        # Re-raise LLMServiceError as-is
+        raise
     except requests.exceptions.RequestException as e:
         logger.error(f"LLM API request failed: {e}")
-        raise
+        # Convert generic request exceptions to LLMServiceError
+        raise LLMServiceError(
+            message=f"AI service request failed: {str(e)}",
+            model_id=model_id
+        )
 
 
 def _validate_and_extract_response(
@@ -301,7 +355,12 @@ def summarize_with_llm(
             # Anthropic response already handled above
             pass
         else:
-            response_json = _make_api_request(api_url, headers, payload, verify_ssl=DEFAULT_SSL_VERIFICATION, timeout=LLM_TIMEOUT_SECONDS)
+            response_json = _make_api_request(
+                api_url, headers, payload,
+                verify_ssl=DEFAULT_SSL_VERIFICATION,
+                timeout=LLM_TIMEOUT_SECONDS,
+                model_id=summarize_model_id
+            )
             raw_response = _validate_and_extract_response(
                 response_json, is_external=True, provider=provider
             )
@@ -598,7 +657,8 @@ Use time range syntax `[{time_range_syntax}]` in PromQL queries where appropriat
 
     # Common OpenShift metrics for reference
     common_metrics = """**📊 Comprehensive OpenShift/Kubernetes Metrics:**
-- Pods: `sum(kube_pod_status_phase{phase="Running"})`, `sum(kube_pod_status_phase{phase="Failed"})`
+- Pods Running: `sum(kube_pod_status_phase{phase="Running"})`
+- Pods Failing: `kube_pod_status_phase{phase="Failed"} == 1`, `kube_pod_container_status_waiting_reason{reason=~"CrashLoopBackOff|ImagePullBackOff"} == 1`, `kube_pod_container_status_terminated_reason{reason=~"Error|OOMKilled"} == 1`
 - Deployments: `sum(kube_deployment_status_replicas_ready)`, `sum(kube_deployment_spec_replicas)`
 - Services: `sum(kube_service_info)`, `sum(kube_endpoint_address_available)`
 - Jobs: `sum(kube_job_status_active)`, `sum(kube_job_status_succeeded)`, `sum(kube_job_status_failed)`
@@ -609,6 +669,8 @@ Use time range syntax `[{time_range_syntax}]` in PromQL queries where appropriat
 - Memory: `100 - (sum(node_memory_MemAvailable_bytes) / sum(node_memory_MemTotal_bytes) * 100)`
 - Containers: `count(count by (image)(container_spec_image))`, `sum(kube_pod_container_status_running)`
 - Workloads: `sum(kube_daemonset_status_number_ready)`, `sum(kube_statefulset_status_replicas_ready)`
+
+**Note:** When filtering by pod, container, or deployment name, use regex matching (e.g., `pod=~"name.*"`) because Kubernetes names include generated hash suffixes.
 
 """
 

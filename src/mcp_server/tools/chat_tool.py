@@ -94,6 +94,15 @@ def chat(
         # Priority: 1) Provided api_key (from UI), 2) Kubernetes secret
         resolved_api_key = resolve_api_key(api_key=api_key, model_id=model_name)
 
+        # Auto-detect namespace from question if not provided by UI
+        if not namespace:
+            from core.question_classification import extract_namespace_from_question
+            detected = extract_namespace_from_question(message)
+            if detected:
+                namespace = detected
+                logger.info(f"📌 Auto-detected namespace from question: '{namespace}'")
+                capture_progress(f"📌 Detected namespace: {namespace}")
+
         # Create chatbot with tool executor
         chatbot = create_chatbot(
             model_name=model_name,

@@ -12,6 +12,9 @@ export interface ChatSettings {
   suggestedQuestionsExpanded: boolean;
   suggestedQuestionsLocation: 'header' | 'inline';
 
+  // Metric categories
+  metricCategoriesLocation: 'header' | 'inline';
+
   // Conversation context
   conversationContextLimit: number;
 
@@ -29,6 +32,7 @@ const DEFAULT_SETTINGS: ChatSettings = {
   collapsedPreviewLength: 200,
   suggestedQuestionsExpanded: true,
   suggestedQuestionsLocation: 'header',
+  metricCategoriesLocation: 'header',
   conversationContextLimit: 10, // Last 10 messages (5 back-and-forth)
   showProgressLogByDefault: false,
   enableKeyboardShortcuts: true,

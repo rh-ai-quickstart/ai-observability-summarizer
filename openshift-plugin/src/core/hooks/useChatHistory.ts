@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { ChatScope } from '../data/namespaceDefaults';
 
 const STORAGE_KEY = 'openshift_ai_chat_history';
 const SETTINGS_KEY = 'openshift_ai_chat_settings';
@@ -31,6 +32,8 @@ export interface Message {
   error?: boolean;
   progressLog?: ProgressEntry[];
   originalUserMessage?: string; // Store original user message for retry functionality
+  scope?: ChatScope;
+  namespace?: string;
 }
 
 const getInitialGreeting = (): Message => ({
@@ -125,7 +128,7 @@ export function useChatHistory() {
       })
       .join('\n');
 
-    return `# AI Chat History\n\n${markdown}`;
+    return `# Chat with Prometheus - History\n\n${markdown}`;
   }, [messages]);
 
   return {

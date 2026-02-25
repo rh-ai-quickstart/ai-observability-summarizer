@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       version:
-        description: 'Version to tag images with (may include suffix like -feature)'
+        description: 'Version to tag images with'
         required: true
         type: string
       registry:

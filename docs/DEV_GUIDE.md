@@ -1,6 +1,6 @@
 # DEV_GUIDE.md - OpenShift AI Observability Summarizer
 
-> **Comprehensive Development Guide for Human Developers & AI Assistants**  
+> **Comprehensive Development Guide for Human Developers & AI Assistants**
 > This file provides complete guidance for working with the AI Observability Summarizer project, combining development patterns, architecture, and comprehensive instructions for both **human developers** and **AI coding assistants**.
 
 ## 🚀 Project Overview
@@ -28,107 +28,62 @@ summarizer/
 │   │   ├── reports.py     # Report generation
 │   │   ├── promql_service.py # PromQL generation
 │   │   └── thanos_service.py # Thanos integration
-│   ├── ui/                # Streamlit UI
-│   │   └── ui.py         # Multi-dashboard interface
+│   ├── chatbots/          # Multi-provider chatbot architecture (standalone)
+│   │   ├── base.py           # Abstract base class with common functionality
+│   │   ├── factory.py        # Model-to-bot routing
+│   │   ├── tool_executor.py  # ToolExecutor interface
+│   │   ├── anthropic_bot.py  # Anthropic Claude support
+│   │   ├── openai_bot.py     # OpenAI GPT support
+│   │   ├── google_bot.py     # Google Gemini support
+│   │   ├── llama_bot.py      # Local Llama support
+│   │   └── deterministic_bot.py # Fallback implementation
 │   ├── mcp_server/        # Model Context Protocol server
 │   │   ├── api.py         # MCP API implementation
 │   │   ├── main.py        # HTTP server entrypoint
 │   │   ├── stdio_server.py # STDIO server for AI assistants
 │   │   ├── tools/         # MCP tools (observability_tools.py)
-│   │   ├── integrations/  # AI assistant integration configs
-│   │   └── chatbots/      # Multi-provider chatbot implementations
-│   │       ├── base.py           # Abstract base class with common functionality
-│   │       ├── factory.py        # Model-to-bot routing
-│   │       ├── anthropic_bot.py  # Anthropic Claude support
-│   │       ├── openai_bot.py     # OpenAI GPT support
-│   │       ├── google_bot.py     # Google Gemini support
-│   │       ├── llama_bot.py      # Local Llama models
-│   │       └── deterministic_bot.py # Deterministic parsing for Llama 3.2
+│   │   └── integrations/  # AI assistant integration configs
 │   └── alerting/          # Alerting service
 │       └── alert_receiver.py # Alert handling
+├── openshift-plugin/      # Console Plugin & React UI source code
+│   ├── src/               # TypeScript/React source
+│   ├── Dockerfile.plugin  # Console Plugin container
+│   └── Dockerfile.react-ui # React UI container
 ├── deploy/helm/           # Helm charts for deployment
 │   ├── mcp-server/        # MCP server Helm chart
-│   ├── ui/                # UI Helm chart
+│   ├── openshift-console-plugin/ # Console Plugin Helm chart
+│   ├── react-ui-app/      # React UI Helm chart
 │   └── rag/               # RAG components (llama-stack, llm-service)
 ├── tests/                 # Test suite
 │   ├── mcp/               # MCP server tests
 │   ├── core/              # Core logic tests
 │   └── alerting/          # Alerting tests
 ├── scripts/               # Development and deployment scripts
+│   └── metrics/           # Metrics CLI tool for catalog management
 └── docs/                  # Documentation
 ```
 
-## 🔧 Development Setup
+## 🔧 Development workflows
 
-### Prerequisites
-- Python 3.11+
-- `uv` package manager
-- OpenShift CLI (`oc`)
-- `helm` v3.x
-- `yq` (YAML processor)
-- Docker or Podman
+Use `./scripts/local-dev.sh` for local development and port-forwarding. Keep it as the primary entrypoint for dev work.
 
-### macOS: WeasyPrint for local PDF reports (optional)
-WeasyPrint is used for generating PDF reports. Containers and CI handle dependencies automatically via `uv`, but for local macOS development you may need a system install:
-
-```bash
-brew install weasyprint
-weasyprint --version
-
-# If WeasyPrint cannot find libraries at runtime, set:
-export DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib:$DYLD_FALLBACK_LIBRARY_PATH
-```
-
-
-### Local Development
-```bash
-# Set up port-forwarding to cluster services (default LLM: llama-3.2-3b-instruct)
-./scripts/local-dev.sh -n <DEFAULT_NAMESPACE>
-
-# With specific LLM model (optional)
-./scripts/local-dev.sh -n <DEFAULT_NAMESPACE> -l llama-3.1-8b-instruct
-
-# If model is in different namespace:
-./scripts/local-dev.sh -n <DEFAULT_NAMESPACE> -m <MODEL_NAMESPACE>
-
-# Use cluster config instead of generating new one:
-./scripts/local-dev.sh -n <DEFAULT_NAMESPACE> -c cluster
-
-# This script sets up:
-# - Virtual environment activation (.venv)
-# - MODEL_CONFIG generation (merges base models + specified LLM)
-# - Port-forwarding to Llamastack (localhost:8321)
-# - Port-forwarding to Model service (localhost:8080)
-# - Port-forwarding to Thanos (localhost:9090)
-# - MCP Server (localhost:8085)
-# - Streamlit UI (localhost:8501)
-
-# Examples:
-./scripts/local-dev.sh -n default-ns                      # Default LLM
-./scripts/local-dev.sh -n default-ns -l llama-3.1-8b-instruct  # Custom LLM
-./scripts/local-dev.sh -n default-ns -m model-ns          # Model in different namespace
-./scripts/local-dev.sh -n default-ns -c cluster           # Use cluster config
-```
-
-**Note**: The script automatically:
-- Activates Python virtual environment if `.venv` exists
-- Generates MODEL_CONFIG by merging base external models (OpenAI, Google, Anthropic) with your specified LLM
-- Uses service-based port forwarding for better reliability
-- Supports separate namespaces for different services
+For installation, build/deploy, and test commands, refer to:
+- `README.md`
+- `docs/OBSERVABILITY_OVERVIEW.md`
 
 ## 🏗️ Architecture & Data Flow
 
 ### Core Components
 1. **MCP Server** (`src/mcp_server/`): Model Context Protocol server for metrics analysis, report generation, and AI assistant integration
-   - **Chatbot Architecture** (`src/mcp_server/chatbots/`): Multi-provider LLM support with factory pattern
-     - **Anthropic Claude**: Claude Sonnet 4, Claude 3.5 Haiku, Claude 3 Opus
-     - **OpenAI GPT**: GPT-4o, GPT-4o-mini
-     - **Google Gemini**: Gemini 2.0/2.5 Flash
-     - **Local Llama**: Llama 3.1-8B, Llama 3.2-3B (via LlamaStack)
-2. **UI** (`src/ui/ui.py`): Streamlit multi-dashboard frontend with model selection dropdown
-3. **Core Logic** (`src/core/`): Business logic modules for metrics processing and LLM integration
-4. **Alerting** (`src/alerting/`): Alert handling and Slack notifications
-5. **Helm Charts** (`deploy/helm/`): OpenShift deployment configuration
+2. **Chatbots** (`src/chatbots/`): Multi-provider LLM chatbot architecture with factory pattern (see [CHATBOTS.md](CHATBOTS.md))
+   - **Anthropic Claude**: Claude Sonnet 4, Claude Haiku 4.5, Claude 3 Opus
+   - **OpenAI GPT**: GPT-4o, GPT-4o-mini
+   - **Google Gemini**: Gemini 2.0/2.5 Flash
+   - **Local Llama**: Llama 3.1-8B, Llama 3.2-3B (via LlamaStack)
+3. **UI Options**: Console Plugin (OpenShift Console integration), React UI (standalone)
+4. **Core Logic** (`src/core/`): Business logic modules for metrics processing and LLM integration
+5. **Alerting** (`src/alerting/`): Alert handling and Slack notifications
+6. **Helm Charts** (`deploy/helm/`): OpenShift deployment configuration
 
 ### Data Flow
 1. **Natural Language Question** → PromQL generation via LLM
@@ -144,279 +99,6 @@ export DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib:$DYLD_FALLBACK_LIBRARY_PATH
 - **Llama Stack**: LLM inference backend
 - **OpenTelemetry/Tempo**: Distributed tracing
 
-## 🧪 Testing
-
-### Test Commands
-```bash
-# Run all tests with coverage
-uv run pytest -v --cov=src --cov-report=html --cov-report=term
-
-# Run specific test categories
-uv run pytest -v tests/mcp/           # MCP tests
-uv run pytest -v tests/core/          # Core logic tests
-uv run pytest -v tests/alerting/      # Alerting tests
-uv run pytest -v tests/api/           # API tests
-
-# Run specific test file
-uv run pytest -v tests/mcp/test_api_endpoints.py
-
-# View coverage report
-open htmlcov/index.html
-```
-
-### Test Structure
-- **`tests/mcp/`** - Metric Collection & Processing tests
-- **`tests/mcp_server/`** - MCP server and chatbot implementation tests
-  - `test_chatbots.py` - Chatbot factory, API key retrieval, model name extraction, Korrel8r normalization (56 tests)
-- **`tests/core/`** - Core business logic tests
-- **`tests/alerting/`** - Alerting service tests
-- **`tests/api/`** - API endpoint tests
-
-### Testing Strategy
-- **Unit Tests**: Core business logic in `tests/core/`
-- **Integration Tests**: API endpoints in `tests/mcp/`
-- **Alert Tests**: Alerting functionality in `tests/alerting/`
-- **Coverage**: Configured to exclude UI components and report assets
-
-## 🚀 Building & Deployment
-
-### Container Images
-```bash
-# Build all components
-make build
-
-# Build individual components
-make build-ui            # Streamlit UI
-make build-alerting      # Alerting service
-make build-mcp-server    # MCP server
-
-# Build with custom tag
-make build TAG=v1.0.0
-```
-
-### Deployment
-```bash
-# Deploy to OpenShift (deploys default model)
-make install NAMESPACE=your-namespace
-
-# Deploy with alerting (deploys default model)
-make install-with-alerts NAMESPACE=your-namespace
-
-# Deploy with specific LLM model
-make install NAMESPACE=your-namespace LLM=llama-3-2-1b-instruct
-
-# Deploy with GPU tolerations (deploys default model)
-make install NAMESPACE=your-namespace LLM_TOLERATION="nvidia.com/gpu"
-
-# Deploy with safety models (deploys default model)
-make install NAMESPACE=your-namespace SAFETY=llama-guard-3-8b
-
-# Use existing model (specify LLM_URL as model service URL)
-# Note: When LLM_URL is provided, HF_TOKEN will not be prompted since no new model deployment is needed
-
-# URL with port (no processing applied):
-make install NAMESPACE=your-namespace \
-  LLM_URL=http://llama-3-2-3b-instruct-predictor.dev.svc.cluster.local:8080/v1
-
-# URL without port (automatically adds :8080/v1):
-make install NAMESPACE=your-namespace \
-  LLM_URL=http://llama-3-2-3b-instruct-predictor.dev.svc.cluster.local
-
-# Deploy individual components
-make install-mcp-server NAMESPACE=your-namespace    # MCP server only
-make install-metric-ui NAMESPACE=your-namespace     # UI only
-```
-
-### Observability Stack Management
-
-The project includes a comprehensive observability stack with flexible deployment options:
-
-#### **Complete Observability Stack**
-```bash
-# Install complete observability stack (MinIO + TempoStack + OTEL + tracing)
-# Note: NAMESPACE is required for tracing setup
-make install-observability-stack NAMESPACE=your-namespace
-
-# Uninstall complete observability stack
-# Note: NAMESPACE is required for tracing removal
-make uninstall-observability-stack NAMESPACE=your-namespace
-```
-
-#### **Individual Observability Components**
-```bash
-# Install individual components
-make install-minio                                           # MinIO storage only (uses observability-hub namespace)
-make install-observability                                   # TempoStack + OTEL only (uses observability-hub namespace)
-make setup-tracing NAMESPACE=your-namespace                 # Auto-instrumentation only (requires NAMESPACE)
-
-# Uninstall individual components
-make uninstall-minio                                         # MinIO storage only (uses observability-hub namespace)
-make uninstall-observability                                 # TempoStack + OTEL only (uses observability-hub namespace)
-make remove-tracing NAMESPACE=your-namespace                 # Auto-instrumentation only (requires NAMESPACE)
-```
-
-#### **NAMESPACE Requirements**
-- **`install-observability-stack` / `uninstall-observability-stack`**: Require NAMESPACE for tracing components
-- **`install-minio` / `uninstall-minio`**: Use hardcoded `observability-hub` namespace
-- **`install-observability` / `uninstall-observability`**: Use hardcoded `observability-hub` namespace  
-- **`setup-tracing` / `remove-tracing`**: Require NAMESPACE parameter
-
-#### **MinIO Chart Simplification**
-The MinIO chart has been simplified to use a single template file (`minio-simple.yaml`) that:
-- Deploys MinIO as a StatefulSet with built-in bucket creation
-- Uses MinIO's native `mc` client for bucket and user management
-- Eliminates the need for separate initialization jobs
-- Reduces complexity from 7 template files to 2 (including helpers)
-- Provides more reliable and maintainable MinIO deployment
-
-#### **Observability Stack Features**
-- **MinIO**: S3-compatible object storage for trace data and log data persistence
-- **TempoStack**: Multitenant trace storage and analysis with OpenShift integration
-- **OpenTelemetry Collector**: Distributed tracing collection and forwarding
-- **Auto-instrumentation**: Automatic Python application tracing setup
-- **Dependency Management**: Proper installation/uninstallation order with dependency chains
-
-### Management
-```bash
-# Check deployment status
-make status NAMESPACE=your-namespace
-
-# Uninstall
-make uninstall NAMESPACE=your-namespace
-
-# List available models
-make list-models
-```
-
-## ⚙️ Configuration
-
-### Environment Variables
-- `PROMETHEUS_URL`: Thanos/Prometheus endpoint (default: http://localhost:9090)
-- `LLAMA_STACK_URL`: LLM backend URL (default: http://localhost:8321/v1/openai/v1)
-- `LLM_API_TOKEN`: API token for LLM service
-- `LLM_URL`: Use existing model URL (skips HF_TOKEN prompt and model deployment)
-- `LLM_PREDICTOR`: Override default LLM model selection (e.g., "anthropic/claude-sonnet-4-20250514")
-- `HF_TOKEN`: Hugging Face token (auto-prompted only when LLM_URL is not set)
-- `MODEL_CONFIG`: JSON configuration for available models
-- `THANOS_TOKEN`: Authentication token (default: reads from service account)
-- `SLACK_WEBHOOK_URL`: Slack webhook for alerting notifications
-- **External Model API Keys** (for multi-provider support):
-  - `ANTHROPIC_API_KEY`: Anthropic Claude API key
-  - `OPENAI_API_KEY`: OpenAI GPT API key
-  - `GOOGLE_API_KEY`: Google Gemini API key
-
-### Model Configuration
-Models are configured via `MODEL_CONFIG` environment variable as JSON:
-```json
-{
-  "model-name": {
-    "external": false,
-    "url": "http://service:port",
-    "apiToken": "token"
-  }
-}
-```
-
-### Available Models
-```bash
-# List available models for deployment
-make list-models
-```
-Common models include:
-- `llama-3-2-3b-instruct`
-- `llama-3-1-8b-instruct` (default)
-- `llama-3-3-70b-instruct`
-- `llama-guard-3-8b` (safety model)
-
-### Model Configuration Generation
-
-**Location**: `scripts/generate-model-config.sh`
-
-**Purpose**: Single source of truth for dynamically generating model configurations. Used by both Makefile (OpenShift deployment) and local-dev.sh (local development).
-
-**Architecture**:
-```
-generate-model-config.sh
-├── Used by Makefile (with --helm-format flag)
-│   └── Generates: JSON + Helm YAML values file
-└── Used by local-dev.sh (without flag)
-    └── Generates: JSON only
-```
-
-**How it works**:
-1. **Template Substitution**: Reads `deploy/helm/default-model.json.template` and substitutes:
-   - `$MODEL_ID` → Full model path (e.g., `meta-llama/Llama-3.1-8B-Instruct`)
-   - `$MODEL_NAME` → Service name (e.g., `llama-3-1-8b-instruct`)
-
-2. **JSON Merging**: Merges the LLM-specific config with base external models from `deploy/helm/model-config.json`:
-   ```bash
-   jq -s '.[0] * .[1]' new_model_config.json model-config.json > final_config.json
-   ```
-
-3. **Export**: Sets `MODEL_CONFIG` environment variable for use by services
-
-**Parameters**:
-- **LLM model name** (optional): Model identifier (default: `llama-3-1-8b-instruct`)
-- **`--helm-format` flag** (optional): Generate Helm values YAML file in addition to JSON
-
-**Output Files** (in `/tmp`):
-- `gen_model_config-list_models_output.txt` - Available models from Helm chart
-- `gen_model_config-final_config.json` - Merged JSON configuration
-- `gen_model_config-for_helm.yaml` - Helm values format (only with `--helm-format`)
-
-**Usage Examples**:
-```bash
-# Direct usage (for debugging/testing)
-source scripts/generate-model-config.sh
-generate_model_config                                    # Use default model
-generate_model_config "llama-3.1-8b-instruct"           # Specific model, JSON only
-generate_model_config "llama-3.2-3b-instruct" --helm-format  # JSON + Helm YAML
-
-# Automatic usage via Makefile
-make install NAMESPACE=your-ns LLM=llama-3.1-8b-instruct
-# → Calls: generate_model_config "llama-3.1-8b-instruct" --helm-format
-
-# Automatic usage via local-dev.sh
-./scripts/local-dev.sh -n your-ns -l llama-3.1-8b-instruct
-# → Calls: generate_model_config "llama-3.1-8b-instruct" (no --helm-format)
-```
-
-**Example: Config Merging Process**:
-```bash
-# 1. Template (default-model.json.template)
-{
-  "$MODEL_ID": {
-    "external": false,
-    "requiresApiKey": false,
-    "serviceName": "$MODEL_NAME"
-  }
-}
-
-# 2. After substitution (new_model_config.json)
-{
-  "meta-llama/Llama-3.1-8B-Instruct": {
-    "external": false,
-    "requiresApiKey": false,
-    "serviceName": "llama-3-1-8b-instruct"
-  }
-}
-
-# 3. Base config (model-config.json)
-{
-  "openai/gpt-4o-mini": { ... },
-  "google/gemini-2.5-flash": { ... },
-  "anthropic/claude-sonnet-4-20250514": { ... }
-}
-
-# 4. Final merged config (final_config.json)
-{
-  "meta-llama/Llama-3.1-8B-Instruct": { ... },  # ← LLM-specific
-  "openai/gpt-4o-mini": { ... },                 # ← Base external models
-  "google/gemini-2.5-flash": { ... },
-  "anthropic/claude-sonnet-4-20250514": { ... }
-}
-```
-
 ## 🔍 Common Development Patterns
 
 ### Adding New Metrics
@@ -431,6 +113,54 @@ make install NAMESPACE=your-ns LLM=llama-3.1-8b-instruct
 3. Add MCP tool in `src/mcp_server/tools/`
 4. Add corresponding tests
 
+### Managing the Metrics Catalog
+
+The `scripts/metrics/cli.py` tool manages the optimized metrics catalog used by AI Chat for intelligent metric discovery.
+
+```bash
+# Regenerate the metrics catalog (requires Prometheus access)
+python scripts/metrics/cli.py -a              # Run all: fetch → categorize → optimize
+
+# Individual steps
+python scripts/metrics/cli.py -f              # Fetch from Prometheus
+python scripts/metrics/cli.py -c              # Categorize by priority
+python scripts/metrics/cli.py -m              # Optimize with keywords
+
+# Options
+python scripts/metrics/cli.py -h              # Show all options
+python scripts/metrics/cli.py -a -v           # Verbose output
+python scripts/metrics/cli.py -m -o out.json  # Custom output path
+```
+
+**Output**: `src/mcp_server/data/openshift-metrics-optimized.json` - Contains categorized metrics with keywords for AI-powered search.
+
+### Shared Metric Configurations (Frontend)
+
+Metric constants used by both the metrics pages and Settings tabs are in shared data files:
+
+- **`openshift-plugin/src/core/data/vllmMetricsConfig.ts`** — `KEY_METRICS_CONFIG` (6 key metrics) and `METRIC_CATEGORIES` (8 categories) used by the vLLM Metrics page and vLLM Metrics Settings tab
+- **`openshift-plugin/src/core/data/openshiftMetricsConfig.ts`** — `CLUSTER_WIDE_CATEGORIES` (11 categories) used by the OpenShift Metrics page and OpenShift Metrics Settings tab
+
+Both the page components and settings tabs import from these shared files to keep metric definitions in a single location.
+
+### Settings — Metrics Tab
+
+The Settings modal has a consolidated **"Metrics"** tab containing three subtabs:
+
+| Subtab | Source | Description |
+|--------|--------|-------------|
+| **Chat Metrics Catalog** | MCP `get_category_metrics_detail` tool | Browse the AI chat metrics catalog (loaded from MCP server) |
+| **vLLM Metrics** | `vllmMetricsConfig.ts` | Read-only view of vLLM Metrics page metrics (6 key + 8 categories) |
+| **OpenShift Metrics** | `openshiftMetricsConfig.ts` | Read-only view of OpenShift Metrics page metrics (11 categories) |
+
+All three subtabs support:
+- **Search** with 200ms debounce filtering
+- **Shared download button** at the parent level that exports metrics as a markdown (`.md`) file for whichever subtab is active
+
+The wrapper component is `MetricsSettingsTab.tsx`. Each sub-component (`MetricsCatalogTab`, `VLLMMetricsSettingsTab`, `OpenShiftMetricsSettingsTab`) accepts optional `downloadRef` and `hideHeader` props for integration with the wrapper while remaining usable standalone.
+
+The download utility is at `openshift-plugin/src/core/utils/downloadFile.ts`.
+
 ### Error Handling
 - API endpoints use HTTPException for user-facing errors
 - Internal errors are logged with stack traces
@@ -438,58 +168,14 @@ make install NAMESPACE=your-ns LLM=llama-3.1-8b-instruct
 
 ## 🚀 Development Workflows
 
-### 1. Feature Development
-```bash
-# 1. Set up local environment
-./scripts/local-dev.sh -n <DEFAULT_NAMESPACE>
+### Feature Development
+1. Start local dev environment: `./scripts/local-dev.sh -n <DEFAULT_NAMESPACE>`
+2. Make changes.
+3. Validate behavior in the UI and MCP server logs.
 
-# 2. Make changes to source code
-
-# 3. Run tests
-make test
-
-# 4. Build and test locally
-make build
-```
-
-### 2. Bug Fixing
-```bash
-# 1. Activate virtual environment (for testing)
-uv sync --group dev
-uv venv --seed
-source .venv/bin/activate
-curl -O https://bootstrap.pypa.io/get-pip.py
-python3 get-pip.py
-
-# 2. Setup local environment
-make depend
-uv run python -m pip install -e .
-./scripts/local-dev.sh -n <DEFAULT_NAMESPACE>
-
-# 3. Run specific test
-uv run pytest -v tests/core/test_specific_feature.py
-
-# 4. Debug with coverage
-uv run pytest -v --cov=src --cov-report=term-missing
-```
-
-### 3. Deployment Testing
-```bash
-# 1. Build images
-make build TAG=test-$(date +%s)
-
-# 2. Deploy to test namespace
-make install NAMESPACE=test-namespace
-
-# 3. Verify deployment
-make status NAMESPACE=test-namespace
-
-# 4. Test functionality
-# Access UI via OpenShift route
-
-# 5. Cleanup
-make uninstall NAMESPACE=test-namespace
-```
+### Bug Fixing
+1. Reproduce via local dev environment.
+2. Add/adjust tests only if the change is not easily validated manually.
 
 ## 📊 Monitoring & Debugging
 
@@ -530,7 +216,7 @@ oc port-forward $TEMPO_SERVICE 8082:8080 -n observability-hub &
 ### Logs
 ```bash
 # View pod logs (replace with your actual namespace)
-oc logs -f deployment/metric-ui -n <DEFAULT_NAMESPACE>
+oc logs -f deployment/aiobs-ui -n <DEFAULT_NAMESPACE>
 oc logs -f deployment/mcp-server -n <DEFAULT_NAMESPACE>
 oc logs -f deployment/metric-alerting -n <DEFAULT_NAMESPACE>
 ```
@@ -551,15 +237,15 @@ oc port-forward svc/mcp-server 8085:8085 -n <DEFAULT_NAMESPACE>
 
 ### Building
 - `make build` - Build all container images
-- `make build-ui` - Build Streamlit UI
+- `make build-console-plugin` - Build Console Plugin
+- `make build-react-ui` - Build React UI
 - `make build-alerting` - Build alerting service
 - `make build-mcp-server` - Build MCP server
 
 ### Deployment
-- `make install` - Deploy to OpenShift
+- `make install` - Deploy to OpenShift (Console Plugin by default, React UI with DEV_MODE=true)
 - `make install-with-alerts` - Deploy with alerting
 - `make install-mcp-server` - Deploy MCP server only
-- `make install-metric-ui` - Deploy UI only
 - `make status` - Check deployment status
 - `make uninstall` - Remove deployment
 
@@ -631,37 +317,6 @@ oc get events -n <DEFAULT_NAMESPACE> --sort-by='.lastTimestamp'
 - No secrets should be logged or committed to repository
 - API endpoints use proper authentication and authorization
 
-## 🔐 Credential Management
-
-### Required Credentials
-- **Quay Registry**: Username and password for container image pushing
-- **OpenShift**: Server URL and authentication token
-- **Hugging Face**: API token for model access
-
-### Retrieving Credentials
-
-#### Quay Registry Access
-- **Search for**: `Appeng Quay ecosystem-appeng+aiobs kubernetes secret and token` in Bitwarden
-  - **Required fields**: Username and Password
-- **Purpose**: Pushing container images to Quay registry
-
-#### OpenShift Access
-- **For GitHub Actions workflows**: Run `./scripts/ocp-setup.sh -s -n <namespace>` to generate the required token
-- **Manual setup**: Access your password manager and search for:
-  - `openshift-ai-observability-summarizer ai-quickstart (aiobs)` for OCP server user/password
-  - **Required fields**: Username and Password
-- **Purpose**: Deploying to OpenShift clusters
-
-#### Hugging Face Access
-- User your personal "Hugging Face" token (_read token is sufficient_)
-- **Purpose**: Accessing AI models and datasets
-
-### Security Best Practices
-- Never commit credentials to source code
-- Use GitHub repository secrets for CI/CD
-- Rotate credentials regularly
-- Limit credential scope to minimum required permissions
-
 ## 📚 Additional Resources
 
 - **README.md** - Comprehensive project overview and setup
@@ -672,8 +327,9 @@ oc get events -n <DEFAULT_NAMESPACE> --sort-by='.lastTimestamp'
 
 ### File Locations
 - **MCP Server**: `src/mcp_server/main.py`
+- **Chatbots**: `src/chatbots/` (see [CHATBOTS.md](CHATBOTS.md))
 - **Core Logic**: `src/core/llm_summary_service.py`
-- **UI**: `src/ui/ui.py`
+- **Console Plugin & React UI**: `openshift-plugin/` (TypeScript/React source for both UIs)
 - **Tests**: `tests/`
 - **Helm Charts**: `deploy/helm/`
 

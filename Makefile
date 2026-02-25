@@ -14,9 +14,14 @@ MAKEFLAGS += --no-print-directory
 REGISTRY ?= quay.io
 ORG ?= ecosystem-appeng
 IMAGE_PREFIX ?= aiobs
-VERSION ?= 1.2.1-feature
+VERSION ?= 1.2.0
 PLATFORM ?= linux/amd64
 DEV_MODE ?= false
+
+# GPU Metrics Discovery - custom prefix overrides (comma-separated, additive)
+GPU_PREFIX_NVIDIA ?=
+GPU_PREFIX_INTEL ?=
+GPU_PREFIX_AMD ?=
 
 # Container image names
 METRICS_UI_IMAGE = $(REGISTRY)/$(ORG)/$(IMAGE_PREFIX)-metrics-ui
@@ -299,6 +304,9 @@ help:
 	@echo "  MINIO_BUCKETS      - Comma-separated list of MinIO buckets to create (default: tempo,loki)"
 	@echo "  UNINSTALL_OBSERVABILITY - Set to 'true' to uninstall observability stack during uninstall"
 	@echo "  UNINSTALL_OPERATORS     - Set to 'true' to uninstall operators during uninstall"
+	@echo "  GPU_PREFIX_NVIDIA  - Extra NVIDIA metric prefixes (comma-separated, additive to defaults)"
+	@echo "  GPU_PREFIX_INTEL   - Extra Intel metric prefixes (comma-separated, additive to defaults)"
+	@echo "  GPU_PREFIX_AMD     - Extra AMD metric prefixes (comma-separated, additive to defaults)"
 	@echo ""
 
 .PHONY: build
@@ -442,6 +450,9 @@ install-mcp-server: namespace
 			--set env.DEV_MODE=$(DEV_MODE) \
 			$(if $(MCP_SERVER_ROUTE_HOST),--set route.host='$(MCP_SERVER_ROUTE_HOST)',) \
 			$(if $(LLAMA_STACK_URL),--set llm.url='$(LLAMA_STACK_URL)',) \
+			$(if $(GPU_PREFIX_NVIDIA),--set env.GPU_METRICS_PREFIX_NVIDIA='$(GPU_PREFIX_NVIDIA)',) \
+			$(if $(GPU_PREFIX_INTEL),--set env.GPU_METRICS_PREFIX_INTEL='$(GPU_PREFIX_INTEL)',) \
+			$(if $(GPU_PREFIX_AMD),--set env.GPU_METRICS_PREFIX_AMD='$(GPU_PREFIX_AMD)',) \
 			-f $(GEN_MODEL_CONFIG_PREFIX)-for_helm.yaml; \
 	else \
 		echo "ClusterRole does not exist. Deploying and creating Grafana role..."; \
@@ -453,11 +464,23 @@ install-mcp-server: namespace
 			--set env.DEV_MODE=$(DEV_MODE) \
 			$(if $(MCP_SERVER_ROUTE_HOST),--set route.host='$(MCP_SERVER_ROUTE_HOST)',) \
 			$(if $(LLAMA_STACK_URL),--set llm.url='$(LLAMA_STACK_URL)',) \
+			$(if $(GPU_PREFIX_NVIDIA),--set env.GPU_METRICS_PREFIX_NVIDIA='$(GPU_PREFIX_NVIDIA)',) \
+			$(if $(GPU_PREFIX_INTEL),--set env.GPU_METRICS_PREFIX_INTEL='$(GPU_PREFIX_INTEL)',) \
+			$(if $(GPU_PREFIX_AMD),--set env.GPU_METRICS_PREFIX_AMD='$(GPU_PREFIX_AMD)',) \
 			-f $(GEN_MODEL_CONFIG_PREFIX)-for_helm.yaml; \
 	fi
 
+.PHONY: check-console-plugin-namespace
+check-console-plugin-namespace:
+	@PLUGIN_NAME=aiobs-console-plugin; \
+	existing_ns=$$(oc get consoleplugin $$PLUGIN_NAME -o jsonpath='{.spec.backend.service.namespace}' 2>/dev/null); \
+	if [ -n "$$existing_ns" ] && [ "$$existing_ns" != "$(NAMESPACE)" ]; then \
+		echo "⚠️  ConsolePlugin $$PLUGIN_NAME already points to namespace $$existing_ns (requested $(NAMESPACE))"; \
+		echo "   Consider uninstalling the old release or set NAMESPACE=$$existing_ns"; \
+	fi
+
 .PHONY: install-console-plugin
-install-console-plugin: namespace
+install-console-plugin: namespace check-console-plugin-namespace
 	@echo "Deploying OpenShift Console Plugin"
 	@cd deploy/helm && helm upgrade --install $(CONSOLE_PLUGIN_RELEASE_NAME) $(CONSOLE_PLUGIN_CHART_PATH) -n $(NAMESPACE) \
 		--set plugin.image.repository=$(CONSOLE_PLUGIN_IMAGE) \

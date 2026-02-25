@@ -81,7 +81,11 @@ For GPU queries (Multi-vendor: NVIDIA + Intel Gaudi):
 - The "or" pattern automatically selects the correct vendor metric
 
 For Pod Status queries:
-- Use: kube_pod_status_phase == 1 to filter only active states
+- Running/Pending/Succeeded pods: kube_pod_status_phase{phase="Running"} == 1
+- Failing/unhealthy pods require MULTIPLE metrics:
+  - kube_pod_status_phase{phase="Failed"} == 1
+  - kube_pod_container_status_waiting_reason{reason=~"CrashLoopBackOff|ImagePullBackOff|ErrImagePull"} == 1
+  - kube_pod_container_status_terminated_reason{reason=~"Error|OOMKilled"} == 1
 - Include namespace filter and grouping
 
 **Key PromQL Rules:**
@@ -216,7 +220,7 @@ For Pod Status queries:
                             progress_callback(f"🔧 Using tool: {tool_name}")
 
                         # Get tool result with automatic truncation (logging handled in base class)
-                        tool_result = self._get_tool_result(tool_name, tool_args)
+                        tool_result = self._get_tool_result(tool_name, tool_args, namespace=namespace)
 
                         tool_results.append({
                             "role": "tool",
@@ -227,9 +231,8 @@ For Pod Status queries:
                     # Add tool results to conversation
                     messages.extend(tool_results)
 
-                    # Limit conversation history
-                    if len(messages) > 10:
-                        messages = [messages[0]] + messages[-8:]
+                    # Truncate conversation safely (preserves tool-call/result pairs)
+                    messages = self._truncate_messages(messages, keep_system_prompt=True)
 
                     # Continue loop
                     continue

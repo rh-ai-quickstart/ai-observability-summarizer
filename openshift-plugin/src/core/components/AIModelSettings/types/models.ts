@@ -68,7 +68,7 @@ export interface AIModelState {
   };
   
   // Current active tab
-  activeTab: 'models' | 'apikeys' | 'addmodel' | 'chatsettings';
+  activeTab: 'models' | 'apikeys' | 'addmodel' | 'chatsettings' | 'metrics';
   
   // Error and success messages
   error: string | null;
