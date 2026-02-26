@@ -4,6 +4,7 @@ import json
 from common.pylogger import get_python_logger
 from core.korrel8r_client import Korrel8rClient
 from core.korrel8r_service import fetch_goal_query_objects
+from core.chat_with_prometheus import execute_promql_query
 from core.response_utils import make_mcp_text_response
 from mcp_server.exceptions import MCPException, MCPErrorCode
 
@@ -136,6 +137,94 @@ def _fetch_logs_via_direct_query(namespace: str, pod_name: Optional[str]) -> lis
     return all_logs
 
 
+def _check_unhealthy_pods(namespace: str) -> str:
+    """Check for unhealthy pods in the namespace via Prometheus.
+
+    Queries two metrics to catch all common failure modes:
+    - kube_pod_container_status_waiting_reason: pods stuck waiting
+      (ImagePullBackOff, CrashLoopBackOff, ErrImagePull, CreateContainerConfigError)
+    - kube_pod_container_status_terminated_reason: pods terminated with errors
+      (Error, OOMKilled)
+
+    Returns a warning string if unhealthy pods found, empty string otherwise.
+    """
+    queries = [
+        (
+            'kube_pod_container_status_waiting_reason{'
+            f'namespace="{namespace}",'
+            'reason=~"CrashLoopBackOff|ImagePullBackOff|ErrImagePull|CreateContainerConfigError"'
+            '} == 1'
+        ),
+        (
+            'kube_pod_container_status_terminated_reason{'
+            f'namespace="{namespace}",'
+            'reason=~"Error|OOMKilled"'
+            '} == 1'
+        ),
+    ]
+
+    pods = []
+    seen = set()
+    for query in queries:
+        try:
+            result = execute_promql_query(query)
+            if not isinstance(result, dict) or result.get("status") != "success":
+                continue
+            # execute_promql_query returns {"results": [...]} (not "data.result")
+            for item in result.get("results", []):
+                metric = item.get("metric", {}) if isinstance(item, dict) else {}
+                pod_name = metric.get("pod", "unknown")
+                reason = metric.get("reason", "unknown")
+                if pod_name not in seen:
+                    seen.add(pod_name)
+                    pods.append(f"{pod_name} ({reason})")
+        except Exception as e:
+            logger.debug("_check_unhealthy_pods query failed (non-fatal): %s", e)
+
+    if not pods:
+        return ""
+
+    warning = (
+        f"WARNING: {len(pods)} unhealthy pod(s) in namespace '{namespace}': "
+        f"{', '.join(pods)}. "
+        "These pods may have no logs or only partial logs."
+    )
+    logger.info("_check_unhealthy_pods: %s", warning)
+    return warning
+
+
+def _resolve_pod_names(namespace: str, pod_pattern: str) -> List[str]:
+    """Resolve a pod name pattern to exact pod names via Prometheus.
+
+    Korrel8r log domain queries don't support glob patterns — only exact pod
+    names.  When the LLM passes a pattern like ``alert-example*``, this
+    function queries ``kube_pod_info`` to find matching pod names.
+
+    Returns a list of exact pod names, or empty list on failure.
+    """
+    # Strip trailing glob
+    prefix = pod_pattern.rstrip("*")
+    query = f'kube_pod_info{{namespace="{namespace}",pod=~"{prefix}.*"}}'
+    try:
+        result = execute_promql_query(query)
+        if not isinstance(result, dict) or result.get("status") != "success":
+            return []
+        pods = []
+        seen = set()
+        for item in result.get("results", []):
+            metric = item.get("metric", {}) if isinstance(item, dict) else {}
+            pod_name = metric.get("pod")
+            if pod_name and pod_name not in seen:
+                seen.add(pod_name)
+                pods.append(pod_name)
+        if pods:
+            logger.info("_resolve_pod_names: resolved '%s' to %s", pod_pattern, pods)
+        return pods
+    except Exception as e:
+        logger.debug("_resolve_pod_names failed (non-fatal): %s", e)
+        return []
+
+
 def get_correlated_logs(
     namespace: str,
     pod: Optional[str] = None,
@@ -188,8 +277,29 @@ def get_correlated_logs(
             logger.info("get_correlated_logs: correlation returned no logs, trying direct query")
             all_logs = _fetch_logs_via_direct_query(namespace, pod_name)
 
+        # Phase 3: If pod name returned no logs, resolve exact pod names via
+        # Prometheus and retry.  Korrel8r log queries require exact pod names
+        # — neither glob patterns (alert-example*) nor partial names
+        # (alert-example) work.  LLMs almost never pass full k8s pod names
+        # with the deployment/replicaset hash suffixes.
+        if not all_logs and pod_name:
+            resolved_pods = _resolve_pod_names(namespace, pod_name if "*" in pod_name else pod_name + "*")
+            for exact_pod in resolved_pods:
+                logger.info("get_correlated_logs: retrying with resolved pod name: %s", exact_pod)
+                logs = _fetch_logs_via_correlation(namespace, exact_pod)
+                if not logs:
+                    logs = _fetch_logs_via_direct_query(namespace, exact_pod)
+                all_logs.extend(logs)
+
         logger.info("get_correlated_logs returned %d log entries for namespace=%s", len(all_logs), namespace)
-        return make_mcp_text_response(json.dumps(all_logs))
+
+        # Check for unhealthy pods (may have no logs or partial logs)
+        pod_warning = _check_unhealthy_pods(namespace)
+        if pod_warning:
+            response_text = pod_warning + "\n\n" + json.dumps(all_logs)
+        else:
+            response_text = json.dumps(all_logs)
+        return make_mcp_text_response(response_text)
     except Exception as e:
         logger.error("get_correlated_logs failed: namespace=%s, pod=%s, error=%s", namespace, pod_name, e)
         err = MCPException(
