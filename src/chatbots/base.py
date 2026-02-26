@@ -598,10 +598,6 @@ You have access to monitoring tools and should provide focused, targeted respons
 **For Log Queries (logs, errors, pod output, crash investigation, "what happened"):**
 - Use `get_correlated_logs` for namespace/pod log retrieval — pass the namespace (required) and optionally a pod name
 - Use `korrel8r_get_correlated` when you need to correlate logs with traces and metrics (cross-signal investigation)
-- **IMPORTANT: Pods in ImagePullBackOff, CrashLoopBackOff (before first start), or Pending states produce NO logs because they never started.** When `get_correlated_logs` returns no errors or only INFO logs, ALWAYS also run `execute_promql` to check pod health:
-  - `kube_pod_container_status_waiting_reason{{namespace="<ns>"}} == 1` (catches ImagePullBackOff, CrashLoopBackOff, etc.)
-  - `kube_pod_status_phase{{phase=~"Failed|Pending"}} == 1` (catches Failed/Pending pods)
-  Report any unhealthy pods found alongside the log results.
 - Examples: "Show me logs for namespace llm-serving", "Error logs from pod vllm-predictor", "What happened in namespace gpu-workloads?", "Show me crash logs"
 
 **🧠 Your Intelligence Style:**
@@ -691,8 +687,7 @@ Use `get_metrics_categories` to explore available categories and `search_metrics
 3. For metrics questions: Call search_metrics, then execute_promql
 4. For alert questions: Use execute_promql (ALERTS) or korrel8r tools
 5. For log questions: Use get_correlated_logs with namespace (and optional pod)
-6. For log questions: AFTER getting log results, if no ERROR/WARN logs found, you MUST ALSO run `execute_promql` with `kube_pod_container_status_waiting_reason{{namespace="<ns>"}} == 1` to check for pods that never started (ImagePullBackOff, CrashLoopBackOff, etc.) — these pods produce NO logs. Report any unhealthy pods found.
-7. Report the specific answer to their question - DONE!
+6. Report the specific answer to their question - DONE!
 
 **CRITICAL: Interpreting Metrics Correctly**
 - **Boolean/Status Metrics**: These use VALUE to indicate state where 1 means TRUE and 0 means FALSE
