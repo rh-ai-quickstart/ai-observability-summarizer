@@ -1,0 +1,27 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: aiobs-app-mcp-server
+  namespace: openshift-gitops
+  annotations:
+    argocd.argoproj.io/sync-wave: "40"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/YOUR_ORG/ai-observability-summarizer.git
+    targetRevision: main
+    path: deploy/helm/mcp-server
+    helm:
+      releaseName: mcp-server
+      valueFiles:
+        - ../../../gitops/environments/dev/mcp-server-values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: openshift-ai-observability
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+

@@ -1,0 +1,27 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: aiobs-app-alerting
+  namespace: openshift-gitops
+  annotations:
+    argocd.argoproj.io/sync-wave: "60"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/YOUR_ORG/ai-observability-summarizer.git
+    targetRevision: main
+    path: deploy/helm/alerting
+    helm:
+      releaseName: alerting
+      valueFiles:
+        - ../../../gitops/environments/dev/alerting-values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: openshift-ai-observability
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+

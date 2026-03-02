@@ -1,0 +1,17 @@
+app:
+  image:
+    tag: latest
+
+# IMPORTANT for GitOps:
+# If cookieSecret is empty, many Helm charts generate a random value at render-time,
+# which makes Argo CD show perpetual drift. For a real deployment, set this via
+# SealedSecrets/ExternalSecrets and then commit the *encrypted/indirect* form.
+oauth:
+  enabled: true
+  cookieSecret: "REPLACE_WITH_A_REAL_SECRET_MANAGED_OUTSIDE_PLAINTEXT_GIT"
+
+mcpServer:
+  serviceName: aiobs-mcp-server-svc
+  port: 8085
+  namespace: openshift-ai-observability
+

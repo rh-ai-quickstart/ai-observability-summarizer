@@ -1,0 +1,10 @@
+image:
+  tag: 1.0.8-feature
+
+mcpServer:
+  serviceName: aiobs-mcp-server-svc
+  port: 8085
+
+env:
+  PROMETHEUS_URL: "https://thanos-querier.openshift-monitoring.svc.cluster.local:9091"
+

@@ -1,0 +1,12 @@
+minio:
+  secret:
+    # For real clusters: manage these via SealedSecrets/ExternalSecrets.
+    user: admin
+    password: minio123
+    host: minio
+    port: "9000"
+
+  buckets:
+    - tempo
+    - loki
+

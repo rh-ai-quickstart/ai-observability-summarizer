@@ -1,0 +1,18 @@
+apiVersion: opentelemetry.io/v1alpha1
+kind: Instrumentation
+metadata:
+  name: python-instrumentation
+  namespace: openshift-ai-observability
+spec:
+  exporter:
+    endpoint: http://otel-collector-collector.observability-hub.svc.cluster.local:4318
+  propagators:
+    - tracecontext
+    - baggage
+    - b3
+  python:
+    image: ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-python:latest
+    env:
+      - name: OTEL_PYTHON_PLATFORM
+        value: glibc
+

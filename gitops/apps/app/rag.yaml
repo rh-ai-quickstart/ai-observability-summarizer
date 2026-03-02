@@ -1,0 +1,29 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: aiobs-app-rag
+  namespace: openshift-gitops
+  annotations:
+    # Makefile installs RAG after the base stack; place it before UIs.
+    argocd.argoproj.io/sync-wave: "35"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/YOUR_ORG/ai-observability-summarizer.git
+    targetRevision: main
+    path: deploy/helm/rag
+    helm:
+      releaseName: rag
+      valueFiles:
+        - ../../../gitops/environments/dev/rag-values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: openshift-ai-observability
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - SkipDryRunOnMissingResource=true
+
