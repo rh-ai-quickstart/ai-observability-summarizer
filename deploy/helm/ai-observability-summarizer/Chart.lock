@@ -1,0 +1,36 @@
+dependencies:
+- name: minio-observability-storage
+  repository: file://../minio
+  version: 0.1.0
+- name: tempo-stack
+  repository: file://../observability/tempo
+  version: 1.0.0
+- name: otel-collector
+  repository: file://../observability/otel-collector
+  version: 0.2.0
+- name: loki-stack
+  repository: file://../observability/loki
+  version: 0.1.0
+- name: korrel8r
+  repository: file://../observability/korrel8r
+  version: 0.1.0
+- name: mcp-server
+  repository: file://../mcp-server
+  version: 0.1.0
+- name: ui
+  repository: file://../ui
+  version: 0.1.0
+- name: openshift-console-plugin
+  repository: file://../openshift-console-plugin
+  version: 0.1.0
+- name: openshift-aiobs-react-ui
+  repository: file://../react-ui-app
+  version: 1.0.0
+- name: alerts
+  repository: file://../alerting
+  version: 0.1.0
+- name: rag
+  repository: file://../rag
+  version: 0.1.0
+digest: sha256:9169c3cee532753b77e353ea4b06dac9ba4d6636daa2406e6ac8a79357ce4d2f
+generated: "2026-03-03T15:14:53.432463-05:00"

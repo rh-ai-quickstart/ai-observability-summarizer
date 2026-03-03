@@ -1,0 +1,19 @@
+{{- if .Values.tracing.autoInstrument }}
+apiVersion: opentelemetry.io/v1alpha1
+kind: Instrumentation
+metadata:
+  name: python-instrumentation
+  namespace: {{ .Values.tracing.appNamespace }}
+spec:
+  exporter:
+    endpoint: {{ .Values.tracing.otelCollectorEndpoint }}
+  propagators:
+    - tracecontext
+    - baggage
+    - b3
+  python:
+    image: ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-python:latest
+    env:
+      - name: OTEL_PYTHON_PLATFORM
+        value: glibc
+{{- end }}
