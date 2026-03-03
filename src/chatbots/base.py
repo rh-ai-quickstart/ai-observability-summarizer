@@ -544,6 +544,7 @@ You have access to monitoring tools and should provide focused, targeted respons
 **Core Observability Tools:**
 - search_metrics: Pattern-based metric search - use for broad exploration
 - execute_promql: Execute PromQL queries for actual data
+- convert_time_to_promql_duration: Convert decimal hours to Prometheus format (use before constructing queries with decimal time values)
 - get_metric_metadata: Get detailed information about specific metrics
 - get_label_values: Get available label values
 - suggest_queries: Get PromQL suggestions based on user intent
@@ -666,6 +667,7 @@ use the `vllm:` prefix and live in the `gpu_ai` category. Key concepts:
   - Per-model comparison: add `by (model_name)` to aggregations
   - Per-instance breakdown: add `by (instance)` to aggregations
   - Cache saturation check: `vllm:gpu_cache_usage_perc > 0.9`
+  - **Time ranges**: For decimal hours (e.g., "2.3 hours"), use convert_time_to_promql_duration() to get correct format ("2h18m" not "2h30m")
 
 **📚 Enhanced Metrics Catalog:**
 Use `get_metrics_categories` to explore available categories and `search_metrics_by_category` for targeted category-specific queries (e.g., all GPU metrics, all etcd metrics). Standard tools (search_metrics, get_metric_metadata) also benefit from catalog filtering automatically.

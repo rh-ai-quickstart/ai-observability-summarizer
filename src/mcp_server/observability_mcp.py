@@ -59,6 +59,7 @@ class ObservabilityMCPServer:
             get_metrics_categories,           # Get metric categories (NEW)
             search_metrics_by_category,       # Search by category (NEW)
             get_category_metrics_detail,      # Get category catalog JSON for UI
+            convert_time_to_promql_duration,  # Time conversion helper
         )
         from .tools.tempo_tools import (
             query_tempo_tool,
@@ -106,6 +107,7 @@ class ObservabilityMCPServer:
         self.mcp.tool()(get_metrics_categories)           # Get metric categories (NEW)
         self.mcp.tool()(search_metrics_by_category)       # Search by category (NEW)
         self.mcp.tool()(get_category_metrics_detail)      # Get category catalog JSON for UI
+        self.mcp.tool()(convert_time_to_promql_duration)  # Time conversion helper
 
         # Register Tempo query tools
         self.mcp.tool()(query_tempo_tool)

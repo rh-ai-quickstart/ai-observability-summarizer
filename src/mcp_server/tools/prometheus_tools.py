@@ -78,6 +78,56 @@ def get_label_values(
         return make_mcp_text_response(f"Error getting label values: {str(e)}", is_error=True)
 
 
+def convert_time_to_promql_duration(
+    hours: float
+) -> List[Dict[str, Any]]:
+    """Convert decimal hours to Prometheus duration format.
+
+    When users specify time in decimal hours (e.g., "2.3 hours"), this converts
+    it to the correct Prometheus duration syntax for use in queries.
+
+    Args:
+        hours: Decimal hours (e.g., 2.3, 1.5, 0.5)
+
+    Returns:
+        JSON with prometheus_duration string
+
+    Examples:
+        2.3 hours → "2h18m" (not "2h30m")
+        1.5 hours → "1h30m"
+        0.5 hours → "30m"
+        5.0 hours → "5h"
+    """
+    try:
+        if hours <= 0:
+            return make_mcp_text_response("hours must be positive", is_error=True)
+
+        # Convert to total minutes and split into hours/minutes
+        total_minutes = int(hours * 60)
+        h = total_minutes // 60
+        m = total_minutes % 60
+
+        # Format as Prometheus duration
+        if h > 0 and m > 0:
+            duration = f"{h}h{m}m"
+        elif h > 0:
+            duration = f"{h}h"
+        else:
+            duration = f"{m}m"
+
+        result = {
+            "input_hours": hours,
+            "prometheus_duration": duration,
+            "explanation": f"{hours} hours = {h} hours and {m} minutes = {duration}"
+        }
+
+        return make_mcp_text_response(json.dumps(result, indent=2))
+
+    except Exception as e:
+        logger.error(f"Error converting time: {e}")
+        return make_mcp_text_response(f"Error: {str(e)}", is_error=True)
+
+
 def execute_promql(
     query: str,
     time_range: Optional[str] = None,
