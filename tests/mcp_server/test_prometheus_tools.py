@@ -24,6 +24,7 @@ class TestPrometheusToolsBasic:
             find_best_metric_with_metadata_v2,
             find_best_metric_with_metadata,
             get_category_metrics_detail,
+            convert_time_to_promql_duration,
         )
 
         # All tools should be callable
@@ -33,6 +34,7 @@ class TestPrometheusToolsBasic:
             select_best_metric, find_best_metric_with_metadata_v2,
             find_best_metric_with_metadata,
             get_category_metrics_detail,
+            convert_time_to_promql_duration,
         ]
 
         for tool in tools:
@@ -86,14 +88,89 @@ class TestPrometheusToolsBasic:
     def test_metric_ranking_basic(self):
         """Test metric ranking functionality."""
         from core.chat_with_prometheus import rank_metrics_by_relevance
-        
+
         test_metrics = ["cpu_usage", "DCGM_FI_DEV_GPU_TEMP", "memory_total", "gpu_util"]
         ranked = rank_metrics_by_relevance("gpu temperature", test_metrics)
-        
+
         assert isinstance(ranked, list)
         assert len(ranked) > 0
         # GPU metrics should be ranked higher
         assert any("gpu" in metric.lower() or "dcgm" in metric.lower() for metric in ranked[:2])
+
+    def test_time_conversion_decimal_hours(self):
+        """Test decimal hour conversion to Prometheus format."""
+        from mcp_server.tools.prometheus_tools import convert_time_to_promql_duration
+
+        # Test 2.3 hours → 2h18m (not 2h30m)
+        result = convert_time_to_promql_duration(2.3)
+        assert isinstance(result, list)
+        assert len(result) > 0
+        text = result[0]["text"]
+        assert "2h18m" in text, "2.3 hours should convert to 2h18m"
+
+        # Verify the math explanation is present
+        data = json.loads(text)
+        assert data["input_hours"] == 2.3
+        assert data["prometheus_duration"] == "2h18m"
+
+    def test_time_conversion_half_hour(self):
+        """Test 1.5 hours → 1h30m."""
+        from mcp_server.tools.prometheus_tools import convert_time_to_promql_duration
+
+        result = convert_time_to_promql_duration(1.5)
+        text = result[0]["text"]
+        data = json.loads(text)
+        assert data["prometheus_duration"] == "1h30m"
+
+    def test_time_conversion_minutes_only(self):
+        """Test 0.5 hours → 30m."""
+        from mcp_server.tools.prometheus_tools import convert_time_to_promql_duration
+
+        result = convert_time_to_promql_duration(0.5)
+        text = result[0]["text"]
+        data = json.loads(text)
+        assert data["prometheus_duration"] == "30m"
+
+    def test_time_conversion_whole_hours(self):
+        """Test whole hours like 5.0 → 5h."""
+        from mcp_server.tools.prometheus_tools import convert_time_to_promql_duration
+
+        result = convert_time_to_promql_duration(5.0)
+        text = result[0]["text"]
+        data = json.loads(text)
+        assert data["prometheus_duration"] == "5h"
+
+    def test_time_conversion_small_values(self):
+        """Test very small time values."""
+        from mcp_server.tools.prometheus_tools import convert_time_to_promql_duration
+
+        # 0.1 hours = 6 minutes
+        result = convert_time_to_promql_duration(0.1)
+        text = result[0]["text"]
+        data = json.loads(text)
+        assert data["prometheus_duration"] == "6m"
+
+        # 0.016667 hours ≈ 1 minute
+        result = convert_time_to_promql_duration(0.016667)
+        text = result[0]["text"]
+        data = json.loads(text)
+        assert data["prometheus_duration"] == "1m"
+
+    def test_time_conversion_large_values(self):
+        """Test large time values."""
+        from mcp_server.tools.prometheus_tools import convert_time_to_promql_duration
+
+        # 24 hours
+        result = convert_time_to_promql_duration(24.0)
+        text = result[0]["text"]
+        data = json.loads(text)
+        assert data["prometheus_duration"] == "24h"
+
+        # 48.5 hours = 48h30m
+        result = convert_time_to_promql_duration(48.5)
+        text = result[0]["text"]
+        data = json.loads(text)
+        assert data["prometheus_duration"] == "48h30m"
 
 
 class TestPrometheusToolsMCP:
@@ -129,12 +206,68 @@ class TestPrometheusToolsMCP:
     def test_error_handling(self):
         """Test error handling in MCP tools."""
         from mcp_server.tools.prometheus_tools import get_label_values
-        
+
         # Test with missing parameters
         result = get_label_values("", "")
         assert isinstance(result, list)
         assert len(result) > 0
         assert "required" in result[0]["text"].lower()
+
+    def test_time_conversion_mcp_response_format(self):
+        """Test that convert_time_to_promql_duration returns proper MCP format."""
+        from mcp_server.tools.prometheus_tools import convert_time_to_promql_duration
+
+        result = convert_time_to_promql_duration(2.3)
+
+        # Should return MCP format: List[Dict[str, Any]] with type and text
+        assert isinstance(result, list), "Should return list"
+        assert len(result) > 0, "Should have at least one response item"
+        assert "type" in result[0], "Should have type field"
+        assert "text" in result[0], "Should have text field"
+        assert result[0]["type"] == "text", "Type should be text"
+
+        # Text should contain valid JSON
+        text = result[0]["text"]
+        data = json.loads(text)  # Should not raise exception
+        assert "input_hours" in data
+        assert "prometheus_duration" in data
+        assert "explanation" in data
+
+    def test_time_conversion_edge_cases(self):
+        """Test edge cases for time conversion."""
+        from mcp_server.tools.prometheus_tools import convert_time_to_promql_duration
+
+        # Zero should return error
+        result = convert_time_to_promql_duration(0)
+        assert isinstance(result, list)
+        assert "positive" in result[0]["text"].lower()
+
+        # Negative should return error
+        result = convert_time_to_promql_duration(-1.5)
+        assert isinstance(result, list)
+        assert "positive" in result[0]["text"].lower()
+
+    def test_time_conversion_precision(self):
+        """Test precision handling in time conversion."""
+        from mcp_server.tools.prometheus_tools import convert_time_to_promql_duration
+
+        # Test that fractional minutes are handled correctly
+        # 2.3 hours = 138 minutes = 2h18m
+        result = convert_time_to_promql_duration(2.3)
+        text = result[0]["text"]
+        data = json.loads(text)
+
+        # Verify the calculation
+        total_minutes = int(2.3 * 60)  # 138 minutes
+        expected_hours = total_minutes // 60  # 2
+        expected_minutes = total_minutes % 60  # 18
+
+        assert expected_hours == 2
+        assert expected_minutes == 18
+        assert data["prometheus_duration"] == "2h18m"
+
+        # Verify explanation includes the breakdown
+        assert "2 hours and 18 minutes" in data["explanation"]
 
 
 class TestArchitectureSeparation:
