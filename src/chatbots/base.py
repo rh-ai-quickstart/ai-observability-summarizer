@@ -72,9 +72,7 @@ class BaseChatBot(ABC):
             model_name: Model identifier (e.g., "gpt-4", "claude-3-5-sonnet")
             api_key: Optional API key for the model
             tool_executor: Tool executor for calling observability tools (REQUIRED)
-                          Pass a ToolExecutor implementation:
-                          - MCPServerAdapter (from MCP server context)
-                          - MCPClientAdapter (from UI context)
+                          Pass MCPServerAdapter instance from the MCP server context.
 
         Raises:
             ValueError: If tool_executor is None
@@ -82,8 +80,8 @@ class BaseChatBot(ABC):
         """
         if tool_executor is None:
             raise ValueError(
-                "tool_executor is required. Pass a ToolExecutor implementation "
-                "(MCPServerAdapter from MCP server or MCPClientAdapter from UI)"
+                "tool_executor is required. Pass a MCPServerAdapter instance "
+                "from the MCP server context"
             )
 
         if not isinstance(tool_executor, ToolExecutor):

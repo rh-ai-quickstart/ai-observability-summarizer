@@ -104,6 +104,7 @@ After the workflow completes:
    - `aiobs-react-ui:<version>`
    - `aiobs-metrics-alerting:<version>`
    - `aiobs-mcp-server:<version>`
+   - `aiobs-console-plugin:<version>`
 3. If target branch was `dev`, check for the PR from `dev` to `main`:
    - Go to the **Pull requests** tab in GitHub
    - Look for a PR titled "Release Preparation <version>" (e.g., "Release Preparation 1.1.0")
@@ -181,6 +182,8 @@ Actions → Prepare Release → Run workflow
     • aiobs-metrics-alerting:latest
     • aiobs-mcp-server:1.1.0
     • aiobs-mcp-server:latest
+    • aiobs-console-plugin:1.1.0
+    • aiobs-console-plugin:latest
   → Creates PR from dev to main
   → Outputs: Expected version 1.1.0
 ```
@@ -194,6 +197,8 @@ Verify images in Quay.io (both tags should exist):
   ✓ quay.io/ecosystem-appeng/aiobs-metrics-alerting:latest
   ✓ quay.io/ecosystem-appeng/aiobs-mcp-server:1.1.0
   ✓ quay.io/ecosystem-appeng/aiobs-mcp-server:latest
+  ✓ quay.io/ecosystem-appeng/aiobs-console-plugin:1.1.0
+  ✓ quay.io/ecosystem-appeng/aiobs-console-plugin:latest
 
 Review PR from dev to main (created by prepare-release workflow)
 ```
@@ -223,6 +228,7 @@ Actions → Create Release → Run workflow
     • aiobs-react-ui:v1.1.0
     • aiobs-metrics-alerting:v1.1.0
     • aiobs-mcp-server:v1.1.0
+    • aiobs-console-plugin:v1.1.0
   → Updates latest tag to point to v1.1.0
   → Creates GitHub release v1.1.0
 ```

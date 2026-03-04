@@ -1,12 +1,11 @@
 """
 Tool Executor Interface - Abstract interface for chatbots to execute tools.
 
-This interface allows chatbots to execute tools without depending on
-whether they're running in the MCP server process or in a client process.
+This interface decouples chatbots from the MCP server infrastructure,
+allowing them to execute tools through dependency injection.
 
-Implementations:
+Implementation:
 - MCPServerAdapter (mcp_server/mcp_tools_adapter.py) - Direct tool calls in server process
-- MCPClientAdapter (ui/mcp_client_adapter.py) - MCP protocol calls via FastMCP client from UI
 """
 
 from abc import ABC, abstractmethod

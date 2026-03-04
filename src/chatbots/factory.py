@@ -40,17 +40,13 @@ def create_chatbot(
         ValueError: If tool_executor is None
 
     Examples:
-        # Example 1: Using MCPServerAdapter (in MCP server process)
+        # Example 1: External model with MCPServerAdapter
         >>> from mcp_server.mcp_tools_adapter import MCPServerAdapter
         >>> tool_executor = MCPServerAdapter(mcp_server)
         >>> chatbot = create_chatbot("gpt-4o-mini", api_key="sk-...", tool_executor=tool_executor)
         >>> response = chatbot.chat("What's the CPU usage?")
 
-        # Example 2: Using MCPClientAdapter (in UI process)
-        >>> from ui.mcp_client_helper import MCPClientHelper
-        >>> from ui.mcp_client_adapter import MCPClientAdapter
-        >>> mcp_client = MCPClientHelper()
-        >>> tool_executor = MCPClientAdapter(mcp_client)
+        # Example 2: Anthropic model with MCPServerAdapter
         >>> chatbot = create_chatbot("anthropic/claude-haiku-4-5-20251001", api_key="sk-...", tool_executor=tool_executor)
         >>> response = chatbot.chat("Check memory usage")
 
@@ -101,8 +97,8 @@ def create_chatbot(
     """
     if tool_executor is None:
         raise ValueError(
-            "tool_executor is required. Pass a ToolExecutor implementation "
-            "(MCPServerAdapter from MCP server or MCPClientAdapter from UI)"
+            "tool_executor is required. Pass a MCPServerAdapter instance "
+            "from the MCP server context"
         )
 
     # Detect provider from model name pattern using dict mapping

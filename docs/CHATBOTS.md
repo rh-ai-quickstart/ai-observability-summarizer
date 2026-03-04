@@ -25,138 +25,22 @@ This document focuses on **architecture** and **design decisions**.
 
 ## Architecture
 
-The chatbots system uses a **ToolExecutor interface** with **Adapter pattern** implementations to decouple chatbot
-implementations from the execution context. This allows chatbots to work seamlessly whether they are running in the
-_UI process_ or the _MCP server process_.
+The chatbots system uses a **ToolExecutor interface** with **Adapter pattern** to decouple chatbot implementations from the MCP server infrastructure. Chatbots run in the _MCP server process_ and use `MCPServerAdapter` for direct tool execution.
 
 - **ToolExecutor**: Abstract interface that defines how tools are executed (_dependency inversion principle_)
-- **Adapter Pattern**: Implementation approach where `MCPServerAdapter` and `MCPClientAdapter` adapt different contexts to the `ToolExecutor` interface
+- **Adapter Pattern**: `MCPServerAdapter` adapts the MCP server instance to the `ToolExecutor` interface for direct tool execution
 
 ### Key Components
 
 - `BaseChatBot` implementations (provider-specific)
 - `ToolExecutor` interface
-- Adapters for UI (`MCPClientAdapter`) and MCP server (`MCPServerAdapter`)
+- `MCPServerAdapter` - adapts MCP server instance for direct tool execution
 
 ## Usage Patterns
 
-### 1. Usage from UI
+### Usage via `chat` MCP Tool
 
-The UI creates chatbots directly and uses them to answer user questions about observability data.
-
-#### Sequence Diagram
-
-![Chatbot UI Flow](images/chatbot-ui-flow.png)
-
-<details>
-<summary>View Mermaid source code</summary>
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant UI
-    participant Chatbot
-    participant MCPClientAdapter
-    participant MCPClientHelper
-    participant MCPServer
-
-    User->>UI: Ask question about metrics
-    UI->>UI: Create MCPClientHelper
-    UI->>UI: Create MCPClientAdapter(MCPClientHelper)
-    UI->>Chatbot: create_chatbot(model, api_key, MCPClientAdapter)
-    User->>UI: Submit question
-    UI->>Chatbot: chatbot.chat(question)
-
-    loop Tool Execution Loop
-        Chatbot->>Chatbot: Decide to use tool
-        Chatbot->>MCPClientAdapter: call_tool(tool_name, args)
-        MCPClientAdapter->>MCPClientHelper: call_tool_sync(tool_name, args)
-        MCPClientHelper->>MCPServer: HTTP POST /mcp (JSON-RPC)
-        MCPServer->>MCPServer: Execute tool
-        MCPServer-->>MCPClientHelper: Tool result
-        MCPClientHelper-->>MCPClientAdapter: Result
-        MCPClientAdapter-->>Chatbot: Tool result string
-        Chatbot->>Chatbot: Process result, continue conversation
-    end
-
-    Chatbot-->>UI: Final response
-    UI-->>User: Display response
-```
-
-</details>
-
-
-<details>
-<summary>ASCII Sequence Diagram</summary>
-
-```
-User → UI: Ask question about metrics
-UI → UI: Create MCPClientHelper
-UI → UI: Create MCPClientAdapter(MCPClientHelper)
-UI → Chatbot: create_chatbot(model, api_key, MCPClientAdapter)
-User → UI: Submit question
-UI → Chatbot: chatbot.chat(question)
-
-[Tool Execution Loop - repeats as needed]
-  Chatbot → Chatbot: Decide to use tool
-  Chatbot → MCPClientAdapter: call_tool(tool_name, args)
-  MCPClientAdapter → MCPClientHelper: call_tool_sync(tool_name, args)
-  MCPClientHelper → MCPServer: HTTP POST /mcp (JSON-RPC)
-  MCPServer → MCPServer: Execute tool
-  MCPServer ⤶ MCPClientHelper: Tool result
-  MCPClientHelper ⤶ MCPClientAdapter: Result
-  MCPClientAdapter ⤶ Chatbot: Tool result string
-  Chatbot → Chatbot: Process result, continue conversation
-
-Chatbot ⤶ UI: Final response
-UI ⤶ User: Display response
-```
-
-</details>
-
-
-#### Code Example
-
-<details>
-<summary>Click to expand or collapse</summary>
-
-```python
-# In UI (ui/ui.py)
-from chatbots import create_chatbot
-from ui.mcp_client_helper import MCPClientHelper
-from ui.mcp_client_adapter import MCPClientAdapter
-
-# Initialize MCP client and adapter
-mcp_client = MCPClientHelper()
-tool_executor = MCPClientAdapter(mcp_client)
-
-# Create chatbot with user's API key
-chatbot = create_chatbot(
-    model_name="anthropic/claude-haiku-4-5-20251001",
-    api_key=user_api_key,
-    tool_executor=tool_executor  # REQUIRED parameter
-)
-
-# Use chatbot to answer questions
-response = chatbot.chat(
-    user_question="What's the CPU usage?",
-    namespace=None,  # Cluster-wide
-    progress_callback=update_progress
-)
-```
-
-</details>
-
-#### Key Points
-
-- **Location**: Chatbots run in the UI process (Console Plugin or React UI)
-- **Tool Execution**: Tools are executed via MCP protocol (HTTP/JSON-RPC)
-- **Adapter**: `MCPClientAdapter` wraps `MCPClientHelper` to provide `ToolExecutor` interface
-- **Benefits**: UI can use chatbots without importing MCP server code
-
-### 2. Usage from `chat` MCP Tool
-
-The `chat` MCP tool allows external clients to use chatbots through the MCP protocol. This is useful for CLI tools, other services, or any MCP-compatible client.
+All clients (including the OpenShift Console Plugin, CLI tools, and other services) use chatbots through the `chat` MCP tool. Chatbots run in the MCP server process and execute tools directly via `MCPServerAdapter`.
 
 #### Sequence Diagram
 
@@ -221,9 +105,7 @@ The refactored design introduces a **ToolExecutor interface** with **Adapter pat
 
 **Location**: Chatbots now live in standalone `src/chatbots/` package
 
-**Import Chain** (UI): Chatbots package → ToolExecutor → MCPClientAdapter.
-
-**Import Chain** (MCP Server): Chatbots package → ToolExecutor → MCPServerAdapter.
+**Import Chain**: Chatbots package → ToolExecutor → MCPServerAdapter
 
 **Current code structure:**
 ```python
@@ -249,40 +131,14 @@ class BaseChatBot(ABC):
         self.tool_executor = tool_executor
 ```
 
-**UI usage (refactored architecture):**
-```python
-# src/ui/ui.py (refactored architecture)
-# UI imports from standalone chatbots package
-from chatbots import create_chatbot
-from ui.mcp_client_adapter import MCPClientAdapter
-from ui.mcp_client_helper import MCPClientHelper
-
-# Create adapter for MCP client (dependency injection)
-mcp_client = MCPClientHelper()
-tool_executor = MCPClientAdapter(mcp_client)
-
-# Create chatbot with injected tool executor
-chatbot = create_chatbot(
-    model_name=model_name,
-    api_key=api_key,
-    tool_executor=tool_executor
-)
-response = chatbot.chat(question)
-```
-
 **Improvements in this approach:**
 
 - Chatbots in standalone package, decoupled from server implementation
 - Dependency injection enables flexible tool execution
-- Clean separation between UI and server concerns
-- Chatbots work in multiple contexts (UI, MCP server, tests)
-- Easy to test with mock implementations
+- Clean separation between chatbot logic and server infrastructure
+- Chatbots work in the MCP server context and can be tested with mock implementations
 - Eliminates circular dependencies
 - Follows SOLID principles (Dependency Inversion)
-
-#### Architecture Diagram (Refactored)
-
-![Circular Dependency - After](images/circular-dependency-after.png)
 
 ### Key Changes
 
@@ -292,11 +148,10 @@ response = chatbot.chat(question)
    - Chatbots depend on interface, not concrete implementations
    - Defines contract: `call_tool()`, `list_tools()`, `get_tool()`
 
-2. **Created Adapter Implementations** (Adapter Pattern)
+2. **Created Adapter Implementation** (Adapter Pattern)
 
-   - `MCPClientAdapter` (in `ui/mcp_client_adapter.py`) - adapts `MCPClientHelper` to `ToolExecutor` interface for UI context
-   - `MCPServerAdapter` (in `mcp_server/mcp_tools_adapter.py`) - adapts `ObservabilityMCPServer` to `ToolExecutor` interface for MCP server context
-   - Both implement the `ToolExecutor` interface but use different underlying mechanisms
+   - `MCPServerAdapter` (in `mcp_server/mcp_tools_adapter.py`) - adapts `ObservabilityMCPServer` to `ToolExecutor` interface
+   - Implements the `ToolExecutor` interface for direct tool execution within the server
 
 3. **Dependency Injection**
 
