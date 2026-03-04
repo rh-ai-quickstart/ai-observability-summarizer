@@ -9,41 +9,50 @@ description = "AI Observability Metric Summarizer"
 requires-python = "==3.11.*"
 
 dependencies = [
-    "fastapi>=0.116.1",
-    "pydantic>=2.0.0",
-    "pandas>=2.3.1",
-    "requests>=2.32.4",
-    "scipy>=1.16.0",
-    "numpy>=1.24.0",
-    "markdown>=3.8.2",
-    "dateparser>=1.2.2",
-    "llama-stack-client>=0.2.12",
-    "fire>=0.7.0",
-    "pytest>=8.4.1",
+    "fastapi==0.135.1",
+    "pydantic==2.12.5",
+    "pandas==2.3.1",
+    "requests==2.32.5",
+    "scipy==1.17.1",
+    "numpy==2.4.2",
+    "markdown==3.10.2",
+    "dateparser==1.3.0",
+    "llama-stack-client==0.2.12",
+    "fire==0.7.1",
+    "pytest==9.0.2",
     "fastmcp==3.0.2",
-    "pytest-cov>=6.2.1",
-    "structlog>=25.0.0",
-    "trio>=0.30.0",
-    "mcp[client]>=1.13.0",
-    "anthropic>=0.39.0",
-    "openai>=2.6.0",
-    "google-generativeai>=0.8.5",
-    "itsdangerous>=2.1.0",
+    "pytest-cov==7.0.0",
+    "structlog==25.5.0",
+    "trio==0.33.0",
+    "mcp==1.26.0",
+    "anthropic==0.84.0",
+    "openai==2.24.0",
+    "google-generativeai==0.8.6",
+    "itsdangerous==2.2.0",
 ]
 
 [dependency-groups]
 test = [
-    "pytest>=7.0.0",
-    "pytest-mock>=3.10.0",
-    "httpx>=0.24.0",
-    "pytest-cov>=4.0.0",
+    "pytest==9.0.2",
+    "pytest-mock==3.14.1",
+    "httpx==0.28.1",
+    "pytest-cov==7.0.0",
 ]
 dev = [
+<<<<<<< HEAD
     "black>=23.0.0",
     "ruff>=0.1.0",
     "matplotlib>=3.10.3",
     "uvicorn>=0.35.0",
     "weasyprint>=65.1",
+=======
+    "black==25.1.0",
+    "ruff==0.12.4",
+    "matplotlib==3.10.3",
+    "streamlit==1.47.0",
+    "uvicorn==0.41.0",
+    "weasyprint==65.1",
+>>>>>>> 5cef87aa (chore: lock all dependency versions to prevent version drift)
 ]
 
 [tool.hatch.build.targets.wheel]
