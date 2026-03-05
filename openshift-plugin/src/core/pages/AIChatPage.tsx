@@ -434,7 +434,11 @@ const AIChatPage: React.FC = () => {
               )}
               {chatSettings.metricCategoriesLocation === 'header' && (
                 <FlexItem>
-                  <MetricCategoriesPopover onSelectQuestion={(question) => handleSend(question)} />
+                  <MetricCategoriesPopover
+                    onSelectQuestion={(question) => handleSend(question)}
+                    chatScope={chatScope}
+                    selectedNamespace={selectedNamespace}
+                  />
                 </FlexItem>
               )}
               <FlexItem>
@@ -745,6 +749,8 @@ const AIChatPage: React.FC = () => {
                     setQuestionsExpanded(false);
                   }
                 }}
+                chatScope={chatScope}
+                selectedNamespace={selectedNamespace}
               />
             </div>
           )}

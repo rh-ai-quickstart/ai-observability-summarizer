@@ -19,6 +19,7 @@ import {
   ArrowLeftIcon,
 } from '@patternfly/react-icons';
 import { callMcpTool } from '../services/mcpClient';
+import { ChatScope } from '../data/namespaceDefaults';
 
 export interface CategorySummary {
   id: string;
@@ -27,6 +28,20 @@ export interface CategorySummary {
   icon: string;
   metric_count: number;
 }
+
+/**
+ * Category IDs that are relevant when viewing namespace-scoped metrics.
+ * These categories focus on workload-specific metrics rather than cluster infrastructure.
+ */
+export const NAMESPACE_SCOPED_CATEGORIES = [
+  'gpu_ai',           // GPU and AI/ML workloads (vLLM, KServe, etc.)
+  'pod_container',    // Pod and container metrics
+  'networking',       // Network traffic and service mesh
+  'storage',          // PVC and storage usage
+  'resource_quota',   // Resource quotas and limits (if exists in backend)
+  'http_grpc',        // HTTP/gRPC application metrics
+  'go_runtime',       // Application runtime metrics
+];
 
 export const CATEGORY_QUESTIONS: Record<string, string[]> = {
   cluster_health: [
@@ -149,19 +164,95 @@ export const CATEGORY_QUESTIONS: Record<string, string[]> = {
   ],
 };
 
-export const getQuestionsForCategory = (category: CategorySummary): string[] => {
+/**
+ * Namespace-scoped versions of category questions.
+ * These questions are phrased to focus on the selected namespace.
+ */
+export const NAMESPACE_CATEGORY_QUESTIONS: Record<string, string[]> = {
+  gpu_ai: [
+    "What's the GPU utilization in this namespace?",
+    'Are there any GPU memory issues in my deployments?',
+    'Show me the health of vLLM or AI workloads here',
+    'What are the token generation rates for models in this namespace?',
+    'Check inference latency and throughput for my models',
+  ],
+  pod_container: [
+    'Which pods are consuming the most resources in this namespace?',
+    'Are there any pods in CrashLoopBackOff or error state?',
+    'Show me container restart trends in this namespace',
+    'What are the resource limits vs actual usage for my pods?',
+  ],
+  networking: [
+    'Show me network traffic for services in this namespace',
+    'What is the service mesh latency for my workloads?',
+    'Are there any connection errors or timeouts?',
+    'Show me ingress/egress bandwidth usage',
+  ],
+  storage: [
+    'Are any PVCs running low on space in this namespace?',
+    'Show me storage IOPS and throughput for my volumes',
+    'What is the current PVC utilization?',
+    'Are there any stuck or pending volume claims?',
+  ],
+  http_grpc: [
+    'Show me HTTP/gRPC request rates for services in this namespace',
+    'What are the current request latency percentiles?',
+    'Are there any failing requests or high error rates?',
+    'Show me request throughput trends for my applications',
+  ],
+  go_runtime: [
+    'Show me Go runtime memory usage for applications in this namespace',
+    'Are there any goroutine leaks in my services?',
+    'What is the GC pause time for my Go applications?',
+    'Show me process CPU and memory trends',
+  ],
+};
+
+export const getQuestionsForCategory = (
+  category: CategorySummary,
+  scope: ChatScope = 'cluster_wide',
+  namespace?: string | null
+): string[] => {
+  // For namespace scope, use namespace-specific questions if available
+  if (scope === 'namespace_scoped' && NAMESPACE_CATEGORY_QUESTIONS[category.id]) {
+    const questions = NAMESPACE_CATEGORY_QUESTIONS[category.id];
+
+    // If namespace is provided, contextualize questions with namespace name
+    if (namespace) {
+      return questions.map(q =>
+        q.replace('this namespace', `namespace "${namespace}"`)
+         .replace('in this namespace', `in namespace "${namespace}"`)
+         .replace('my deployments', `deployments in "${namespace}"`)
+         .replace('my workloads', `workloads in "${namespace}"`)
+         .replace('my models', `models in "${namespace}"`)
+         .replace('my pods', `pods in "${namespace}"`)
+         .replace('my services', `services in "${namespace}"`)
+         .replace('my volumes', `volumes in "${namespace}"`)
+         .replace('my applications', `applications in "${namespace}"`)
+      );
+    }
+
+    return questions;
+  }
+
+  // Fall back to cluster-wide questions
   if (CATEGORY_QUESTIONS[category.id]) {
     return CATEGORY_QUESTIONS[category.id];
   }
+
   return [`Show me the key ${category.name} metrics`];
 };
 
 interface MetricCategoriesPopoverProps {
   onSelectQuestion: (question: string) => void;
+  chatScope?: ChatScope;
+  selectedNamespace?: string | null;
 }
 
 export const MetricCategoriesPopover: React.FC<MetricCategoriesPopoverProps> = ({
   onSelectQuestion,
+  chatScope = 'cluster_wide',
+  selectedNamespace = null,
 }) => {
   const [key, setKey] = React.useState(0);
   const [categories, setCategories] = React.useState<CategorySummary[]>([]);
@@ -174,6 +265,14 @@ export const MetricCategoriesPopover: React.FC<MetricCategoriesPopoverProps> = (
     if (loadedRef.current) return;
     loadCategories();
   }, []);
+
+  // Reload categories when scope changes
+  React.useEffect(() => {
+    if (loadedRef.current) {
+      loadCategories();
+      setSelectedCategory(null); // Reset category selection when scope changes
+    }
+  }, [chatScope]);
 
   const loadCategories = async () => {
     setLoading(true);
@@ -189,7 +288,14 @@ export const MetricCategoriesPopover: React.FC<MetricCategoriesPopoverProps> = (
       if (parsed.error) {
         setError(parsed.error);
       } else {
-        setCategories(Array.isArray(parsed) ? parsed : []);
+        const allCategories = Array.isArray(parsed) ? parsed : [];
+
+        // Simple static filtering based on scope
+        const filteredCategories = chatScope === 'namespace_scoped'
+          ? allCategories.filter(cat => NAMESPACE_SCOPED_CATEGORIES.includes(cat.id))
+          : allCategories;
+
+        setCategories(filteredCategories);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load categories');
@@ -284,7 +390,7 @@ export const MetricCategoriesPopover: React.FC<MetricCategoriesPopoverProps> = (
 
   const renderQuestionList = () => {
     if (!selectedCategory) return null;
-    const questions = getQuestionsForCategory(selectedCategory);
+    const questions = getQuestionsForCategory(selectedCategory, chatScope, selectedNamespace);
 
     return (
       <div>
