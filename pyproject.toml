@@ -39,20 +39,11 @@ test = [
     "pytest-cov==7.0.0",
 ]
 dev = [
-<<<<<<< HEAD
-    "black>=23.0.0",
-    "ruff>=0.1.0",
-    "matplotlib>=3.10.3",
-    "uvicorn>=0.35.0",
-    "weasyprint>=65.1",
-=======
     "black==25.1.0",
     "ruff==0.12.4",
     "matplotlib==3.10.3",
-    "streamlit==1.47.0",
     "uvicorn==0.41.0",
     "weasyprint==65.1",
->>>>>>> 5cef87aa (chore: lock all dependency versions to prevent version drift)
 ]
 
 [tool.hatch.build.targets.wheel]
