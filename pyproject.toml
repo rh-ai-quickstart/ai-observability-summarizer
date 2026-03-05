@@ -24,7 +24,7 @@ dependencies = [
     "pytest-cov==7.0.0",
     "structlog==25.5.0",
     "trio==0.33.0",
-    "mcp==1.26.0",
+    "mcp[client]==1.26.0",
     "anthropic==0.84.0",
     "openai==2.24.0",
     "google-generativeai==0.8.6",
