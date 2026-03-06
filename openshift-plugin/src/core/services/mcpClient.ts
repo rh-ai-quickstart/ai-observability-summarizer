@@ -5,7 +5,7 @@
  * Uses stateless HTTP mode - no session management needed
  */
 
-import { getDevCredentials } from './devCredentials';
+import { getDevCredentials, getDevModels } from './devCredentials';
 import { fetchRuntimeConfig, isDevMode as checkDevMode } from './runtimeConfig';
 import config from '../../shared/config';
 
@@ -60,6 +60,7 @@ export function detectProviderFromModelId(modelId: string): string | null {
     anthropic: /^(anthropic\/|claude-)/,
     google: /^(google\/|gemini-)/,
     meta: /^(meta\/|llama-)/,
+    maas: /^maas\//,
   };
 
   for (const [provider, pattern] of Object.entries(patterns)) {
@@ -94,23 +95,35 @@ async function injectDevCredentials(toolName: string, args: Record<string, unkno
   }
 
   const devCreds = getDevCredentials();
+  const devModels = getDevModels();
 
   // Try to detect provider from various parameters
   let provider: string | null = null;
+  let modelId: string | null = null;
 
   // Check explicit provider parameter first
   if (typeof args.provider === 'string') {
     provider = args.provider.toLowerCase();
   }
   // Try to detect from model_id parameters
-  else {
-    const modelId = (args.summarize_model_id as string) || (args.model_name as string);
-    if (modelId) {
-      provider = detectProviderFromModelId(modelId);
+  modelId = (args.summarize_model_id as string) || (args.model_name as string) || null;
+  if (modelId && !provider) {
+    provider = detectProviderFromModelId(modelId);
+  }
+
+  // Special handling for MAAS: Look up API key from dev model storage
+  if (modelId) {
+    const devModel = devModels[modelId];
+    if (devModel && devModel.provider === 'maas' && devModel.apiKey) {
+      console.log(`[DevMode] Auto-injecting MAAS API key for model ${modelId}`);
+      return {
+        ...args,
+        api_key: devModel.apiKey,
+      };
     }
   }
 
-  // Inject the key if provider detected and key available
+  // Inject the key if provider detected and key available (for non-MAAS providers)
   if (provider && devCreds[provider]?.apiKey) {
     console.log(`[DevMode] Auto-injecting API key for ${provider}`);
     return {
