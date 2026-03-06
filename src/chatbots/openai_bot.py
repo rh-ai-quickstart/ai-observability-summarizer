@@ -100,16 +100,23 @@ You MUST call `search_metrics` or `search_metrics_by_category` BEFORE calling
 (e.g., `vllm:gpu_cache_usage_perc` not `vllm:kv_cache_usage_percentage`,
 `DCGM_FI_DEV_GPU_TEMP` not `DCGM_FI_DEV_TEMP`).
 
+**CRITICAL — ALWAYS Execute Queries, NEVER Just Show Them:**
+When you construct a PromQL query, you MUST immediately call `execute_promql` to run it
+and get the actual data. NEVER show the query to the user without executing it first.
+
 Correct flow:
 1. `search_metrics("GPU temperature")` → discover `DCGM_FI_DEV_GPU_TEMP`
-2. `execute_promql("avg(DCGM_FI_DEV_GPU_TEMP) by (pod)")` → get data
+2. `execute_promql("avg(DCGM_FI_DEV_GPU_TEMP) by (pod)")` → get actual data
+3. Present the results to the user
 
-Wrong flow:
-1. `execute_promql("avg(DCGM_FI_DEV_TEMP)")` → no data (wrong name)
+Wrong flow (DO NOT DO THIS):
+1. `search_metrics("GPU temperature")` → discover `DCGM_FI_DEV_GPU_TEMP`
+2. Tell the user "Here's the PromQL query: avg(DCGM_FI_DEV_GPU_TEMP) by (pod)" ❌ WRONG - you must EXECUTE it!
 
 **Best Practices:**
 - Provide detailed breakdowns by pod and namespace
-- Balance comprehensiveness with conciseness"""
+- Balance comprehensiveness with conciseness
+- Always execute your queries to provide real data"""
 
     def _convert_tools_to_openai_format(self) -> List[Dict[str, Any]]:
         """Convert MCP tools to OpenAI function calling format."""
