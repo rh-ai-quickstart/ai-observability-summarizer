@@ -7,6 +7,7 @@ import {
   TextVariants,
   Alert,
   AlertVariant,
+  Button,
 } from '@patternfly/react-core';
 import {
   KeyIcon,
@@ -14,18 +15,20 @@ import {
 
 import { AIModelState } from '../types/models';
 import { ProviderInlineItem } from '../components/ProviderInlineItem';
-import { getExternalProviders } from '../services/providerTemplates';
+import { getExternalProviders, PROVIDER_TEMPLATES } from '../services/providerTemplates';
 import { DevModeBanner } from '../components/DevModeBanner';
 import { isDevMode } from '../../../services/devCredentials';
 
 interface APIKeysTabProps {
   state: AIModelState;
   onProviderUpdate: () => void;
+  onGoToAddModel: () => void;
 }
 
 export const APIKeysTab: React.FC<APIKeysTabProps> = ({
   state,
   onProviderUpdate,
+  onGoToAddModel,
 }) => {
   const externalProviders = getExternalProviders();
 
@@ -56,7 +59,7 @@ export const APIKeysTab: React.FC<APIKeysTabProps> = ({
       </Flex>
 
       {/* MAAS Info Alert */}
-      {externalProviders.some(p => p.provider === 'maas') && (
+      {PROVIDER_TEMPLATES.maas && (
         <Alert
           variant={AlertVariant.info}
           title="Red Hat MAAS uses per-model API keys"
@@ -65,11 +68,11 @@ export const APIKeysTab: React.FC<APIKeysTabProps> = ({
         >
           <p>
             Unlike other providers, each MAAS model requires its own API key.
-            Configure API keys when adding individual models in the <strong>Add Model</strong> tab.
-          </p>
-          <p style={{ marginTop: '8px' }}>
-            You can view configured MAAS model credentials in the Kubernetes secret:{' '}
-            <code>ai-maas-credentials</code>
+            Configure API keys when adding individual models in the{' '}
+            <Button variant="link" isInline onClick={onGoToAddModel}>
+              Add Model
+            </Button>{' '}
+            tab.
           </p>
         </Alert>
       )}

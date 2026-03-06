@@ -253,6 +253,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
           <APIKeysTab
             state={state}
             onProviderUpdate={handleProviderUpdate}
+            onGoToAddModel={() => setState(prev => ({ ...prev, activeTab: 'addmodel' }))}
           />
         );
       case 'addmodel':
@@ -261,6 +262,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
             state={state}
             onModelAdd={handleModelAdd}
             onSuccess={() => setState(prev => ({ ...prev, activeTab: 'models' }))}
+            onGoToApiKeys={() => setState(prev => ({ ...prev, activeTab: 'apikeys' }))}
           />
         );
       case 'chatsettings':

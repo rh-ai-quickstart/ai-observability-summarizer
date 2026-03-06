@@ -107,7 +107,7 @@ export const getAllProviders = (): ProviderTemplate[] => {
 };
 
 export const getExternalProviders = (): ProviderTemplate[] => {
-  return Object.values(PROVIDER_TEMPLATES).filter(p => p.requiresApiKey && p.provider !== 'other');
+  return Object.values(PROVIDER_TEMPLATES).filter(p => p.requiresApiKey && p.provider !== 'other' && p.provider !== 'maas');
 };
 
 export const formatModelName = (provider: Provider, modelId: string): string => {
