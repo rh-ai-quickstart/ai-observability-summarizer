@@ -558,6 +558,7 @@ def analyze_vllm(
     start_datetime: Optional[str] = None,
     end_datetime: Optional[str] = None,
     api_key: Optional[str] = None,
+    api_url: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """Analyze vLLM metrics and generate AI summary.
 
@@ -682,6 +683,7 @@ def analyze_vllm(
             summarize_model_id,
             ResponseType.VLLM_ANALYSIS,
             resolved_api_key,
+            api_url,
         )
         time_llm_summarization = time.perf_counter() - t_start
         logger.debug(
@@ -922,6 +924,7 @@ def chat_vllm(
     question: str,
     summarize_model_id: str,
     api_key: Optional[str] = None,
+    api_url: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """
     Chat about vLLM metrics - ask follow-up questions about analyzed data.
@@ -976,6 +979,7 @@ def chat_vllm(
             summarize_model_id,
             ResponseType.GENERAL_CHAT,
             resolved_api_key,
+            api_url,
             max_tokens=1500
         )
         

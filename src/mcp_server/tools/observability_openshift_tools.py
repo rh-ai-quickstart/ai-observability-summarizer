@@ -449,6 +449,7 @@ def chat_openshift(
     end_datetime: Optional[str] = None,
     summarize_model_id: Optional[str] = None,
     api_key: Optional[str] = None,
+    api_url: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """Chat about OpenShift metrics for a specific category/scope with structured error handling.
 
@@ -521,6 +522,7 @@ def chat_openshift(
             end_ts=end_ts_resolved,
             summarize_model_id=summarize_model_id or "",
             api_key=resolved_api_key,
+            api_url=api_url,
         )
         payload = {
             "metric_category": metric_category,

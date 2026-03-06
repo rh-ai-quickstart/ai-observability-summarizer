@@ -23,6 +23,7 @@ logger = get_python_logger()
 def create_chatbot(
     model_name: str,
     api_key: Optional[str] = None,
+    api_url: Optional[str] = None,
     tool_executor: ToolExecutor = None
 ) -> BaseChatBot:
     """
@@ -31,6 +32,7 @@ def create_chatbot(
     Args:
         model_name: Name of the model to use
         api_key: Optional API key for external models
+        api_url: Optional API URL for custom endpoints (for DEV mode, MAAS)
         tool_executor: Tool executor for calling observability tools (required)
 
     Returns:
@@ -127,19 +129,19 @@ def create_chatbot(
     if is_external:
         if provider == "maas":
             logger.info(f"Creating OpenAIChatBot for MAAS model {model_name}")
-            return OpenAIChatBot(model_name, api_key, tool_executor)
+            return OpenAIChatBot(model_name, api_key, api_url, tool_executor)
         elif provider == "anthropic":
             logger.info(f"Creating AnthropicChatBot for {model_name}")
             return AnthropicChatBot(model_name, api_key, tool_executor)
         elif provider == "openai":
             logger.info(f"Creating OpenAIChatBot for {model_name}")
-            return OpenAIChatBot(model_name, api_key, tool_executor)
+            return OpenAIChatBot(model_name, api_key, api_url, tool_executor)
         elif provider == "google":
             logger.info(f"Creating GoogleChatBot for {model_name}")
             return GoogleChatBot(model_name, api_key, tool_executor)
         else:
             logger.warning(f"Unknown external provider {provider}, using OpenAI as fallback")
-            return OpenAIChatBot(model_name, api_key, tool_executor)
+            return OpenAIChatBot(model_name, api_key, api_url, tool_executor)
     else:
         # Check if RAG (local models) infrastructure is available
         if not RAG_AVAILABLE:

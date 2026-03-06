@@ -372,13 +372,28 @@ class ModelService {
       if (isDevMode()) {
         console.log(`[ModelService] DEV MODE: Saving model ${modelKey} to browser storage`);
 
+        // Normalize endpoint URL to match backend behavior
+        let normalizedEndpoint = formData.endpoint;
+        if (normalizedEndpoint) {
+          // For MAAS, append /chat/completions if not already present
+          if (formData.provider === 'maas' && !normalizedEndpoint.includes('/chat/completions')) {
+            normalizedEndpoint = `${normalizedEndpoint.replace(/\/$/, '')}/chat/completions`;
+          }
+          // For other OpenAI-compatible providers, ensure /chat/completions path
+          else if (['openai', 'meta', 'other'].includes(formData.provider) && !normalizedEndpoint.includes('/chat/completions') && !normalizedEndpoint.includes('/responses')) {
+            normalizedEndpoint = `${normalizedEndpoint.replace(/\/$/, '')}/chat/completions`;
+          }
+          // For Google, keep as-is (uses different format)
+          // For Anthropic, keep as-is (uses different format)
+        }
+
         // Save model configuration to dev storage
         const devModelConfig: DevModelConfig = {
           name: modelKey,
           provider: formData.provider,
           modelId: formData.modelId,
           description: formData.description,
-          endpoint: formData.endpoint,
+          endpoint: normalizedEndpoint,
           apiKey: formData.apiKey, // Store API key in model config for dev mode
           savedAt: new Date().toISOString(),
         };

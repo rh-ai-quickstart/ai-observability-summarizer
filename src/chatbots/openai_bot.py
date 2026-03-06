@@ -49,6 +49,7 @@ class OpenAIChatBot(BaseChatBot):
         self,
         model_name: str,
         api_key: Optional[str] = None,
+        api_url: Optional[str] = None,
         tool_executor: ToolExecutor = None):
         super().__init__(model_name, api_key, tool_executor)
 
@@ -59,10 +60,24 @@ class OpenAIChatBot(BaseChatBot):
             # Only create client if API key is provided
             # This matches the pattern used by other providers
             if self.api_key:
-                # Check if model config specifies custom base_url (for MAAS, custom endpoints)
-                base_url = self._get_base_url_from_config()
+                # Priority: 1) Passed api_url (from DEV mode), 2) Model config (production)
+                base_url = None
+                if api_url:
+                    # Extract base URL by removing /chat/completions suffix if present
+                    for suffix in ["/chat/completions", "/v1/chat/completions"]:
+                        if api_url.endswith(suffix):
+                            base_url = api_url[:-len(suffix)]
+                            break
+                    if not base_url:
+                        base_url = api_url  # Use as-is if no known suffix
+                    logger.info(f"Using passed api_url for {self.model_name}: {base_url}")
+                else:
+                    # Check if model config specifies custom base_url (for MAAS, custom endpoints)
+                    base_url = self._get_base_url_from_config()
+                    if base_url:
+                        logger.info(f"Using custom base_url from config for {self.model_name}: {base_url}")
+
                 if base_url:
-                    logger.info(f"Using custom base_url for {self.model_name}: {base_url}")
                     self.client = OpenAI(api_key=self.api_key, base_url=base_url)
                 else:
                     self.client = OpenAI(api_key=self.api_key)
