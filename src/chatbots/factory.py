@@ -86,6 +86,7 @@ def create_chatbot(
 
     Model Name Patterns:
         External Providers:
+            - MAAS: "maas/" (Red Hat Model as a Service)
             - Anthropic: "anthropic/", "claude"
             - OpenAI: "openai/", "gpt-", "o1-"
             - Google: "google/", "gemini"
@@ -103,6 +104,7 @@ def create_chatbot(
 
     # Detect provider from model name pattern using dict mapping
     PROVIDER_PATTERNS = {
+        "maas": [("maas/", False)],
         "anthropic": [("anthropic/", False), ("claude", False)],
         "openai": [("openai/", False), ("gpt-", True), ("o1-", True)],
         "google": [("google/", False), ("gemini", False)]
@@ -123,7 +125,10 @@ def create_chatbot(
 
     # Route to appropriate implementation based on provider and capabilities
     if is_external:
-        if provider == "anthropic":
+        if provider == "maas":
+            logger.info(f"Creating OpenAIChatBot for MAAS model {model_name}")
+            return OpenAIChatBot(model_name, api_key, tool_executor)
+        elif provider == "anthropic":
             logger.info(f"Creating AnthropicChatBot for {model_name}")
             return AnthropicChatBot(model_name, api_key, tool_executor)
         elif provider == "openai":

@@ -1,4 +1,4 @@
-export type Provider = 'openai' | 'anthropic' | 'google' | 'meta' | 'internal' | 'other';
+export type Provider = 'openai' | 'anthropic' | 'google' | 'meta' | 'maas' | 'internal' | 'other';
 
 export type StorageType = 'secret' | 'cache' | 'none';
 

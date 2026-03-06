@@ -147,8 +147,8 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
 
   const hasSelectableModels = (s: AIModelState): boolean => {
     const internal = s.internalModels.length > 0;
-    const external = s.externalModels.some(m => s.providers[m.provider]?.status === 'configured');
-    const custom = s.customModels.some(m => !m.requiresApiKey || s.providers[m.provider]?.status === 'configured');
+    const external = s.externalModels.some(m => m.provider === 'maas' || s.providers[m.provider]?.status === 'configured');
+    const custom = s.customModels.some(m => !m.requiresApiKey || m.provider === 'maas' || s.providers[m.provider]?.status === 'configured');
     return internal || external || custom;
   };
 
@@ -158,6 +158,8 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
     const m = all.find(mm => mm.name === modelName);
     if (!m) return false;
     if (!m.requiresApiKey) return true;
+    // MAAS models have per-model API keys configured when added
+    if (m.provider === 'maas') return true;
     return s.providers[m.provider]?.status === 'configured';
   };
 

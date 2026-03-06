@@ -5,6 +5,8 @@ import {
   Text,
   TextContent,
   TextVariants,
+  Alert,
+  AlertVariant,
 } from '@patternfly/react-core';
 import {
   KeyIcon,
@@ -53,11 +55,30 @@ export const APIKeysTab: React.FC<APIKeysTabProps> = ({
         </FlexItem>
       </Flex>
 
+      {/* MAAS Info Alert */}
+      {externalProviders.some(p => p.provider === 'maas') && (
+        <Alert
+          variant={AlertVariant.info}
+          title="Red Hat MAAS uses per-model API keys"
+          isInline
+          style={{ marginBottom: '16px' }}
+        >
+          <p>
+            Unlike other providers, each MAAS model requires its own API key.
+            Configure API keys when adding individual models in the <strong>Add Model</strong> tab.
+          </p>
+          <p style={{ marginTop: '8px' }}>
+            You can view configured MAAS model credentials in the Kubernetes secret:{' '}
+            <code>ai-maas-credentials</code>
+          </p>
+        </Alert>
+      )}
+
       {/* Providers - Compact inline sections */}
       <div style={{ display: 'grid', gap: '12px' }}>
         {externalProviders.map((provider) => {
           const status = getProviderStatus(provider.provider);
-          
+
           return (
             <ProviderInlineItem
               key={provider.provider}

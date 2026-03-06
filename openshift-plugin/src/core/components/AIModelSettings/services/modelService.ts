@@ -238,16 +238,22 @@ class ModelService {
     try {
       const { internal, external, custom } = await this.loadAvailableModels();
       const allModels = [...internal, ...external, ...custom];
-      
+
       const model = allModels.find(m => m.name === modelName);
       if (!model) {
         return { ready: false, reason: 'Model not found' };
       }
-      
+
       if (!model.requiresApiKey) {
         return { ready: true };
       }
-      
+
+      // MAAS models use per-model API keys stored when the model is added
+      // If a MAAS model exists in the config, it has its API key configured
+      if (model.provider === 'maas') {
+        return { ready: true };
+      }
+
       // Check if API key is available in OpenShift secret
       const secretStatus = await secretManager.checkProviderSecret(model.provider);
 
@@ -335,14 +341,26 @@ class ModelService {
     try {
       // Always add to ConfigMap via MCP tool (dev and production)
       // The server needs the model config to know how to call the LLM
+      const params: any = {
+        provider: formData.provider,
+        model_id: formData.modelId,
+        model_name: formData.modelId, // Use modelId as name for now
+        description: formData.description,
+      };
+
+      // For MAAS models, include per-model API key and custom endpoint
+      if (formData.provider === 'maas') {
+        if (formData.apiKey) {
+          params.api_key = formData.apiKey;
+        }
+        if (formData.endpoint) {
+          params.api_url = formData.endpoint;
+        }
+      }
+
       const response = await callMcpTool<any>(
         'add_model_to_config',
-        {
-          provider: formData.provider,
-          model_id: formData.modelId,
-          model_name: formData.modelId, // Use modelId as name for now
-          description: formData.description,
-        }
+        params
       );
 
       console.log('Add model response:', response);
@@ -402,6 +420,7 @@ class ModelService {
         anthropic: { provider: 'anthropic', status: 'missing', storage: 'none' },
         google: { provider: 'google', status: 'missing', storage: 'none' },
         meta: { provider: 'meta', status: 'missing', storage: 'none' },
+        maas: { provider: 'maas', status: 'missing', storage: 'none' },
         internal: { provider: 'internal', status: 'configured', storage: 'none' },
         other: { provider: 'other', status: 'missing', storage: 'none' },
       },

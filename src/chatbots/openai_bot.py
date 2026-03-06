@@ -26,6 +26,25 @@ class OpenAIChatBot(BaseChatBot):
         """GPT-4 supports 128K token context - 10K chars is reasonable."""
         return 10000
 
+    def _get_base_url_from_config(self) -> Optional[str]:
+        """Get custom base URL from model config (for MAAS, custom endpoints)."""
+        try:
+            from core.model_config_manager import get_model_config
+            config = get_model_config()
+            model_config = config.get(self.model_name, {})
+            api_url = model_config.get("apiUrl", "")
+
+            if api_url:
+                # Extract base URL by removing /chat/completions suffix
+                for suffix in ["/chat/completions", "/v1/chat/completions"]:
+                    if api_url.endswith(suffix):
+                        return api_url[:-len(suffix)]
+                return api_url  # Return as-is if no known suffix
+            return None
+        except Exception as e:
+            logger.warning(f"Could not get base_url from config: {e}")
+            return None
+
     def __init__(
         self,
         model_name: str,
@@ -40,7 +59,13 @@ class OpenAIChatBot(BaseChatBot):
             # Only create client if API key is provided
             # This matches the pattern used by other providers
             if self.api_key:
-                self.client = OpenAI(api_key=self.api_key)
+                # Check if model config specifies custom base_url (for MAAS, custom endpoints)
+                base_url = self._get_base_url_from_config()
+                if base_url:
+                    logger.info(f"Using custom base_url for {self.model_name}: {base_url}")
+                    self.client = OpenAI(api_key=self.api_key, base_url=base_url)
+                else:
+                    self.client = OpenAI(api_key=self.api_key)
             else:
                 self.client = None
         except ImportError:

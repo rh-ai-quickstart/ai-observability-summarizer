@@ -27,7 +27,10 @@ export const ModelListItem: React.FC<ModelListItemProps> = ({
 }) => {
   const template = getProviderTemplate(model.provider);
 
-  const canSelect = !model.requiresApiKey || providerStatus.status === 'configured';
+  // MAAS models use per-model API keys - if the model exists, it's configured
+  const canSelect = !model.requiresApiKey ||
+                    model.provider === 'maas' ||
+                    providerStatus.status === 'configured';
 
   const ProviderIcon = (() => {
     switch (model.provider) {
@@ -37,6 +40,7 @@ export const ModelListItem: React.FC<ModelListItemProps> = ({
       case 'anthropic':
       case 'google':
       case 'meta':
+      case 'maas':
         return ExternalLinkAltIcon;
       default:
         return CubeIcon;
@@ -45,6 +49,10 @@ export const ModelListItem: React.FC<ModelListItemProps> = ({
 
   const statusLabel = (() => {
     if (!model.requiresApiKey) {
+      return <Label color="green">Ready</Label>;
+    }
+    // MAAS models have per-model API keys configured when added
+    if (model.provider === 'maas') {
       return <Label color="green">Ready</Label>;
     }
     switch (providerStatus.status) {
@@ -61,6 +69,10 @@ export const ModelListItem: React.FC<ModelListItemProps> = ({
 
   const statusIcon = (() => {
     if (!model.requiresApiKey) {
+      return <CheckCircleIcon style={{ color: 'var(--pf-v5-global--success-color--100)' }} />;
+    }
+    // MAAS models have per-model API keys configured when added
+    if (model.provider === 'maas') {
       return <CheckCircleIcon style={{ color: 'var(--pf-v5-global--success-color--100)' }} />;
     }
     switch (providerStatus.status) {

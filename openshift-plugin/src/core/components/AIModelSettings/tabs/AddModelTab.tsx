@@ -20,6 +20,10 @@ import {
   EmptyState,
   EmptyStateIcon,
   EmptyStateBody,
+  TextInput,
+  FormHelperText,
+  HelperText,
+  HelperTextItem,
 } from '@patternfly/react-core';
 import {
   PlusCircleIcon,
@@ -125,6 +129,12 @@ export const AddModelTab: React.FC<AddModelTabProps> = ({
     // Validate form
     if (!formData.modelId.trim()) {
       setError('Model selection is required');
+      return;
+    }
+
+    // MAAS-specific validation
+    if (formData.provider === 'maas' && !formData.apiKey?.trim()) {
+      setError('API key is required for MAAS models');
       return;
     }
 
@@ -262,6 +272,46 @@ export const AddModelTab: React.FC<AddModelTabProps> = ({
               )}
             </FormGroup>
 
+            {/* MAAS-specific fields: per-model API key and endpoint */}
+            {formData.provider === 'maas' && (
+              <>
+                <FormGroup label="Model API Key" isRequired fieldId="maas-api-key" style={{ marginTop: '16px' }}>
+                  <TextInput
+                    id="maas-api-key"
+                    type="password"
+                    value={formData.apiKey || ''}
+                    onChange={(_event, value) => setFormData(prev => ({ ...prev, apiKey: value }))}
+                    placeholder="Enter API key for this specific model"
+                    aria-label="MAAS model API key"
+                  />
+                  <FormHelperText>
+                    <HelperText>
+                      <HelperTextItem>
+                        MAAS models require individual API keys. Each model has unique credentials.
+                      </HelperTextItem>
+                    </HelperText>
+                  </FormHelperText>
+                </FormGroup>
+
+                <FormGroup label="Model Endpoint" fieldId="maas-endpoint" style={{ marginTop: '16px' }}>
+                  <TextInput
+                    id="maas-endpoint"
+                    value={formData.endpoint || ''}
+                    onChange={(_event, value) => setFormData(prev => ({ ...prev, endpoint: value }))}
+                    placeholder={template.defaultEndpoint}
+                    aria-label="MAAS model endpoint"
+                  />
+                  <FormHelperText>
+                    <HelperText>
+                      <HelperTextItem>
+                        Optional: Override default MAAS endpoint for this model
+                      </HelperTextItem>
+                    </HelperText>
+                  </FormHelperText>
+                </FormGroup>
+              </>
+            )}
+
             {/* Action Buttons */}
             <div style={{ marginTop: '32px', paddingTop: '16px', borderTop: '1px solid var(--pf-v5-global--BorderColor--100)' }}>
               <Flex>
@@ -269,7 +319,7 @@ export const AddModelTab: React.FC<AddModelTabProps> = ({
                   <Button
                     variant="primary"
                     onClick={handleSubmit}
-                    isDisabled={saving || !formData.modelId.trim()}
+                    isDisabled={saving || !formData.modelId.trim() || (formData.provider === 'maas' && !formData.apiKey?.trim())}
                     isLoading={saving}
                   >
                     <PlusCircleIcon style={{ marginRight: '8px' }} />
