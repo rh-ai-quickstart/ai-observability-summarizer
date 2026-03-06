@@ -111,15 +111,24 @@ async function injectDevCredentials(toolName: string, args: Record<string, unkno
     provider = detectProviderFromModelId(modelId);
   }
 
-  // Special handling for MAAS: Look up API key from dev model storage
+  // Special handling for MAAS and other external models: Look up from dev model storage
   if (modelId) {
     const devModel = devModels[modelId];
-    if (devModel && devModel.provider === 'maas' && devModel.apiKey) {
-      console.log(`[DevMode] Auto-injecting MAAS API key for model ${modelId}`);
-      return {
-        ...args,
-        api_key: devModel.apiKey,
-      };
+    if (devModel) {
+      console.log(`[DevMode] Auto-injecting config for model ${modelId} from dev storage`);
+      const injectedArgs: Record<string, unknown> = { ...args };
+
+      // Inject API key if available
+      if (devModel.apiKey && !args.api_key) {
+        injectedArgs.api_key = devModel.apiKey;
+      }
+
+      // Inject API URL if available (critical for MAAS and custom endpoints)
+      if (devModel.endpoint && !args.api_url) {
+        injectedArgs.api_url = devModel.endpoint;
+      }
+
+      return injectedArgs;
     }
   }
 

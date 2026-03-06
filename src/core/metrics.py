@@ -1962,6 +1962,7 @@ def analyze_openshift_metrics(
     end_ts: int,
     summarize_model_id: Optional[str],
     api_key: Optional[str],
+    api_url: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Returns a dict matching the API response fields (health_prompt, llm_summary, metrics, etc.).
@@ -2008,7 +2009,7 @@ def analyze_openshift_metrics(
     # Summarize; if LLM service fails, raise HTTPException to be mapped to LLMServiceError by MCP
     try:
         summary = summarize_with_llm(
-            prompt, summarize_model_id or "", ResponseType.OPENSHIFT_ANALYSIS, api_key or ""
+            prompt, summarize_model_id or "", ResponseType.OPENSHIFT_ANALYSIS, api_key or "", api_url
         )
     except requests.exceptions.RequestException:
         # Re-raise so MCP layer can classify as LLM service error
@@ -2042,6 +2043,7 @@ def chat_openshift_metrics(
     end_ts: int,
     summarize_model_id: Optional[str],
     api_key: Optional[str],
+    api_url: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Build a chat-oriented OpenShift analysis:
@@ -2105,7 +2107,7 @@ def chat_openshift_metrics(
     )
 
     llm_response = summarize_with_llm(
-        prompt, summarize_model_id or "", ResponseType.OPENSHIFT_ANALYSIS, api_key or ""
+        prompt, summarize_model_id or "", ResponseType.OPENSHIFT_ANALYSIS, api_key or "", api_url
     )
     # Parse JSON content robustly (handles extra text and fenced code blocks)
     promql = ""
