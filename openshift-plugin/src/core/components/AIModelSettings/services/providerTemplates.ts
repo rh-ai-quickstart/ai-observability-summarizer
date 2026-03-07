@@ -60,7 +60,7 @@ export const PROVIDER_TEMPLATES: Record<Provider, ProviderTemplate> = {
   },
   maas: {
     provider: 'maas',
-    label: 'Red Hat MAAS',
+    label: 'Model as a Service (MaaS)',
     description: 'Model as a Service from Red Hat. Each model requires its own API key and endpoint.',
     defaultEndpoint: 'https://litellm-prod.apps.maas.redhatworkshops.io/v1',
     requiresApiKey: true,
@@ -68,9 +68,6 @@ export const PROVIDER_TEMPLATES: Record<Provider, ProviderTemplate> = {
     color: '#ee0000',
     commonModels: [
       'qwen3-14b',
-      'granite-3.1-8b-instruct',
-      'granite-3.1-3b-instruct',
-      'llama-3.1-8b-instruct',
     ],
     documentationUrl: 'https://docs.redhat.com/maas',
   },

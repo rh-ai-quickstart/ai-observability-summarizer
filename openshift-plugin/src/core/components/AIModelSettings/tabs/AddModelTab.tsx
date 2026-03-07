@@ -321,7 +321,7 @@ export const AddModelTab: React.FC<AddModelTabProps> = ({
                             setFormData(prev => ({ ...prev, modelId: '' }));
                           }
                         }}
-                        placeholder="Enter model ID (e.g., granite-3.1-8b-instruct)"
+                        placeholder="Enter model ID (e.g., qwen3-14b)"
                         aria-label="Custom model ID"
                       />
                       <FormHelperText>

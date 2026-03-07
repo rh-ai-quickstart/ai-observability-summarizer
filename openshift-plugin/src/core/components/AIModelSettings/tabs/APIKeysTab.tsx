@@ -62,7 +62,7 @@ export const APIKeysTab: React.FC<APIKeysTabProps> = ({
       {PROVIDER_TEMPLATES.maas && (
         <Alert
           variant={AlertVariant.info}
-          title="Red Hat MAAS uses per-model API keys"
+          title="Model as a Service (MaaS) uses per-model API keys"
           isInline
           style={{ marginBottom: '16px' }}
         >

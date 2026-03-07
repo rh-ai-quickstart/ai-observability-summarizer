@@ -114,24 +114,6 @@ def _get_curated_maas_models() -> List[Dict[str, Any]]:
             "description": "Alibaba Qwen 14B parameter model for general-purpose tasks",
             "context_length": 32768,
         },
-        {
-            "id": "granite-3.1-8b-instruct",
-            "name": "Granite 3.1 8B Instruct",
-            "description": "IBM Granite 8B parameter model for instruction following",
-            "context_length": 8192,
-        },
-        {
-            "id": "granite-3.1-3b-instruct",
-            "name": "Granite 3.1 3B Instruct",
-            "description": "Compact 3B parameter model for efficient inference",
-            "context_length": 8192,
-        },
-        {
-            "id": "llama-3.1-8b-instruct",
-            "name": "Llama 3.1 8B Instruct",
-            "description": "Meta Llama 3.1 hosted on Red Hat MAAS",
-            "context_length": 128000,
-        },
     ]
 
 
