@@ -202,8 +202,8 @@ def test_openai_bot_with_custom_base_url(mock_mcp_tools):
     """Test that OpenAIChatBot correctly handles custom base_url from api_url."""
     from chatbots import OpenAIChatBot
 
+    # Test with /v1/chat/completions suffix - should strip /chat/completions, leaving /v1
     with patch('openai.OpenAI') as mock_openai_class:
-        # Test with /chat/completions suffix (should be stripped)
         bot = OpenAIChatBot(
             "maas/qwen3-14b",
             api_key="test-key",
@@ -216,21 +216,32 @@ def test_openai_bot_with_custom_base_url(mock_mcp_tools):
             base_url="https://test.api.com/v1"
         )
 
-    # Reset mock for next test
-    mock_openai_class.reset_mock()
-
+    # Test with just /chat/completions suffix - should strip it completely
     with patch('openai.OpenAI') as mock_openai_class:
-        # Test with /v1/chat/completions suffix (should be stripped)
         bot = OpenAIChatBot(
             "maas/qwen3-14b",
             api_key="test-key",
-            api_url="https://test.api.com/v1/chat/completions",
+            api_url="https://custom.api.com/chat/completions",
             tool_executor=mock_mcp_tools
         )
 
         mock_openai_class.assert_called_once_with(
             api_key="test-key",
-            base_url="https://test.api.com"
+            base_url="https://custom.api.com"
+        )
+
+    # Test with URL that has no known suffix - should use as-is
+    with patch('openai.OpenAI') as mock_openai_class:
+        bot = OpenAIChatBot(
+            "maas/qwen3-14b",
+            api_key="test-key",
+            api_url="https://another.api.com/v1",
+            tool_executor=mock_mcp_tools
+        )
+
+        mock_openai_class.assert_called_once_with(
+            api_key="test-key",
+            base_url="https://another.api.com/v1"
         )
 
 
