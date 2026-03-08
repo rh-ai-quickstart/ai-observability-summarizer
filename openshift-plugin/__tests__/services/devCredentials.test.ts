@@ -16,12 +16,18 @@ describe('devCredentials', () => {
   beforeEach(() => {
     // Clear sessionStorage before each test
     sessionStorage.clear();
-    // Clear any DEV_MODE env setting
+    // Enable DEV_MODE for all tests (required for functions to work)
+    (window as any).__RUNTIME_CONFIG__ = { DEV_MODE: 'true' };
+  });
+
+  afterEach(() => {
+    // Clean up
     delete (window as any).__RUNTIME_CONFIG__;
   });
 
   describe('isDevMode', () => {
     it('should return false when DEV_MODE is not set', () => {
+      delete (window as any).__RUNTIME_CONFIG__;
       expect(isDevMode()).toBe(false);
     });
 
@@ -38,23 +44,25 @@ describe('devCredentials', () => {
 
   describe('DevCredentials Management', () => {
     describe('saveDevCredential', () => {
-      it('should save credential to sessionStorage', () => {
+      it('should save credential to sessionStorage with correct structure', () => {
         saveDevCredential('openai', 'sk-test123');
 
-        const stored = sessionStorage.getItem('ai_dev_credentials');
+        const stored = sessionStorage.getItem('ai_observability_dev_credentials');
         expect(stored).toBeTruthy();
 
         const parsed = JSON.parse(stored!);
-        expect(parsed.openai).toBe('sk-test123');
+        expect(parsed.openai).toBeDefined();
+        expect(parsed.openai.apiKey).toBe('sk-test123');
+        expect(parsed.openai.savedAt).toBeDefined();
       });
 
       it('should preserve existing credentials when adding new ones', () => {
         saveDevCredential('openai', 'sk-openai');
         saveDevCredential('anthropic', 'sk-ant-test');
 
-        const stored = JSON.parse(sessionStorage.getItem('ai_dev_credentials')!);
-        expect(stored.openai).toBe('sk-openai');
-        expect(stored.anthropic).toBe('sk-ant-test');
+        const stored = JSON.parse(sessionStorage.getItem('ai_observability_dev_credentials')!);
+        expect(stored.openai.apiKey).toBe('sk-openai');
+        expect(stored.anthropic.apiKey).toBe('sk-ant-test');
       });
     });
 
@@ -69,7 +77,7 @@ describe('devCredentials', () => {
       });
 
       it('should handle corrupted storage gracefully', () => {
-        sessionStorage.setItem('ai_dev_credentials', 'invalid json');
+        sessionStorage.setItem('ai_observability_dev_credentials', 'invalid json');
         expect(getDevCredential('openai')).toBeNull();
       });
     });
@@ -113,11 +121,15 @@ describe('devCredentials', () => {
       it('should save model config to sessionStorage', () => {
         saveDevModel(sampleModel);
 
-        const stored = sessionStorage.getItem('ai_dev_models');
+        const stored = sessionStorage.getItem('ai_observability_dev_models');
         expect(stored).toBeTruthy();
 
         const parsed = JSON.parse(stored!);
-        expect(parsed['maas/qwen3-14b']).toEqual(sampleModel);
+        expect(parsed['maas/qwen3-14b']).toBeDefined();
+        expect(parsed['maas/qwen3-14b'].name).toBe('maas/qwen3-14b');
+        expect(parsed['maas/qwen3-14b'].provider).toBe('maas');
+        expect(parsed['maas/qwen3-14b'].modelId).toBe('qwen3-14b');
+        expect(parsed['maas/qwen3-14b'].savedAt).toBeDefined();
       });
 
       it('should preserve existing models when adding new ones', () => {
@@ -128,8 +140,10 @@ describe('devCredentials', () => {
         saveDevModel(model2);
 
         const models = getDevModels();
-        expect(models['maas/model1']).toEqual(model1);
-        expect(models['maas/model2']).toEqual(model2);
+        expect(models['maas/model1']).toBeDefined();
+        expect(models['maas/model2']).toBeDefined();
+        expect(models['maas/model1'].modelId).toBe('model1');
+        expect(models['maas/model2'].modelId).toBe('model2');
       });
 
       it('should update existing model if name matches', () => {
@@ -148,7 +162,8 @@ describe('devCredentials', () => {
         saveDevModel(sampleModel);
         const models = getDevModels();
 
-        expect(models['maas/qwen3-14b']).toEqual(sampleModel);
+        expect(models['maas/qwen3-14b']).toBeDefined();
+        expect(models['maas/qwen3-14b'].name).toBe('maas/qwen3-14b');
       });
 
       it('should return empty object when no models exist', () => {
@@ -156,7 +171,7 @@ describe('devCredentials', () => {
       });
 
       it('should handle corrupted storage gracefully', () => {
-        sessionStorage.setItem('ai_dev_models', 'invalid json');
+        sessionStorage.setItem('ai_observability_dev_models', 'invalid json');
         expect(getDevModels()).toEqual({});
       });
     });

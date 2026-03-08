@@ -560,7 +560,7 @@ describe('mcpClient', () => {
         apiKey: 'sk-maas-test',
         savedAt: '2026-03-08T00:00:00.000Z',
       };
-      sessionStorage.setItem('ai_dev_models', JSON.stringify({ 'maas/qwen3-14b': devModel }));
+      sessionStorage.setItem('ai_observability_dev_models', JSON.stringify({ 'maas/qwen3-14b': devModel }));
 
       (global.fetch as jest.Mock).mockImplementation((url: string) => {
         if (url.includes('/config')) {
@@ -610,7 +610,7 @@ describe('mcpClient', () => {
         apiKey: 'sk-custom-openai',
         savedAt: '2026-03-08T00:00:00.000Z',
       };
-      sessionStorage.setItem('ai_dev_models', JSON.stringify({ 'openai/custom-model': devModel }));
+      sessionStorage.setItem('ai_observability_dev_models', JSON.stringify({ 'openai/custom-model': devModel }));
 
       (global.fetch as jest.Mock).mockImplementation((url: string) => {
         if (url.includes('/config')) {
