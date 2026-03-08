@@ -30,7 +30,7 @@ import { APIKeysTab } from './tabs/APIKeysTab';
 import { AddModelTab } from './tabs/AddModelTab';
 import { ChatSettingsTab } from './tabs/ChatSettingsTab';
 import { MetricsSettingsTab } from './tabs/MetricsSettingsTab';
-import { isDevMode } from '../../services/devCredentials';
+import { isDevMode } from '../../services/runtimeConfig';
 import { useChatSettings } from '../../hooks/useChatSettings';
 
 interface AIModelSettingsProps {

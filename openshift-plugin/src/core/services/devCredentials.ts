@@ -3,7 +3,7 @@
  * Stores API keys in browser sessionStorage when DEV_MODE env var is enabled
  */
 
-import { isDevMode as isDevModeFromConfig } from './runtimeConfig';
+import { isDevMode } from './runtimeConfig';
 
 export interface DevCredentials {
   [provider: string]: {
@@ -25,13 +25,6 @@ export interface DevModelConfig {
 
 const DEV_CREDENTIALS_KEY = 'ai_observability_dev_credentials';
 const DEV_MODELS_KEY = 'ai_observability_dev_models';
-
-/**
- * Check if running in dev mode (reads from runtime config)
- */
-export function isDevMode(): boolean {
-  return isDevModeFromConfig();
-}
 
 /**
  * Save API key to browser session

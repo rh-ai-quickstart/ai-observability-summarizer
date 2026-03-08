@@ -2,7 +2,8 @@ import { Model, Provider, AIModelState, ModelFormData, ProviderModel } from '../
 import { formatModelName, parseModelName } from './providerTemplates';
 import { secretManager } from './secretManager';
 import { listSummarizationModels, callMcpTool } from '../../../services/mcpClient';
-import { isDevMode, saveDevModel, getDevModels, DevModelConfig } from '../../../services/devCredentials';
+import { saveDevModel, getDevModels, DevModelConfig } from '../../../services/devCredentials';
+import { isDevMode } from '../../../services/runtimeConfig';
 
 /**
  * Get the appropriate storage mechanism based on dev mode

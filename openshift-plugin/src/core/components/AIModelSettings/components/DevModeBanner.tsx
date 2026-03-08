@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { Alert, AlertVariant, Button } from '@patternfly/react-core';
-import { isDevMode, listDevProviders, clearDevCredentials, clearDevModels, getDevModels } from '../../../services/devCredentials';
+import { listDevProviders, clearDevCredentials, clearDevModels, getDevModels } from '../../../services/devCredentials';
+import { isDevMode } from '../../../services/runtimeConfig';
 
 export const DevModeBanner: React.FC = () => {
   const [cachedProviders, setCachedProviders] = React.useState<string[]>([]);

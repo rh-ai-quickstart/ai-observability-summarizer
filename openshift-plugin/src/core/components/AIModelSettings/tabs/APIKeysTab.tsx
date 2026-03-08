@@ -17,7 +17,7 @@ import { AIModelState } from '../types/models';
 import { ProviderInlineItem } from '../components/ProviderInlineItem';
 import { getExternalProviders, PROVIDER_TEMPLATES } from '../services/providerTemplates';
 import { DevModeBanner } from '../components/DevModeBanner';
-import { isDevMode } from '../../../services/devCredentials';
+import { isDevMode } from '../../../services/runtimeConfig';
 
 interface APIKeysTabProps {
   state: AIModelState;

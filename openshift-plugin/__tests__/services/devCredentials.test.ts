@@ -1,5 +1,4 @@
 import {
-  isDevMode,
   saveDevCredential,
   getDevCredential,
   hasDevCredential,
@@ -19,6 +18,9 @@ jest.mock('../../src/core/services/runtimeConfig', () => ({
   fetchRuntimeConfig: jest.fn(async () => ({ devMode: true })),
   initializeRuntimeConfig: jest.fn(async () => {}),
 }));
+
+// Import isDevMode from runtimeConfig (after mocking)
+import { isDevMode } from '../../src/core/services/runtimeConfig';
 
 describe('devCredentials', () => {
   beforeEach(() => {
