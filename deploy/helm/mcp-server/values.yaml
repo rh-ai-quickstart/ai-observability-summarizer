@@ -57,6 +57,8 @@ env:
   GPU_METRICS_PREFIX_NVIDIA: ""
   GPU_METRICS_PREFIX_INTEL: ""
   GPU_METRICS_PREFIX_AMD: ""
+  # MAAS (Model as a Service) API endpoint - can be overridden for different environments
+  MAAS_API_URL: "https://litellm-prod.apps.maas.redhatworkshops.io/v1"
 
 # Name of the LLM used
 LLM_PREDICTOR: "llama-3-1-8b-instruct-predictor"

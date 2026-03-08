@@ -86,7 +86,8 @@ def _provider_api_url(provider: str) -> str:
     if provider == "meta":
         return "https://api.llama-api.com/v1"
     if provider == "maas":
-        return "https://litellm-prod.apps.maas.redhatworkshops.io/v1"
+        # Allow MAAS URL to be configured via environment variable
+        return os.getenv("MAAS_API_URL", "https://litellm-prod.apps.maas.redhatworkshops.io/v1")
     return ""
 
 
@@ -529,8 +530,8 @@ def add_model_to_config(
                     error_code=MCPErrorCode.INVALID_INPUT,
                 )
             if not api_url:
-                # Use default MAAS base URL if not provided
-                api_url = "https://litellm-prod.apps.maas.redhatworkshops.io/v1"
+                # Use MAAS URL from environment variable or default
+                api_url = os.getenv("MAAS_API_URL", "https://litellm-prod.apps.maas.redhatworkshops.io/v1")
 
             # Save API key to Secret (specific field for this model)
             secret_field = model_id.replace("maas/", "").strip()

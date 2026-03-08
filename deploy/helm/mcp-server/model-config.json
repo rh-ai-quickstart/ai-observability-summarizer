@@ -13,7 +13,8 @@
     },
     "_metadata": {
       "source": "default",
-      "description": "Alibaba Qwen 14B model via Model as a Service (MaaS)"
+      "description": "Alibaba Qwen 14B model via Model as a Service (MaaS)",
+      "note": "MAAS apiUrl can be overridden via MAAS_API_URL environment variable"
     }
   },
   "openai/gpt-4o-mini": {
