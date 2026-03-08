@@ -3,6 +3,17 @@ import { chat, getSessionConfig, setSessionConfig, clearSessionConfig } from '..
 // Mock fetch
 global.fetch = jest.fn();
 
+// Mock the runtimeConfig module - use inline jest.fn() to avoid hoisting issues
+jest.mock('../../src/core/services/runtimeConfig', () => ({
+  isDevMode: jest.fn(() => false),
+  getRuntimeConfig: jest.fn(() => ({ devMode: false })),
+  fetchRuntimeConfig: jest.fn(async () => ({ devMode: false })),
+  initializeRuntimeConfig: jest.fn(async () => {}),
+}));
+
+// Import the mocked functions to control them in tests
+import { isDevMode as mockIsDevMode, getRuntimeConfig as mockGetRuntimeConfig, fetchRuntimeConfig as mockFetchRuntimeConfig } from '../../src/core/services/runtimeConfig';
+
 describe('mcpClient', () => {
   beforeEach(() => {
     (global.fetch as jest.Mock).mockClear();
@@ -542,12 +553,17 @@ describe('mcpClient', () => {
   describe('DEV Mode - api_url parameter propagation', () => {
     beforeEach(() => {
       sessionStorage.clear();
-      // Enable DEV mode
-      (window as any).__RUNTIME_CONFIG__ = { DEV_MODE: 'true' };
+      // Enable DEV mode via mock
+      (mockIsDevMode as jest.Mock).mockReturnValue(true);
+      (mockGetRuntimeConfig as jest.Mock).mockReturnValue({ devMode: true });
+      (mockFetchRuntimeConfig as jest.Mock).mockResolvedValue({ devMode: true });
     });
 
     afterEach(() => {
-      delete (window as any).__RUNTIME_CONFIG__;
+      // Reset to default (disabled)
+      (mockIsDevMode as jest.Mock).mockReturnValue(false);
+      (mockGetRuntimeConfig as jest.Mock).mockReturnValue({ devMode: false });
+      (mockFetchRuntimeConfig as jest.Mock).mockResolvedValue({ devMode: false });
     });
 
     it('should inject api_url from dev storage for MAAS models', async () => {
