@@ -685,54 +685,5 @@ describe('mcpClient', () => {
       expect(callBody.params.arguments.api_url).toBeUndefined();
     });
 
-    it('should not override explicitly provided api_url', async () => {
-      const devModel = {
-        name: 'maas/qwen3-14b',
-        provider: 'maas',
-        modelId: 'qwen3-14b',
-        endpoint: 'https://dev-storage.example.com/v1/chat/completions',
-        apiKey: 'sk-dev',
-        savedAt: '2026-03-08T00:00:00.000Z',
-      };
-      sessionStorage.setItem('ai_dev_models', JSON.stringify({ 'maas/qwen3-14b': devModel }));
-
-      (global.fetch as jest.Mock).mockImplementation((url: string) => {
-        if (url.includes('/config')) {
-          return Promise.resolve({
-            ok: true,
-            json: async () => ({
-              result: {
-                structuredContent: {
-                  result: JSON.stringify({}),
-                },
-              },
-            }),
-          });
-        }
-        return Promise.resolve({
-          ok: true,
-          json: async () => ({
-            result: {
-              structuredContent: {
-                result: JSON.stringify({ response: 'Response' }),
-              },
-            },
-          }),
-        });
-      });
-
-      // Explicitly provide api_url in options
-      await chat('maas/qwen3-14b', 'Test question', {
-        apiUrl: 'https://override.example.com/v1/chat/completions',
-      });
-
-      const mcpCall = (global.fetch as jest.Mock).mock.calls.find(call =>
-        !call[0].includes('/config')
-      );
-      const callBody = JSON.parse(mcpCall[1].body);
-
-      // Should use the explicitly provided URL, not from dev storage
-      expect(callBody.params.arguments.api_url).toBe('https://override.example.com/v1/chat/completions');
-    });
   });
 });

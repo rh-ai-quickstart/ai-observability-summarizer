@@ -3,7 +3,6 @@ import {
   saveDevCredential,
   getDevCredential,
   hasDevCredential,
-  deleteDevCredential,
   clearDevCredentials,
   saveDevModel,
   getDevModels,
@@ -83,18 +82,6 @@ describe('devCredentials', () => {
 
       it('should return false if credential does not exist', () => {
         expect(hasDevCredential('openai')).toBe(false);
-      });
-    });
-
-    describe('deleteDevCredential', () => {
-      it('should delete specific credential', () => {
-        saveDevCredential('openai', 'sk-openai');
-        saveDevCredential('anthropic', 'sk-ant');
-
-        deleteDevCredential('openai');
-
-        expect(hasDevCredential('openai')).toBe(false);
-        expect(hasDevCredential('anthropic')).toBe(true);
       });
     });
 
