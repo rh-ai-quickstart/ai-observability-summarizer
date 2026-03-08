@@ -17,6 +17,10 @@
    - [Quick Start - OpenShift Deployment](#quick-start---openshift-deployment)
    - [Quick Start - Local Development](#quick-start---local-development)
    - [Usage](#usage)
+   - [Configuration](#configuration)
+     - [Model as a Service (MaaS) Setup](#model-as-a-service-maas-setup)
+     - [DEV Mode Workflow](#dev-mode-workflow)
+     - [Per-Model API Key Configuration](#per-model-api-key-configuration)
    - [Delete](#delete)
 4. [References](#references)
 5. [Tags](#tags)
@@ -87,7 +91,9 @@ Without this project, teams typically:
 **Application components**
 
 - **MCP server**: metrics analysis, report generation, and AI tool-calling surface
-- **LLM runtime**: local model deployment by default (or connect to an existing model via `LLM_URL`)
+- **LLM runtime**:
+  - Local model deployment by default (or connect to an existing model via `LLM_URL`)
+  - External AI providers: OpenAI, Anthropic, Google, Meta, Model as a Service (MaaS)
 - **UI**
   - **OpenShift Console Plugin** (default, `DEV_MODE=false`)
   - **Standalone React UI** (`DEV_MODE=true`)
@@ -178,7 +184,7 @@ Navigate to settings and configure a model:
 
 ![Settings page](docs/images/settings.png)
 
-You can either set an `API_KEY` or add a custom model. Supported providers include OpenAI, Gemini, Anthropic, and Meta.
+You can either set an `API_KEY` or add a custom model. Supported providers include OpenAI, Gemini, Anthropic, Meta, and Model as a Service (MaaS).
 
 ![API page](docs/images/api.png)
 
@@ -187,6 +193,8 @@ You can either set an `API_KEY` or add a custom model. Supported providers inclu
 Once the model configuration is set, select your model from the dropdown:
 
 ![Dropdown page](docs/images/dropdown.png)
+
+> **For detailed setup instructions**, see the [Configuration](#configuration) section below, which covers MAAS setup, DEV mode workflow, and per-model API key configuration.
 
 #### OpenShift Console Plugin (default)
 
@@ -227,6 +235,118 @@ You can also navigate to suggested metrics and choose from the questions there -
 #### Reports
 
 Export reports when needed (HTML/PDF/Markdown).
+
+### Configuration
+
+#### Model as a Service (MaaS) Setup
+
+Model as a Service provides access to Red Hat-hosted AI models with per-model API key configuration.
+
+**Adding a MAAS Model:**
+
+1. Navigate to **AI Observability → Settings → Add Model**
+2. Select **Model as a Service (MaaS)** as the provider
+3. Choose a model from the dropdown or enter a custom model ID
+4. Provide your MAAS API key (unique per model)
+5. (Optional) Override the default endpoint URL if needed
+6. Click **Add Model**
+
+**Key Features:**
+
+- **Per-model API keys**: Each MAAS model requires its own API key, unlike other providers that use global keys
+- **Custom endpoints**: Supports custom MAAS deployments for dev/staging/production environments
+- **No global credentials**: MAAS models are configured individually in the "Add Model" tab, not in "API Keys"
+
+**Environment Configuration:**
+
+For production deployments with custom MAAS endpoints, set the environment variable in Helm values:
+
+```yaml
+env:
+  MAAS_API_URL: "https://your-custom-maas.example.com/v1"
+```
+
+#### DEV Mode Workflow
+
+DEV mode allows developers to test external AI models using browser sessionStorage instead of Kubernetes Secrets and ConfigMaps. This is ideal for:
+
+- Local development without cluster permissions
+- Testing different models quickly
+- Avoiding secrets management overhead
+
+**Enabling DEV Mode:**
+
+```bash
+make install NAMESPACE=your-namespace DEV_MODE=true
+```
+
+**How it works:**
+
+- **API keys** are cached in browser `sessionStorage` (cleared on tab close)
+- **Model configurations** are saved to browser `sessionStorage` (no ConfigMap updates)
+- **Production mode** continues using Kubernetes Secrets/ConfigMaps for persistent storage
+
+**DEV Mode Workflow:**
+
+1. Install with `DEV_MODE=true`
+2. Open the React UI (check Routes for `aiobs-react-ui`)
+3. Navigate to **Settings → API Keys** or **Settings → Add Model**
+4. Configure your models and API keys (saved to browser only)
+5. Test your models immediately—no cluster resources modified
+
+**Clearing DEV Mode Cache:**
+
+A "Clear Cache" button is available in DEV mode to remove all cached credentials and model configurations from the browser.
+
+**Production vs. DEV Mode:**
+
+| Feature | Production (`DEV_MODE=false`) | DEV Mode (`DEV_MODE=true`) |
+|---------|------------------------------|---------------------------|
+| API Keys | Kubernetes Secrets | Browser sessionStorage |
+| Model Configs | ConfigMap | Browser sessionStorage |
+| Persistence | Permanent (cluster-wide) | Session only (tab close = reset) |
+| Permissions | Requires RBAC | No cluster permissions needed |
+| UI | Console Plugin | Standalone React UI |
+
+#### Per-Model API Key Configuration
+
+Different providers handle API keys differently:
+
+**Global Provider Keys** (API Keys Tab)
+
+Most providers use a single API key for all models:
+
+- **OpenAI**: One key for all GPT models
+- **Anthropic**: One key for all Claude models
+- **Google**: One key for all Gemini models
+- **Meta**: One key for all Llama models
+
+Configure these in **Settings → API Keys**.
+
+**Per-Model Keys** (Add Model Tab)
+
+MAAS uses unique API keys per model:
+
+- **Model as a Service (MaaS)**: Each model requires its own API key and endpoint
+
+Configure these in **Settings → Add Model**.
+
+**Custom Models:**
+
+For custom OpenAI-compatible endpoints:
+
+1. Go to **Settings → Add Model**
+2. Select your provider (e.g., OpenAI, Meta, or Other)
+3. Enter the model ID
+4. Provide the custom endpoint URL
+5. Enter the API key
+6. Click **Add Model**
+
+The system will inject the custom `api_url` when calling the model, enabling support for:
+
+- Self-hosted models
+- Custom model deployments
+- Alternative OpenAI-compatible APIs
 
 #### Observe → Traces / Observe → Logs (optional)
 
