@@ -160,29 +160,38 @@ def _save_maas_model_api_key(secret_field: str, api_key: str) -> Dict[str, Any]:
         # Add/update model's API key field
         secret_data[secret_field] = base64.b64encode(api_key.encode()).decode()
 
-        # Create or update secret
-        secret_payload = {
-            "apiVersion": "v1",
-            "kind": "Secret",
-            "metadata": {
-                "name": secret_name,
-                "namespace": ns,
-                "labels": {
-                    "app.kubernetes.io/name": "mcp-server",
-                    "app.kubernetes.io/component": "model-credentials"
-                }
-            },
-            "type": "Opaque",
-            "data": secret_data
-        }
-
         if secret_exists:
-            # Update existing secret using PUT
-            r = requests.put(get_url, headers=headers, json=secret_payload, timeout=10, verify=verify)
+            # Update existing secret using PATCH (strategic merge)
+            patch_headers = headers.copy()
+            patch_headers["Content-Type"] = "application/strategic-merge-patch+json"
+
+            # Only send the data field to merge
+            patch_payload = {
+                "data": {
+                    secret_field: secret_data[secret_field]
+                }
+            }
+
+            r = requests.patch(get_url, headers=patch_headers, json=patch_payload, timeout=10, verify=verify)
             if r.status_code not in (200, 201):
                 return {"success": False, "error": f"Failed to update secret: {r.status_code}"}
         else:
             # Create new secret using POST
+            secret_payload = {
+                "apiVersion": "v1",
+                "kind": "Secret",
+                "metadata": {
+                    "name": secret_name,
+                    "namespace": ns,
+                    "labels": {
+                        "app.kubernetes.io/name": "mcp-server",
+                        "app.kubernetes.io/component": "model-credentials"
+                    }
+                },
+                "type": "Opaque",
+                "data": secret_data
+            }
+
             r = requests.post(create_url, headers=headers, json=secret_payload, timeout=10, verify=verify)
             if r.status_code not in (200, 201):
                 return {"success": False, "error": f"Failed to create secret: {r.status_code}"}
@@ -605,23 +614,16 @@ def add_model_to_config(
         # Add/update model in config
         current_config[model_key] = model_config
 
-        # Update ConfigMap
+        # Update ConfigMap using PATCH (strategic merge)
         configmap_name = "ai-model-config"
         url = f"{K8S_API_URL}/api/v1/namespaces/{ns}/configmaps/{configmap_name}"
         headers = _get_k8s_headers()
+        headers["Content-Type"] = "application/strategic-merge-patch+json"
         verify = K8S_SA_CA_PATH if os.path.exists(K8S_SA_CA_PATH) else True
 
-        configmap_payload = {
-            "apiVersion": "v1",
-            "kind": "ConfigMap",
+        # Use strategic merge patch to update data and annotations
+        patch_payload = {
             "metadata": {
-                "name": configmap_name,
-                "namespace": ns,
-                "labels": {
-                    "app.kubernetes.io/name": "mcp-server",
-                    "app.kubernetes.io/component": "model-config",
-                    "app.kubernetes.io/managed-by": "mcp-server"
-                },
                 "annotations": {
                     "config.kubernetes.io/last-modified": datetime.utcnow().isoformat() + "Z"
                 }
@@ -631,7 +633,7 @@ def add_model_to_config(
             }
         }
 
-        r = requests.put(url, headers=headers, json=configmap_payload, timeout=10, verify=verify)
+        r = requests.patch(url, headers=headers, json=patch_payload, timeout=10, verify=verify)
 
         if r.status_code not in (200, 201):
             raise MCPException(
