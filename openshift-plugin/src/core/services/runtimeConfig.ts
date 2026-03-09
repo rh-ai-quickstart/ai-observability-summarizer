@@ -22,10 +22,17 @@ function getConfigUrl(): string {
 
   if (isLocalDev) {
     // Local development: direct connection to MCP server
+    console.log('[RuntimeConfig] Detected local development mode');
     return 'http://localhost:8085/config';
   }
 
   const mode = getDeploymentMode();
+  console.log(`[RuntimeConfig] Detected deployment mode: ${mode}`);
+  console.log(`[RuntimeConfig] window.location:`, {
+    hostname: window.location.hostname,
+    pathname: window.location.pathname,
+    href: window.location.href
+  });
 
   if (mode === 'plugin') {
     // Console plugin uses console proxy
@@ -67,16 +74,21 @@ export async function fetchRuntimeConfig(): Promise<RuntimeConfig> {
       if (response.ok) {
         const config: RuntimeConfig = await response.json();
         console.log(`[RuntimeConfig] Successfully loaded from MCP server:`, config);
+        console.log(`[RuntimeConfig] Dev mode is: ${config.devMode ? 'ENABLED' : 'DISABLED'}`);
         return config;
       } else {
-        console.warn(`[RuntimeConfig] Failed to fetch from MCP server: ${response.status}`);
+        const errorText = await response.text().catch(() => '(unable to read error)');
+        console.error(`[RuntimeConfig] Failed to fetch from MCP server: ${response.status} ${response.statusText}`);
+        console.error(`[RuntimeConfig] Response body:`, errorText);
+        console.error(`[RuntimeConfig] Request URL was:`, configUrl);
       }
 
       // Fallback to defaults if fetch failed
-      console.warn('[RuntimeConfig] Could not fetch config, using defaults');
+      console.warn('[RuntimeConfig] Could not fetch config, using defaults (devMode: false)');
       return { devMode: false };
     } catch (error) {
       console.error('[RuntimeConfig] Error fetching config:', error);
+      console.error('[RuntimeConfig] Falling back to devMode: false');
       return { devMode: false };
     }
   })();
