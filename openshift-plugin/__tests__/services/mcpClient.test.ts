@@ -24,13 +24,7 @@ describe('mcpClient', () => {
       if (url.includes('/config')) {
         return Promise.resolve({
           ok: true,
-          json: async () => ({
-            result: {
-              structuredContent: {
-                result: JSON.stringify({}),
-              },
-            },
-          }),
+          json: async () => ({ devMode: false }),
         });
       }
       // Default fallback
@@ -580,15 +574,10 @@ describe('mcpClient', () => {
 
       (global.fetch as jest.Mock).mockImplementation((url: string) => {
         if (url.includes('/config')) {
+          // Mock /config endpoint to return correct structure (not used due to module mock, but kept for consistency)
           return Promise.resolve({
             ok: true,
-            json: async () => ({
-              result: {
-                structuredContent: {
-                  result: JSON.stringify({}),
-                },
-              },
-            }),
+            json: async () => ({ devMode: true }),
           });
         }
         return Promise.resolve({
@@ -630,15 +619,10 @@ describe('mcpClient', () => {
 
       (global.fetch as jest.Mock).mockImplementation((url: string) => {
         if (url.includes('/config')) {
+          // Mock /config endpoint to return correct structure (not used due to module mock, but kept for consistency)
           return Promise.resolve({
             ok: true,
-            json: async () => ({
-              result: {
-                structuredContent: {
-                  result: JSON.stringify({}),
-                },
-              },
-            }),
+            json: async () => ({ devMode: true }),
           });
         }
         return Promise.resolve({
@@ -667,15 +651,10 @@ describe('mcpClient', () => {
     it('should not inject api_url when not in dev storage', async () => {
       (global.fetch as jest.Mock).mockImplementation((url: string) => {
         if (url.includes('/config')) {
+          // Mock /config endpoint to return correct structure (not used due to module mock, but kept for consistency)
           return Promise.resolve({
             ok: true,
-            json: async () => ({
-              result: {
-                structuredContent: {
-                  result: JSON.stringify({}),
-                },
-              },
-            }),
+            json: async () => ({ devMode: true }),
           });
         }
         return Promise.resolve({
