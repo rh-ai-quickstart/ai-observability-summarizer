@@ -33,6 +33,7 @@ import {
 import { AIModelState, ModelFormData, Provider, ProviderModel } from '../types/models';
 import { getAllProviders, getProviderTemplate, formatModelName } from '../services/providerTemplates';
 import { modelService } from '../services/modelService';
+import { isDevMode } from '../../../services/runtimeConfig';
 
 interface AddModelTabProps {
   state: AIModelState;
@@ -207,9 +208,19 @@ export const AddModelTab: React.FC<AddModelTabProps> = ({
 
       <TextContent style={{ marginBottom: '24px' }}>
         <Text component={TextVariants.p}>
-          Add AI models from supported providers to your cluster configuration.
-          Select a provider and choose from available models. Models are saved to cluster storage and shared across all users.
-          Configure API keys in the <strong>API Keys</strong> tab before adding models from external providers.
+          {isDevMode() ? (
+            <>
+              Add AI models from supported providers for testing and development.
+              Select a provider and choose from available models. <strong>Models are saved to your browser session storage</strong> and will be cleared when you close the tab.
+              Configure API keys in the <strong>API Keys</strong> tab (also stored in browser) before adding models from external providers.
+            </>
+          ) : (
+            <>
+              Add AI models from supported providers to your cluster configuration.
+              Select a provider and choose from available models. Models are saved to cluster storage and shared across all users.
+              Configure API keys in the <strong>API Keys</strong> tab before adding models from external providers.
+            </>
+          )}
         </Text>
       </TextContent>
 
