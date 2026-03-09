@@ -548,7 +548,12 @@ def add_model_to_config(
         # Build model config object
         if provider_lower == "maas":
             # MAAS uses custom api_url provided by user
-            final_api_url = f"{api_url.rstrip('/')}/chat/completions"
+            # Normalize endpoint: only append /chat/completions if not already present
+            normalized_url = api_url.rstrip('/')
+            if not normalized_url.endswith('/chat/completions'):
+                final_api_url = f"{normalized_url}/chat/completions"
+            else:
+                final_api_url = normalized_url
             secret_field = model_id.replace("maas/", "").strip()
             model_config = {
                 "external": True,
@@ -576,14 +581,27 @@ def add_model_to_config(
                 # Google uses specific endpoint format
                 final_api_url = f"{final_api_url}/models/{model_id}:generateContent"
             elif provider_lower in ["openai", "anthropic", "meta"]:
-                # OpenAI endpoint selection based on model version
+                # OpenAI-compatible endpoint normalization (defensive)
+                normalized_url = final_api_url.rstrip('/')
                 if provider_lower == "openai":
                     # GPT-5 and later use the new /v1/responses endpoint
                     # GPT-4 and earlier use /v1/chat/completions
                     if _is_gpt5_model(model_id):
-                        final_api_url = f"{final_api_url}/responses"
+                        if not normalized_url.endswith('/responses'):
+                            final_api_url = f"{normalized_url}/responses"
+                        else:
+                            final_api_url = normalized_url
                     else:
-                        final_api_url = f"{final_api_url}/chat/completions"
+                        if not normalized_url.endswith('/chat/completions'):
+                            final_api_url = f"{normalized_url}/chat/completions"
+                        else:
+                            final_api_url = normalized_url
+                else:
+                    # For meta and other OpenAI-compatible providers, use /chat/completions
+                    if not normalized_url.endswith('/chat/completions'):
+                        final_api_url = f"{normalized_url}/chat/completions"
+                    else:
+                        final_api_url = normalized_url
 
             model_config = {
                 "external": True,

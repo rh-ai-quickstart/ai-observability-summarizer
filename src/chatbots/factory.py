@@ -106,10 +106,10 @@ def create_chatbot(
 
     # Detect provider from model name pattern using dict mapping
     PROVIDER_PATTERNS = {
-        "maas": [("maas/", False)],
-        "anthropic": [("anthropic/", False), ("claude", False)],
-        "openai": [("openai/", False), ("gpt-", True), ("o1-", True)],
-        "google": [("google/", False), ("gemini", False)]
+        "maas": [("maas/", True)],  # Must be at start to avoid false matches
+        "anthropic": [("anthropic/", True), ("claude", False)],
+        "openai": [("openai/", True), ("gpt-", True), ("o1-", True)],
+        "google": [("google/", True), ("gemini", False)]
     }
 
     model_lower = model_name.lower()
