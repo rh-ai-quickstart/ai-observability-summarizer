@@ -200,7 +200,7 @@ export const AddModelTab: React.FC<AddModelTabProps> = ({
         <FlexItem>
           <Title headingLevel="h2" size="xl">
             <PlusCircleIcon style={{ marginRight: '8px' }} />
-            Add Custom Model
+            Add External Model
           </Title>
         </FlexItem>
       </Flex>

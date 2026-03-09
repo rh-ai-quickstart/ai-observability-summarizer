@@ -101,11 +101,11 @@ export const ModelsTab: React.FC<ModelsTabProps> = ({
                 No Models Available
               </Title>
               <EmptyStateBody>
-                No models are currently available to select. Configure an API key for an external provider or add a custom model.
+                No models are currently available to select. Configure an API key for an external provider or add an external model.
               </EmptyStateBody>
               <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
                 <Button variant="primary" onClick={onGoToApiKeys}>Configure API key</Button>
-                <Button variant="secondary" onClick={onGoToAddModel}>Add custom model</Button>
+                <Button variant="secondary" onClick={onGoToAddModel}>Add external model</Button>
               </div>
             </EmptyState>
           </CardBody>

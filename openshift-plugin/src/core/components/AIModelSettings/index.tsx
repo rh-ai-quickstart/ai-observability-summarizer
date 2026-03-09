@@ -367,14 +367,14 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
           >
             <TextContent>
               <Text component={TextVariants.p}>
-                No models are available to select. Configure an API key or add a custom model.
+                No models are available to select. Configure an API key or add an external model.
               </Text>
               <div style={{ display: 'flex', gap: 8 }}>
                 <Button variant="link" isInline onClick={() => setState(prev => ({ ...prev, activeTab: 'apikeys' }))}>
                   Configure API key
                 </Button>
                 <Button variant="link" isInline onClick={() => setState(prev => ({ ...prev, activeTab: 'addmodel' }))}>
-                  Add custom model
+                  Add external model
                 </Button>
               </div>
             </TextContent>
@@ -447,7 +447,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
                 Add Model
               </TabTitleText>
             }
-            aria-label="Add Custom Model"
+            aria-label="Add External Model"
           >
             {state.activeTab === 'addmodel' && renderTabContent()}
           </Tab>
