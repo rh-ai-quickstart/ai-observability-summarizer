@@ -172,7 +172,7 @@ export const NAMESPACE_CATEGORY_QUESTIONS: Record<string, string[]> = {
   gpu_ai: [
     "What's the GPU utilization in this namespace?",
     'Are there any GPU memory issues in my deployments?',
-    'Show me the health of vLLM or AI workloads here',
+    'Show me the health of vLLM or AI workloads in this namespace',
     'What are the token generation rates for models in this namespace?',
     'Check inference latency and throughput for my models',
   ],
@@ -206,6 +206,12 @@ export const NAMESPACE_CATEGORY_QUESTIONS: Record<string, string[]> = {
     'What is the GC pause time for my Go applications?',
     'Show me process CPU and memory trends',
   ],
+  resource_quota: [
+    'What are the resource quotas configured for this namespace?',
+    'Are there any resource quota violations or rejections?',
+    'Show me resource quota usage vs limits in this namespace',
+    'Are pods being throttled due to quota limits?',
+  ],
 };
 
 export const getQuestionsForCategory = (
@@ -220,8 +226,8 @@ export const getQuestionsForCategory = (
     // If namespace is provided, contextualize questions with namespace name
     if (namespace) {
       return questions.map(q =>
-        q.replace('this namespace', `namespace "${namespace}"`)
-         .replace('in this namespace', `in namespace "${namespace}"`)
+        q.replace('in this namespace', `in namespace "${namespace}"`)
+         .replace('this namespace', `namespace "${namespace}"`)
          .replace('my deployments', `deployments in "${namespace}"`)
          .replace('my workloads', `workloads in "${namespace}"`)
          .replace('my models', `models in "${namespace}"`)
