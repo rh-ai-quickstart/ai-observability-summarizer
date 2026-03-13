@@ -3,6 +3,17 @@ import { chat, getSessionConfig, setSessionConfig, clearSessionConfig } from '..
 // Mock fetch
 global.fetch = jest.fn();
 
+// Mock the runtimeConfig module - use inline jest.fn() to avoid hoisting issues
+jest.mock('../../src/core/services/runtimeConfig', () => ({
+  isDevMode: jest.fn(() => false),
+  getRuntimeConfig: jest.fn(() => ({ devMode: false })),
+  fetchRuntimeConfig: jest.fn(async () => ({ devMode: false })),
+  initializeRuntimeConfig: jest.fn(async () => {}),
+}));
+
+// Import the mocked functions to control them in tests
+import { isDevMode as mockIsDevMode, getRuntimeConfig as mockGetRuntimeConfig, fetchRuntimeConfig as mockFetchRuntimeConfig } from '../../src/core/services/runtimeConfig';
+
 describe('mcpClient', () => {
   beforeEach(() => {
     (global.fetch as jest.Mock).mockClear();
@@ -13,13 +24,7 @@ describe('mcpClient', () => {
       if (url.includes('/config')) {
         return Promise.resolve({
           ok: true,
-          json: async () => ({
-            result: {
-              structuredContent: {
-                result: JSON.stringify({}),
-              },
-            },
-          }),
+          json: async () => ({ devMode: false }),
         });
       }
       // Default fallback
@@ -537,5 +542,143 @@ describe('mcpClient', () => {
       expect(result.response).toBe('Object format response');
       expect(result.progressLog).toHaveLength(1);
     });
+  });
+
+  describe('DEV Mode - api_url parameter propagation', () => {
+    beforeEach(() => {
+      sessionStorage.clear();
+      // Enable DEV mode via mock
+      (mockIsDevMode as jest.Mock).mockReturnValue(true);
+      (mockGetRuntimeConfig as jest.Mock).mockReturnValue({ devMode: true });
+      (mockFetchRuntimeConfig as jest.Mock).mockResolvedValue({ devMode: true });
+    });
+
+    afterEach(() => {
+      // Reset to default (disabled)
+      (mockIsDevMode as jest.Mock).mockReturnValue(false);
+      (mockGetRuntimeConfig as jest.Mock).mockReturnValue({ devMode: false });
+      (mockFetchRuntimeConfig as jest.Mock).mockResolvedValue({ devMode: false });
+    });
+
+    it('should inject api_url from dev storage for MAAS models', async () => {
+      // Save a MAAS model with custom endpoint in dev storage
+      const devModel = {
+        name: 'maas/qwen3-14b',
+        provider: 'maas',
+        modelId: 'qwen3-14b',
+        endpoint: 'https://custom-maas.example.com/v1/chat/completions',
+        apiKey: 'sk-maas-test',
+        savedAt: '2026-03-08T00:00:00.000Z',
+      };
+      sessionStorage.setItem('ai_observability_dev_models', JSON.stringify({ 'maas/qwen3-14b': devModel }));
+
+      (global.fetch as jest.Mock).mockImplementation((url: string) => {
+        if (url.includes('/config')) {
+          // Mock /config endpoint to return correct structure (not used due to module mock, but kept for consistency)
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ devMode: true }),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            result: {
+              structuredContent: {
+                result: JSON.stringify({ response: 'MAAS response' }),
+              },
+            },
+          }),
+        });
+      });
+
+      await chat('maas/qwen3-14b', 'Test question');
+
+      // Find the MCP call (skip config call)
+      const mcpCall = (global.fetch as jest.Mock).mock.calls.find(call =>
+        !call[0].includes('/config')
+      );
+      const callBody = JSON.parse(mcpCall[1].body);
+
+      // Verify api_url was injected from dev storage
+      expect(callBody.params.arguments.api_url).toBe('https://custom-maas.example.com/v1/chat/completions');
+      // Verify api_key was also injected
+      expect(callBody.params.arguments.api_key).toBe('sk-maas-test');
+    });
+
+    it('should inject api_url for custom OpenAI-compatible models', async () => {
+      const devModel = {
+        name: 'openai/custom-model',
+        provider: 'openai',
+        modelId: 'custom-model',
+        endpoint: 'https://custom-openai.example.com/v1/chat/completions',
+        apiKey: 'sk-custom-openai',
+        savedAt: '2026-03-08T00:00:00.000Z',
+      };
+      sessionStorage.setItem('ai_observability_dev_models', JSON.stringify({ 'openai/custom-model': devModel }));
+
+      (global.fetch as jest.Mock).mockImplementation((url: string) => {
+        if (url.includes('/config')) {
+          // Mock /config endpoint to return correct structure (not used due to module mock, but kept for consistency)
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ devMode: true }),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            result: {
+              structuredContent: {
+                result: JSON.stringify({ response: 'Custom OpenAI response' }),
+              },
+            },
+          }),
+        });
+      });
+
+      await chat('openai/custom-model', 'Test question');
+
+      const mcpCall = (global.fetch as jest.Mock).mock.calls.find(call =>
+        !call[0].includes('/config')
+      );
+      const callBody = JSON.parse(mcpCall[1].body);
+
+      expect(callBody.params.arguments.api_url).toBe('https://custom-openai.example.com/v1/chat/completions');
+      expect(callBody.params.arguments.api_key).toBe('sk-custom-openai');
+    });
+
+    it('should not inject api_url when not in dev storage', async () => {
+      (global.fetch as jest.Mock).mockImplementation((url: string) => {
+        if (url.includes('/config')) {
+          // Mock /config endpoint to return correct structure (not used due to module mock, but kept for consistency)
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ devMode: true }),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            result: {
+              structuredContent: {
+                result: JSON.stringify({ response: 'Standard response' }),
+              },
+            },
+          }),
+        });
+      });
+
+      await chat('gpt-4o-mini', 'Test question');
+
+      const mcpCall = (global.fetch as jest.Mock).mock.calls.find(call =>
+        !call[0].includes('/config')
+      );
+      const callBody = JSON.parse(mcpCall[1].body);
+
+      // api_url should not be present
+      expect(callBody.params.arguments.api_url).toBeUndefined();
+    });
+
   });
 });

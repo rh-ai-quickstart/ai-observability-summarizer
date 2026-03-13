@@ -16,7 +16,7 @@ import { KeyIcon, SyncAltIcon, TrashIcon, ExternalLinkAltIcon, CheckCircleIcon, 
 import { ProviderTemplate, ProviderCredential } from '../types/models';
 import { secretManager } from '../services/secretManager';
 import { isValidApiKey } from '../services/providerTemplates';
-import { isDevMode } from '../../../services/devCredentials';
+import { isDevMode } from '../../../services/runtimeConfig';
 
 interface ProviderInlineItemProps {
   provider: ProviderTemplate;

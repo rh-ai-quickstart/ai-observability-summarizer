@@ -209,6 +209,7 @@ def summarize_with_llm(
     summarize_model_id: str,
     response_type: ResponseType,
     api_key: Optional[str] = None,
+    api_url: Optional[str] = None,
     messages: Optional[List[Dict[str, str]]] = None,
     max_tokens: int = DEFAULT_MAX_TOKENS,
     enable_validation: bool = True,
@@ -221,6 +222,7 @@ def summarize_with_llm(
         summarize_model_id: Model identifier from MODEL_CONFIG
         response_type: Expected response type for validation (OPENSHIFT, VLLM, CHAT) - required
         api_key: API key for external models (optional for local models)
+        api_url: API URL override for external models (optional, for DEV mode)
         messages: Previous conversation messages (optional)
         max_tokens: Maximum number of tokens to generate (default: 6000)
         enable_validation: Whether to enable response validation and cleanup (default: True)
@@ -232,7 +234,10 @@ def summarize_with_llm(
     # Get model configuration from runtime config
     runtime_config = get_model_config()
     model_info = runtime_config.get(summarize_model_id, {})
-    is_external = model_info.get("external", False)
+
+    # In DEV mode, model might not be in ConfigMap, so check if we have override parameters
+    # If api_url is provided (from DEV mode browser storage), treat as external model
+    is_external = model_info.get("external", False) or bool(api_url)
 
     # For local vLLM models, use a smaller max_tokens limit to prevent repetition loops
     # External models have better repetition handling, so they can use the full limit
@@ -256,8 +261,15 @@ def summarize_with_llm(
 
         # Get provider-specific configuration
         provider = model_info.get("provider", "openai")
-        api_url = model_info.get("apiUrl", "https://api.openai.com/v1/chat/completions")
+        # Use passed api_url (from DEV mode) if available, otherwise get from config
+        if not api_url:
+            api_url = model_info.get("apiUrl", "https://api.openai.com/v1/chat/completions")
+        # Get model name from config, or extract from summarize_model_id (for DEV mode)
         model_name = model_info.get("modelName")
+        if not model_name:
+            # In DEV mode, model might not be in config, so extract from model ID
+            # Format: "provider/model-name" -> extract "model-name"
+            model_name = summarize_model_id.split('/')[-1] if '/' in summarize_model_id else summarize_model_id
 
         # Provider-specific authentication and payload
         if provider == "google":

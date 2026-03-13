@@ -18,6 +18,7 @@ def chat(
     model_name: str,
     message: str,
     api_key: Optional[str] = None,
+    api_url: Optional[str] = None,
     namespace: Optional[str] = None,
     scope: Optional[str] = None,
     conversation_history: Optional[List[Dict[str, str]]] = None
@@ -33,6 +34,7 @@ def chat(
                     "openai/gpt-4o-mini", "meta-llama/Llama-3.1-8B-Instruct")
         message: User's question
         api_key: Optional API key for external models (Anthropic, OpenAI, Google)
+        api_url: Optional API URL for custom endpoints (for DEV mode, MAAS)
         namespace: Optional Kubernetes namespace filter
         scope: Optional scope (e.g., "cluster-wide")
         conversation_history: Optional list of previous messages in format:
@@ -107,6 +109,7 @@ def chat(
         chatbot = create_chatbot(
             model_name=model_name,
             api_key=resolved_api_key if resolved_api_key else None,
+            api_url=api_url,
             tool_executor=tool_executor
         )
 

@@ -1,8 +1,8 @@
 import { Provider, SecretConfig, SecretStatus, ConnectionTestResult } from '../types/models';
 import { callMcpTool } from '../../../services/mcpClient';
 import { generateSecretName, getProviderTemplate, isValidApiKey } from './providerTemplates';
-import { isDevMode, saveDevCredential, hasDevCredential } from '../../../services/devCredentials';
-import { fetchRuntimeConfig } from '../../../services/runtimeConfig';
+import { saveDevCredential, hasDevCredential } from '../../../services/devCredentials';
+import { fetchRuntimeConfig, isDevMode } from '../../../services/runtimeConfig';
 
 class AISecretManager {
   /**

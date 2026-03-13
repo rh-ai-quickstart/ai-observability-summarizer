@@ -20,6 +20,10 @@ import {
   EmptyState,
   EmptyStateIcon,
   EmptyStateBody,
+  TextInput,
+  FormHelperText,
+  HelperText,
+  HelperTextItem,
 } from '@patternfly/react-core';
 import {
   PlusCircleIcon,
@@ -29,23 +33,24 @@ import {
 import { AIModelState, ModelFormData, Provider, ProviderModel } from '../types/models';
 import { getAllProviders, getProviderTemplate, formatModelName } from '../services/providerTemplates';
 import { modelService } from '../services/modelService';
+import { isDevMode } from '../../../services/runtimeConfig';
 
 interface AddModelTabProps {
   state: AIModelState;
   onModelAdd: () => void;
   onSuccess: () => void;
+  onGoToApiKeys: () => void;
 }
 
 export const AddModelTab: React.FC<AddModelTabProps> = ({
   state,
   onModelAdd,
   onSuccess,
+  onGoToApiKeys,
 }) => {
-  // Find first provider with configured API key, or default to openai
+  // Default to MAAS provider
   const getInitialProvider = (): Provider => {
-    const availableProviders = getAllProviders().filter(p => p.provider !== 'internal' && p.provider !== 'other');
-    const configuredProvider = availableProviders.find(p => state.providers[p.provider]?.status === 'configured');
-    return configuredProvider?.provider || 'openai';
+    return 'maas';
   };
 
   const initialProvider = getInitialProvider();
@@ -59,6 +64,7 @@ export const AddModelTab: React.FC<AddModelTabProps> = ({
   const [error, setError] = React.useState<string | null>(null);
   const [availableModels, setAvailableModels] = React.useState<ProviderModel[]>([]);
   const [loadingModels, setLoadingModels] = React.useState(false);
+  const [customModelId, setCustomModelId] = React.useState('');
 
   const providers = getAllProviders().filter(p => p.provider !== 'internal' && p.provider !== 'other'); // Exclude internal and custom provider
 
@@ -98,33 +104,50 @@ export const AddModelTab: React.FC<AddModelTabProps> = ({
       endpoint: template.defaultEndpoint,
       modelId: '',
     }));
+    setCustomModelId('');
     setError(null);
 
     // Fetch available models for the selected provider
     fetchAvailableModels(provider);
   };
 
-  // Fetch models on initial load only if the provider has an API key configured
+  // Fetch models on initial load
   React.useEffect(() => {
-    // Check if any provider has an API key configured
-    const hasAnyConfiguredProvider = providers.some(p => state.providers[p.provider]?.status === 'configured');
-
-    if (!hasAnyConfiguredProvider) {
-      // No providers configured - show helpful message instead of error
-      setError('No API keys configured. Please configure at least one provider API key in the API Keys tab.');
+    // MAAS doesn't require global API key, so always fetch models for it
+    if (formData.provider === 'maas') {
+      fetchAvailableModels(formData.provider);
       return;
     }
 
-    // Fetch models for the initially selected provider (which has a key)
+    // For other providers, check if API key is configured
     if (state.providers[formData.provider]?.status === 'configured') {
       fetchAvailableModels(formData.provider);
+    } else {
+      // Check if any provider has an API key configured
+      const hasAnyConfiguredProvider = providers.some(p => state.providers[p.provider]?.status === 'configured');
+
+      if (!hasAnyConfiguredProvider) {
+        // No providers configured - show helpful message instead of error
+        setError('No API keys configured. Please configure at least one provider API key in the API Keys tab, or use MAAS which requires per-model API keys.');
+      }
     }
   }, []);
 
   const handleSubmit = async () => {
+    // Determine the actual model ID (from dropdown or custom input)
+    const actualModelId = formData.provider === 'maas' && customModelId.trim()
+      ? customModelId.trim()
+      : formData.modelId.trim();
+
     // Validate form
-    if (!formData.modelId.trim()) {
+    if (!actualModelId) {
       setError('Model selection is required');
+      return;
+    }
+
+    // MAAS-specific validation
+    if (formData.provider === 'maas' && !formData.apiKey?.trim()) {
+      setError('API key is required for MAAS models');
       return;
     }
 
@@ -133,7 +156,10 @@ export const AddModelTab: React.FC<AddModelTabProps> = ({
 
     try {
       // Add model to ConfigMap via MCP tool
-      await modelService.addModelToConfig(formData);
+      await modelService.addModelToConfig({
+        ...formData,
+        modelId: actualModelId,
+      });
 
       // Reset form (keep the same provider)
       setFormData(prev => ({
@@ -141,6 +167,7 @@ export const AddModelTab: React.FC<AddModelTabProps> = ({
         modelId: '',
         description: '',
       }));
+      setCustomModelId('');
 
       // Refresh available models
       await fetchAvailableModels(formData.provider);
@@ -156,8 +183,13 @@ export const AddModelTab: React.FC<AddModelTabProps> = ({
   };
 
   const getModelPreview = () => {
-    if (!formData.modelId.trim()) return 'provider/model-id';
-    return formatModelName(formData.provider, formData.modelId.trim());
+    // For MAAS, use custom model ID if provided, otherwise use selected model
+    const actualModelId = formData.provider === 'maas' && customModelId.trim()
+      ? customModelId.trim()
+      : formData.modelId.trim();
+
+    if (!actualModelId) return 'provider/model-id';
+    return formatModelName(formData.provider, actualModelId);
   };
 
   const template = getProviderTemplate(formData.provider);
@@ -169,16 +201,26 @@ export const AddModelTab: React.FC<AddModelTabProps> = ({
         <FlexItem>
           <Title headingLevel="h2" size="xl">
             <PlusCircleIcon style={{ marginRight: '8px' }} />
-            Add Custom Model
+            Add External Model
           </Title>
         </FlexItem>
       </Flex>
 
       <TextContent style={{ marginBottom: '24px' }}>
         <Text component={TextVariants.p}>
-          Add AI models from supported providers to your cluster configuration.
-          Select a provider and choose from available models. Models are saved to cluster storage and shared across all users.
-          Configure API keys in the <strong>API Keys</strong> tab before adding models from external providers.
+          {isDevMode() ? (
+            <>
+              Add AI models from supported providers for testing and development.
+              Select a provider and choose from available models. <strong>Models are saved to your browser session storage</strong> and will be cleared when you close the tab.
+              Configure API keys in the <strong>API Keys</strong> tab (also stored in browser) before adding models from external providers.
+            </>
+          ) : (
+            <>
+              Add AI models from supported providers to your cluster configuration.
+              Select a provider and choose from available models. Models are saved to cluster storage and shared across all users.
+              Configure API keys in the <strong>API Keys</strong> tab before adding models from external providers.
+            </>
+          )}
         </Text>
       </TextContent>
 
@@ -194,7 +236,16 @@ export const AddModelTab: React.FC<AddModelTabProps> = ({
                 isInline
                 style={{ marginBottom: '20px' }}
               >
-                {error}
+                <div>
+                  {error}
+                  {(error.includes('API key not found') || error.includes('API Keys tab')) && (
+                    <div style={{ marginTop: '8px' }}>
+                      <Button variant="link" isInline onClick={onGoToApiKeys}>
+                        Go to API Keys tab
+                      </Button>
+                    </div>
+                  )}
+                </div>
               </Alert>
             )}
 
@@ -223,7 +274,7 @@ export const AddModelTab: React.FC<AddModelTabProps> = ({
                   <Spinner size="md" />
                   <Text component={TextVariants.p}>Loading available models...</Text>
                 </div>
-              ) : availableModels.length === 0 && !error ? (
+              ) : availableModels.length === 0 && !error && formData.provider !== 'maas' ? (
                 <EmptyState variant="xs">
                   <EmptyStateIcon icon={SearchIcon} />
                   <EmptyStateBody>
@@ -232,35 +283,116 @@ export const AddModelTab: React.FC<AddModelTabProps> = ({
                 </EmptyState>
               ) : (
                 <>
-                  <FormSelect
-                    id="model-select"
-                    value={formData.modelId}
-                    onChange={(_event, value) => {
-                      const selectedModel = availableModels.find(m => m.id === value);
-                      setFormData(prev => ({
-                        ...prev,
-                        modelId: value,
-                        description: selectedModel?.description || prev.description
-                      }));
-                    }}
-                    aria-label="Select model"
-                    isDisabled={availableModels.length === 0}
-                  >
-                    <FormSelectOption key="placeholder" value="" label="Select a model..." isDisabled />
-                    {availableModels.map((model) => (
-                      <FormSelectOption
-                        key={model.id}
-                        value={model.id}
-                        label={`${model.name}${model.description ? ` - ${model.description}` : ''}`}
+                  {availableModels.length > 0 && (
+                    <>
+                      <FormSelect
+                        id="model-select"
+                        value={formData.modelId}
+                        onChange={(_event, value) => {
+                          const selectedModel = availableModels.find(m => m.id === value);
+                          setFormData(prev => ({
+                            ...prev,
+                            modelId: value,
+                            description: selectedModel?.description || prev.description
+                          }));
+                          // Clear custom model ID when selecting from dropdown
+                          if (formData.provider === 'maas') {
+                            setCustomModelId('');
+                          }
+                        }}
+                        aria-label="Select model"
+                      >
+                        <FormSelectOption key="placeholder" value="" label="Select a model..." isDisabled />
+                        {availableModels.map((model) => (
+                          <FormSelectOption
+                            key={model.id}
+                            value={model.id}
+                            label={`${model.name}${model.description ? ` - ${model.description}` : ''}`}
+                          />
+                        ))}
+                      </FormSelect>
+                    </>
+                  )}
+
+                  {/* Custom Model ID for MAAS */}
+                  {formData.provider === 'maas' && (
+                    <div style={{ marginTop: availableModels.length > 0 ? '16px' : '0' }}>
+                      {availableModels.length > 0 && (
+                        <Text component={TextVariants.p} style={{ marginBottom: '8px', fontWeight: 'bold' }}>
+                          Or enter custom model ID:
+                        </Text>
+                      )}
+                      <TextInput
+                        id="custom-model-id"
+                        value={customModelId}
+                        onChange={(_event, value) => {
+                          setCustomModelId(value);
+                          // Clear dropdown selection when typing custom model ID
+                          if (value.trim()) {
+                            setFormData(prev => ({ ...prev, modelId: '' }));
+                          }
+                        }}
+                        placeholder="Enter model ID (e.g., qwen3-14b)"
+                        aria-label="Custom model ID"
                       />
-                    ))}
-                  </FormSelect>
-                  <Text component={TextVariants.small} style={{ color: 'var(--pf-v5-global--Color--200)', marginTop: '4px' }}>
+                      <FormHelperText>
+                        <HelperText>
+                          <HelperTextItem>
+                            {availableModels.length > 0
+                              ? 'Use this field if your model is not listed above'
+                              : 'Enter the MAAS model ID you want to add'}
+                          </HelperTextItem>
+                        </HelperText>
+                      </FormHelperText>
+                    </div>
+                  )}
+
+                  <Text component={TextVariants.small} style={{ color: 'var(--pf-v5-global--Color--200)', marginTop: '8px' }}>
                     <strong>Preview:</strong> {getModelPreview()}
                   </Text>
                 </>
               )}
             </FormGroup>
+
+            {/* MAAS-specific fields: per-model API key and endpoint */}
+            {formData.provider === 'maas' && (
+              <>
+                <FormGroup label="Model API Key" isRequired fieldId="maas-api-key" style={{ marginTop: '16px' }}>
+                  <TextInput
+                    id="maas-api-key"
+                    type="password"
+                    value={formData.apiKey || ''}
+                    onChange={(_event, value) => setFormData(prev => ({ ...prev, apiKey: value }))}
+                    placeholder="Enter API key for this specific model"
+                    aria-label="MAAS model API key"
+                  />
+                  <FormHelperText>
+                    <HelperText>
+                      <HelperTextItem>
+                        MAAS models require individual API keys. Each model has unique credentials.
+                      </HelperTextItem>
+                    </HelperText>
+                  </FormHelperText>
+                </FormGroup>
+
+                <FormGroup label="Model Endpoint" fieldId="maas-endpoint" style={{ marginTop: '16px' }}>
+                  <TextInput
+                    id="maas-endpoint"
+                    value={formData.endpoint || ''}
+                    onChange={(_event, value) => setFormData(prev => ({ ...prev, endpoint: value }))}
+                    placeholder={template.defaultEndpoint}
+                    aria-label="MAAS model endpoint"
+                  />
+                  <FormHelperText>
+                    <HelperText>
+                      <HelperTextItem>
+                        Optional: Override default MAAS endpoint for this model
+                      </HelperTextItem>
+                    </HelperText>
+                  </FormHelperText>
+                </FormGroup>
+              </>
+            )}
 
             {/* Action Buttons */}
             <div style={{ marginTop: '32px', paddingTop: '16px', borderTop: '1px solid var(--pf-v5-global--BorderColor--100)' }}>
@@ -269,7 +401,11 @@ export const AddModelTab: React.FC<AddModelTabProps> = ({
                   <Button
                     variant="primary"
                     onClick={handleSubmit}
-                    isDisabled={saving || !formData.modelId.trim()}
+                    isDisabled={
+                      saving ||
+                      (!formData.modelId.trim() && !customModelId.trim()) ||
+                      (formData.provider === 'maas' && !formData.apiKey?.trim())
+                    }
                     isLoading={saving}
                   >
                     <PlusCircleIcon style={{ marginRight: '8px' }} />
@@ -281,13 +417,14 @@ export const AddModelTab: React.FC<AddModelTabProps> = ({
                     variant="link"
                     onClick={() => {
                       setFormData({
-                        provider: 'openai',
+                        provider: 'maas',
                         modelId: '',
-                        endpoint: getProviderTemplate('openai').defaultEndpoint,
+                        endpoint: getProviderTemplate('maas').defaultEndpoint,
                         description: '',
                       });
+                      setCustomModelId('');
                       setError(null);
-                      fetchAvailableModels('openai');
+                      fetchAvailableModels('maas');
                     }}
                   >
                     Reset Form

@@ -2,7 +2,8 @@ import { Model, Provider, AIModelState, ModelFormData, ProviderModel } from '../
 import { formatModelName, parseModelName } from './providerTemplates';
 import { secretManager } from './secretManager';
 import { listSummarizationModels, callMcpTool } from '../../../services/mcpClient';
-import { isDevMode } from '../../../services/devCredentials';
+import { saveDevModel, getDevModels, DevModelConfig } from '../../../services/devCredentials';
+import { isDevMode } from '../../../services/runtimeConfig';
 
 /**
  * Get the appropriate storage mechanism based on dev mode
@@ -15,30 +16,74 @@ function getStorage(): Storage {
 
 class ModelService {
   /**
-   * Load all available models from MCP server
+   * Load all available models from MCP server (production) or browser storage (dev mode)
+   * In DEV mode: tries browser storage first, falls back to MCP server if empty
    */
   async loadAvailableModels(): Promise<{ internal: Model[]; external: Model[]; custom: Model[] }> {
     try {
-      // Get models with metadata from MCP server (includes ConfigMap models)
-      const mcpModelsData = await listSummarizationModels();
-
-      // Transform and categorize models
-      const transformedModels = mcpModelsData.map(modelData => this.transformMcpModelWithMetadata(modelData));
-
-      // Load custom models from localStorage
-      const customModels = this.loadCustomModels();
-
-      // Separate into categories
       const internal: Model[] = [];
       const external: Model[] = [];
 
-      transformedModels.forEach(model => {
-        if (model.type === 'internal') {
-          internal.push(model);
+      // In DEV mode, load models from browser sessionStorage first
+      if (isDevMode()) {
+        console.log('[ModelService] DEV MODE: Loading models from dev storage (sessionStorage)');
+        const devModels = getDevModels();
+        const devModelCount = Object.keys(devModels).length;
+
+        if (devModelCount > 0) {
+          // Use cached models from sessionStorage
+          console.log(`[ModelService] Found ${devModelCount} models in dev storage`);
+          Object.values(devModels).forEach((devModel: DevModelConfig) => {
+            const model: Model = {
+              id: devModel.name,
+              name: devModel.name,
+              provider: devModel.provider as Provider,
+              modelId: devModel.modelId,
+              type: 'external', // Dev models are external by default
+              requiresApiKey: true,
+              isAvailable: true,
+              description: devModel.description,
+              endpoint: devModel.endpoint,
+            };
+            external.push(model);
+          });
         } else {
-          external.push(model);
+          // Browser storage is empty, fetch from MCP server and cache
+          console.log('[ModelService] Dev storage empty, fetching default models from MCP server');
+          const mcpModelsData = await listSummarizationModels();
+
+          // Transform and categorize models
+          const transformedModels = mcpModelsData.map(modelData => this.transformMcpModelWithMetadata(modelData));
+
+          transformedModels.forEach(model => {
+            if (model.type === 'internal') {
+              internal.push(model);
+            } else {
+              external.push(model);
+            }
+          });
+
+          console.log(`[ModelService] Fetched ${internal.length} internal and ${external.length} external models from MCP server`);
+          console.log('[ModelService] Note: To use these models in DEV mode, add them via "Add Model" tab');
         }
-      });
+      } else {
+        // Production mode: Get models from MCP server (ConfigMap)
+        const mcpModelsData = await listSummarizationModels();
+
+        // Transform and categorize models
+        const transformedModels = mcpModelsData.map(modelData => this.transformMcpModelWithMetadata(modelData));
+
+        transformedModels.forEach(model => {
+          if (model.type === 'internal') {
+            internal.push(model);
+          } else {
+            external.push(model);
+          }
+        });
+      }
+
+      // Load custom models from browser storage (works in both modes)
+      const customModels = this.loadCustomModels();
 
       return { internal, external, custom: customModels };
     } catch (error) {
@@ -238,16 +283,22 @@ class ModelService {
     try {
       const { internal, external, custom } = await this.loadAvailableModels();
       const allModels = [...internal, ...external, ...custom];
-      
+
       const model = allModels.find(m => m.name === modelName);
       if (!model) {
         return { ready: false, reason: 'Model not found' };
       }
-      
+
       if (!model.requiresApiKey) {
         return { ready: true };
       }
-      
+
+      // MAAS models use per-model API keys stored when the model is added
+      // If a MAAS model exists in the config, it has its API key configured
+      if (model.provider === 'maas') {
+        return { ready: true };
+      }
+
       // Check if API key is available in OpenShift secret
       const secretStatus = await secretManager.checkProviderSecret(model.provider);
 
@@ -263,12 +314,18 @@ class ModelService {
   }
 
   /**
-   * Get configured models from ConfigMap (for duplicate checking)
-   * Uses the same tool as loadAvailableModels - single source of truth
+   * Get configured models from ConfigMap (production) or browser storage (dev mode)
+   * Used for duplicate checking
    */
   async getConfiguredModels(): Promise<string[]> {
     try {
-      // Use list_summarization_models for consistency
+      // In DEV mode, get models from browser sessionStorage
+      if (isDevMode()) {
+        const devModels = getDevModels();
+        return Object.keys(devModels);
+      }
+
+      // Production mode: Use list_summarization_models
       const modelsData = await listSummarizationModels();
       // Extract just the names
       return modelsData.map(m => m.name || m);
@@ -328,21 +385,72 @@ class ModelService {
   }
 
   /**
-   * Add a new model to ConfigMap (both dev and production modes)
-   * Dev mode only affects where API keys are stored, not models
+   * Add a new model to ConfigMap (production) or browser storage (dev mode)
    */
   async addModelToConfig(formData: ModelFormData): Promise<{ success: boolean; model_key: string; message: string }> {
     try {
-      // Always add to ConfigMap via MCP tool (dev and production)
-      // The server needs the model config to know how to call the LLM
+      const modelKey = formatModelName(formData.provider, formData.modelId);
+
+      // DEV MODE: Save to browser sessionStorage
+      if (isDevMode()) {
+        console.log(`[ModelService] DEV MODE: Saving model ${modelKey} to browser storage`);
+
+        // Normalize endpoint URL to match backend behavior
+        let normalizedEndpoint = formData.endpoint;
+        if (normalizedEndpoint) {
+          // For MAAS, append /chat/completions if not already present
+          if (formData.provider === 'maas' && !normalizedEndpoint.includes('/chat/completions')) {
+            normalizedEndpoint = `${normalizedEndpoint.replace(/\/$/, '')}/chat/completions`;
+          }
+          // For other OpenAI-compatible providers, ensure /chat/completions path
+          else if (['openai', 'meta', 'other'].includes(formData.provider) && !normalizedEndpoint.includes('/chat/completions') && !normalizedEndpoint.includes('/responses')) {
+            normalizedEndpoint = `${normalizedEndpoint.replace(/\/$/, '')}/chat/completions`;
+          }
+          // For Google, keep as-is (uses different format)
+          // For Anthropic, keep as-is (uses different format)
+        }
+
+        // Save model configuration to dev storage
+        const devModelConfig: DevModelConfig = {
+          name: modelKey,
+          provider: formData.provider,
+          modelId: formData.modelId,
+          description: formData.description,
+          endpoint: normalizedEndpoint,
+          apiKey: formData.apiKey, // Store API key in model config for dev mode
+          savedAt: new Date().toISOString(),
+        };
+
+        saveDevModel(devModelConfig);
+
+        return {
+          success: true,
+          model_key: modelKey,
+          message: `Model ${modelKey} saved to browser storage (dev mode)`
+        };
+      }
+
+      // PRODUCTION MODE: Add to ConfigMap via MCP tool
+      const params: any = {
+        provider: formData.provider,
+        model_id: formData.modelId,
+        model_name: formData.modelId, // Use modelId as name for now
+        description: formData.description,
+      };
+
+      // For MAAS models, include per-model API key and custom endpoint
+      if (formData.provider === 'maas') {
+        if (formData.apiKey) {
+          params.api_key = formData.apiKey;
+        }
+        if (formData.endpoint) {
+          params.api_url = formData.endpoint;
+        }
+      }
+
       const response = await callMcpTool<any>(
         'add_model_to_config',
-        {
-          provider: formData.provider,
-          model_id: formData.modelId,
-          model_name: formData.modelId, // Use modelId as name for now
-          description: formData.description,
-        }
+        params
       );
 
       console.log('Add model response:', response);
@@ -402,6 +510,7 @@ class ModelService {
         anthropic: { provider: 'anthropic', status: 'missing', storage: 'none' },
         google: { provider: 'google', status: 'missing', storage: 'none' },
         meta: { provider: 'meta', status: 'missing', storage: 'none' },
+        maas: { provider: 'maas', status: 'missing', storage: 'none' },
         internal: { provider: 'internal', status: 'configured', storage: 'none' },
         other: { provider: 'other', status: 'missing', storage: 'none' },
       },

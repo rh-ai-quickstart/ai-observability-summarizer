@@ -151,6 +151,128 @@ def test_factory_creates_google_bot(mock_mcp_tools):
     assert isinstance(bot, GoogleChatBot)
 
 
+def test_factory_creates_openai_bot_for_maas(mock_mcp_tools):
+    """Test that factory creates OpenAIChatBot for MAAS models (OpenAI-compatible)."""
+    from chatbots import create_chatbot, OpenAIChatBot
+
+    # MAAS uses OpenAI-compatible API, so should route to OpenAIChatBot
+    bot = create_chatbot("maas/qwen3-14b", api_key="test-maas-key", tool_executor=mock_mcp_tools)
+    assert isinstance(bot, OpenAIChatBot)
+    assert bot.model_name == "maas/qwen3-14b"
+
+
+def test_factory_maas_with_api_url(mock_mcp_tools):
+    """Test that factory passes api_url to OpenAIChatBot for MAAS models."""
+    from chatbots import create_chatbot, OpenAIChatBot
+
+    with patch('openai.OpenAI') as mock_openai_class:
+        bot = create_chatbot(
+            "maas/qwen3-14b",
+            api_key="test-maas-key",
+            api_url="https://custom-maas.example.com/v1/chat/completions",
+            tool_executor=mock_mcp_tools
+        )
+        assert isinstance(bot, OpenAIChatBot)
+
+        # Verify OpenAI client was created with custom base_url
+        # The api_url includes /chat/completions suffix which should be removed for base_url
+        mock_openai_class.assert_called_once_with(
+            api_key="test-maas-key",
+            base_url="https://custom-maas.example.com/v1"
+        )
+
+
+def test_factory_maas_pattern_matching(mock_mcp_tools):
+    """Test that factory correctly identifies MAAS models by pattern."""
+    from chatbots import create_chatbot, OpenAIChatBot
+
+    # Test various MAAS model name patterns
+    maas_patterns = [
+        "maas/qwen3-14b",
+        "maas/granite-3.1-8b-instruct",
+        "MAAS/model-name",  # Case insensitive
+    ]
+
+    for model_name in maas_patterns:
+        bot = create_chatbot(model_name, api_key="test-key", tool_executor=mock_mcp_tools)
+        assert isinstance(bot, OpenAIChatBot), f"Failed for pattern: {model_name}"
+
+
+def test_openai_bot_with_custom_base_url(mock_mcp_tools):
+    """Test that OpenAIChatBot correctly handles custom base_url from api_url."""
+    from chatbots import OpenAIChatBot
+
+    # Test with /v1/chat/completions suffix - should strip /chat/completions, leaving /v1
+    with patch('openai.OpenAI') as mock_openai_class:
+        bot = OpenAIChatBot(
+            "maas/qwen3-14b",
+            api_key="test-key",
+            api_url="https://test.api.com/v1/chat/completions",
+            tool_executor=mock_mcp_tools
+        )
+
+        mock_openai_class.assert_called_once_with(
+            api_key="test-key",
+            base_url="https://test.api.com/v1"
+        )
+
+    # Test with just /chat/completions suffix - should strip it completely
+    with patch('openai.OpenAI') as mock_openai_class:
+        bot = OpenAIChatBot(
+            "maas/qwen3-14b",
+            api_key="test-key",
+            api_url="https://custom.api.com/chat/completions",
+            tool_executor=mock_mcp_tools
+        )
+
+        mock_openai_class.assert_called_once_with(
+            api_key="test-key",
+            base_url="https://custom.api.com"
+        )
+
+    # Test with URL that has no known suffix - should use as-is
+    with patch('openai.OpenAI') as mock_openai_class:
+        bot = OpenAIChatBot(
+            "maas/qwen3-14b",
+            api_key="test-key",
+            api_url="https://another.api.com/v1",
+            tool_executor=mock_mcp_tools
+        )
+
+        mock_openai_class.assert_called_once_with(
+            api_key="test-key",
+            base_url="https://another.api.com/v1"
+        )
+
+
+def test_openai_bot_api_url_priority(mock_mcp_tools):
+    """Test that passed api_url takes priority over model config."""
+    from chatbots import OpenAIChatBot
+
+    with patch('openai.OpenAI') as mock_openai_class:
+        with patch('core.model_config_manager.get_model_config') as mock_get_config:
+            # Mock model config with different URL
+            mock_get_config.return_value = {
+                "maas/qwen3-14b": {
+                    "apiUrl": "https://config-url.example.com/v1/chat/completions"
+                }
+            }
+
+            # Pass api_url explicitly (should take priority)
+            bot = OpenAIChatBot(
+                "maas/qwen3-14b",
+                api_key="test-key",
+                api_url="https://passed-url.example.com/v1/chat/completions",
+                tool_executor=mock_mcp_tools
+            )
+
+            # Should use the passed URL, not the config URL
+            mock_openai_class.assert_called_once_with(
+                api_key="test-key",
+                base_url="https://passed-url.example.com/v1"
+            )
+
+
 class TestAPIKeyRetrieval:
     """Test API key retrieval for all bot types."""
 
