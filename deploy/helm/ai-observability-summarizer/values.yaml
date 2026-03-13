@@ -1,0 +1,377 @@
+# =============================================================================
+# AI Observability Summarizer - Umbrella Chart Values
+# =============================================================================
+#
+# Prerequisites (must be installed by platform team):
+#   - Cluster Observability Operator
+#   - Red Hat build of OpenTelemetry Operator
+#   - Tempo Operator
+#   - Red Hat OpenShift Logging Operator
+#   - Loki Operator
+#
+# Usage:
+#   helm install aiobs . -n openshift-ai-observability --create-namespace
+#   helm install aiobs . -n openshift-ai-observability -f values-custom.yaml
+#
+# =============================================================================
+
+# =============================================================================
+# Component Toggles
+# =============================================================================
+# Each toggle controls whether the corresponding sub-chart is deployed.
+# Disabled components will not render any resources.
+
+minio:
+  enabled: true
+
+tempo:
+  enabled: true
+
+otelCollector:
+  enabled: true
+
+loki:
+  enabled: true
+
+korrel8r:
+  enabled: true
+
+mcpServer:
+  enabled: true
+
+metricUi:
+  enabled: true
+
+consolePlugin:
+  enabled: true
+
+reactUi:
+  enabled: false       # Standalone React UI (dev/demo alternative to console plugin)
+
+alerting:
+  enabled: false       # Opt-in: requires Slack webhook secret
+
+rag:
+  enabled: false       # Opt-in: requires GPU node + HF token
+
+# =============================================================================
+# Cluster-Wide Configuration
+# =============================================================================
+# These create cluster-scoped resources that are NOT part of any sub-chart.
+
+clusterMonitoring:
+  enableUserWorkloadMonitoring: true
+  enableAlertmanagerForUWM: true
+
+# Console plugin enablement (tracing + logging menus in OpenShift Console)
+consolePlugins:
+  enableTracing: true
+  enableLogging: true
+  patcherImage: "registry.redhat.io/openshift4/ose-tools-rhel9@sha256:ee65b244fc94d5765514c604dc0a288517dcdce68de65128d047622b6b30a618"
+
+tracing:
+  autoInstrument: true
+  appNamespace: openshift-ai-observability
+  otelCollectorEndpoint: http://otel-collector-collector.observability-hub.svc.cluster.local:4318
+
+# =============================================================================
+# Observability Platform — MinIO (observability-hub)
+# =============================================================================
+# Shared object storage backend for Tempo traces and Loki logs.
+
+minio:
+  minio:
+    nameOverride: minio-observability-storage
+    fullnameOverride: minio-observability-storage
+    secret:
+      user: admin
+      password: minio123
+      host: minio-observability-storage
+      port: "9000"
+    service:
+      enabled: true
+      type: ClusterIP
+      port: 9090
+      apiPort: 9000
+    buckets: ["tempo", "loki"]
+    podSecurityContext: {}
+    containerSecurityContext: {}
+    bucketInit:
+      securityContext: {}
+      podSecurityContext: {}
+    sampleFileUpload:
+      enabled: false
+
+# =============================================================================
+# Observability Platform — Tempo (observability-hub)
+# =============================================================================
+
+tempo:
+  global:
+    namespace: observability-hub
+  tempoStack:
+    name: tempostack
+    storageSize: 15Gi
+    resources:
+      total:
+        limits:
+          memory: 10Gi
+          cpu: 5000m
+        requests:
+          memory: 2Gi
+          cpu: 1000m
+    tenants:
+      mode: openshift
+      authentication:
+        - tenantName: dev
+          tenantId: "1610b0c3-c509-4592-a256-a1871353dbfa"
+    template:
+      gateway:
+        enabled: true
+      queryFrontend:
+        jaegerQuery:
+          enabled: true
+  minio:
+    enabled: false
+    s3:
+      accessKeyId: admin
+      accessKeySecret: minio123
+      bucket: tempo
+      endpoint: http://minio-observability-storage.observability-hub.svc.cluster.local:9000
+  rbac:
+    create: true
+
+# =============================================================================
+# Observability Platform — OpenTelemetry Collector (observability-hub)
+# =============================================================================
+
+otelCollector:
+  global:
+    namespace: observability-hub
+  serviceAccount:
+    create: true
+    name: otel-collector
+  rbac:
+    create: true
+  collector:
+    enabled: true
+    name: otel-collector
+    mode: deployment
+    upgradeStrategy: automatic
+    managementState: managed
+    replicas: 1
+    observability:
+      metrics:
+        enableMetrics: true
+    ingress:
+      enabled: true
+      type: route
+      route:
+        termination: passthrough
+
+# =============================================================================
+# Observability Platform — Loki (openshift-logging)
+# =============================================================================
+
+loki:
+  global:
+    namespace: openshift-logging
+  lokiStack:
+    name: logging-loki
+    size: 1x.demo
+    storageClassName: gp3
+    tenants:
+      mode: openshift-logging
+    limits:
+      global:
+        retention:
+          days: 3
+    template:
+      distributor:
+        replicas: 1
+      ingester:
+        replicas: 1
+      querier:
+        replicas: 1
+      queryFrontend:
+        replicas: 1
+      gateway:
+        replicas: 1
+      indexGateway:
+        replicas: 1
+      compactor:
+        replicas: 1
+  minio:
+    s3:
+      accessKeyId: admin
+      accessKeySecret: minio123
+      bucket: loki
+      endpoint: http://minio-observability-storage.observability-hub.svc.cluster.local:9000
+  uiPlugin:
+    enabled: true
+  rbac:
+    create: true
+    collector:
+      create: true
+  clusterLogging:
+    enabled: true
+    logForwarder:
+      enabled: true
+
+# =============================================================================
+# Observability Platform — Korrel8r (openshift-cluster-observability-operator)
+# =============================================================================
+
+korrel8r:
+  global:
+    namespace: openshift-cluster-observability-operator
+  korrel8r:
+    name: korrel8r-summarizer
+    verbose: 0
+    stores:
+      log:
+        lokiStackUrl: https://logging-loki-gateway-http.openshift-logging.svc:8080
+      netflow:
+        lokiStackUrl: https://logging-loki-gateway-http.openshift-logging.svc:8080
+      trace:
+        tempoStackUrl: https://tempo-tempostack-gateway.observability-hub.svc.cluster.local:8080/api/traces/v1/dev/tempo/api/search
+  image:
+    repository: quay.io/korrel8r/korrel8r
+    tag: "0.8.4"
+  route:
+    enabled: true
+
+# =============================================================================
+# Application — MCP Server
+# =============================================================================
+
+mcpServer:
+  image:
+    repository: quay.io/ecosystem-appeng/aiobs-mcp-server
+    tag: 1.0.8-feature
+  service:
+    name: aiobs-mcp-server-svc
+    port: 8085
+  route:
+    enabled: true
+  env:
+    MCP_HOST: "0.0.0.0"
+    MCP_PORT: 8085
+    MCP_TRANSPORT_PROTOCOL: "http"
+    PYTHON_LOG_LEVEL: "INFO"
+    DEV_MODE: "false"
+    PROMETHEUS_URL: "https://thanos-querier.openshift-monitoring.svc.cluster.local:9091"
+    TEMPO_URL: "https://tempo-tempostack-gateway.observability-hub.svc.cluster.local:8080"
+    TEMPO_TENANT_ID: "dev"
+    MAX_TIME_RANGE_DAYS: 90
+    DEFAULT_TIME_RANGE_DAYS: 7
+    KORREL8R_ENABLED: "true"
+    KORREL8R_URL: "https://korrel8r-summarizer.openshift-cluster-observability-operator.svc.cluster.local:9443"
+    MAX_NUM_LOG_ROWS: 10
+    MAX_NUM_TRACE_SPANS: 10
+    KORREL8R_TIMEOUT_SECONDS: 8
+    LLM_TIMEOUT_SECONDS: 180
+    MAX_TOOL_RESULT_CHARS: 15000
+  tls:
+    enabled: true
+  resources:
+    requests:
+      cpu: "1"
+      memory: "1Gi"
+    limits:
+      cpu: "1"
+      memory: "1Gi"
+
+# =============================================================================
+# Application — Metric UI (Streamlit)
+# =============================================================================
+
+metricUi:
+  deployment:
+    name: aiobs-ui
+  image:
+    repository: quay.io/ecosystem-appeng/aiobs-metrics-ui
+    tag: 1.0.8-feature
+  service:
+    name: aiobs-ui
+    port: 8501
+  env:
+    PROMETHEUS_URL: "https://thanos-querier.openshift-monitoring.svc.cluster.local:9091"
+    LLM_URL: "http://llm-service:8012"
+    LLM_API_TOKEN: ""
+    LLAMA_STACK_URL: "http://llamastack:8321/v1/openai/v1"
+    PYTHON_LOG_LEVEL: "INFO"
+  mcpServer:
+    serviceName: aiobs-mcp-server-svc
+    port: 8085
+
+# =============================================================================
+# Application — OpenShift Console Plugin
+# =============================================================================
+
+consolePlugin:
+  plugin:
+    name: aiobs-console-plugin
+    image:
+      repository: quay.io/ecosystem-appeng/aiobs-console-plugin
+      tag: 1.0.8-feature
+    replicas: 1
+    port: 9443
+    jobs:
+      patchConsoles:
+        enabled: true
+        image: "registry.redhat.io/openshift4/ose-tools-rhel9@sha256:ee65b244fc94d5765514c604dc0a288517dcdce68de65128d047622b6b30a618"
+  mcpServer:
+    enabled: true
+    serviceName: aiobs-mcp-server-svc
+    port: 8085
+
+# =============================================================================
+# Application — React UI (standalone, disabled by default)
+# =============================================================================
+
+reactUi:
+  app:
+    name: aiobs-react-ui
+    image:
+      repository: quay.io/ecosystem-appeng/aiobs-react-ui
+      tag: latest
+    port: 8080
+  route:
+    enabled: true
+    tls:
+      enabled: true
+      termination: edge
+  oauth:
+    enabled: true
+  mcpServer:
+    serviceName: aiobs-mcp-server-svc
+    port: 8085
+
+# =============================================================================
+# Application — Alerting (disabled by default)
+# =============================================================================
+# Requires: Secret 'alerts-secrets' with key 'slack-webhook-url'
+
+alerts:
+  image:
+    repository: quay.io/ecosystem-appeng/aiobs-metrics-alerting
+    tag: 1.0.8-feature
+  schedule: "*/1 * * * *"
+  config:
+    alertmanagerUrl: "https://alertmanager-user-workload.openshift-user-workload-monitoring.svc.cluster.local:9095"
+    timeWindow: 60
+
+# =============================================================================
+# Application — RAG (disabled by default)
+# =============================================================================
+# Requires: GPU node, HF token, external chart dependencies
+
+rag:
+  pgvector:
+    secret:
+      user: postgres
+      password: rag_password
+      dbname: rag_blueprint
+      host: pgvector
+      port: "5432"

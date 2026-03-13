@@ -1,0 +1,21 @@
+lokiStack:
+  # This chart defaults to openshift-logging namespace; keep as-is unless you know otherwise.
+  name: logging-loki
+  # Makefile detects and sets the cluster's default StorageClass.
+  # In GitOps, set this explicitly for your cluster (or keep chart default).
+  # storageClassName: gp3
+
+minio:
+  s3:
+    accessKeyId: admin
+    accessKeySecret: minio123
+    bucket: loki
+
+rbac:
+  # The Makefile tries to auto-detect whether the collector ServiceAccount already exists.
+  # In GitOps, pick one:
+  # - true: create collector SA/RBAC (new deployments)
+  # - false: OpenShift Logging Operator already manages collector SA/RBAC
+  collector:
+    create: false
+

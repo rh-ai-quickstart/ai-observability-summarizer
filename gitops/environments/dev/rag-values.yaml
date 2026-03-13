@@ -1,0 +1,17 @@
+# RAG chart deploys backend services used by the UIs:
+# - llm-service
+# - llama-stack
+# - pgvector
+#
+# IMPORTANT (Argo CD):
+# This chart has remote Helm dependencies (see `deploy/helm/rag/Chart.yaml`).
+# For Argo CD to render it, either:
+# - enable Helm dependency build in Argo CD repo-server, OR
+# - vendor dependencies by running `helm dependency build deploy/helm/rag` and committing `deploy/helm/rag/charts/`.
+
+# Minimal example overrides go here (optional).
+# For real clusters, move secrets (HF token, API keys) to ExternalSecrets/SealedSecrets.
+llama-stack:
+  secrets:
+    TAVILY_SEARCH_API_KEY: ""
+

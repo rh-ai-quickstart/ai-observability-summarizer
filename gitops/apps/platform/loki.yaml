@@ -1,0 +1,29 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: aiobs-platform-loki
+  namespace: openshift-gitops
+  annotations:
+    argocd.argoproj.io/sync-wave: "20"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/YOUR_ORG/ai-observability-summarizer.git
+    targetRevision: main
+    path: deploy/helm/observability/loki
+    helm:
+      # Match Makefile: `helm upgrade --install loki-stack observability/loki ...`
+      releaseName: loki-stack
+      valueFiles:
+        - ../../../../gitops/environments/dev/loki-values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: openshift-logging
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - SkipDryRunOnMissingResource=true
+

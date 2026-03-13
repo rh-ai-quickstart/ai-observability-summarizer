@@ -1,0 +1,28 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: aiobs-platform-tempo
+  namespace: openshift-gitops
+  annotations:
+    argocd.argoproj.io/sync-wave: "20"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/YOUR_ORG/ai-observability-summarizer.git
+    targetRevision: main
+    path: deploy/helm/observability/tempo
+    helm:
+      releaseName: tempo
+      valueFiles:
+        - ../../../../gitops/environments/dev/tempo-values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observability-hub
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - SkipDryRunOnMissingResource=true
+

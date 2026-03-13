@@ -1,0 +1,28 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: aiobs-app-console-plugin
+  namespace: openshift-gitops
+  annotations:
+    # Makefile installs the console plugin after MCP server.
+    argocd.argoproj.io/sync-wave: "55"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/YOUR_ORG/ai-observability-summarizer.git
+    targetRevision: main
+    path: deploy/helm/openshift-console-plugin
+    helm:
+      releaseName: aiobs-console-plugin
+      valueFiles:
+        - ../../../gitops/environments/dev/console-plugin-values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: openshift-ai-observability
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+

@@ -1,0 +1,27 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: aiobs-platform-minio
+  namespace: openshift-gitops
+  annotations:
+    argocd.argoproj.io/sync-wave: "10"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/YOUR_ORG/ai-observability-summarizer.git
+    targetRevision: main
+    path: deploy/helm/minio
+    helm:
+      releaseName: minio-observability-storage
+      valueFiles:
+        - ../../../gitops/environments/dev/minio-values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observability-hub
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+

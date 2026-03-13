@@ -1,0 +1,8 @@
+{{- if .Values.tracing.autoInstrument }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.tracing.appNamespace }}
+  annotations:
+    instrumentation.opentelemetry.io/inject-python: "true"
+{{- end }}

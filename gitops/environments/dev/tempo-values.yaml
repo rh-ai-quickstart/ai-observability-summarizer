@@ -1,0 +1,6 @@
+minio:
+  s3:
+    accessKeyId: admin
+    accessKeySecret: minio123
+    bucket: tempo
+
