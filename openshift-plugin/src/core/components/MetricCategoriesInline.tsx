@@ -52,7 +52,7 @@ export const MetricCategoriesInline: React.FC<MetricCategoriesInlineProps> = ({
       setSelectedCategoryId(''); // Reset category selection when scope changes
       onCategorySelect(null); // Notify parent that category selection is cleared
     }
-  }, [chatScope, onCategorySelect]);
+  }, [chatScope]);
 
   const loadCategories = async () => {
     setLoading(true);
