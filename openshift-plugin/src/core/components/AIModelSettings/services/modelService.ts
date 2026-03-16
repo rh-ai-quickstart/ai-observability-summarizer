@@ -497,6 +497,103 @@ class ModelService {
   }
 
   /**
+   * Update API key (and optionally endpoint) for an existing MAAS model
+   */
+  async updateMaasModelApiKey(formData: ModelFormData): Promise<{ success: boolean; model_key: string; message: string }> {
+    try {
+      const modelKey = formatModelName(formData.provider, formData.modelId);
+
+      // DEV MODE: Update sessionStorage
+      if (isDevMode()) {
+        console.log(`[ModelService] DEV MODE: Updating MAAS model ${modelKey} in browser storage`);
+
+        const devModels = getDevModels();
+        if (!devModels[modelKey]) {
+          throw new Error(`Model ${modelKey} not found in dev storage`);
+        }
+
+        // Update the model config
+        let normalizedEndpoint = formData.endpoint;
+        if (normalizedEndpoint && !normalizedEndpoint.includes('/chat/completions')) {
+          normalizedEndpoint = `${normalizedEndpoint.replace(/\/$/, '')}/chat/completions`;
+        }
+
+        const updatedConfig: DevModelConfig = {
+          ...devModels[modelKey],
+          apiKey: formData.apiKey, // Update API key
+          endpoint: normalizedEndpoint || devModels[modelKey].endpoint, // Update endpoint if provided
+          savedAt: new Date().toISOString(),
+        };
+
+        saveDevModel(updatedConfig);
+
+        return {
+          success: true,
+          model_key: modelKey,
+          message: `Model ${modelKey} updated in browser storage (dev mode)`
+        };
+      }
+
+      // PRODUCTION MODE: Update via MCP tool
+      const params: any = {
+        model_id: formData.modelId,
+        api_key: formData.apiKey,
+      };
+
+      if (formData.endpoint) {
+        params.api_url = formData.endpoint;
+      }
+
+      const response = await callMcpTool<any>(
+        'update_maas_model_api_key',
+        params
+      );
+
+      console.log('Update MAAS model response:', response);
+
+      // Parse response
+      let data: any;
+      if (typeof response === 'string') {
+        try {
+          data = JSON.parse(response);
+        } catch (parseError) {
+          console.error('Failed to parse update response:', response);
+          throw new Error('Invalid response from server');
+        }
+      } else if (response && typeof response === 'object') {
+        if (response.type === 'text' && typeof response.text === 'string') {
+          try {
+            data = JSON.parse(response.text);
+          } catch (parseError) {
+            console.error('Failed to parse MCP text response:', response.text);
+            throw new Error('Invalid response from server');
+          }
+        } else if (response.success !== undefined) {
+          data = response;
+        } else {
+          console.error('Unexpected response format:', response);
+          throw new Error('Unexpected response format from server');
+        }
+      } else {
+        throw new Error('Invalid response from server');
+      }
+
+      if (!data.success) {
+        throw new Error(data.message || 'Failed to update MAAS model');
+      }
+
+      return {
+        success: data.success,
+        model_key: data.model_key,
+        message: data.message || `Model ${data.model_key} updated successfully`
+      };
+    } catch (error) {
+      console.error('Failed to update MAAS model:', error);
+      throw new Error(`Failed to update model: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
    * Initialize default state
    */
   getInitialState(): AIModelState {

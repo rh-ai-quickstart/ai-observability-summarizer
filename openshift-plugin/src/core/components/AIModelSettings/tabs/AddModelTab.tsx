@@ -65,6 +65,8 @@ export const AddModelTab: React.FC<AddModelTabProps> = ({
   const [availableModels, setAvailableModels] = React.useState<ProviderModel[]>([]);
   const [loadingModels, setLoadingModels] = React.useState(false);
   const [customModelId, setCustomModelId] = React.useState('');
+  const [mode, setMode] = React.useState<'add' | 'update'>('add');
+  const [isConfiguredModel, setIsConfiguredModel] = React.useState(false);
 
   const providers = getAllProviders().filter(p => p.provider !== 'internal' && p.provider !== 'other'); // Exclude internal and custom provider
 
@@ -80,11 +82,17 @@ export const AddModelTab: React.FC<AddModelTabProps> = ({
       // Get currently configured models
       const configured = await modelService.getConfiguredModels();
 
-      // Filter out already configured models
-      const filtered = providerModels.filter(model => {
-        const modelKey = formatModelName(provider, model.id);
-        return !configured.includes(modelKey);
-      });
+      // For MAAS: Don't filter out configured models (allow updates)
+      // For other providers: Filter out configured models
+      const filtered = provider === 'maas'
+        ? providerModels.map(model => ({
+            ...model,
+            isConfigured: configured.includes(formatModelName(provider, model.id))
+          }))
+        : providerModels.filter(model => {
+            const modelKey = formatModelName(provider, model.id);
+            return !configured.includes(modelKey);
+          });
 
       setAvailableModels(filtered);
     } catch (err) {
@@ -103,8 +111,11 @@ export const AddModelTab: React.FC<AddModelTabProps> = ({
       provider,
       endpoint: template.defaultEndpoint,
       modelId: '',
+      apiKey: undefined,
     }));
     setCustomModelId('');
+    setIsConfiguredModel(false);
+    setMode('add');
     setError(null);
 
     // Fetch available models for the selected provider
@@ -155,19 +166,30 @@ export const AddModelTab: React.FC<AddModelTabProps> = ({
     setError(null);
 
     try {
-      // Add model to ConfigMap via MCP tool
-      await modelService.addModelToConfig({
-        ...formData,
-        modelId: actualModelId,
-      });
+      if (mode === 'update' && formData.provider === 'maas') {
+        // Update existing MAAS model API key
+        await modelService.updateMaasModelApiKey({
+          ...formData,
+          modelId: actualModelId,
+        });
+      } else {
+        // Add new model to ConfigMap via MCP tool
+        await modelService.addModelToConfig({
+          ...formData,
+          modelId: actualModelId,
+        });
+      }
 
       // Reset form (keep the same provider)
       setFormData(prev => ({
         ...prev,
         modelId: '',
         description: '',
+        apiKey: undefined,
       }));
       setCustomModelId('');
+      setIsConfiguredModel(false);
+      setMode('add');
 
       // Refresh available models
       await fetchAvailableModels(formData.provider);
@@ -176,7 +198,7 @@ export const AddModelTab: React.FC<AddModelTabProps> = ({
       onModelAdd();
       onSuccess();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to add model');
+      setError(err instanceof Error ? err.message : 'Failed to ' + (mode === 'update' ? 'update' : 'add') + ' model');
     } finally {
       setSaving(false);
     }
@@ -290,26 +312,41 @@ export const AddModelTab: React.FC<AddModelTabProps> = ({
                         value={formData.modelId}
                         onChange={(_event, value) => {
                           const selectedModel = availableModels.find(m => m.id === value);
+                          const isConfigured = selectedModel && (selectedModel as any).isConfigured;
+
                           setFormData(prev => ({
                             ...prev,
                             modelId: value,
                             description: selectedModel?.description || prev.description
                           }));
-                          // Clear custom model ID when selecting from dropdown
+
+                          // For MAAS models, check if it's already configured
                           if (formData.provider === 'maas') {
                             setCustomModelId('');
+                            setIsConfiguredModel(!!isConfigured);
+                            setMode(isConfigured ? 'update' : 'add');
+                          } else {
+                            setIsConfiguredModel(false);
+                            setMode('add');
                           }
                         }}
                         aria-label="Select model"
                       >
                         <FormSelectOption key="placeholder" value="" label="Select a model..." isDisabled />
-                        {availableModels.map((model) => (
-                          <FormSelectOption
-                            key={model.id}
-                            value={model.id}
-                            label={`${model.name}${model.description ? ` - ${model.description}` : ''}`}
-                          />
-                        ))}
+                        {availableModels.map((model) => {
+                          const isConfigured = (model as any).isConfigured;
+                          const label = formData.provider === 'maas' && isConfigured
+                            ? `${model.name} (Already configured - Update API key)${model.description ? ` - ${model.description}` : ''}`
+                            : `${model.name}${model.description ? ` - ${model.description}` : ''}`;
+
+                          return (
+                            <FormSelectOption
+                              key={model.id}
+                              value={model.id}
+                              label={label}
+                            />
+                          );
+                        })}
                       </FormSelect>
                     </>
                   )}
@@ -330,6 +367,9 @@ export const AddModelTab: React.FC<AddModelTabProps> = ({
                           // Clear dropdown selection when typing custom model ID
                           if (value.trim()) {
                             setFormData(prev => ({ ...prev, modelId: '' }));
+                            // Custom model IDs are always new models
+                            setIsConfiguredModel(false);
+                            setMode('add');
                           }
                         }}
                         placeholder="Enter model ID (e.g., qwen3-14b)"
@@ -354,6 +394,19 @@ export const AddModelTab: React.FC<AddModelTabProps> = ({
               )}
             </FormGroup>
 
+            {/* Update Mode Warning */}
+            {mode === 'update' && formData.provider === 'maas' && isConfiguredModel && (
+              <Alert
+                variant={AlertVariant.info}
+                title="Update Mode"
+                isInline
+                style={{ marginTop: '16px' }}
+              >
+                This model is already configured. You can update its API key and endpoint below.
+                The existing credentials will be replaced.
+              </Alert>
+            )}
+
             {/* MAAS-specific fields: per-model API key and endpoint */}
             {formData.provider === 'maas' && (
               <>
@@ -369,7 +422,9 @@ export const AddModelTab: React.FC<AddModelTabProps> = ({
                   <FormHelperText>
                     <HelperText>
                       <HelperTextItem>
-                        MAAS models require individual API keys. Each model has unique credentials.
+                        {mode === 'update'
+                          ? 'Update the API key to restore access to this model. The previous key will be replaced.'
+                          : 'MAAS models require individual API keys. Each model has unique credentials.'}
                       </HelperTextItem>
                     </HelperText>
                   </FormHelperText>
@@ -409,7 +464,7 @@ export const AddModelTab: React.FC<AddModelTabProps> = ({
                     isLoading={saving}
                   >
                     <PlusCircleIcon style={{ marginRight: '8px' }} />
-                    Add Model
+                    {mode === 'update' ? 'Update API Key' : 'Add Model'}
                   </Button>
                 </FlexItem>
                 <FlexItem>
@@ -421,8 +476,11 @@ export const AddModelTab: React.FC<AddModelTabProps> = ({
                         modelId: '',
                         endpoint: getProviderTemplate('maas').defaultEndpoint,
                         description: '',
+                        apiKey: undefined,
                       });
                       setCustomModelId('');
+                      setIsConfiguredModel(false);
+                      setMode('add');
                       setError(null);
                       fetchAvailableModels('maas');
                     }}

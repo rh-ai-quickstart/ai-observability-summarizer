@@ -112,4 +112,5 @@ export interface ProviderModel {
   context_length?: number; // Token limit
   created?: number;        // Release date (timestamp)
   owned_by?: string;       // Owner/organization
+  isConfigured?: boolean;  // Whether model is already configured (for MAAS update flow)
 }

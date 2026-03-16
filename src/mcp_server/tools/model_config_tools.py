@@ -686,6 +686,130 @@ def add_model_to_config(
         return err.to_mcp_response()
 
 
+def update_maas_model_api_key(
+    model_id: str,
+    api_key: str,
+    api_url: Optional[str] = None
+) -> List[Dict[str, Any]]:
+    """
+    Update API key and optionally endpoint for an existing MAAS model.
+
+    Args:
+        model_id: Model identifier (e.g., 'qwen3-14b')
+        api_key: New API key for the model
+        api_url: Optional new endpoint URL
+
+    Returns:
+        MCP response with result
+    """
+    try:
+        logger.info(f"Updating MAAS model API key: {model_id}")
+
+        if not model_id or not api_key:
+            raise MCPException(
+                message="model_id and api_key are required",
+                error_code=MCPErrorCode.INVALID_INPUT,
+            )
+
+        # Clean up model_id (remove maas/ prefix if present)
+        clean_model_id = model_id.replace("maas/", "").strip()
+        model_key = f"maas/{clean_model_id}"
+
+        # Verify model exists in config
+        from core.model_config_manager import get_model_config
+        current_config = get_model_config(force_refresh=True)
+
+        if model_key not in current_config:
+            raise MCPException(
+                message=f"Model {model_key} not found in configuration. Use Add Model to add it first.",
+                error_code=MCPErrorCode.INVALID_INPUT,
+            )
+
+        # Update API key in Secret
+        secret_field = clean_model_id
+        save_result = _save_maas_model_api_key(secret_field, api_key)
+        if not save_result["success"]:
+            raise MCPException(
+                message=f"Failed to update MAAS API key: {save_result.get('error', 'Unknown error')}",
+                error_code=MCPErrorCode.KUBERNETES_API_ERROR,
+            )
+
+        # Update endpoint in ConfigMap if provided
+        if api_url:
+            ns = os.getenv("NAMESPACE", "")
+            if not ns:
+                raise MCPException(
+                    message="Server namespace not detected; cannot update ConfigMap",
+                    error_code=MCPErrorCode.INTERNAL_ERROR,
+                )
+
+            # Normalize endpoint URL
+            normalized_url = api_url.rstrip('/')
+            if not normalized_url.endswith('/chat/completions'):
+                final_api_url = f"{normalized_url}/chat/completions"
+            else:
+                final_api_url = normalized_url
+
+            # Update model config
+            model_config = current_config[model_key]
+            model_config["apiUrl"] = final_api_url
+            model_config["_metadata"]["lastUpdated"] = datetime.utcnow().isoformat() + "Z"
+            model_config["_metadata"]["updatedBy"] = "console-plugin"
+
+            # Update ConfigMap
+            configmap_name = "ai-model-config"
+            url = f"{K8S_API_URL}/api/v1/namespaces/{ns}/configmaps/{configmap_name}"
+            headers = _get_k8s_headers()
+            headers["Content-Type"] = "application/strategic-merge-patch+json"
+            verify = K8S_SA_CA_PATH if os.path.exists(K8S_SA_CA_PATH) else True
+
+            patch_payload = {
+                "metadata": {
+                    "annotations": {
+                        "config.kubernetes.io/last-modified": datetime.utcnow().isoformat() + "Z"
+                    }
+                },
+                "data": {
+                    "model-config.json": json.dumps(current_config, indent=2)
+                }
+            }
+
+            r = requests.patch(url, headers=headers, json=patch_payload, timeout=10, verify=verify)
+
+            if r.status_code not in (200, 201):
+                # API key was updated but endpoint update failed
+                logger.warning(f"API key updated but endpoint update failed: {r.status_code}")
+                result = {
+                    "success": True,
+                    "model_key": model_key,
+                    "warning": f"API key updated successfully, but endpoint update failed: {r.status_code}",
+                    "message": f"Model {model_key} API key updated (endpoint update failed)"
+                }
+                return make_mcp_text_response(json.dumps(result))
+
+            # Force refresh runtime config
+            from core.model_config_manager import reload_model_config
+            reload_model_config()
+
+        result = {
+            "success": True,
+            "model_key": model_key,
+            "message": f"Model {model_key} updated successfully" + (" with new endpoint" if api_url else "")
+        }
+        logger.info(f"MAAS model {model_key} updated successfully")
+        return make_mcp_text_response(json.dumps(result))
+
+    except MCPException as e:
+        return e.to_mcp_response()
+    except Exception as e:
+        logger.error(f"Error updating MAAS model: {e}")
+        err = MCPException(
+            message=f"Failed to update MAAS model: {str(e)}",
+            error_code=MCPErrorCode.INTERNAL_ERROR,
+        )
+        return err.to_mcp_response()
+
+
 # get_current_model_config has been removed - use list_summarization_models instead
 # The console plugin now uses list_summarization_models for both displaying models
 # and checking for duplicates, providing a single source of truth.
