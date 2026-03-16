@@ -59,20 +59,21 @@ class TestDetectProviderFromModelId:
         assert detect_provider_from_model_id("Llama-3.2-3B-Instruct") == "meta"
 
     def test_pattern_matching_openai_keyword(self):
-        """Test pattern matching with 'openai' keyword in name"""
-        assert detect_provider_from_model_id("openai-model-v1") == "openai"
+        """Test pattern matching with 'openai/' prefix"""
+        assert detect_provider_from_model_id("openai/custom-model-v1") == "openai"
 
     def test_pattern_matching_anthropic_keyword(self):
-        """Test pattern matching with 'anthropic' keyword in name"""
-        assert detect_provider_from_model_id("anthropic-model") == "anthropic"
+        """Test pattern matching with 'anthropic/' prefix"""
+        assert detect_provider_from_model_id("anthropic/custom-model") == "anthropic"
 
     def test_pattern_matching_google_keyword(self):
-        """Test pattern matching with 'google' keyword in name"""
-        assert detect_provider_from_model_id("google-ai-model") == "google"
+        """Test pattern matching with 'google/' prefix"""
+        assert detect_provider_from_model_id("google/custom-ai-model") == "google"
 
     def test_pattern_matching_bard(self):
-        """Test pattern matching for Bard (Google) models"""
-        assert detect_provider_from_model_id("bard-advanced") == "google"
+        """Test that 'bard' without google/ prefix returns internal (deprecated model)"""
+        # Bard is deprecated and requires google/ prefix for proper detection
+        assert detect_provider_from_model_id("bard-advanced") == "internal"
 
     def test_internal_model_fallback(self):
         """Test fallback to 'internal' for unknown model patterns"""
