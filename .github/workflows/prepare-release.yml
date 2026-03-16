@@ -164,6 +164,8 @@ jobs:
           echo "Files that would be updated:"
           echo "  - deploy/helm/alerting/values.yaml"
           echo "  - deploy/helm/mcp-server/values.yaml"
+          echo "  - deploy/helm/openshift-console-plugin/values.yaml"
+          echo "  - deploy/helm/react-ui-app/values.yaml"
           echo "  - Makefile"
           echo ""
           echo "Commit would be pushed to: origin/${{ inputs.target_branch }}"
@@ -224,6 +226,8 @@ jobs:
           ### Container Images
           - \`${{ env.IMAGE_PREFIX }}-metrics-alerting:$VERSION_NUMBER\`
           - \`${{ env.IMAGE_PREFIX }}-mcp-server:$VERSION_NUMBER\`
+          - \`${{ env.IMAGE_PREFIX }}-console-plugin:$VERSION_NUMBER\`
+          - \`${{ env.IMAGE_PREFIX }}-react-ui:$VERSION_NUMBER\`
           
           ### Checklist
           - [ ] All images verified in Quay.io
@@ -310,6 +314,8 @@ jobs:
             echo "4. Images would be built with version \`${{ needs.compute-next-version.outputs.expected_version }}\`:" >> $GITHUB_STEP_SUMMARY
             echo "   - \`${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-metrics-alerting:${{ needs.compute-next-version.outputs.expected_version }}\`" >> $GITHUB_STEP_SUMMARY
             echo "   - \`${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-mcp-server:${{ needs.compute-next-version.outputs.expected_version }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "   - \`${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-console-plugin:${{ needs.compute-next-version.outputs.expected_version }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "   - \`${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-react-ui:${{ needs.compute-next-version.outputs.expected_version }}\`" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "### To Execute for Real:" >> $GITHUB_STEP_SUMMARY
             echo "Run this workflow again with the same settings but **uncheck the dry_run option**" >> $GITHUB_STEP_SUMMARY
@@ -324,6 +330,8 @@ jobs:
             echo "1. Verify images are built with version \`${{ needs.version-bump-commit.outputs.expected_version }}\`:" >> $GITHUB_STEP_SUMMARY
             echo "   - [${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-metrics-alerting:${{ needs.version-bump-commit.outputs.expected_version }}](https://${{ env.REGISTRY }}/repository/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-metrics-alerting?tab=tags)" >> $GITHUB_STEP_SUMMARY
             echo "   - [${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-mcp-server:${{ needs.version-bump-commit.outputs.expected_version }}](https://${{ env.REGISTRY }}/repository/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-mcp-server?tab=tags)" >> $GITHUB_STEP_SUMMARY
+            echo "   - [${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-console-plugin:${{ needs.version-bump-commit.outputs.expected_version }}](https://${{ env.REGISTRY }}/repository/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-console-plugin?tab=tags)" >> $GITHUB_STEP_SUMMARY
+            echo "   - [${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-react-ui:${{ needs.version-bump-commit.outputs.expected_version }}](https://${{ env.REGISTRY }}/repository/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-react-ui?tab=tags)" >> $GITHUB_STEP_SUMMARY
             if [ "${{ inputs.target_branch }}" = "dev" ]; then
               # Check if PR was created (create-pr job succeeded)
               if [ "${{ needs.create-pr.result }}" = "success" ]; then
