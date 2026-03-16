@@ -536,8 +536,13 @@ class TestAddModelToConfig:
         mock_patch.assert_called_once()
         mock_reload.assert_called_once()
 
-    def test_add_maas_model_missing_api_key(self):
+    @patch("os.getenv")
+    def test_add_maas_model_missing_api_key(self, mock_getenv):
         """Test adding MAAS model without API key"""
+        # Need to mock NAMESPACE so we get past the namespace check
+        # and reach the API key validation
+        mock_getenv.return_value = "test-namespace"
+
         result = add_model_to_config(
             provider="maas",
             model_id="qwen3-14b"
