@@ -50,18 +50,23 @@ def detect_provider_from_model_id(model_id: Optional[str]) -> Optional[str]:
         if "/" in model_id:
             return model_id.split("/", 1)[0].strip().lower()
 
-        # Pattern matching for common model names
+        # Pattern matching for common model names (standardized with factory.py)
         m_lower = model_id.lower()
-        if "gpt" in m_lower or "openai" in m_lower:
+        # MAAS: Must be at start to avoid false matches (e.g., "custom-maas-model")
+        if m_lower.startswith("maas/"):
+            return "maas"
+        # OpenAI: Check for prefix patterns
+        if m_lower.startswith("openai/") or m_lower.startswith("gpt-") or m_lower.startswith("o1-"):
             return "openai"
-        if "claude" in m_lower or "anthropic" in m_lower:
+        # Anthropic: Check for prefix or substring (claude can appear anywhere)
+        if m_lower.startswith("anthropic/") or "claude" in m_lower:
             return "anthropic"
-        if "gemini" in m_lower or "google" in m_lower or "bard" in m_lower:
+        # Google: Check for prefix or substring (gemini can appear anywhere)
+        if m_lower.startswith("google/") or "gemini" in m_lower:
             return "google"
+        # Meta: Check for substring patterns
         if "llama" in m_lower or "meta" in m_lower:
             return "meta"
-        if "maas" in m_lower:
-            return "maas"
 
         return "internal"
     except Exception:
@@ -266,7 +271,8 @@ def resolve_api_key(
     # Priority 2: Kubernetes secret based on model
     if model_id:
         # MAAS models need per-model API key lookup
-        if model_id.startswith("maas/") or "maas" in model_id.lower():
+        # Use startswith to avoid false matches (e.g., "custom-maas-model")
+        if model_id.lower().startswith("maas/"):
             maas_key = fetch_maas_model_api_key(model_id)
             if maas_key:
                 return maas_key
