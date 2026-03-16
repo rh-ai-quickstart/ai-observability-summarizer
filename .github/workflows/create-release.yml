@@ -47,11 +47,11 @@ jobs:
     name: Validate version and create GitHub release
     runs-on: ubuntu-latest
     outputs:
-      release_url: ${{ steps.create_release.outputs.url }}
+      release_url: ${{ steps.create_release.outputs.html_url }}
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ inputs.target_branch }}
           fetch-depth: 0
@@ -259,16 +259,24 @@ jobs:
       - name: Create GitHub Release
         if: ${{ !inputs.dry_run }}
         id: create_release
-        uses: actions/create-release@v1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ steps.get_version.outputs.version }}
-          release_name: "OpenShift AI Observability Summarizer ${{ steps.get_version.outputs.version }}"
-          body_path: release_notes.md
-          draft: false
-          prerelease: ${{ inputs.prerelease }}
-          commitish: ${{ inputs.target_branch }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          PRERELEASE_FLAG=""
+          if [ "${{ inputs.prerelease }}" = "true" ]; then
+            PRERELEASE_FLAG="--prerelease"
+          fi
+
+          RELEASE_URL=$(gh release create "$VERSION" \
+            --repo "${{ github.repository }}" \
+            --title "OpenShift AI Observability Summarizer $VERSION" \
+            --notes-file release_notes.md \
+            --target "${{ inputs.target_branch }}" \
+            $PRERELEASE_FLAG)
+
+          echo "Release created: $RELEASE_URL"
+          echo "html_url=$RELEASE_URL" >> $GITHUB_OUTPUT
 
 
       - name: Summary
