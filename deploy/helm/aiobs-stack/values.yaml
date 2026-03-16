@@ -73,7 +73,7 @@ tempo: {}
 # NOTE: Collector RBAC is disabled to avoid conflicts with OLM-managed ClusterRoles
 loki:
   lokiStack:
-    storageClassName: "gp3"  # Default for AWS. Change to: 'standard' (GCP), 'managed-premium' (Azure), or your cluster's default
+    storageClassName: "auto"  # Auto-detect cluster default storage class (or specify: gp3, gp2, standard, managed-premium, thin, etc.)
   global:
     namespace: openshift-logging  # Deploy LokiStack to openshift-logging (not ai-observability)
   rbac:

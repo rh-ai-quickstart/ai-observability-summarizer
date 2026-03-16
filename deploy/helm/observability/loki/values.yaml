@@ -17,7 +17,7 @@ global:
 lokiStack:
   name: logging-loki
   size: 1x.demo # Options: 1x.demo, 1x.extra-small, 1x.small, 1x.medium
-  storageClassName: "gp3"
+  storageClassName: "auto" # auto = detect cluster default, or specify: gp3, gp2, standard, managed-premium, thin, etc.
 
   # Tenant configuration - OpenShift Logging mode for proper RBAC
   tenants:

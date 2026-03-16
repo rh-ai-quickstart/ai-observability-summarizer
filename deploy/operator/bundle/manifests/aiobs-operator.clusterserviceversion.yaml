@@ -30,7 +30,7 @@ metadata:
             },
             "loki": {
               "lokiStack": {
-                "storageClassName": ""
+                "storageClassName": "auto"
               }
             },
             "mcpServer": {
@@ -161,20 +161,6 @@ spec:
         x-descriptors:
         - urn:alm:descriptor:com.tectonic.ui:fieldGroup:Other Settings
         - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
-      - description: Storage class for Loki persistent volumes. Select the storage
-          class that matches your cloud provider (gp3/gp2 for AWS, standard for GCP,
-          managed-premium for Azure).
-        displayName: Loki Storage Class
-        path: loki.lokiStack.storageClassName
-        x-descriptors:
-        - urn:alm:descriptor:com.tectonic.ui:fieldGroup:Other Settings
-        - urn:alm:descriptor:com.tectonic.ui:select:gp3
-        - urn:alm:descriptor:com.tectonic.ui:select:gp2
-        - urn:alm:descriptor:com.tectonic.ui:select:standard
-        - urn:alm:descriptor:com.tectonic.ui:select:managed-premium
-        - urn:alm:descriptor:com.tectonic.ui:select:thin
-        - urn:alm:descriptor:com.tectonic.ui:select:ocs-storagecluster-ceph-rbd
-        - urn:alm:descriptor:com.tectonic.ui:select:ocs-storagecluster-cephfs
       statusDescriptors:
       - description: Current status conditions
         displayName: Conditions

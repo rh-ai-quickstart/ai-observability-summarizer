@@ -18,7 +18,7 @@ spec:
     secret:
       name: minio-loki-credentials
       type: s3
-  storageClassName: {{ .Values.lokiStack.storageClassName }}
+  storageClassName: {{ include "loki-stack.storageClass" . }}
   size: {{ .Values.lokiStack.size }}
   tenants:
     mode: {{ .Values.lokiStack.tenants.mode }}
