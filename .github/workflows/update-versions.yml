@@ -58,6 +58,13 @@ jobs:
             echo "Updated deploy/helm/openshift-console-plugin/values.yaml"
           fi
 
+      - name: Update react-ui-app values.yaml
+        run: |
+          if [ -f "deploy/helm/react-ui-app/values.yaml" ]; then
+            sed -i 's|tag: .*|tag: '"${{ inputs.version }}"'|' deploy/helm/react-ui-app/values.yaml
+            echo "Updated deploy/helm/react-ui-app/values.yaml"
+          fi
+
       - name: Update Makefile version
         run: |
           if [ -f "Makefile" ]; then

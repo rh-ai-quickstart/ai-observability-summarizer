@@ -1,17 +1,11 @@
 name: Deploy to OpenShift
 
 on:
-  workflow_run:
-    # Workflows this workflow depends on
-    workflows: ["Build and push image"]
-    types:
-      - completed
   workflow_dispatch:
     inputs:
       namespace:
-        description: 'Target namespace for deployment (leave empty for auto-detect based on branch)'
-        required: false
-        default: ''
+        description: 'Target namespace for deployment (e.g., ai-observability)'
+        required: true
         type: string
       force_deploy:
         description: 'Force deployment even if build workflow did not run'
@@ -20,32 +14,20 @@ on:
         type: boolean
 
 env:
-  # Determine namespace based on branch:
-  # - Manual dispatch: use input namespace if provided
-  # - workflow_run: use the branch name that triggered the workflow (head_branch)
-  # - workflow_dispatch: use the current branch name (ref_name)
-  # This ensures deployment to a namespace matching the target branch name
-  NAMESPACE: ${{ github.event.inputs.namespace || (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.ref_name) }}
+  NAMESPACE: ${{ github.event.inputs.namespace }}
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    # Run this workflow when:
-    # 1. Build workflow completes successfully (automatic)
-    # 2. Manually triggered (workflow_dispatch)
-    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.ref_name }}
 
       - name: Show branch and commit info
         run: |
           echo "::group::Repository Information"
           echo "Checked out branch: $(git branch --show-current)"
-          echo "Target ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.ref_name }}"
           echo "Event: ${{ github.event_name }}"
           echo "Repository: ${{ github.repository }}"
           echo "Actor: ${{ github.actor }}"
