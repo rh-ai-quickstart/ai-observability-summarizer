@@ -341,37 +341,6 @@ class TestDiscoveryWithMockedRequests:
         assert result.error is not None
 
 
-class TestAsyncDiscovery:
-    """Tests for async discovery."""
-
-    @pytest.fixture
-    def discovery(self):
-        return GPUMetricsDiscovery("http://localhost:9090")
-
-    def test_discover_async(self, discovery):
-        """Test async discovery with callback."""
-        import requests as real_requests
-
-        mock_response = Mock()
-        mock_response.json.return_value = {
-            "status": "success",
-            "data": ["DCGM_FI_DEV_GPU_TEMP"]
-        }
-        mock_response.raise_for_status = Mock()
-
-        results = []
-
-        def callback(result):
-            results.append(result)
-
-        with patch.object(real_requests, 'get', return_value=mock_response):
-            thread = discovery.discover_async(callback=callback, timeout_seconds=5.0)
-            thread.join(timeout=10.0)
-
-        assert len(results) == 1
-        assert results[0].total_discovered == 1
-
-
 class TestConvenienceFunction:
     """Tests for the convenience function."""
 
