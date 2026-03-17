@@ -13,9 +13,8 @@ Features:
 """
 
 import logging
-from typing import Dict, Any, List, Optional, Union
+from typing import Dict, Any, List, Optional
 from enum import Enum
-import traceback
 import json
 
 logger = logging.getLogger(__name__)

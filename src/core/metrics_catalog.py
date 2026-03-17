@@ -12,7 +12,6 @@ Provides centralized access to the optimized metrics catalog with:
 
 import json
 import logging
-import os
 import threading
 from pathlib import Path
 from typing import Dict, List, Optional, Set

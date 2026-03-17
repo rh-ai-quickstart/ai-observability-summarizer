@@ -24,8 +24,7 @@ get_python_logger()
 
 logger = logging.getLogger(__name__)
 
-from .config import PROMETHEUS_URL, THANOS_TOKEN, VERIFY_SSL, MODEL_CONFIG
-from fastapi import HTTPException
+from .config import PROMETHEUS_URL, THANOS_TOKEN, VERIFY_SSL
 from .llm_client import summarize_with_llm
 from .response_validator import ResponseType
 from .llm_client import (

@@ -7,8 +7,7 @@ to various observability services (Tempo, Prometheus, Thanos, etc.).
 
 import httpx
 import requests
-from typing import Dict, Any, Optional, List, Union
-from datetime import datetime
+from typing import Dict, Any, Optional, List
 import logging
 
 from .config import VERIFY_SSL, K8S_SERVICE_ACCOUNT_TOKEN_PATH, DEV_FALLBACK_TOKEN

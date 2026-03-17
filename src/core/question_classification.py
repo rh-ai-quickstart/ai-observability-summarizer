@@ -6,7 +6,7 @@ different observability services (Tempo, Prometheus, etc.).
 """
 
 import re
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 from enum import Enum
 
 
@@ -219,7 +219,6 @@ class TempoQuestionClassifier(QuestionClassifier):
 
 class PrometheusQuestionClassifier(QuestionClassifier):
     """Prometheus-specific question classifier with PromQL query generation."""
-    pass
 
 
 class TraceErrorDetector:

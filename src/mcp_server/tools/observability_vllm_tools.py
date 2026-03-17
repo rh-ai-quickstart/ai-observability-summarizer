@@ -39,7 +39,6 @@ from core.metrics import (
     get_vllm_namespaces_helper,
     get_vllm_metrics,
     fetch_metrics,
-    get_summarization_models,
     get_cluster_gpu_info,
     get_namespace_model_deployment_info,
     execute_instant_queries_parallel,

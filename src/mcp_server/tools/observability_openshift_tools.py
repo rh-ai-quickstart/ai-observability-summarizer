@@ -2,8 +2,6 @@ from typing import Dict, Any, List, Optional
 import os
 import json
 import core.metrics as core_metrics
-import re
-import pandas as pd
 import requests
 
 from .observability_vllm_tools import resolve_time_range
@@ -16,8 +14,6 @@ from core.metrics import (
     calculate_histogram_quantile_optimal_lookback,
 )
 from core.api_key_manager import (
-    detect_provider_from_model_id,
-    fetch_api_key_from_secret,
     resolve_api_key,
 )
 from common.pylogger import get_python_logger

@@ -7,7 +7,7 @@ Progress updates are captured and returned in the response for UI replay.
 import json
 import logging
 from datetime import datetime
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict
 
 from core.api_key_manager import resolve_api_key
 

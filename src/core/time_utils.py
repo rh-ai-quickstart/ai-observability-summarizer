@@ -6,8 +6,7 @@ the observability summarizer for parsing user questions and
 converting time ranges to appropriate formats.
 """
 
-import re
-from typing import Optional, Tuple
+from typing import Tuple
 from datetime import datetime, timedelta
 
 

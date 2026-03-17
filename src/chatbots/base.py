@@ -111,7 +111,6 @@ class BaseChatBot(ABC):
         Returns:
             API key string or None if not needed/available
         """
-        pass
 
     def _extract_model_name(self) -> str:
         """Extract the API-specific model name from the full model identifier.
@@ -758,4 +757,3 @@ Begin by finding the perfect metric for the user's question, then provide compre
         Returns:
             Model's response as a string
         """
-        pass

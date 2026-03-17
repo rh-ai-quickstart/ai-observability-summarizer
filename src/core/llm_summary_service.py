@@ -4,12 +4,9 @@ Core LLM Summary Service
 Moved from metrics_api.py to separate business logic
 """
 
-import os
-import json
 import re
 import logging
 from typing import Dict, List, Any, Optional
-from datetime import datetime
 from common.pylogger import get_python_logger
 
 # Import LLM client
