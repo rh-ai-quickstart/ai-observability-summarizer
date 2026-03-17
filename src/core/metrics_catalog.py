@@ -282,49 +282,6 @@ class MetricsCatalog:
 
             logger.info(f"Merged {result.total_discovered} GPU metrics into catalog")
 
-    def is_gpu_catalog_ready(self) -> bool:
-        """
-        Check if GPU metrics have been discovered and merged.
-
-        Returns:
-            True if GPU discovery is complete (success or no GPUs found).
-            False if discovery is still in progress.
-        """
-        return self._gpu_catalog_loaded
-
-    def get_gpu_discovery_status(self) -> Dict:
-        """
-        Get detailed GPU discovery status.
-
-        Returns:
-            Dict with status information.
-        """
-        return {
-            "enabled": self._enable_gpu_discovery,
-            "ready": self._gpu_catalog_loaded,
-            "error": self._gpu_discovery_error,
-            "in_progress": (
-                self._gpu_discovery_thread is not None and
-                self._gpu_discovery_thread.is_alive()
-            ),
-        }
-
-    def wait_for_gpu_discovery(self, timeout: float = None) -> bool:
-        """
-        Wait for GPU discovery to complete.
-
-        Args:
-            timeout: Maximum time to wait in seconds. None = wait indefinitely.
-
-        Returns:
-            True if GPU discovery completed, False if timed out.
-        """
-        if self._gpu_discovery_thread is None:
-            return True  # No discovery started
-
-        self._gpu_discovery_thread.join(timeout)
-        return not self._gpu_discovery_thread.is_alive()
-
     def _start_catalog_validation(self) -> None:
         """Start background catalog validation against Prometheus."""
         if self._catalog_validation_thread is not None:
@@ -428,48 +385,6 @@ class MetricsCatalog:
                 self._catalog["metadata"]["total_metrics"] = (
                     current_total - len(result.metrics_removed) + len(result.metrics_added)
                 )
-
-    def is_catalog_validated(self) -> bool:
-        """
-        Check if catalog validation against Prometheus is complete.
-
-        Returns:
-            True if validation finished successfully.
-        """
-        return self._catalog_validated
-
-    def get_catalog_validation_status(self) -> Dict:
-        """
-        Get detailed catalog validation status.
-
-        Returns:
-            Dict with status information.
-        """
-        return {
-            "enabled": self._enable_catalog_validation,
-            "ready": self._catalog_validated,
-            "error": self._catalog_validation_error,
-            "in_progress": (
-                self._catalog_validation_thread is not None and
-                self._catalog_validation_thread.is_alive()
-            ),
-        }
-
-    def wait_for_catalog_validation(self, timeout: float = None) -> bool:
-        """
-        Wait for catalog validation to complete.
-
-        Args:
-            timeout: Maximum time to wait in seconds. None = wait indefinitely.
-
-        Returns:
-            True if validation completed, False if timed out.
-        """
-        if self._catalog_validation_thread is None:
-            return True  # No validation started
-
-        self._catalog_validation_thread.join(timeout)
-        return not self._catalog_validation_thread.is_alive()
 
     def is_available(self) -> bool:
         """Check if catalog is loaded and available."""
