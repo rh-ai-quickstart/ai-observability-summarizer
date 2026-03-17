@@ -39,7 +39,7 @@ oauth:
   enabled: true
   image:
     repository: "quay.io/openshift/origin-oauth-proxy"
-    tag: 2.1.0
+    tag: 4.22.0
     pullPolicy: IfNotPresent
   port: 8443
   upstreamTimeout: "240s"  # Timeout for upstream requests (AI analysis can take time)
