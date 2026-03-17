@@ -39,8 +39,9 @@ def test_list_vllm_namespaces_empty(_):
     assert any("No monitored vLLM namespaces found" in t for t in texts)
 
 
-@patch("os.getenv", return_value='{"m1": {"external": false}, "m2": {"external": true}}')
-def test_get_model_config_success(_):
+@patch("core.config.is_rag_available", return_value=True)
+@patch("core.model_config_manager.get_model_config", return_value={"m1": {"external": False}, "m2": {"external": True}})
+def test_get_model_config_success(mock_get_config, mock_is_rag):
     out = tools.get_model_config()
     text = "\n".join(_texts(out))
     assert "Available Model Config" in text
@@ -48,15 +49,12 @@ def test_get_model_config_success(_):
     assert text.find("m1") < text.find("m2")
 
 
-@patch("core.config.RAG_AVAILABLE", True)
-@patch("src.mcp_server.tools.observability_vllm_tools.os.getenv")
-def test_get_model_config_empty(mock_getenv):
-    # Return "{}" for MODEL_CONFIG, None for all other env vars
-    mock_getenv.side_effect = lambda key, default=None: "{}" if key == "MODEL_CONFIG" else default
-
+@patch("core.config.is_rag_available", return_value=True)
+@patch("core.model_config_manager.get_model_config", return_value={})
+def test_get_model_config_empty(mock_get_config, mock_is_rag):
     out = tools.get_model_config()
     texts = _texts(out)
-    # When RAG_AVAILABLE is True and config is empty, should show this message
+    # When RAG is available and config is empty, should show this message
     assert any("No LLM models configured" in t for t in texts)
 @patch("src.mcp_server.tools.observability_vllm_tools.get_vllm_metrics", return_value={"latency": "q1", "tps": "q2"})
 @patch("src.mcp_server.tools.observability_vllm_tools.execute_range_queries_parallel")
