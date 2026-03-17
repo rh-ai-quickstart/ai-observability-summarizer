@@ -24,47 +24,52 @@ class ModelService {
       const internal: Model[] = [];
       const external: Model[] = [];
 
-      // In DEV mode, load models from browser sessionStorage first
+      // In DEV mode, load models from both MCP server and browser sessionStorage
       if (isDevMode()) {
-        console.log('[ModelService] DEV MODE: Loading models from dev storage (sessionStorage)');
+        console.log('[ModelService] DEV MODE: Loading models from MCP server and dev storage');
+
+        // First, fetch base models from MCP server (internal + default external models)
+        const mcpModelsData = await listSummarizationModels();
+        const transformedModels = mcpModelsData.map(modelData => this.transformMcpModelWithMetadata(modelData));
+
+        transformedModels.forEach(model => {
+          if (model.type === 'internal') {
+            internal.push(model);
+          } else {
+            external.push(model);
+          }
+        });
+
+        console.log(`[ModelService] Fetched ${internal.length} internal and ${external.length} external models from MCP server`);
+
+        // Then, add user-added models from dev storage
         const devModels = getDevModels();
         const devModelCount = Object.keys(devModels).length;
 
         if (devModelCount > 0) {
-          // Use cached models from sessionStorage
-          console.log(`[ModelService] Found ${devModelCount} models in dev storage`);
+          console.log(`[ModelService] Found ${devModelCount} user-added models in dev storage`);
+
+          // Get existing model names to avoid duplicates
+          const existingNames = new Set([...internal, ...external].map(m => m.name));
+
           Object.values(devModels).forEach((devModel: DevModelConfig) => {
-            const model: Model = {
-              id: devModel.name,
-              name: devModel.name,
-              provider: devModel.provider as Provider,
-              modelId: devModel.modelId,
-              type: 'external', // Dev models are external by default
-              requiresApiKey: true,
-              isAvailable: true,
-              description: devModel.description,
-              endpoint: devModel.endpoint,
-            };
-            external.push(model);
-          });
-        } else {
-          // Browser storage is empty, fetch from MCP server and cache
-          console.log('[ModelService] Dev storage empty, fetching default models from MCP server');
-          const mcpModelsData = await listSummarizationModels();
-
-          // Transform and categorize models
-          const transformedModels = mcpModelsData.map(modelData => this.transformMcpModelWithMetadata(modelData));
-
-          transformedModels.forEach(model => {
-            if (model.type === 'internal') {
-              internal.push(model);
-            } else {
+            // Only add if not already in the list (avoid duplicates)
+            if (!existingNames.has(devModel.name)) {
+              const model: Model = {
+                id: devModel.name,
+                name: devModel.name,
+                provider: devModel.provider as Provider,
+                modelId: devModel.modelId,
+                type: 'external', // Dev models are external by default
+                requiresApiKey: true,
+                isAvailable: true,
+                description: devModel.description,
+                endpoint: devModel.endpoint,
+              };
               external.push(model);
+              console.log(`[ModelService] Added user model: ${devModel.name}`);
             }
           });
-
-          console.log(`[ModelService] Fetched ${internal.length} internal and ${external.length} external models from MCP server`);
-          console.log('[ModelService] Note: To use these models in DEV mode, add them via "Add Model" tab');
         }
       } else {
         // Production mode: Get models from MCP server (ConfigMap)
