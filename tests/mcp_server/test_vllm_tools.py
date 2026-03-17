@@ -23,9 +23,8 @@ def test_list_models_empty(_):
     assert any("No models are currently available" in t for t in texts)
 
 
-@patch("src.mcp_server.tools.observability_vllm_tools.check_rag_availability", return_value=None)
 @patch("src.mcp_server.tools.observability_vllm_tools.get_vllm_namespaces_helper", return_value=["ns1", "ns2"])  # type: ignore[arg-type]
-def test_list_vllm_namespaces_success(_, __):
+def test_list_vllm_namespaces_success(_):
     out = tools.list_vllm_namespaces()
     texts = _texts(out)
     assert any("Monitored vLLM Namespaces" in t for t in texts)
@@ -33,9 +32,8 @@ def test_list_vllm_namespaces_success(_, __):
     assert any("ns2" in t for t in texts)
 
 
-@patch("src.mcp_server.tools.observability_vllm_tools.check_rag_availability", return_value=None)
 @patch("src.mcp_server.tools.observability_vllm_tools.get_vllm_namespaces_helper", return_value=[])  # type: ignore[arg-type]
-def test_list_vllm_namespaces_empty(_, __):
+def test_list_vllm_namespaces_empty(_):
     out = tools.list_vllm_namespaces()
     texts = _texts(out)
     assert any("No monitored vLLM namespaces found" in t for t in texts)

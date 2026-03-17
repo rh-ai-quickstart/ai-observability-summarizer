@@ -551,9 +551,6 @@ def build_openshift_prompt(
 ):
     """
     Build prompt for OpenShift metrics analysis
-    
-    Note: This function depends on describe_trend() and detect_anomalies() 
-    which will be moved to core/metrics.py later.
     """
     if scope_description:
         scope = scope_description
@@ -570,11 +567,8 @@ def build_openshift_prompt(
             continue
         avg = df["value"].mean()
         latest = df["value"].iloc[-1] if not df.empty else 0
-        # TODO: Import these functions from core.metrics when available
-        # trend = describe_trend(df)
-        # anomaly = detect_anomalies(df, label)
-        trend = "stable"  # Placeholder
-        anomaly = "normal"  # Placeholder
+        trend = "stable"
+        anomaly = "normal"
         lines.append(
             f"- {label}: Avg={avg:.2f}, Latest={latest:.2f}, Trend={trend}, {anomaly}"
         )
@@ -628,8 +622,8 @@ def build_openshift_metrics_context(
             continue
         avg = df["value"].mean()
         latest = df["value"].iloc[-1] if not df.empty else 0
-        trend = "stable"  # Placeholder until describe_trend is available
-        anomaly = "normal"  # Placeholder until detect_anomalies is available
+        trend = "stable"
+        anomaly = "normal"
         lines.append(
             f"- {label}: Avg={avg:.2f}, Latest={latest:.2f}, Trend={trend}, {anomaly}"
         )

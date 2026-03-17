@@ -70,23 +70,6 @@ from mcp_server.exceptions import (
 logger = get_python_logger()
 
 
-def check_rag_availability():
-    """Check if RAG infrastructure is available for vLLM operations."""
-    try:
-        from core.config import RAG_AVAILABLE
-        if not RAG_AVAILABLE:
-            error = MCPException(
-                message="vLLM infrastructure not available",
-                error_code=MCPErrorCode.CONFIGURATION_ERROR,
-                recovery_suggestion="RAG infrastructure is not installed or accessible. vLLM metrics require local model deployment. Install with: make install ENABLE_RAG=true"
-            )
-            return error.to_mcp_response()
-        return None
-    except Exception:
-        # If we can't determine availability, allow the operation to continue
-        return None
-
-
 def resolve_time_range(
     time_range: Optional[str] = None,
     start_datetime: Optional[str] = None,
