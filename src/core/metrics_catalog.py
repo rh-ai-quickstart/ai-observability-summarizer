@@ -94,7 +94,6 @@ class MetricsCatalog:
         self._gpu_discovery_timeout = gpu_discovery_timeout
 
         # GPU discovery state
-        self._gpu_catalog_loaded = False
         self._gpu_discovery_error: Optional[str] = None
         self._gpu_discovery_thread: Optional[threading.Thread] = None
         self._catalog_lock = threading.RLock()
@@ -104,7 +103,6 @@ class MetricsCatalog:
         self._catalog_validation_timeout = catalog_validation_timeout
 
         # Catalog validation state
-        self._catalog_validated = False
         self._catalog_validation_error: Optional[str] = None
         self._catalog_validation_thread: Optional[threading.Thread] = None
 
@@ -211,12 +209,10 @@ class MetricsCatalog:
 
                 if result.total_discovered == 0:
                     logger.info("GPU discovery: no GPU metrics found (cluster may not have GPUs)")
-                    self._gpu_catalog_loaded = True
                     return
 
                 # Merge GPU metrics into catalog
                 self._merge_gpu_metrics(result)
-                self._gpu_catalog_loaded = True
 
                 logger.info(
                     f"GPU discovery complete: {len(result.metrics_high)} High, "
@@ -315,7 +311,6 @@ class MetricsCatalog:
 
                 # Apply results
                 self._apply_validation_result(result)
-                self._catalog_validated = True
 
             except ImportError as e:
                 self._catalog_validation_error = f"Catalog validator module not available: {e}"
