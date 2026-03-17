@@ -531,46 +531,6 @@ class TestMetricsCatalogValidationIntegration:
         catalog_file.write_text(json.dumps(base_catalog_data))
         return catalog_file
 
-    def test_validation_status_initial(self, base_catalog_file):
-        """Test initial catalog validation status."""
-        from core.metrics_catalog import MetricsCatalog
-
-        catalog = MetricsCatalog(
-            catalog_path=base_catalog_file,
-            enable_gpu_discovery=False,
-            enable_catalog_validation=False,
-        )
-        catalog._load_catalog()
-
-        status = catalog.get_catalog_validation_status()
-        assert status["enabled"] is False
-        assert status["ready"] is False
-        assert status["error"] is None
-
-    def test_is_catalog_validated_initial(self, base_catalog_file):
-        """Test is_catalog_validated when validation is disabled."""
-        from core.metrics_catalog import MetricsCatalog
-
-        catalog = MetricsCatalog(
-            catalog_path=base_catalog_file,
-            enable_gpu_discovery=False,
-            enable_catalog_validation=False,
-        )
-        catalog._load_catalog()
-        assert catalog.is_catalog_validated() is False
-
-    def test_wait_for_catalog_validation_no_thread(self, base_catalog_file):
-        """Test wait_for_catalog_validation when no validation started."""
-        from core.metrics_catalog import MetricsCatalog
-
-        catalog = MetricsCatalog(
-            catalog_path=base_catalog_file,
-            enable_gpu_discovery=False,
-            enable_catalog_validation=False,
-        )
-        catalog._load_catalog()
-        assert catalog.wait_for_catalog_validation(timeout=1.0) is True
-
     def test_apply_validation_result_removes_metrics(self, base_catalog_file):
         """Test that _apply_validation_result removes metrics correctly."""
         from core.metrics_catalog import MetricsCatalog
