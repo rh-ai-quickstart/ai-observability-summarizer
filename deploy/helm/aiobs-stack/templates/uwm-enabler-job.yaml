@@ -1,0 +1,162 @@
+# Job to enable user workload monitoring (idempotent)
+# Checks if already enabled before patching cluster-monitoring-config
+# This is required for PrometheusRules, ServiceMonitors, and alerting to work
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-uwm-enabler
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: uwm-enabler
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: monitoring-enabler
+    app.kubernetes.io/part-of: aiobs-stack
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-15"  # Run before infrastructure components
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: uwm-enabler
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ .Release.Name }}-uwm-enabler
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: enabler
+        image: registry.redhat.io/openshift4/ose-cli:latest
+        command:
+        - /bin/bash
+        - -c
+        - |
+          set -e
+
+          echo "🔍 Checking if user workload monitoring is already enabled..."
+
+          # Check if ConfigMap exists and has enableUserWorkload: true
+          if oc get configmap cluster-monitoring-config -n openshift-monitoring \
+             -o jsonpath='{.data.config\.yaml}' 2>/dev/null | grep -q "enableUserWorkload: true"; then
+            echo "✅ User workload monitoring already enabled - skipping UWM configuration"
+          else
+            echo "→ User workload monitoring not enabled, enabling now..."
+
+            # Apply/patch the ConfigMap (idempotent with oc apply)
+            oc apply -f - <<EOF
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: cluster-monitoring-config
+            namespace: openshift-monitoring
+          data:
+            config.yaml: |
+              enableUserWorkload: true
+          EOF
+
+            echo "✅ User workload monitoring enabled successfully!"
+
+            # Wait a moment for the change to propagate
+            echo "⏳ Waiting 5 seconds for monitoring stack to reconcile..."
+            sleep 5
+          fi
+
+          echo ""
+          echo "🔍 Enabling Alertmanager for user workload monitoring..."
+
+          # Check if Alertmanager is already enabled
+          if oc get configmap user-workload-monitoring-config -n openshift-user-workload-monitoring \
+             -o jsonpath='{.data.config\.yaml}' 2>/dev/null | grep -q "enabled: true"; then
+            echo "✅ Alertmanager already enabled - skipping"
+          else
+            echo "→ Enabling Alertmanager for user workload monitoring..."
+
+            # Apply the user-workload-monitoring-config ConfigMap
+            oc apply -f - <<EOF
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: user-workload-monitoring-config
+            namespace: openshift-user-workload-monitoring
+          data:
+            config.yaml: |
+              alertmanager:
+                enabled: true
+                enableAlertmanagerConfig: true
+          EOF
+
+            echo "✅ Alertmanager enabled for user workload monitoring"
+            echo "  → alertmanager.enabled = true"
+            echo "  → alertmanager.enableAlertmanagerConfig = true"
+          fi
+
+          echo ""
+          echo "✅ User workload monitoring configuration complete!"
+        securityContext:
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          seccompProfile:
+            type: RuntimeDefault
+---
+# ServiceAccount for the enabler job
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Release.Name }}-uwm-enabler
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: uwm-enabler
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-20"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+---
+# ClusterRole to manage cluster-monitoring-config
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Release.Name }}-uwm-enabler
+  labels:
+    app.kubernetes.io/name: uwm-enabler
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-20"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+rules:
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "list", "create", "patch", "update"]
+  # Needs cluster-wide access for:
+  # - openshift-monitoring/cluster-monitoring-config (enable UWM)
+  # - openshift-user-workload-monitoring/user-workload-monitoring-config (enable Alertmanager)
+---
+# ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Release.Name }}-uwm-enabler
+  labels:
+    app.kubernetes.io/name: uwm-enabler
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-20"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ .Release.Name }}-uwm-enabler
+subjects:
+- kind: ServiceAccount
+  name: {{ .Release.Name }}-uwm-enabler
+  namespace: {{ .Release.Namespace }}

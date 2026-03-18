@@ -1,0 +1,27 @@
+# permissions for end users to edit aiobservabilitysummarizers.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: aiobs-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: aiobservabilitysummarizer-editor-role
+rules:
+- apiGroups:
+  - aiobs.rh-ai-quickstart.io
+  resources:
+  - aiobservabilitysummarizers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - aiobs.rh-ai-quickstart.io
+  resources:
+  - aiobservabilitysummarizers/status
+  verbs:
+  - get

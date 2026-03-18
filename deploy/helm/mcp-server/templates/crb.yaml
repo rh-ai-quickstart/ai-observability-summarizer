@@ -105,4 +105,30 @@ roleRef:
   kind: ClusterRole
   name: openshift-logging-loki-stack-tenant-logs
   apiGroup: rbac.authorization.k8s.io
+---
+# ClusterRole for discovering InferenceServices (runtime model discovery)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: inferenceservice-viewer-{{ .Release.Namespace }}-mcp
+  labels:
+    app.kubernetes.io/name: mcp-server
+    app.kubernetes.io/component: rbac
+rules:
+- apiGroups: ["serving.kserve.io"]
+  resources: ["inferenceservices"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: inferenceservice-viewer-binding-{{ .Release.Namespace }}-mcp
+subjects:
+- kind: ServiceAccount
+  name: mcp-analyzer
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: inferenceservice-viewer-{{ .Release.Namespace }}-mcp
+  apiGroup: rbac.authorization.k8s.io
 
