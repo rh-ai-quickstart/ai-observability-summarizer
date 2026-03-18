@@ -28,11 +28,13 @@ import {
 import {
   PlusCircleIcon,
   SearchIcon,
+  SyncAltIcon,
 } from '@patternfly/react-icons';
 
 import { AIModelState, ModelFormData, Provider, ProviderModel } from '../types/models';
 import { getAllProviders, getProviderTemplate, formatModelName } from '../services/providerTemplates';
 import { modelService } from '../services/modelService';
+import { secretManager } from '../services/secretManager';
 import { isDevMode } from '../../../services/runtimeConfig';
 
 interface AddModelTabProps {
@@ -61,7 +63,9 @@ export const AddModelTab: React.FC<AddModelTabProps> = ({
     description: '',
   });
   const [saving, setSaving] = React.useState(false);
+  const [testing, setTesting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [testSuccess, setTestSuccess] = React.useState<string | null>(null);
   const [availableModels, setAvailableModels] = React.useState<ProviderModel[]>([]);
   const [loadingModels, setLoadingModels] = React.useState(false);
   const [customModelId, setCustomModelId] = React.useState('');
@@ -117,9 +121,60 @@ export const AddModelTab: React.FC<AddModelTabProps> = ({
     setIsConfiguredModel(false);
     setMode('add');
     setError(null);
+    setTestSuccess(null);
 
     // Fetch available models for the selected provider
     fetchAvailableModels(provider);
+  };
+
+  const handleTestConnection = async () => {
+    setError(null);
+    setTestSuccess(null);
+
+    // Get the actual model ID
+    const actualModelId = customModelId.trim() || formData.modelId.trim();
+
+    if (!actualModelId) {
+      setError('Please select or enter a model ID');
+      return;
+    }
+
+    if (!formData.apiKey?.trim()) {
+      setError('API key is required to test connection');
+      return;
+    }
+
+    if (!formData.endpoint?.trim()) {
+      setError('Endpoint is required to test connection');
+      return;
+    }
+
+    setTesting(true);
+
+    try {
+      const result = await secretManager.testMaasConnection(
+        actualModelId,
+        formData.apiKey,
+        formData.endpoint
+      );
+
+      if (result.success) {
+        const responseTime = result.details?.responseTime || 'N/A';
+        const statusCode = result.details?.status;
+        const statusMsg = statusCode ? ` (HTTP ${statusCode})` : '';
+        setTestSuccess(`✓ Connection successful! Response time: ${responseTime}ms${statusMsg}`);
+      } else {
+        const errorMsg = result.error || 'Connection test failed - please check your API key and endpoint';
+        const statusCode = result.details?.status;
+        const statusMsg = statusCode ? ` (HTTP ${statusCode})` : '';
+        setError(`${errorMsg}${statusMsg}`);
+      }
+    } catch (err) {
+      console.error('[AddModelTab] Test error:', err);
+      setError(err instanceof Error ? err.message : 'Connection test failed');
+    } finally {
+      setTesting(false);
+    }
   };
 
   // Fetch models on initial load
@@ -164,8 +219,29 @@ export const AddModelTab: React.FC<AddModelTabProps> = ({
 
     setSaving(true);
     setError(null);
+    setTestSuccess(null);
 
     try {
+      // For MaaS models, validate the API key before saving
+      if (formData.provider === 'maas' && formData.apiKey && formData.endpoint) {
+        const validationResult = await secretManager.testMaasConnection(
+          actualModelId,
+          formData.apiKey,
+          formData.endpoint
+        );
+
+        if (!validationResult.success) {
+          const statusCode = validationResult.details?.status;
+          const statusMsg = statusCode ? ` (HTTP ${statusCode})` : '';
+          setError(
+            `Cannot ${mode === 'update' ? 'update' : 'add'} model: Invalid API key or endpoint${statusMsg}. ` +
+            'Please verify your credentials and try again.'
+          );
+          setSaving(false);
+          return;
+        }
+      }
+
       if (mode === 'update' && formData.provider === 'maas') {
         // Update existing MAAS model API key
         await modelService.updateMaasModelApiKey({
@@ -268,6 +344,16 @@ export const AddModelTab: React.FC<AddModelTabProps> = ({
                     </div>
                   )}
                 </div>
+              </Alert>
+            )}
+            {testSuccess && (
+              <Alert
+                variant={AlertVariant.success}
+                title="Connection Test Successful"
+                isInline
+                style={{ marginBottom: '20px' }}
+              >
+                {testSuccess}
               </Alert>
             )}
 
@@ -458,6 +544,7 @@ export const AddModelTab: React.FC<AddModelTabProps> = ({
                     onClick={handleSubmit}
                     isDisabled={
                       saving ||
+                      testing ||
                       (!formData.modelId.trim() && !customModelId.trim()) ||
                       (formData.provider === 'maas' && !formData.apiKey?.trim())
                     }
@@ -467,6 +554,25 @@ export const AddModelTab: React.FC<AddModelTabProps> = ({
                     {mode === 'update' ? 'Update API Key' : 'Add Model'}
                   </Button>
                 </FlexItem>
+                {formData.provider === 'maas' && (
+                  <FlexItem>
+                    <Button
+                      variant="secondary"
+                      onClick={handleTestConnection}
+                      isDisabled={
+                        testing ||
+                        saving ||
+                        (!formData.modelId.trim() && !customModelId.trim()) ||
+                        !formData.apiKey?.trim() ||
+                        !formData.endpoint?.trim()
+                      }
+                      isLoading={testing}
+                    >
+                      <SyncAltIcon style={{ marginRight: '8px' }} />
+                      {testing ? 'Testing...' : 'Test Connection'}
+                    </Button>
+                  </FlexItem>
+                )}
                 <FlexItem>
                   <Button
                     variant="link"
@@ -482,6 +588,7 @@ export const AddModelTab: React.FC<AddModelTabProps> = ({
                       setIsConfiguredModel(false);
                       setMode('add');
                       setError(null);
+                      setTestSuccess(null);
                       fetchAvailableModels('maas');
                     }}
                   >

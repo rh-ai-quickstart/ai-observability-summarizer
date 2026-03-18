@@ -203,6 +203,59 @@ class AISecretManager {
   }
 
   /**
+   * Test MaaS model connection with per-model API key and endpoint
+   * MaaS models use individual API keys, unlike other providers
+   */
+  async testMaasConnection(modelId: string, apiKey: string, endpoint?: string): Promise<ConnectionTestResult> {
+    const startTime = Date.now();
+
+    if (!apiKey) {
+      return {
+        success: false,
+        error: 'API key is required for testing',
+      };
+    }
+
+    if (!endpoint) {
+      return {
+        success: false,
+        error: 'Endpoint is required for MaaS models',
+      };
+    }
+
+    try {
+      const result = await callMcpTool<{ success: boolean; details?: any }>('validate_api_key', {
+        provider: 'maas',
+        api_key: apiKey,
+        endpoint: endpoint,
+        model_id: modelId,
+      });
+
+      const details: ConnectionTestResult['details'] = {
+        responseTime: Date.now() - startTime,
+        ...(result.details || {}),
+      };
+
+      const success = !!result.success;
+
+      return {
+        success,
+        error: success ? undefined : 'Connection test failed - invalid API key or endpoint',
+        details,
+      };
+    } catch (error) {
+      console.error('[SecretManager] MaaS test error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Connection test failed',
+        details: {
+          responseTime: Date.now() - startTime,
+        },
+      };
+    }
+  }
+
+  /**
    * Delete secret using MCP tool (production) or clear cached credential (dev mode)
    * Works in all deployment modes: console plugin, react-ui, and dev
    */

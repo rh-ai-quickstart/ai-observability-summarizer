@@ -102,6 +102,7 @@ export interface ConnectionTestResult {
     responseTime?: number;
     modelCount?: number;
     supportedFeatures?: string[];
+    status?: number;  // HTTP status code
   };
 }
 

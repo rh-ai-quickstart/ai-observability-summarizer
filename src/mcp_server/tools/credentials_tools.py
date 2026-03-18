@@ -27,10 +27,16 @@ def _provider_defaults(provider: str) -> Dict[str, str]:
     return {"endpoint": ""}
 
 
-def validate_api_key(provider: str, api_key: str, endpoint: Optional[str] = None) -> List[Dict[str, Any]]:
+def validate_api_key(provider: str, api_key: str, endpoint: Optional[str] = None, model_id: Optional[str] = None) -> List[Dict[str, Any]]:
     """
     Validate an API key for a given provider by making a minimal request server-side.
     Returns structured MCP content with { success, details }.
+
+    Args:
+        provider: Provider name (openai, anthropic, google, meta, maas)
+        api_key: API key to validate
+        endpoint: Optional custom endpoint URL
+        model_id: Optional model ID (required for MaaS)
     """
     try:
         if not provider or not api_key:
@@ -75,6 +81,52 @@ def validate_api_key(provider: str, api_key: str, endpoint: Optional[str] = None
             r = requests.get(ep, headers={"Authorization": f"Bearer {api_key}"}, timeout=timeout)
             ok = r.status_code == 200
             details["status"] = r.status_code
+        elif provider_lower == "maas":
+            # MaaS uses per-model API keys with custom endpoints
+            # Test by making a minimal chat completion request with the actual model
+            if not model_id:
+                raise MCPException(
+                    message="model_id is required for MaaS validation",
+                    error_code=MCPErrorCode.INVALID_INPUT,
+                )
+
+            test_url = ep.rstrip('/')
+            # Ensure we're testing the /chat/completions endpoint
+            if not test_url.endswith('/chat/completions'):
+                if test_url.endswith('/v1'):
+                    test_url = f"{test_url}/chat/completions"
+                else:
+                    test_url = f"{test_url}/v1/chat/completions"
+
+            # Clean model ID (remove maas/ prefix if present)
+            clean_model_id = model_id.replace("maas/", "").strip()
+            logger.info(f"Testing MaaS connection to: {test_url} with model: {clean_model_id}")
+
+            # Make a minimal test request with the actual model ID
+            # A valid API key will return 200 (success) or 400 (bad request but authenticated)
+            # An invalid API key will return 401 (unauthorized) or 403 (forbidden)
+            test_payload = {
+                "model": clean_model_id,
+                "messages": [{"role": "user", "content": "test"}],
+                "max_tokens": 1
+            }
+            r = requests.post(
+                test_url,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json"
+                },
+                json=test_payload,
+                timeout=timeout
+            )
+            # 200/201 = valid key and successful request
+            # 400 = bad request but valid auth (key is valid)
+            # 401 = unauthorized (invalid key)
+            # 403 = forbidden (invalid key)
+            # 422 = validation error but valid auth (key is valid)
+            ok = r.status_code not in (401, 403)
+            details["status"] = r.status_code
+            logger.info(f"MaaS validation result - Status: {r.status_code}, Valid: {ok}")
         else:
             raise MCPException(
                 message=f"Unsupported provider: {provider}",
