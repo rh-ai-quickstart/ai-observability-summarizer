@@ -2,23 +2,29 @@ import * as React from 'react';
 import { Alert, AlertVariant, Button } from '@patternfly/react-core';
 import { listDevProviders, clearDevCredentials, clearDevModels, getDevModels } from '../../../services/devCredentials';
 import { isDevMode } from '../../../services/runtimeConfig';
+import { clearSessionConfig, getSessionConfig } from '../../../services/mcpClient';
 
 export const DevModeBanner: React.FC = () => {
   const [cachedProviders, setCachedProviders] = React.useState<string[]>([]);
   const [modelCount, setModelCount] = React.useState<number>(0);
+  const [hasSelectedModel, setHasSelectedModel] = React.useState<boolean>(false);
   const devMode = isDevMode();
 
   React.useEffect(() => {
     if (devMode) {
-      // Refresh cached providers and models list every 2 seconds
+      // Refresh cached providers, models list, and selected model every 2 seconds
       const interval = setInterval(() => {
         setCachedProviders(listDevProviders());
         setModelCount(Object.keys(getDevModels()).length);
+        const config = getSessionConfig();
+        setHasSelectedModel(!!config.ai_model);
       }, 2000);
 
       // Initial load
       setCachedProviders(listDevProviders());
       setModelCount(Object.keys(getDevModels()).length);
+      const config = getSessionConfig();
+      setHasSelectedModel(!!config.ai_model);
 
       return () => clearInterval(interval);
     }
@@ -27,8 +33,13 @@ export const DevModeBanner: React.FC = () => {
   const handleClearCache = () => {
     clearDevCredentials();
     clearDevModels();
+    clearSessionConfig();
     setCachedProviders([]);
     setModelCount(0);
+    setHasSelectedModel(false);
+
+    // Notify parent component to reload models
+    window.dispatchEvent(new CustomEvent('dev-cache-cleared'));
   };
 
   if (!devMode) {
@@ -42,7 +53,7 @@ export const DevModeBanner: React.FC = () => {
       title="Development Mode Active"
       style={{ marginBottom: '20px' }}
       actionClose={
-        (cachedProviders.length > 0 || modelCount > 0) ? (
+        (cachedProviders.length > 0 || modelCount > 0 || hasSelectedModel) ? (
           <Button variant="link" onClick={handleClearCache}>
             Clear Cache
           </Button>
@@ -59,7 +70,7 @@ export const DevModeBanner: React.FC = () => {
       <p>
         <em>Note: All data is stored in sessionStorage and will be cleared when you close this browser tab.</em>
       </p>
-      {(cachedProviders.length > 0 || modelCount > 0) && (
+      {(cachedProviders.length > 0 || modelCount > 0 || hasSelectedModel) && (
         <div style={{ marginTop: '10px' }}>
           {cachedProviders.length > 0 && (
             <p>
@@ -69,6 +80,11 @@ export const DevModeBanner: React.FC = () => {
           {modelCount > 0 && (
             <p>
               <strong>Cached models:</strong> {modelCount} model{modelCount !== 1 ? 's' : ''}
+            </p>
+          )}
+          {hasSelectedModel && (
+            <p>
+              <strong>Selected model for analysis:</strong> {getSessionConfig().ai_model}
             </p>
           )}
         </div>

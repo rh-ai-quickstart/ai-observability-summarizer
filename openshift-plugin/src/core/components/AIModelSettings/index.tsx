@@ -54,6 +54,19 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
     }
   }, [isOpen]);
 
+  // Listen for dev cache clear events
+  React.useEffect(() => {
+    const handleCacheCleared = () => {
+      console.log('[AIModelSettings] Dev cache cleared, reloading models...');
+      loadInitialData();
+    };
+
+    window.addEventListener('dev-cache-cleared', handleCacheCleared);
+    return () => {
+      window.removeEventListener('dev-cache-cleared', handleCacheCleared);
+    };
+  }, []);
+
   const loadInitialData = async () => {
     setState(prev => ({
       ...prev,
@@ -71,18 +84,29 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
       if (modelsResult.status === 'fulfilled') {
         const { internal, external, custom } = modelsResult.value;
         setState(prev => {
+          // Always refresh selectedModel from session config
+          const currentModel = modelService.getCurrentModel();
+
           const next = {
             ...prev,
             internalModels: internal,
             externalModels: external,
             customModels: custom,
+            selectedModel: currentModel,
             loading: { ...prev.loading, models: false },
           };
+
           // If nothing is selectable, clear selected model in session
           if (!hasSelectableModels(next)) {
             modelService.setCurrentModel('');
             next.selectedModel = null;
           }
+          // If selected model is not in the available models list, clear it
+          else if (currentModel && !isModelSelectable(next, currentModel)) {
+            modelService.setCurrentModel('');
+            next.selectedModel = null;
+          }
+
           return next;
         });
       } else {

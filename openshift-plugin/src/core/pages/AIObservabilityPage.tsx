@@ -135,13 +135,20 @@ const AIObservabilityPage: React.FC<AIObservabilityPageProps> = ({
         setActiveTabKey(detail.tabIndex);
       }
     };
+    const handleCacheCleared = () => {
+      console.log('[AIObservabilityPage] Dev cache cleared, updating configured model...');
+      const updatedConfig = getSessionConfig();
+      setConfiguredModel(updatedConfig.ai_model || '');
+    };
 
     window.addEventListener('open-settings', handleOpenSettings);
     window.addEventListener('quick-action-navigate', handleQuickActionNavigate);
+    window.addEventListener('dev-cache-cleared', handleCacheCleared);
 
     return () => {
       window.removeEventListener('open-settings', handleOpenSettings);
       window.removeEventListener('quick-action-navigate', handleQuickActionNavigate);
+      window.removeEventListener('dev-cache-cleared', handleCacheCleared);
     };
   }, [setActiveTabKey]);
 
