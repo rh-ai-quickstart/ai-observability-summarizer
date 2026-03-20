@@ -32,6 +32,7 @@ import { ChatSettingsTab } from './tabs/ChatSettingsTab';
 import { MetricsSettingsTab } from './tabs/MetricsSettingsTab';
 import { isDevMode } from '../../services/runtimeConfig';
 import { useChatSettings } from '../../hooks/useChatSettings';
+import { DEV_CACHE_CLEARED_EVENT } from '../../constants';
 
 interface AIModelSettingsProps {
   isOpen: boolean;
@@ -47,62 +48,30 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
   const [state, setState] = React.useState<AIModelState>(modelService.getInitialState());
   const { settings: chatSettings, updateSettings: updateChatSettings, resetSettings: resetChatSettings } = useChatSettings();
 
-  // Load initial data when modal opens
-  React.useEffect(() => {
-    if (isOpen) {
-      loadInitialData();
-    }
-  }, [isOpen]);
+  const hasSelectableModels = React.useCallback((s: AIModelState): boolean => {
+    const internal = s.internalModels.length > 0;
+    const external = s.externalModels.some(m => m.provider === 'maas' || s.providers[m.provider]?.status === 'configured');
+    const custom = s.customModels.some(m => !m.requiresApiKey || m.provider === 'maas' || s.providers[m.provider]?.status === 'configured');
+    return internal || external || custom;
+  }, []);
 
-  const loadInitialData = async () => {
-    setState(prev => ({
-      ...prev,
-      loading: { ...prev.loading, models: true, secrets: true },
-      error: null,
-    }));
+  const isModelSelectable = React.useCallback((s: AIModelState, modelName: string | null): boolean => {
+    if (!modelName) return false;
+    const all = [...s.internalModels, ...s.externalModels, ...s.customModels];
+    const m = all.find(mm => mm.name === modelName);
+    if (!m) return false;
+    if (!m.requiresApiKey) return true;
+    // MAAS models have per-model API keys configured when added
+    if (m.provider === 'maas') return true;
+    return s.providers[m.provider]?.status === 'configured';
+  }, []);
 
-    try {
-      // Load models in parallel with provider status
-      const [modelsResult] = await Promise.allSettled([
-        modelService.loadAvailableModels(),
-        loadProviderStatus(),
-      ]);
-
-      if (modelsResult.status === 'fulfilled') {
-        const { internal, external, custom } = modelsResult.value;
-        setState(prev => {
-          const next = {
-            ...prev,
-            internalModels: internal,
-            externalModels: external,
-            customModels: custom,
-            loading: { ...prev.loading, models: false },
-          };
-          // If nothing is selectable, clear selected model in session
-          if (!hasSelectableModels(next)) {
-            modelService.setCurrentModel('');
-            next.selectedModel = null;
-          }
-          return next;
-        });
-      } else {
-        throw new Error('Failed to load models');
-      }
-    } catch (error) {
-      setState(prev => ({
-        ...prev,
-        error: error instanceof Error ? error.message : 'Failed to load data',
-        loading: { models: false, secrets: false, testing: false, saving: false },
-      }));
-    }
-  };
-
-  const loadProviderStatus = async () => {
+  const loadProviderStatus = React.useCallback(async () => {
     try {
       // Get the initial state for providers (don't rely on current state)
       const initialProviders = modelService.getInitialState().providers;
       const providers = { ...initialProviders };
-      
+
       // Check each external provider for existing secrets
       for (const provider of ['openai', 'anthropic', 'google', 'meta', 'other'] as const) {
         const secretStatus = await secretManager.checkProviderSecret(provider);
@@ -143,25 +112,80 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
         loading: { ...prev.loading, secrets: false },
       }));
     }
-  };
+  }, [hasSelectableModels]);
 
-  const hasSelectableModels = (s: AIModelState): boolean => {
-    const internal = s.internalModels.length > 0;
-    const external = s.externalModels.some(m => m.provider === 'maas' || s.providers[m.provider]?.status === 'configured');
-    const custom = s.customModels.some(m => !m.requiresApiKey || m.provider === 'maas' || s.providers[m.provider]?.status === 'configured');
-    return internal || external || custom;
-  };
+  const loadInitialData = React.useCallback(async () => {
+    setState(prev => ({
+      ...prev,
+      loading: { ...prev.loading, models: true, secrets: true },
+      error: null,
+    }));
 
-  const isModelSelectable = (s: AIModelState, modelName: string | null): boolean => {
-    if (!modelName) return false;
-    const all = [...s.internalModels, ...s.externalModels, ...s.customModels];
-    const m = all.find(mm => mm.name === modelName);
-    if (!m) return false;
-    if (!m.requiresApiKey) return true;
-    // MAAS models have per-model API keys configured when added
-    if (m.provider === 'maas') return true;
-    return s.providers[m.provider]?.status === 'configured';
-  };
+    try {
+      // Load models in parallel with provider status
+      const [modelsResult] = await Promise.allSettled([
+        modelService.loadAvailableModels(),
+        loadProviderStatus(),
+      ]);
+
+      if (modelsResult.status === 'fulfilled') {
+        const { internal, external, custom } = modelsResult.value;
+        setState(prev => {
+          // Always refresh selectedModel from session config
+          const currentModel = modelService.getCurrentModel();
+
+          const next = {
+            ...prev,
+            internalModels: internal,
+            externalModels: external,
+            customModels: custom,
+            selectedModel: currentModel,
+            loading: { ...prev.loading, models: false },
+          };
+
+          // If nothing is selectable, clear selected model in session
+          if (!hasSelectableModels(next)) {
+            modelService.setCurrentModel('');
+            next.selectedModel = null;
+          }
+          // If selected model is not in the available models list, clear it
+          else if (currentModel && !isModelSelectable(next, currentModel)) {
+            modelService.setCurrentModel('');
+            next.selectedModel = null;
+          }
+
+          return next;
+        });
+      } else {
+        throw new Error('Failed to load models');
+      }
+    } catch (error) {
+      setState(prev => ({
+        ...prev,
+        error: error instanceof Error ? error.message : 'Failed to load data',
+        loading: { models: false, secrets: false, testing: false, saving: false },
+      }));
+    }
+  }, [hasSelectableModels, isModelSelectable, loadProviderStatus]);
+
+  // Load initial data when modal opens
+  React.useEffect(() => {
+    if (isOpen) {
+      loadInitialData();
+    }
+  }, [isOpen, loadInitialData]);
+
+  // Listen for dev cache clear events
+  React.useEffect(() => {
+    const handleCacheCleared = () => {
+      loadInitialData();
+    };
+
+    window.addEventListener(DEV_CACHE_CLEARED_EVENT, handleCacheCleared);
+    return () => {
+      window.removeEventListener(DEV_CACHE_CLEARED_EVENT, handleCacheCleared);
+    };
+  }, [loadInitialData]);
 
   const handleTabSelect = (_event: React.MouseEvent<HTMLElement, MouseEvent>, tabIndex: string | number) => {
     const tabName = tabIndex as AIModelState['activeTab'];
