@@ -4,27 +4,33 @@ import { listDevProviders, clearDevCredentials, clearDevModels, getDevModels } f
 import { isDevMode } from '../../../services/runtimeConfig';
 import { clearSessionConfig, getSessionConfig } from '../../../services/mcpClient';
 
+// Poll every 2 seconds to keep UI in sync with cached data in dev mode
+const DEV_CACHE_POLL_INTERVAL_MS = 2000;
+
 export const DevModeBanner: React.FC = () => {
   const [cachedProviders, setCachedProviders] = React.useState<string[]>([]);
   const [modelCount, setModelCount] = React.useState<number>(0);
   const [hasSelectedModel, setHasSelectedModel] = React.useState<boolean>(false);
+  const [selectedModelName, setSelectedModelName] = React.useState<string>('');
   const devMode = isDevMode();
 
   React.useEffect(() => {
     if (devMode) {
-      // Refresh cached providers, models list, and selected model every 2 seconds
+      // Refresh cached providers, models list, and selected model
       const interval = setInterval(() => {
         setCachedProviders(listDevProviders());
         setModelCount(Object.keys(getDevModels()).length);
         const config = getSessionConfig();
         setHasSelectedModel(!!config.ai_model);
-      }, 2000);
+        setSelectedModelName(config.ai_model || '');
+      }, DEV_CACHE_POLL_INTERVAL_MS);
 
       // Initial load
       setCachedProviders(listDevProviders());
       setModelCount(Object.keys(getDevModels()).length);
       const config = getSessionConfig();
       setHasSelectedModel(!!config.ai_model);
+      setSelectedModelName(config.ai_model || '');
 
       return () => clearInterval(interval);
     }
@@ -37,6 +43,7 @@ export const DevModeBanner: React.FC = () => {
     setCachedProviders([]);
     setModelCount(0);
     setHasSelectedModel(false);
+    setSelectedModelName('');
 
     // Notify parent component to reload models
     window.dispatchEvent(new CustomEvent('dev-cache-cleared'));
@@ -84,7 +91,7 @@ export const DevModeBanner: React.FC = () => {
           )}
           {hasSelectedModel && (
             <p>
-              <strong>Selected model for analysis:</strong> {getSessionConfig().ai_model}
+              <strong>Selected model for analysis:</strong> {selectedModelName}
             </p>
           )}
         </div>
