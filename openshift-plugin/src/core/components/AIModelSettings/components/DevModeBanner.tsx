@@ -3,6 +3,7 @@ import { Alert, AlertVariant, Button } from '@patternfly/react-core';
 import { listDevProviders, clearDevCredentials, clearDevModels, getDevModels } from '../../../services/devCredentials';
 import { isDevMode } from '../../../services/runtimeConfig';
 import { clearSessionConfig, getSessionConfig } from '../../../services/mcpClient';
+import { dispatchDevCacheClearedEvent } from '../../../constants';
 
 // Poll every 2 seconds to keep UI in sync with cached data in dev mode
 const DEV_CACHE_POLL_INTERVAL_MS = 2000;
@@ -45,8 +46,8 @@ export const DevModeBanner: React.FC = () => {
     setHasSelectedModel(false);
     setSelectedModelName('');
 
-    // Notify parent component to reload models
-    window.dispatchEvent(new CustomEvent('dev-cache-cleared'));
+    // Notify parent components to reload data
+    dispatchDevCacheClearedEvent();
   };
 
   if (!devMode) {

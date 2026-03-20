@@ -32,6 +32,7 @@ import { ModelInsightsSection, QuickActionsSection, StatusSummarySection } from 
 import { getSessionConfig, healthCheck, listModels, listNamespaces } from '../services/mcpClient';
 import type { ModelInfo, NamespaceInfo } from '../services/mcpClient';
 import { initializeRuntimeConfig } from '../services/runtimeConfig';
+import { DEV_CACHE_CLEARED_EVENT } from '../constants';
 
 // Overview Dashboard Component
 const OverviewDashboard: React.FC = () => {
@@ -136,19 +137,18 @@ const AIObservabilityPage: React.FC<AIObservabilityPageProps> = ({
       }
     };
     const handleCacheCleared = () => {
-      console.log('[AIObservabilityPage] Dev cache cleared, updating configured model...');
       const updatedConfig = getSessionConfig();
       setConfiguredModel(updatedConfig.ai_model || '');
     };
 
     window.addEventListener('open-settings', handleOpenSettings);
     window.addEventListener('quick-action-navigate', handleQuickActionNavigate);
-    window.addEventListener('dev-cache-cleared', handleCacheCleared);
+    window.addEventListener(DEV_CACHE_CLEARED_EVENT, handleCacheCleared);
 
     return () => {
       window.removeEventListener('open-settings', handleOpenSettings);
       window.removeEventListener('quick-action-navigate', handleQuickActionNavigate);
-      window.removeEventListener('dev-cache-cleared', handleCacheCleared);
+      window.removeEventListener(DEV_CACHE_CLEARED_EVENT, handleCacheCleared);
     };
   }, [setActiveTabKey]);
 
