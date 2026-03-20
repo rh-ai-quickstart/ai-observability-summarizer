@@ -20,8 +20,10 @@ from typing import Dict, Any, List, Optional
 
 from .config import PROMETHEUS_URL, THANOS_TOKEN, VERIFY_SSL
 from .llm_client import summarize_with_llm
+from .metrics import choose_prometheus_step
 from .response_validator import ResponseType
 from .metrics_catalog import get_metrics_catalog
+from .time_utils import parse_duration_to_timedelta
 
 # Initialize logger
 logger = logging.getLogger(__name__)
@@ -211,17 +213,10 @@ def execute_promql_query(
     # Parse time parameters
     if start_time:
         if start_time.endswith(('m', 'h', 'd')):
-            # Relative time (e.g., "1h", "30m")
+            # Relative time (e.g., "1h", "30m", "2d")
             now = datetime.utcnow()
-            if start_time.endswith('m'):
-                minutes = int(start_time[:-1])
-                start_timestamp = (now - timedelta(minutes=minutes)).timestamp()
-            elif start_time.endswith('h'):
-                hours = int(start_time[:-1])
-                start_timestamp = (now - timedelta(hours=hours)).timestamp()
-            elif start_time.endswith('d'):
-                days = int(start_time[:-1])
-                start_timestamp = (now - timedelta(days=days)).timestamp()
+            delta = parse_duration_to_timedelta(start_time)
+            start_timestamp = (now - delta).timestamp()
         else:
             # Absolute time
             start_timestamp = datetime.fromisoformat(start_time.replace('Z', '+00:00')).timestamp()
@@ -237,11 +232,13 @@ def execute_promql_query(
     # Execute query - use instant query if no time range specified
     if start_time or end_time:
         # Range query
+        step = choose_prometheus_step(int(start_timestamp), int(end_timestamp), min_step_seconds=60)
+        logger.info("Range query step: %s (start=%s, end=%s)", step, start_time, end_time)
         params = {
             "query": query,
             "start": start_timestamp,
             "end": end_timestamp,
-            "step": "60s"  # 1 minute resolution
+            "step": step,
         }
         response = make_prometheus_request("/api/v1/query_range", params)
     else:
@@ -830,23 +827,23 @@ def generate_metadata_driven_promql(
 
     elif intent == 'percentile':
         if metric_type == 'histogram':
-            query = f"histogram_quantile(0.95, rate({metric_name}_bucket[5m]))"
+            query = f"histogram_quantile(0.95, rate({metric_name}_bucket[<rate_interval>]))"
         else:
             query = f"quantile(0.95, {metric_name})"
         return apply_boolean_filter(query)
 
     elif intent == 'rate':
         if metric_type == 'counter':
-            query = f"sum(rate({metric_name}[5m]))"
+            query = f"sum(rate({metric_name}[<rate_interval>]))"
         elif metric_type == 'histogram':
-            query = f"histogram_quantile(0.95, rate({metric_name}_bucket[5m]))"
+            query = f"histogram_quantile(0.95, rate({metric_name}_bucket[<rate_interval>]))"
         else:
-            query = f"rate({metric_name}[5m])"
+            query = f"rate({metric_name}[<rate_interval>])"
         return apply_boolean_filter(query)
 
     elif intent == 'trend':
         if metric_type == 'counter':
-            query = f"rate({metric_name}[5m])"
+            query = f"rate({metric_name}[<rate_interval>])"
         elif metric_type == 'gauge':
             query = f"avg_over_time({metric_name}[1h])"
         else:
@@ -855,16 +852,16 @@ def generate_metadata_driven_promql(
 
     elif intent == 'top_n':
         if metric_type == 'counter':
-            query = f"topk(5, rate({metric_name}[5m]))"
+            query = f"topk(5, rate({metric_name}[<rate_interval>]))"
         else:
             query = f"topk(5, {metric_name})"
         return apply_boolean_filter(query)
 
     elif intent == 'comparison':
         if metric_type == 'counter':
-            query = f"sum by (model_name) (rate({metric_name}[5m]))"
+            query = f"sum by (model_name) (rate({metric_name}[<rate_interval>]))"
         elif metric_type == 'histogram':
-            query = f"histogram_quantile(0.95, sum by (model_name, le) (rate({metric_name}_bucket[5m])))"
+            query = f"histogram_quantile(0.95, sum by (model_name, le) (rate({metric_name}_bucket[<rate_interval>])))"
         else:
             query = f"avg by (model_name) ({metric_name})"
         return apply_boolean_filter(query)
@@ -872,7 +869,7 @@ def generate_metadata_driven_promql(
     else:
         # Default based on metric type
         if metric_type == 'counter':
-            query = f"rate({metric_name}[5m])"
+            query = f"rate({metric_name}[<rate_interval>])"
         elif metric_type == 'gauge':
             if 'temperature' in concepts['measurements'] or 'usage' in concepts['measurements']:
                 query = f"avg({metric_name})"
@@ -898,8 +895,8 @@ def generate_query_examples(metric_name: str, metadata: Dict[str, Any]) -> List[
     # Type-specific examples
     if metric_type == 'counter':
         examples.extend([
-            f"rate({metric_name}[5m])",
-            f"sum(rate({metric_name}[5m]))",
+            f"rate({metric_name}[<rate_interval>])",
+            f"sum(rate({metric_name}[<rate_interval>]))",
             f"increase({metric_name}[1h])"
         ])
     elif metric_type == 'gauge':
@@ -912,7 +909,7 @@ def generate_query_examples(metric_name: str, metadata: Dict[str, Any]) -> List[
         examples.extend([
             f"histogram_quantile(0.95, {metric_name}_bucket)",
             f"histogram_quantile(0.99, {metric_name}_bucket)",
-            f"rate({metric_name}_sum[5m]) / rate({metric_name}_count[5m])"
+            f"rate({metric_name}_sum[<rate_interval>]) / rate({metric_name}_count[<rate_interval>])"
         ])
     
     # Add common aggregations
@@ -941,7 +938,7 @@ def suggest_related_queries(user_intent: str, base_metric: str = "") -> List[str
         
         # Rate calculations for counters
         if not base_metric.startswith("rate("):
-            suggestions.append(f"rate({base_metric}[5m])")
+            suggestions.append(f"rate({base_metric}[<rate_interval>])")
         
         # Histogram quantiles if it looks like a histogram
         if "_bucket" in base_metric or "histogram" in base_metric.lower():

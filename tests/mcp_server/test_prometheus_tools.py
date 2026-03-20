@@ -4,6 +4,7 @@ import pytest
 import json
 import sys
 import os
+from datetime import timedelta
 
 # Python path is now handled by conftest.py
 
@@ -318,6 +319,324 @@ class TestArchitectureSeparation:
         
         # Both should follow similar patterns
         assert "from core." in source and "from core." in vllm_source
+
+
+class TestResolveRateIntervalPlaceholder:
+    """Tests for the _resolve_rate_interval_placeholder safety-net function."""
+
+    def test_no_placeholder_returns_query_unchanged(self):
+        """Query without <rate_interval> should pass through unchanged."""
+        from mcp_server.tools.prometheus_tools import _resolve_rate_interval_placeholder
+
+        query = "rate(vllm:e2e_request_latency_seconds_count[5m])"
+        result = _resolve_rate_interval_placeholder(query, None, None)
+        assert result == query
+
+    def test_placeholder_replaced_with_default_when_no_times(self):
+        """Without start/end times, should substitute the 5m default."""
+        from mcp_server.tools.prometheus_tools import _resolve_rate_interval_placeholder
+
+        query = "rate(metric[<rate_interval>])"
+        result = _resolve_rate_interval_placeholder(query, None, None)
+        assert result == "rate(metric[5m])"
+
+    def test_tier_leq_1h(self):
+        """<=1h range -> 5m."""
+        from mcp_server.tools.prometheus_tools import _resolve_rate_interval_placeholder
+
+        query = "rate(metric[<rate_interval>])"
+        result = _resolve_rate_interval_placeholder(
+            query, "2026-03-17T10:00:00Z", "2026-03-17T10:30:00Z"
+        )
+        assert result == "rate(metric[5m])"
+
+    def test_tier_leq_3h(self):
+        """<=3h range -> 15m."""
+        from mcp_server.tools.prometheus_tools import _resolve_rate_interval_placeholder
+
+        query = "rate(metric[<rate_interval>])"
+        result = _resolve_rate_interval_placeholder(
+            query, "2026-03-17T08:00:00Z", "2026-03-17T10:00:00Z"
+        )
+        assert result == "rate(metric[15m])"
+
+    def test_tier_leq_6h(self):
+        """<=6h range -> 30m."""
+        from mcp_server.tools.prometheus_tools import _resolve_rate_interval_placeholder
+
+        query = "rate(metric[<rate_interval>])"
+        result = _resolve_rate_interval_placeholder(
+            query, "2026-03-17T06:00:00Z", "2026-03-17T10:00:00Z"
+        )
+        assert result == "rate(metric[30m])"
+
+    def test_tier_leq_12h(self):
+        """<=12h range -> 1h."""
+        from mcp_server.tools.prometheus_tools import _resolve_rate_interval_placeholder
+
+        query = "rate(metric[<rate_interval>])"
+        result = _resolve_rate_interval_placeholder(
+            query, "2026-03-17T00:00:00Z", "2026-03-17T10:00:00Z"
+        )
+        assert result == "rate(metric[1h])"
+
+    def test_tier_leq_24h(self):
+        """<=24h range -> 2h."""
+        from mcp_server.tools.prometheus_tools import _resolve_rate_interval_placeholder
+
+        query = "rate(metric[<rate_interval>])"
+        result = _resolve_rate_interval_placeholder(
+            query, "2026-03-16T10:00:00Z", "2026-03-17T10:00:00Z"
+        )
+        assert result == "rate(metric[2h])"
+
+    def test_tier_leq_48h(self):
+        """<=48h range -> 4h."""
+        from mcp_server.tools.prometheus_tools import _resolve_rate_interval_placeholder
+
+        query = "rate(metric[<rate_interval>])"
+        result = _resolve_rate_interval_placeholder(
+            query, "2026-03-15T10:00:00Z", "2026-03-17T10:00:00Z"
+        )
+        assert result == "rate(metric[4h])"
+
+    def test_gt_48h_dynamic(self):
+        """>48h range -> computed dynamically: 168h / 12 = 14h."""
+        from mcp_server.tools.prometheus_tools import _resolve_rate_interval_placeholder
+
+        query = "rate(metric[<rate_interval>])"
+        # 7 days = 168h -> 168/12 = 14h
+        result = _resolve_rate_interval_placeholder(
+            query, "2026-03-10T10:00:00Z", "2026-03-17T10:00:00Z"
+        )
+        assert result == "rate(metric[14h])"
+
+    def test_multiple_placeholders_replaced(self):
+        """All occurrences of <rate_interval> should be replaced."""
+        from mcp_server.tools.prometheus_tools import _resolve_rate_interval_placeholder
+
+        query = (
+            "histogram_quantile(0.95, sum(rate(metric_bucket[<rate_interval>])) by (le)) "
+            "/ rate(metric_count[<rate_interval>])"
+        )
+        result = _resolve_rate_interval_placeholder(query, None, None)
+        assert "<rate_interval>" not in result
+        assert "[5m]" in result
+        assert result.count("[5m]") == 2
+
+    def test_malformed_timestamps_use_default(self):
+        """Unparseable timestamps should fall back to 5m default."""
+        from mcp_server.tools.prometheus_tools import _resolve_rate_interval_placeholder
+
+        query = "rate(metric[<rate_interval>])"
+        result = _resolve_rate_interval_placeholder(query, "not-a-date", "also-not-a-date")
+        assert result == "rate(metric[5m])"
+
+
+class TestNormalizeLiteralRateWindows:
+    """Tests for literal rate window normalization (no placeholder)."""
+
+    def test_literal_5m_normalized_for_24h_range(self):
+        """LLM wrote [5m] from training — should be normalized to [2h] for 24h range."""
+        from mcp_server.tools.prometheus_tools import _resolve_rate_interval_placeholder
+
+        query = "rate(vllm:request_success_total[5m])"
+        result = _resolve_rate_interval_placeholder(
+            query, "2026-03-16T10:00:00Z", "2026-03-17T10:00:00Z"
+        )
+        assert result == "rate(vllm:request_success_total[2h])"
+
+    def test_literal_not_normalized_without_times(self):
+        """Without start/end, literal windows should pass through unchanged."""
+        from mcp_server.tools.prometheus_tools import _resolve_rate_interval_placeholder
+
+        query = "rate(vllm:request_success_total[5m])"
+        result = _resolve_rate_interval_placeholder(query, None, None)
+        assert result == query
+
+    def test_literal_already_matches_tier(self):
+        """[2h] for 24h range is already correct — result is the same (no-op)."""
+        from mcp_server.tools.prometheus_tools import _resolve_rate_interval_placeholder
+
+        query = "rate(metric[2h])"
+        result = _resolve_rate_interval_placeholder(
+            query, "2026-03-16T10:00:00Z", "2026-03-17T10:00:00Z"
+        )
+        assert result == "rate(metric[2h])"
+
+    def test_multiple_literal_windows_all_normalized(self):
+        """All literal windows in a multi-rate query should be normalized."""
+        from mcp_server.tools.prometheus_tools import _resolve_rate_interval_placeholder
+
+        query = (
+            "histogram_quantile(0.95, sum(rate(metric_bucket[5m])) by (le)) "
+            "/ rate(metric_count[5m])"
+        )
+        result = _resolve_rate_interval_placeholder(
+            query, "2026-03-16T10:00:00Z", "2026-03-17T10:00:00Z"
+        )
+        assert result.count("[2h]") == 2
+        assert "[5m]" not in result
+
+    def test_literal_normalized_for_6h_range(self):
+        """[5m] should become [30m] for a 6h range."""
+        from mcp_server.tools.prometheus_tools import _resolve_rate_interval_placeholder
+
+        query = "rate(metric[5m])"
+        result = _resolve_rate_interval_placeholder(
+            query, "2026-03-17T04:00:00Z", "2026-03-17T10:00:00Z"
+        )
+        assert result == "rate(metric[30m])"
+
+    def test_no_rate_window_passes_through(self):
+        """Query without any rate window is not modified."""
+        from mcp_server.tools.prometheus_tools import _resolve_rate_interval_placeholder
+
+        query = "histogram_quantile(0.95, vllm:time_to_first_token_seconds_bucket)"
+        result = _resolve_rate_interval_placeholder(
+            query, "2026-03-16T10:00:00Z", "2026-03-17T10:00:00Z"
+        )
+        assert result == query
+
+    def test_avg_over_time_not_normalized(self):
+        """avg_over_time window should NOT be normalized — it's not a rate function."""
+        from mcp_server.tools.prometheus_tools import _resolve_rate_interval_placeholder
+
+        query = "avg_over_time(node_cpu_seconds_total[5m])"
+        result = _resolve_rate_interval_placeholder(
+            query, "2026-03-16T10:00:00Z", "2026-03-17T10:00:00Z"
+        )
+        assert result == query  # unchanged
+
+    def test_max_over_time_not_normalized(self):
+        """max_over_time window should NOT be normalized."""
+        from mcp_server.tools.prometheus_tools import _resolve_rate_interval_placeholder
+
+        query = "max_over_time(container_memory_usage_bytes[1h])"
+        result = _resolve_rate_interval_placeholder(
+            query, "2026-03-16T10:00:00Z", "2026-03-17T10:00:00Z"
+        )
+        assert result == query  # unchanged
+
+    def test_mixed_rate_and_over_time(self):
+        """rate() window should be normalized but avg_over_time() should not."""
+        from mcp_server.tools.prometheus_tools import _resolve_rate_interval_placeholder
+
+        query = "avg_over_time(rate(http_requests_total[5m])[1h:])"
+        result = _resolve_rate_interval_placeholder(
+            query, "2026-03-16T10:00:00Z", "2026-03-17T10:00:00Z"
+        )
+        # rate's [5m] should become [2h], but the subquery [1h:] should be untouched
+        assert "rate(http_requests_total[2h])" in result
+        assert "[1h:]" in result
+
+    def test_subquery_step_preserved(self):
+        """rate(x[5m:1m]) — normalize the 5m range but preserve the :1m step."""
+        from mcp_server.tools.prometheus_tools import _resolve_rate_interval_placeholder
+
+        query = "rate(http_requests_total[5m:1m])"
+        result = _resolve_rate_interval_placeholder(
+            query, "2026-03-16T10:00:00Z", "2026-03-17T10:00:00Z"
+        )
+        assert result == "rate(http_requests_total[2h:1m])"
+
+    def test_label_with_brackets_handled(self):
+        """Brackets in label values should not break the regex."""
+        from mcp_server.tools.prometheus_tools import _resolve_rate_interval_placeholder
+
+        query = 'rate(metric{label="value[1]"}[5m])'
+        result = _resolve_rate_interval_placeholder(
+            query, "2026-03-16T10:00:00Z", "2026-03-17T10:00:00Z"
+        )
+        assert result == 'rate(metric{label="value[1]"}[2h])'
+
+    def test_malformed_timestamps_skip_normalization(self):
+        """Unparseable timestamps should not normalize literal windows."""
+        from mcp_server.tools.prometheus_tools import _resolve_rate_interval_placeholder
+
+        query = "rate(metric[5m])"
+        result = _resolve_rate_interval_placeholder(query, "not-a-date", "also-not-a-date")
+        assert result == "rate(metric[5m])"
+
+    def test_full_duration_window_normalized_to_tier(self):
+        """LLM used full duration [24h] as rate window — should be normalized to [2h]."""
+        from mcp_server.tools.prometheus_tools import _resolve_rate_interval_placeholder
+
+        query = "rate(metric[24h])"
+        result = _resolve_rate_interval_placeholder(
+            query, "2026-03-16T10:00:00Z", "2026-03-17T10:00:00Z"
+        )
+        assert result == "rate(metric[2h])"
+
+    def test_day_unit_normalized(self):
+        """LLM used [2d] — should be normalized to [4h] for 48h range."""
+        from mcp_server.tools.prometheus_tools import _resolve_rate_interval_placeholder
+
+        query = "increase(vllm:request_success_total[2d])"
+        result = _resolve_rate_interval_placeholder(
+            query, "2026-03-15T10:00:00Z", "2026-03-17T10:00:00Z"
+        )
+        assert result == "increase(vllm:request_success_total[4h])"
+
+    def test_month_duration_normalized(self):
+        """LLM used [30d] — should be normalized dynamically for 30-day range."""
+        from mcp_server.tools.prometheus_tools import _resolve_rate_interval_placeholder
+
+        query = "rate(metric[30d])"
+        # 30 days = 720h -> 720/12 = 60h
+        result = _resolve_rate_interval_placeholder(
+            query, "2026-02-15T10:00:00Z", "2026-03-17T10:00:00Z"
+        )
+        assert result == "rate(metric[60h])"
+
+
+class TestParseDurationToTimedelta:
+    """Tests for parse_duration_to_timedelta (in core.time_utils)."""
+
+    def test_simple_hours(self):
+        from core.time_utils import parse_duration_to_timedelta
+        assert parse_duration_to_timedelta("3h") == timedelta(hours=3)
+
+    def test_simple_minutes(self):
+        from core.time_utils import parse_duration_to_timedelta
+        assert parse_duration_to_timedelta("30m") == timedelta(minutes=30)
+
+    def test_simple_days(self):
+        from core.time_utils import parse_duration_to_timedelta
+        assert parse_duration_to_timedelta("2d") == timedelta(days=2)
+
+    def test_composite_duration(self):
+        from core.time_utils import parse_duration_to_timedelta
+        assert parse_duration_to_timedelta("1h30m") == timedelta(hours=1, minutes=30)
+
+    def test_24_hours(self):
+        from core.time_utils import parse_duration_to_timedelta
+        assert parse_duration_to_timedelta("24h") == timedelta(hours=24)
+
+    def test_unparseable_defaults_to_1h(self):
+        from core.time_utils import parse_duration_to_timedelta
+        assert parse_duration_to_timedelta("foo") == timedelta(hours=1)
+
+    def test_seconds(self):
+        from core.time_utils import parse_duration_to_timedelta
+        assert parse_duration_to_timedelta("90s") == timedelta(seconds=90)
+
+    def test_custom_default(self):
+        from core.time_utils import parse_duration_to_timedelta
+        assert parse_duration_to_timedelta("foo", default=timedelta(hours=24)) == timedelta(hours=24)
+
+    def test_prefixed_string(self):
+        """Handles 'last 3h' format used by convert_time_range_to_iso."""
+        from core.time_utils import parse_duration_to_timedelta
+        assert parse_duration_to_timedelta("last 3h") == timedelta(hours=3)
+
+    def test_decimal_hours(self):
+        from core.time_utils import parse_duration_to_timedelta
+        assert parse_duration_to_timedelta("1.5h") == timedelta(hours=1.5)
+
+    def test_decimal_days(self):
+        from core.time_utils import parse_duration_to_timedelta
+        assert parse_duration_to_timedelta("2.5d") == timedelta(days=2.5)
 
 
 class TestRealDataFlow:

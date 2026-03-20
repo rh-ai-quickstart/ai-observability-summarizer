@@ -238,6 +238,12 @@ class TestQueryGeneration:
         assert len(suggestions) > 0
         assert any("cpu_utilization" in s for s in suggestions)
         
+        # Rate suggestions should use <rate_interval> placeholder, not [5m]
+        rate_suggestions = [s for s in suggestions if "rate(" in s]
+        for s in rate_suggestions:
+            assert "[<rate_interval>]" in s, f"Expected <rate_interval> placeholder in: {s}"
+            assert "[5m]" not in s, f"Hardcoded [5m] should not appear in: {s}"
+
         # Without base metric (intent-based)
         suggestions = suggest_related_queries("performance monitoring")
         assert isinstance(suggestions, list)

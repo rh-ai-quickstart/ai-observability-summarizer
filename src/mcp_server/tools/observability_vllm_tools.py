@@ -220,15 +220,30 @@ def get_vllm_metrics_tool() -> List[Dict[str, Any]]:
         if not vllm_metrics_dict:
             return make_mcp_text_response("No vLLM metrics are currently available from Prometheus.")
 
+        # Replace any hardcoded rate window (e.g. [5m], [15m], [1h]) with
+        # <rate_interval> placeholder so the LLM adjusts the rate window to
+        # match the user's requested time range instead of copying a literal.
+        # All current queries use [5m], but this regex future-proofs against
+        # new metrics that might use other windows.
+        display_metrics = {
+            name: re.sub(r'\[\d+[smhd]\]', '[<rate_interval>]', query)
+            for name, query in vllm_metrics_dict.items()
+        }
+
         # Format the response with categories for better organization
-        content = f"Available vLLM Metrics ({len(vllm_metrics_dict)} total):\n\n"
-        
+        content = f"Available vLLM Metrics ({len(display_metrics)} total):\n\n"
+        content += ("**Note:** `<rate_interval>` must be set based on the user's requested "
+                     "time range: <=1h use 5m, <=3h use 15m, <=6h use 30m, "
+                     "<=12h use 1h, <=24h use 2h, <=48h use 4h, "
+                     ">48h divide hours by 12 and round (e.g. 3d=6h, 1w=14h, 1mo=60h). "
+                     "Default: 5m.\n\n")
+
         # Group metrics by type for better presentation
         gpu_metrics = {}
         vllm_core_metrics = {}
         other_metrics = {}
-        
-        for friendly_name, promql_query in vllm_metrics_dict.items():
+
+        for friendly_name, promql_query in display_metrics.items():
             if any(gpu_term in friendly_name.lower() for gpu_term in ['gpu', 'temperature', 'power', 'memory', 'energy', 'utilization']):
                 gpu_metrics[friendly_name] = promql_query
             elif any(vllm_term in friendly_name.lower() for vllm_term in ['prompt', 'token', 'latency', 'request', 'inference']):
@@ -259,7 +274,7 @@ def get_vllm_metrics_tool() -> List[Dict[str, Any]]:
         content += f"- GPU Metrics: {len(gpu_metrics)}\n"
         content += f"- vLLM Performance: {len(vllm_core_metrics)}\n"
         content += f"- Other: {len(other_metrics)}\n"
-        content += f"- Total: {len(vllm_metrics_dict)}\n"
+        content += f"- Total: {len(display_metrics)}\n"
 
         return make_mcp_text_response(content)
 
