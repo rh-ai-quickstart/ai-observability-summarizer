@@ -253,12 +253,14 @@ interface MetricCategoriesPopoverProps {
   onSelectQuestion: (question: string) => void;
   chatScope?: ChatScope;
   selectedNamespace?: string | null;
+  gpuAvailable?: boolean | undefined;
 }
 
 export const MetricCategoriesPopover: React.FC<MetricCategoriesPopoverProps> = ({
   onSelectQuestion,
   chatScope = 'cluster_wide',
   selectedNamespace = null,
+  gpuAvailable,
 }) => {
   const [key, setKey] = React.useState(0);
   const [categories, setCategories] = React.useState<CategorySummary[]>([]);
@@ -272,13 +274,13 @@ export const MetricCategoriesPopover: React.FC<MetricCategoriesPopoverProps> = (
     loadCategories();
   }, []);
 
-  // Reload categories when scope changes
+  // Reload categories when scope or GPU availability changes
   React.useEffect(() => {
     if (loadedRef.current) {
       loadCategories();
       setSelectedCategory(null); // Reset category selection when scope changes
     }
-  }, [chatScope]);
+  }, [chatScope, gpuAvailable]);
 
   const loadCategories = async () => {
     setLoading(true);
@@ -296,10 +298,15 @@ export const MetricCategoriesPopover: React.FC<MetricCategoriesPopoverProps> = (
       } else {
         const allCategories = Array.isArray(parsed) ? parsed : [];
 
-        // Simple static filtering based on scope
-        const filteredCategories = chatScope === 'namespace_scoped'
+        // Filter based on scope
+        let filteredCategories = chatScope === 'namespace_scoped'
           ? allCategories.filter(cat => NAMESPACE_SCOPED_CATEGORIES.includes(cat.id))
           : allCategories;
+
+        // Filter out GPU category if unavailable
+        if (!gpuAvailable) {
+          filteredCategories = filteredCategories.filter(cat => cat.id !== 'gpu_ai');
+        }
 
         setCategories(filteredCategories);
       }

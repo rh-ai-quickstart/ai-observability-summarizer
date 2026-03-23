@@ -49,7 +49,11 @@ import { NamespaceScopeSelector } from '../components/NamespaceScopeSelector';
 import { ChatScope } from '../data/namespaceDefaults';
 import '../styles/chat-markdown.css';
 
-const AIChatPage: React.FC = () => {
+interface AIChatPageProps {
+  gpuAvailable?: boolean | undefined;
+}
+
+const AIChatPage: React.FC<AIChatPageProps> = ({ gpuAvailable }) => {
   const { messages, setMessages, clearHistory, exportToMarkdown } = useChatHistory();
   const { progressMessage, startProgress, stopProgress } = useProgressIndicator();
   const { settings: chatSettings } = useChatSettings();
@@ -453,7 +457,7 @@ const AIChatPage: React.FC = () => {
               </FlexItem>
               {chatSettings.suggestedQuestionsLocation === 'header' && (
                 <FlexItem>
-                  <SuggestedQuestionsPopover onSelectQuestion={(question) => handleSend(question)} />
+                  <SuggestedQuestionsPopover onSelectQuestion={(question) => handleSend(question)} gpuAvailable={gpuAvailable} />
                 </FlexItem>
               )}
               {chatSettings.metricCategoriesLocation === 'header' && (
@@ -462,6 +466,7 @@ const AIChatPage: React.FC = () => {
                     onSelectQuestion={(question) => handleSend(question)}
                     chatScope={chatScope}
                     selectedNamespace={selectedNamespace}
+                    gpuAvailable={gpuAvailable}
                   />
                 </FlexItem>
               )}
@@ -755,6 +760,7 @@ const AIChatPage: React.FC = () => {
                     setCategoriesExpanded(false);
                   }
                 }}
+                gpuAvailable={gpuAvailable}
               />
             </div>
           )}
@@ -775,6 +781,7 @@ const AIChatPage: React.FC = () => {
                 }}
                 chatScope={chatScope}
                 selectedNamespace={selectedNamespace}
+                gpuAvailable={gpuAvailable}
               />
             </div>
           )}
@@ -897,7 +904,10 @@ const AIChatPage: React.FC = () => {
           </Flex>
           <TextContent style={{ marginTop: '8px' }}>
             <Text component={TextVariants.small} style={{ color: 'var(--pf-v5-global--Color--200)' }}>
-              💡 Try: "What's my GPU utilization?" or "Summarize vLLM health"
+              {gpuAvailable === true
+                ? "💡 Try: \"What's my GPU utilization?\" or \"Summarize vLLM health\""
+                : "💡 Try: \"What's the overall health of my cluster?\" or \"Show me resource utilization trends\""
+              }
             </Text>
           </TextContent>
         </CardFooter>

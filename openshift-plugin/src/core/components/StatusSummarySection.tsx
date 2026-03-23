@@ -119,6 +119,7 @@ interface StatusSummarySectionProps {
   mcpConnected: boolean;
   models: ModelInfo[];
   namespaces: NamespaceInfo[];
+  gpuAvailable?: boolean | undefined;
 }
 
 export const StatusSummarySection: React.FC<StatusSummarySectionProps> = ({
@@ -127,6 +128,7 @@ export const StatusSummarySection: React.FC<StatusSummarySectionProps> = ({
   mcpConnected,
   models,
   namespaces,
+  gpuAvailable,
 }) => {
   const modelCount = models.length;
   const namespaceCount = namespaces.length;
@@ -160,24 +162,29 @@ export const StatusSummarySection: React.FC<StatusSummarySectionProps> = ({
             icon={mcpConnected ? <CheckCircleIcon /> : <ExclamationTriangleIcon />}
           />
         </GridItem>
-        <GridItem lg={4} md={6} sm={12}>
-          <StatusCard
-            title="vLLM Models"
-            value={modelCount}
-            subtitle="Deployed models"
-            status={modelCount > 0 ? 'info' : 'warning'}
-            icon={<CubesIcon />}
-          />
-        </GridItem>
-        <GridItem lg={4} md={6} sm={12}>
-          <StatusCard
-            title="Namespaces"
-            value={namespaceCount}
-            subtitle="With vLLM deployments"
-            status={namespaceCount > 0 ? 'info' : 'warning'}
-            icon={<ServerIcon />}
-          />
-        </GridItem>
+        {/* Only show vLLM-related cards if GPU available */}
+        {gpuAvailable === true && (
+          <>
+            <GridItem lg={4} md={6} sm={12}>
+              <StatusCard
+                title="vLLM Models"
+                value={modelCount}
+                subtitle="Deployed models"
+                status={modelCount > 0 ? 'info' : 'warning'}
+                icon={<CubesIcon />}
+              />
+            </GridItem>
+            <GridItem lg={4} md={6} sm={12}>
+              <StatusCard
+                title="Namespaces with vLLM"
+                value={namespaceCount}
+                subtitle="vLLM deployments detected"
+                status={namespaceCount > 0 ? 'info' : 'warning'}
+                icon={<ServerIcon />}
+              />
+            </GridItem>
+          </>
+        )}
       </Grid>
     </>
   );

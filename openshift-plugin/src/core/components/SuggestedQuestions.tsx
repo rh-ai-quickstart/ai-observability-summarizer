@@ -28,54 +28,62 @@ interface SuggestedQuestion {
   question: string;
 }
 
-const SUGGESTED_QUESTIONS: SuggestedQuestion[] = [
+const ALL_SUGGESTED_QUESTIONS: (SuggestedQuestion & { requiresGpu?: boolean })[] = [
   {
     id: 'gpu-util',
     icon: CubeIcon,
     label: 'GPU Utilization',
     question: "What's the current GPU utilization across all models?",
+    requiresGpu: true,
   },
   {
     id: 'performance',
     icon: ExclamationTriangleIcon,
     label: 'Performance Issues',
     question: 'Are there any performance issues I should be aware of?',
+    requiresGpu: false,
   },
   {
     id: 'vllm-health',
     icon: ChartLineIcon,
     label: 'vLLM Health',
     question: 'Summarize the health of my vLLM deployments',
+    requiresGpu: true,
   },
   {
     id: 'cpu-memory',
     icon: TachometerAltIcon,
     label: 'CPU & Memory Trends',
     question: 'Show me CPU and memory trends for the last hour',
+    requiresGpu: false,
   },
   {
     id: 'resource-consumers',
     icon: ServerIcon,
     label: 'Resource Consumers',
     question: 'What are the top resource consumers in my cluster?',
+    requiresGpu: false,
   },
   {
     id: 'latency-queue',
     icon: ClockIcon,
     label: 'Latency & Queue',
     question: 'Analyze request latency and queue depth',
+    requiresGpu: true,
   },
   {
     id: 'cache-efficiency',
     icon: DatabaseIcon,
     label: 'Cache Efficiency',
     question: 'Check KV cache efficiency and hit rates',
+    requiresGpu: true,
   },
   {
     id: 'alerts',
     icon: BellIcon,
     label: 'Alerts & Anomalies',
     question: 'Show me any alerts or anomalies',
+    requiresGpu: false,
   },
 ];
 
@@ -83,13 +91,19 @@ interface SuggestedQuestionsProps {
   onSelectQuestion: (question: string) => void;
   isExpanded: boolean;
   onToggle: (expanded: boolean) => void;
+  gpuAvailable?: boolean | undefined;
 }
 
 export const SuggestedQuestions: React.FC<SuggestedQuestionsProps> = ({
   onSelectQuestion,
   isExpanded,
   onToggle,
+  gpuAvailable,
 }) => {
+  // Filter out GPU-related questions when GPU is not available
+  const SUGGESTED_QUESTIONS = gpuAvailable === true
+    ? ALL_SUGGESTED_QUESTIONS
+    : ALL_SUGGESTED_QUESTIONS.filter(q => !q.requiresGpu);
   return (
     <ExpandableSection
       toggleText={isExpanded ? "Hide suggested questions" : "Show suggested questions"}

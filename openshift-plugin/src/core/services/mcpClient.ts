@@ -49,6 +49,84 @@ export function clearSessionConfig(): void {
   getStorage().removeItem(SESSION_CONFIG_KEY);
 }
 
+// ============ GPU Availability Detection ============
+
+const GPU_AVAILABILITY_KEY = 'gpu_availability_cache';
+const GPU_AVAILABILITY_CACHE_MS = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Check if GPU hardware is available in the cluster.
+ * Uses the same pattern as DeviceMetricsPage - queries device metrics
+ * and checks if any GPUs/accelerators are detected.
+ *
+ * Supports NVIDIA (DCGM) and Intel (Gaudi) accelerators.
+ */
+export async function getGpuAvailability(): Promise<boolean> {
+  try {
+    // Check cache first
+    const cached = getStorage().getItem(GPU_AVAILABILITY_KEY);
+    if (cached) {
+      const { value, timestamp } = JSON.parse(cached);
+      const cacheAge = Date.now() - timestamp;
+      if (cacheAge < GPU_AVAILABILITY_CACHE_MS) {
+        return value;
+      }
+    }
+
+    // Use existing proven pattern from DeviceMetricsPage (lines 285-304)
+    // Fetch both vendor metrics in parallel
+    const [dcgmResp, intelResp] = await Promise.all([
+      fetchOpenShiftMetrics('Device (DCGM)', 'cluster_wide', '15m'),
+      fetchOpenShiftMetrics('Device (Intel)', 'cluster_wide', '15m'),
+    ]);
+
+    // Guard: both failed
+    if (!dcgmResp && !intelResp) {
+      return false;
+    }
+
+    // CRITICAL: fetchOpenShiftMetrics returns { metrics: {...} } or null
+    // Access .metrics field (DeviceMetricsPage:299-300)
+    const dcgmMetrics = dcgmResp?.metrics || {};
+    const intelMetrics = intelResp?.metrics || {};
+
+    // Check device counts (DeviceMetricsPage:303-304)
+    // GPU available if either vendor reports devices > 0
+    const nvidiaCount = dcgmMetrics['GPU Count']?.latest_value ?? 0;
+    const intelCount = intelMetrics['Device Count']?.latest_value ?? 0;
+
+    const hasGpu = nvidiaCount > 0 || intelCount > 0;
+
+    // Cache result with timestamp
+    getStorage().setItem(GPU_AVAILABILITY_KEY, JSON.stringify({
+      value: hasGpu,
+      timestamp: Date.now(),
+    }));
+
+    return hasGpu;
+  } catch (error) {
+    console.error('GPU availability check failed:', error);
+    // Safe default: assume no GPU on error
+    return false;
+  }
+}
+
+export function clearGpuAvailabilityCache(): void {
+  getStorage().removeItem(GPU_AVAILABILITY_KEY);
+}
+
+// Expose refresh function on window for manual testing
+if (typeof window !== 'undefined') {
+  (window as any).refreshGpuAvailability = async () => {
+    clearGpuAvailabilityCache();
+    const available = await getGpuAvailability();
+    console.log('GPU availability refreshed:', available);
+    // Dispatch event for UI to react
+    window.dispatchEvent(new CustomEvent('gpu-availability-changed', { detail: available }));
+    return available;
+  };
+}
+
 // ============ Dev Mode Credential Injection ============
 
 /**

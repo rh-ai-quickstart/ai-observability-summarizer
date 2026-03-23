@@ -18,9 +18,10 @@ interface LayoutProps {
   children: React.ReactNode;
   activeTab?: number;
   onTabChange?: (tabIndex: number) => void;
+  gpuAvailable?: boolean | undefined;
 }
 
-const Layout: React.FC<LayoutProps> = ({ children, activeTab = 0, onTabChange = () => {} }) => {
+const Layout: React.FC<LayoutProps> = ({ children, activeTab = 0, onTabChange = () => {}, gpuAvailable }) => {
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(true);
 
   const onSidebarToggle = () => {
@@ -54,7 +55,7 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab = 0, onTabChange = 
   const Sidebar = (
     <PageSidebar isSidebarOpen={isSidebarOpen}>
       <PageSidebarBody>
-        <Navigation activeTab={activeTab} onTabChange={onTabChange} />
+        <Navigation activeTab={activeTab} onTabChange={onTabChange} gpuAvailable={gpuAvailable} />
       </PageSidebarBody>
     </PageSidebar>
   );

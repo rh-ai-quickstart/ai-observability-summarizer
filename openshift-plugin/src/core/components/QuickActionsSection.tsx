@@ -104,30 +104,40 @@ const emitNavigate = (tabIndex: number) => {
   window.dispatchEvent(new CustomEvent('quick-action-navigate', { detail: { tabIndex } }));
 };
 
-export const QuickActionsSection: React.FC = () => (
+interface QuickActionsSectionProps {
+  gpuAvailable?: boolean | undefined;
+}
+
+export const QuickActionsSection: React.FC<QuickActionsSectionProps> = ({ gpuAvailable }) => (
   <div style={{ marginTop: '32px' }}>
     <Title headingLevel="h2" size="lg" style={{ marginBottom: '16px' }}>
       Quick Actions
     </Title>
     <Grid hasGutter>
-      <GridItem md={6} sm={12}>
-        <QuickActionCard
-          title="vLLM Metrics"
-          description="Monitor GPU usage, request rates, and inference latency"
-          icon={<ServerIcon style={{ fontSize: '20px' }} />}
-          iconColor="#0066cc"
-          onClick={() => emitNavigate(TabIndex.VLLMMetrics)}
-        />
-      </GridItem>
-      <GridItem md={6} sm={12}>
-        <QuickActionCard
-          title="Hardware Accelerators"
-          description="View GPU/accelerator utilization, memory, temperature, and power"
-          icon={<CubesIcon style={{ fontSize: '20px' }} />}
-          iconColor="#111827"
-          onClick={() => emitNavigate(TabIndex.DeviceMetrics)}
-        />
-      </GridItem>
+      {/* Only show vLLM Quick Action if GPU available */}
+      {gpuAvailable === true && (
+        <GridItem md={6} sm={12}>
+          <QuickActionCard
+            title="vLLM Metrics"
+            description="Monitor GPU usage, request rates, and inference latency"
+            icon={<ServerIcon style={{ fontSize: '20px' }} />}
+            iconColor="#0066cc"
+            onClick={() => emitNavigate(TabIndex.VLLMMetrics)}
+          />
+        </GridItem>
+      )}
+      {/* Only show Hardware Accelerators Quick Action if GPU available */}
+      {gpuAvailable === true && (
+        <GridItem md={6} sm={12}>
+          <QuickActionCard
+            title="Hardware Accelerators"
+            description="View GPU/accelerator utilization, memory, temperature, and power"
+            icon={<CubesIcon style={{ fontSize: '20px' }} />}
+            iconColor="#111827"
+            onClick={() => emitNavigate(TabIndex.DeviceMetrics)}
+          />
+        </GridItem>
+      )}
       <GridItem md={6} sm={12}>
         <QuickActionCard
           title="OpenShift Metrics"
