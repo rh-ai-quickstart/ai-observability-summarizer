@@ -48,7 +48,7 @@ describe('MetricCategoriesPopover', () => {
 
   it('shows loading spinner while categories are loading', async () => {
     mockCallMcpTool.mockReturnValue(new Promise(() => {})); // never resolves
-    render(<MetricCategoriesPopover onSelectQuestion={mockOnSelectQuestion} />);
+    render(<MetricCategoriesPopover onSelectQuestion={mockOnSelectQuestion} gpuAvailable={true} />);
 
     // Open the popover
     const button = screen.getByRole('button', { name: /metric categories/i });
@@ -62,7 +62,7 @@ describe('MetricCategoriesPopover', () => {
   it('displays categories after loading', async () => {
     mockCallMcpTool.mockResolvedValueOnce(JSON.stringify(sampleCategories));
 
-    render(<MetricCategoriesPopover onSelectQuestion={mockOnSelectQuestion} />);
+    render(<MetricCategoriesPopover onSelectQuestion={mockOnSelectQuestion} gpuAvailable={true} />);
 
     // Open the popover
     const button = screen.getByRole('button', { name: /metric categories/i });
@@ -82,7 +82,7 @@ describe('MetricCategoriesPopover', () => {
   it('shows questions when a category is clicked', async () => {
     mockCallMcpTool.mockResolvedValueOnce(JSON.stringify(sampleCategories));
 
-    render(<MetricCategoriesPopover onSelectQuestion={mockOnSelectQuestion} />);
+    render(<MetricCategoriesPopover onSelectQuestion={mockOnSelectQuestion} gpuAvailable={true} />);
 
     // Open the popover
     const button = screen.getByRole('button', { name: /metric categories/i });
@@ -112,7 +112,7 @@ describe('MetricCategoriesPopover', () => {
   it('calls onSelectQuestion when a question is clicked', async () => {
     mockCallMcpTool.mockResolvedValueOnce(JSON.stringify(sampleCategories));
 
-    render(<MetricCategoriesPopover onSelectQuestion={mockOnSelectQuestion} />);
+    render(<MetricCategoriesPopover onSelectQuestion={mockOnSelectQuestion} gpuAvailable={true} />);
 
     // Open the popover
     const button = screen.getByRole('button', { name: /metric categories/i });
@@ -144,7 +144,7 @@ describe('MetricCategoriesPopover', () => {
   it('displays error when loading fails', async () => {
     mockCallMcpTool.mockRejectedValueOnce(new Error('Network error'));
 
-    render(<MetricCategoriesPopover onSelectQuestion={mockOnSelectQuestion} />);
+    render(<MetricCategoriesPopover onSelectQuestion={mockOnSelectQuestion} gpuAvailable={true} />);
 
     // Open the popover
     const button = screen.getByRole('button', { name: /metric categories/i });
@@ -161,7 +161,7 @@ describe('MetricCategoriesPopover', () => {
   it('displays error from response body', async () => {
     mockCallMcpTool.mockResolvedValueOnce(JSON.stringify({ error: 'Catalog not available' }));
 
-    render(<MetricCategoriesPopover onSelectQuestion={mockOnSelectQuestion} />);
+    render(<MetricCategoriesPopover onSelectQuestion={mockOnSelectQuestion} gpuAvailable={true} />);
 
     // Open the popover
     const button = screen.getByRole('button', { name: /metric categories/i });
@@ -177,7 +177,7 @@ describe('MetricCategoriesPopover', () => {
   it('navigates back from questions to categories', async () => {
     mockCallMcpTool.mockResolvedValueOnce(JSON.stringify(sampleCategories));
 
-    render(<MetricCategoriesPopover onSelectQuestion={mockOnSelectQuestion} />);
+    render(<MetricCategoriesPopover onSelectQuestion={mockOnSelectQuestion} gpuAvailable={true} />);
 
     // Open the popover
     const button = screen.getByRole('button', { name: /metric categories/i });
@@ -213,7 +213,7 @@ describe('MetricCategoriesPopover', () => {
   it('shows default question for categories without predefined questions', async () => {
     mockCallMcpTool.mockResolvedValueOnce(JSON.stringify(sampleCategories));
 
-    render(<MetricCategoriesPopover onSelectQuestion={mockOnSelectQuestion} />);
+    render(<MetricCategoriesPopover onSelectQuestion={mockOnSelectQuestion} gpuAvailable={true} />);
 
     // Open the popover
     const button = screen.getByRole('button', { name: /metric categories/i });
@@ -239,7 +239,7 @@ describe('MetricCategoriesPopover', () => {
   it('renders the trigger button with correct text', () => {
     mockCallMcpTool.mockResolvedValueOnce(JSON.stringify(sampleCategories));
 
-    render(<MetricCategoriesPopover onSelectQuestion={mockOnSelectQuestion} />);
+    render(<MetricCategoriesPopover onSelectQuestion={mockOnSelectQuestion} gpuAvailable={true} />);
 
     expect(screen.getByRole('button', { name: /metric categories/i })).toBeInTheDocument();
     expect(screen.getByText('Metric Categories')).toBeInTheDocument();

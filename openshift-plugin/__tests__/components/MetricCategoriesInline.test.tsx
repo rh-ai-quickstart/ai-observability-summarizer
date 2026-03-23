@@ -52,6 +52,7 @@ describe('MetricCategoriesInline', () => {
         onCategorySelect={mockOnCategorySelect}
         isExpanded={true}
         onToggle={mockOnToggle}
+        gpuAvailable={true}
         {...overrides}
       />
     );

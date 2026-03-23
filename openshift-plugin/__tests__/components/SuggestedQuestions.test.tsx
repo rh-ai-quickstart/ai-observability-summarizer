@@ -10,12 +10,13 @@ describe('SuggestedQuestions', () => {
     mockOnSelectQuestion.mockClear();
   });
 
-  it('should render all 8 suggested questions', () => {
+  it('should render all 8 suggested questions when GPU is available', () => {
     render(
       <SuggestedQuestions
         onSelectQuestion={mockOnSelectQuestion}
         isExpanded={true}
         onToggle={jest.fn()}
+        gpuAvailable={true}
       />
     );
 
@@ -30,12 +31,36 @@ describe('SuggestedQuestions', () => {
     expect(screen.getByText('Alerts & Anomalies')).toBeInTheDocument();
   });
 
+  it('should render only 4 non-GPU questions when GPU is not available', () => {
+    render(
+      <SuggestedQuestions
+        onSelectQuestion={mockOnSelectQuestion}
+        isExpanded={true}
+        onToggle={jest.fn()}
+        gpuAvailable={false}
+      />
+    );
+
+    // Check for non-GPU question labels
+    expect(screen.getByText('Performance Issues')).toBeInTheDocument();
+    expect(screen.getByText('CPU & Memory Trends')).toBeInTheDocument();
+    expect(screen.getByText('Resource Consumers')).toBeInTheDocument();
+    expect(screen.getByText('Alerts & Anomalies')).toBeInTheDocument();
+
+    // GPU-related questions should not be present
+    expect(screen.queryByText('GPU Utilization')).not.toBeInTheDocument();
+    expect(screen.queryByText('vLLM Health')).not.toBeInTheDocument();
+    expect(screen.queryByText('Latency & Queue')).not.toBeInTheDocument();
+    expect(screen.queryByText('Cache Efficiency')).not.toBeInTheDocument();
+  });
+
   it('should call onSelectQuestion when a question is clicked', () => {
     render(
       <SuggestedQuestions
         onSelectQuestion={mockOnSelectQuestion}
         isExpanded={true}
         onToggle={jest.fn()}
+        gpuAvailable={true}
       />
     );
 
@@ -47,17 +72,32 @@ describe('SuggestedQuestions', () => {
     expect(mockOnSelectQuestion).toHaveBeenCalledWith(expect.stringContaining('GPU'));
   });
 
-  it('should render correct number of questions', () => {
+  it('should render correct number of questions with GPU', () => {
     const { container } = render(
       <SuggestedQuestions
         onSelectQuestion={mockOnSelectQuestion}
         isExpanded={true}
         onToggle={jest.fn()}
+        gpuAvailable={true}
       />
     );
 
     const questionCards = container.querySelectorAll('.pf-v5-c-card');
     expect(questionCards).toHaveLength(8);
+  });
+
+  it('should render correct number of questions without GPU', () => {
+    const { container } = render(
+      <SuggestedQuestions
+        onSelectQuestion={mockOnSelectQuestion}
+        isExpanded={true}
+        onToggle={jest.fn()}
+        gpuAvailable={false}
+      />
+    );
+
+    const questionCards = container.querySelectorAll('.pf-v5-c-card');
+    expect(questionCards).toHaveLength(4);
   });
 
   it('should show expandable section header', () => {
@@ -66,6 +106,7 @@ describe('SuggestedQuestions', () => {
         onSelectQuestion={mockOnSelectQuestion}
         isExpanded={true}
         onToggle={jest.fn()}
+        gpuAvailable={true}
       />
     );
 
@@ -79,6 +120,7 @@ describe('SuggestedQuestions', () => {
         onSelectQuestion={mockOnSelectQuestion}
         isExpanded={true}
         onToggle={mockOnToggle}
+        gpuAvailable={true}
       />
     );
 
@@ -95,6 +137,7 @@ describe('SuggestedQuestions', () => {
         onSelectQuestion={mockOnSelectQuestion}
         isExpanded={true}
         onToggle={jest.fn()}
+        gpuAvailable={true}
       />
     );
 
@@ -108,6 +151,7 @@ describe('SuggestedQuestions', () => {
         onSelectQuestion={mockOnSelectQuestion}
         isExpanded={false}
         onToggle={jest.fn()}
+        gpuAvailable={true}
       />
     );
 
@@ -122,6 +166,7 @@ describe('SuggestedQuestions', () => {
         onSelectQuestion={mockOnSelectQuestion}
         isExpanded={true}
         onToggle={jest.fn()}
+        gpuAvailable={true}
       />
     );
 
@@ -136,6 +181,7 @@ describe('SuggestedQuestions', () => {
         onSelectQuestion={mockOnSelectQuestion}
         isExpanded={true}
         onToggle={jest.fn()}
+        gpuAvailable={true}
       />
     );
 
@@ -152,6 +198,7 @@ describe('SuggestedQuestions', () => {
         onSelectQuestion={mockOnSelectQuestion}
         isExpanded={true}
         onToggle={jest.fn()}
+        gpuAvailable={true}
       />
     );
 
