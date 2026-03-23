@@ -25,14 +25,14 @@ dependencies:
 
   # Tempo Operator - Distributed tracing backend
   # Provides: TempoStack CRD
-  # PINNED: v0.16.x series - v0.18.x has container crash bug (APPENG-3916)
+  # Tested with: v0.19.0-3 in production (crash bug from v0.18.x is fixed in v0.19.x)
   # NOTE: installPlanApproval is set to Manual via post-install hook (tempo-subscription-patcher.yaml)
-  #       This prevents automatic upgrades to buggy versions. Manual approval required for upgrades.
-  # Range: >=0.16.0-2 allows v0.16.0-2 and newer v0.16.x patches, blocks v0.17.0+ (including buggy v0.18.x)
+  #       This prevents automatic upgrades. Manual approval required for upgrades.
+  # Range: >=0.19.0 allows v0.19.x series, blocks v0.20.0+ (untested breaking changes)
   - type: olm.package
     value:
       packageName: tempo-product
-      version: ">=0.16.0-2 <0.17.0"
+      version: ">=0.19.0 <0.20.0"
 
   # Red Hat OpenShift Logging Operator - Log forwarding
   # Provides: ClusterLogForwarder CRD

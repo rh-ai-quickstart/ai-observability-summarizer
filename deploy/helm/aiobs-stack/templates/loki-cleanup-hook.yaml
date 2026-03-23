@@ -1,0 +1,130 @@
+{{- if .Values.loki.rbac.collector.create }}
+{{/*
+Pre-install hook to cleanup orphaned ClusterRoles from previous installations.
+This ensures clean installation even when ClusterRoles are left behind from
+old cluster-logging operator installations or previous Helm releases.
+*/}}
+---
+# ServiceAccount for the cleanup job
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Release.Name }}-loki-cleanup
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: loki-cleanup
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: pre-install-hook
+    app.kubernetes.io/part-of: aiobs-stack
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+---
+# ClusterRole to delete ClusterRoles and ClusterRoleBindings
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Release.Name }}-loki-cleanup
+  labels:
+    app.kubernetes.io/name: loki-cleanup
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+rules:
+- apiGroups: ["rbac.authorization.k8s.io"]
+  resources: ["clusterroles", "clusterrolebindings"]
+  verbs: ["get", "list", "delete"]
+---
+# ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Release.Name }}-loki-cleanup
+  labels:
+    app.kubernetes.io/name: loki-cleanup
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ .Release.Name }}-loki-cleanup
+subjects:
+- kind: ServiceAccount
+  name: {{ .Release.Name }}-loki-cleanup
+  namespace: {{ .Release.Namespace }}
+---
+# Job to cleanup orphaned ClusterRoles
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-loki-cleanup
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: loki-cleanup
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: pre-install-hook
+    app.kubernetes.io/part-of: aiobs-stack
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: loki-cleanup
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ .Release.Name }}-loki-cleanup
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: cleanup
+        image: registry.redhat.io/openshift4/ose-cli:latest
+        command:
+        - /bin/bash
+        - -c
+        - |
+          set -e
+          echo "🧹 Cleaning up orphaned Loki ClusterRoles and ClusterRoleBindings..."
+
+          # Delete ClusterRoles (ignore if not found)
+          for resource in logging-collector-logs-writer collect-application-logs collect-audit-logs collect-infrastructure-logs; do
+            if oc get clusterrole "$resource" >/dev/null 2>&1; then
+              echo "  → Deleting ClusterRole: $resource"
+              oc delete clusterrole "$resource" --ignore-not-found=true
+            else
+              echo "  → ClusterRole not found (OK): $resource"
+            fi
+          done
+
+          # Delete ClusterRoleBindings (ignore if not found)
+          for resource in logging-collector-logs-writer collect-application-logs collect-audit-logs collect-infrastructure-logs; do
+            if oc get clusterrolebinding "$resource" >/dev/null 2>&1; then
+              echo "  → Deleting ClusterRoleBinding: $resource"
+              oc delete clusterrolebinding "$resource" --ignore-not-found=true
+            else
+              echo "  → ClusterRoleBinding not found (OK): $resource"
+            fi
+          done
+
+          echo "✅ Cleanup complete - ready for fresh installation"
+        securityContext:
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          seccompProfile:
+            type: RuntimeDefault
+{{- end }}{{/* end loki.rbac.collector.create */}}

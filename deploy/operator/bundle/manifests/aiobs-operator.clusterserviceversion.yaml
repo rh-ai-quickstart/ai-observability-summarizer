@@ -30,7 +30,7 @@ metadata:
             },
             "loki": {
               "lokiStack": {
-                "storageClassName": "auto"
+                "storageClassName": ""
               }
             },
             "mcpServer": {
@@ -58,14 +58,14 @@ metadata:
     capabilities: Basic Install
     categories: AI/Machine Learning, Monitoring
     containerImage: quay.io/ecosystem-appeng/aiobs-operator:v1.2.5-operator
-    createdAt: "2026-02-23T20:57:27Z"
+    createdAt: "2026-03-23T14:10:51Z"
     description: Deploy AI-powered observability summarization for OpenShift
     operatorframework.io/suggested-namespace: ai-observability
     operators.operatorframework.io/builder: operator-sdk-v1.37.0
     operators.operatorframework.io/project_layout: helm.sdk.operatorframework.io/v1
     repository: https://github.com/rh-ai-quickstart/openshift-ai-observability-summarizer
     support: Community
-  name: aiobs-operator.v1.8.3-operator
+  name: aiobs-operator.v2.1.1-operator
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
@@ -379,7 +379,7 @@ spec:
                 - --upstream=http://127.0.0.1:8080/
                 - --logtostderr=true
                 - --v=0
-                image: gcr.io/kubebuilder/kube-rbac-proxy:v0.16.0
+                image: registry.redhat.io/openshift4/ose-kube-rbac-proxy-rhel9@sha256:883be225980cafa658d73b7d87ac99a39dce0fa8fb7754158ec28dc218bc903d
                 name: kube-rbac-proxy
                 ports:
                 - containerPort: 8443
@@ -402,7 +402,7 @@ spec:
                 - --metrics-bind-address=127.0.0.1:8080
                 - --leader-elect
                 - --leader-election-id=aiobs-operator
-                image: quay.io/ecosystem-appeng/aiobs-operator:v1.8.3-operator
+                image: quay.io/ahameed/aiobs-operator:v2.1.1-operator
                 imagePullPolicy: Always
                 livenessProbe:
                   httpGet:
@@ -501,4 +501,4 @@ spec:
   provider:
     name: RH AI Quickstart
     url: https://github.com/rh-ai-quickstart
-  version: 1.8.3-operator
+  version: 2.1.1-operator

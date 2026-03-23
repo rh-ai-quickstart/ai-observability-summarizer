@@ -74,7 +74,7 @@ graph TB
         end
 
         subgraph "Dependency Operators (Auto-installed by OLM)"
-            TEMPO_OP[Tempo Operator<br/>v0.16.0-2<br/>Manual Approval]
+            TEMPO_OP[Tempo Operator<br/>v0.19.x<br/>Manual Approval]
             LOKI_OP[Loki Operator<br/>v6.3.x-6.4.x]
             OTEL_OP[OpenTelemetry Operator<br/>v0.108.0+]
             LOGGING_OP[Cluster Logging Operator<br/>v6.3.x-6.4.x]

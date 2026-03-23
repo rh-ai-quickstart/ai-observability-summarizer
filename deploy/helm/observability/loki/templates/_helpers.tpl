@@ -110,7 +110,7 @@ Usage: {{ include "loki-stack.storageClass" . }}
   {{- $storageClasses := lookup "storage.k8s.io/v1" "StorageClass" "" "" -}}
   {{- if $storageClasses -}}
     {{- range $storageClasses.items -}}
-      {{- if or (eq (index .metadata.annotations "storageclass.kubernetes.io/is-default-class") "true") (eq (index .metadata.annotations "storageclass.beta.kubernetes.io/is-default-class") "true") -}}
+      {{- if and .metadata.annotations (or (eq (index .metadata.annotations "storageclass.kubernetes.io/is-default-class") "true") (eq (index .metadata.annotations "storageclass.beta.kubernetes.io/is-default-class") "true")) -}}
         {{- $defaultSC = .metadata.name -}}
       {{- end -}}
     {{- end -}}

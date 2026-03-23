@@ -88,7 +88,11 @@ run: helm-operator ## Run against the configured Kubernetes cluster in ~/.kube/c
 
 .PHONY: prepare-build
 prepare-build: ## Copy helm charts from deploy/helm for container build
-	@echo "Copying helm charts from deploy/helm..."
+	@echo "Updating dependencies in deploy/helm/aiobs-stack..."
+	@cd ../helm/aiobs-stack && helm dependency update >/dev/null
+	@echo "✅ Source chart dependencies updated"
+	@echo ""
+	@echo "Copying helm charts from deploy/helm to operator..."
 	@# Preserve config files
 	@cp -f helm-charts/*.json helm-charts/*.template /tmp/ 2>/dev/null || true
 	@# Copy all charts from deploy/helm
@@ -103,10 +107,12 @@ prepare-build: ## Copy helm charts from deploy/helm for container build
 	@cp -r ../helm/rag helm-charts/
 	@# Restore config files
 	@cp -f /tmp/*.json /tmp/*.template helm-charts/ 2>/dev/null || true
-	@# Update helm dependencies to regenerate .tgz files
-	@echo "Updating helm dependencies..."
-	@cd helm-charts/aiobs-stack && helm dependency update
-	@echo "Helm charts ready for build!"
+	@echo "✅ Charts copied from deploy/helm"
+	@echo ""
+	@# Update helm dependencies for operator (regenerate .tgz files with operator-specific values)
+	@echo "Updating operator helm dependencies..."
+	@cd helm-charts/aiobs-stack && helm dependency update >/dev/null
+	@echo "✅ Operator charts ready for build!"
 
 .PHONY: clean-charts
 clean-charts: ## Remove copied helm charts (keep only config files)
