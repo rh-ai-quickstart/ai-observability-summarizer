@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import json
 import re
-import logging
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
@@ -112,35 +111,6 @@ class Korrel8rClient:
             return True
         except Exception:
             return True
-
-    def health(self) -> Dict[str, Any]:
-        """Check Korrel8r liveness/readiness."""
-        return self._get("/healthz")
-
-    def find_related(
-        self,
-        *,
-        start: Dict[str, Any],
-        targets: Optional[List[str]] = None,
-        time_window: Optional[TimeWindow] = None,
-        limit: Optional[int] = None,
-        depth: Optional[int] = None,
-    ) -> Dict[str, Any]:
-        """Call Korrel8r 'graphs/neighbours' endpoint with path fallback.
-
-        Arguments mirror the proposal; server must map to Korrel8r's actual API.
-        """
-        payload: Dict[str, Any] = {"start": start}
-        if targets:
-            payload["targets"] = targets
-        if time_window:
-            payload["timeWindow"] = {"start": time_window.start, "end": time_window.end}
-        if limit is not None:
-            payload["limit"] = limit
-        if depth is not None:
-            payload["depth"] = depth
-
-        return self._post("/api/v1alpha1/graphs/neighbours", payload)
 
     def query_objects(self, query: str) -> Any:
         """Execute a Korrel8r domain query and return raw objects.

@@ -85,6 +85,9 @@ def _provider_api_url(provider: str) -> str:
         return "https://generativelanguage.googleapis.com/v1beta"
     if provider == "meta":
         return "https://api.llama-api.com/v1"
+    if provider == "maas":
+        # Allow MAAS URL to be configured via environment variable
+        return os.getenv("MAAS_API_URL", "https://litellm-prod.apps.maas.redhatworkshops.io/v1")
     return ""
 
 
@@ -96,6 +99,110 @@ def _is_gpt5_model(model_id: str) -> bool:
     # GPT-5 series models use the new /v1/responses endpoint
     # This includes: gpt-5, gpt-5.1, gpt-5.2, gpt-5-mini, gpt-5-nano, etc.
     return model_lower.startswith("gpt-5")
+
+
+def _get_curated_maas_models() -> List[Dict[str, Any]]:
+    """
+    Get curated list of available MAAS models.
+
+    Since MAAS requires per-model API keys, we cannot query a generic
+    /models endpoint. Users must configure each model individually.
+    """
+    return [
+        {
+            "id": "qwen3-14b",
+            "name": "Qwen 3 14B",
+            "description": "Alibaba Qwen 14B parameter model for general-purpose tasks",
+            "context_length": 32768,
+        },
+    ]
+
+
+def _save_maas_model_api_key(secret_field: str, api_key: str) -> Dict[str, Any]:
+    """
+    Save API key for a specific MAAS model to ai-maas-credentials Secret.
+
+    Args:
+        secret_field: Field name in secret (e.g., "qwen3-14b")
+        api_key: API key to save
+
+    Returns:
+        Success/error dict
+    """
+    try:
+        ns = os.getenv("NAMESPACE", "")
+        if not ns:
+            return {"success": False, "error": "NAMESPACE not set"}
+
+        secret_name = "ai-maas-credentials"
+        get_url = f"{K8S_API_URL}/api/v1/namespaces/{ns}/secrets/{secret_name}"
+        create_url = f"{K8S_API_URL}/api/v1/namespaces/{ns}/secrets"
+        headers = _get_k8s_headers()
+        verify = K8S_SA_CA_PATH if os.path.exists(K8S_SA_CA_PATH) else True
+
+        # Try to get existing secret
+        secret_exists = False
+        secret_data = {}
+        try:
+            r = requests.get(get_url, headers=headers, timeout=5, verify=verify)
+            if r.status_code == 200:
+                # Update existing secret
+                secret = r.json()
+                secret_data = secret.get("data", {})
+                secret_exists = True
+            elif r.status_code == 404:
+                # Will create new secret
+                logger.info(f"Secret {secret_name} does not exist, will create it")
+            else:
+                return {"success": False, "error": f"Failed to get secret: {r.status_code}"}
+        except Exception as e:
+            logger.warning(f"Error getting secret, will create new: {e}")
+
+        # Add/update model's API key field
+        secret_data[secret_field] = base64.b64encode(api_key.encode()).decode()
+
+        if secret_exists:
+            # Update existing secret using PATCH (strategic merge)
+            patch_headers = headers.copy()
+            patch_headers["Content-Type"] = "application/strategic-merge-patch+json"
+
+            # Only send the data field to merge
+            patch_payload = {
+                "data": {
+                    secret_field: secret_data[secret_field]
+                }
+            }
+
+            r = requests.patch(get_url, headers=patch_headers, json=patch_payload, timeout=10, verify=verify)
+            if r.status_code not in (200, 201):
+                return {"success": False, "error": f"Failed to update secret: {r.status_code}"}
+        else:
+            # Create new secret using POST
+            secret_payload = {
+                "apiVersion": "v1",
+                "kind": "Secret",
+                "metadata": {
+                    "name": secret_name,
+                    "namespace": ns,
+                    "labels": {
+                        "app.kubernetes.io/name": "mcp-server",
+                        "app.kubernetes.io/component": "model-credentials"
+                    }
+                },
+                "type": "Opaque",
+                "data": secret_data
+            }
+
+            r = requests.post(create_url, headers=headers, json=secret_payload, timeout=10, verify=verify)
+            if r.status_code not in (200, 201):
+                return {"success": False, "error": f"Failed to create secret: {r.status_code}"}
+
+        logger.info(f"Successfully saved MAAS API key for model in field '{secret_field}'")
+        return {"success": True, "message": f"API key saved for MAAS model"}
+
+    except Exception as e:
+        logger.error(f"Error saving MAAS API key: {e}")
+        return {"success": False, "error": f"Failed to save API key: {str(e)}"}
 
 
 def list_provider_models(
@@ -126,6 +233,14 @@ def list_provider_models(
             return make_mcp_text_response(json.dumps(error_result))
 
         provider_lower = provider.lower()
+
+        # MAAS: Return curated list immediately (no API key needed for listing)
+        # MAAS uses per-model API keys, not a provider-level key
+        if provider_lower == "maas":
+            models = _get_curated_maas_models()
+            result = {"models": models, "provider": provider_lower, "count": len(models)}
+            logger.info(f"Returning {len(models)} curated MAAS models (no API key required)")
+            return make_mcp_text_response(json.dumps(result))
 
         # Get API key: use provided key (dev mode) or retrieve from K8s Secret (production)
         if api_key:
@@ -368,7 +483,9 @@ def add_model_to_config(
     description: Optional[str] = None,
     context_length: Optional[int] = None,
     cost_prompt_rate: Optional[float] = None,
-    cost_output_rate: Optional[float] = None
+    cost_output_rate: Optional[float] = None,
+    api_url: Optional[str] = None,
+    api_key: Optional[str] = None
 ) -> List[Dict[str, Any]]:
     """
     Add a new model to MODEL_CONFIG by updating ConfigMap.
@@ -381,6 +498,8 @@ def add_model_to_config(
         context_length: Max tokens (optional)
         cost_prompt_rate: Cost per input token (optional)
         cost_output_rate: Cost per output token (optional)
+        api_url: Custom API URL (required for MAAS, optional for others)
+        api_key: API key (required for MAAS, not used for other providers)
 
     Returns:
         MCP response with result
@@ -402,41 +521,105 @@ def add_model_to_config(
                 error_code=MCPErrorCode.INTERNAL_ERROR,
             )
 
+        # Special handling for MAAS models
+        if provider_lower == "maas":
+            # MAAS requires per-model API key and URL
+            if not api_key:
+                raise MCPException(
+                    message="MAAS models require an API key. Each MAAS model has unique credentials.",
+                    error_code=MCPErrorCode.INVALID_INPUT,
+                )
+            if not api_url:
+                # Use MAAS URL from environment variable or default
+                api_url = os.getenv("MAAS_API_URL", "https://litellm-prod.apps.maas.redhatworkshops.io/v1")
+
+            # Save API key to Secret (specific field for this model)
+            secret_field = model_id.replace("maas/", "").strip()
+            save_result = _save_maas_model_api_key(secret_field, api_key)
+            if not save_result["success"]:
+                raise MCPException(
+                    message=f"Failed to save MAAS API key: {save_result.get('error', 'Unknown error')}",
+                    error_code=MCPErrorCode.KUBERNETES_API_ERROR,
+                )
+
         # Generate model key
         model_key = f"{provider_lower}/{model_id}"
 
         # Build model config object
-        api_url = _provider_api_url(provider_lower)
-        if provider_lower == "google":
-            # Google uses specific endpoint format
-            api_url = f"{api_url}/models/{model_id}:generateContent"
-        elif provider_lower in ["openai", "anthropic", "meta"]:
-            # OpenAI endpoint selection based on model version
-            if provider_lower == "openai":
-                # GPT-5 and later use the new /v1/responses endpoint
-                # GPT-4 and earlier use /v1/chat/completions
-                if _is_gpt5_model(model_id):
-                    api_url = f"{api_url}/responses"
-                else:
-                    api_url = f"{api_url}/chat/completions"
-
-        model_config = {
-            "external": True,
-            "requiresApiKey": True,
-            "serviceName": None,
-            "provider": provider_lower,
-            "apiUrl": api_url,
-            "modelName": model_id,
-            "cost": {
-                "prompt_rate": cost_prompt_rate if cost_prompt_rate is not None else 0.0,
-                "output_rate": cost_output_rate if cost_output_rate is not None else 0.0,
-            },
-            "_metadata": {
-                "source": "user",
-                "addedBy": "console-plugin",
-                "addedAt": datetime.utcnow().isoformat() + "Z"
+        if provider_lower == "maas":
+            # MAAS uses custom api_url provided by user
+            # Normalize endpoint: only append /chat/completions if not already present
+            normalized_url = api_url.rstrip('/')
+            if not normalized_url.endswith('/chat/completions'):
+                final_api_url = f"{normalized_url}/chat/completions"
+            else:
+                final_api_url = normalized_url
+            secret_field = model_id.replace("maas/", "").strip()
+            model_config = {
+                "external": True,
+                "requiresApiKey": True,
+                "serviceName": None,
+                "provider": provider_lower,
+                "apiUrl": final_api_url,
+                "modelName": model_id.replace("maas/", ""),
+                "apiKeySecretField": secret_field,
+                "cost": {
+                    "prompt_rate": cost_prompt_rate if cost_prompt_rate is not None else 0.0,
+                    "output_rate": cost_output_rate if cost_output_rate is not None else 0.0,
+                },
+                "_metadata": {
+                    "source": "user",
+                    "addedBy": "console-plugin",
+                    "addedAt": datetime.utcnow().isoformat() + "Z",
+                    "description": description or ""
+                }
             }
-        }
+        else:
+            # Other providers use standard logic
+            final_api_url = api_url if api_url else _provider_api_url(provider_lower)
+            if provider_lower == "google":
+                # Google uses specific endpoint format
+                final_api_url = f"{final_api_url}/models/{model_id}:generateContent"
+            elif provider_lower in ["openai", "anthropic", "meta"]:
+                # OpenAI-compatible endpoint normalization (defensive)
+                normalized_url = final_api_url.rstrip('/')
+                if provider_lower == "openai":
+                    # GPT-5 and later use the new /v1/responses endpoint
+                    # GPT-4 and earlier use /v1/chat/completions
+                    if _is_gpt5_model(model_id):
+                        if not normalized_url.endswith('/responses'):
+                            final_api_url = f"{normalized_url}/responses"
+                        else:
+                            final_api_url = normalized_url
+                    else:
+                        if not normalized_url.endswith('/chat/completions'):
+                            final_api_url = f"{normalized_url}/chat/completions"
+                        else:
+                            final_api_url = normalized_url
+                else:
+                    # For meta and other OpenAI-compatible providers, use /chat/completions
+                    if not normalized_url.endswith('/chat/completions'):
+                        final_api_url = f"{normalized_url}/chat/completions"
+                    else:
+                        final_api_url = normalized_url
+
+            model_config = {
+                "external": True,
+                "requiresApiKey": True,
+                "serviceName": None,
+                "provider": provider_lower,
+                "apiUrl": final_api_url,
+                "modelName": model_id,
+                "cost": {
+                    "prompt_rate": cost_prompt_rate if cost_prompt_rate is not None else 0.0,
+                    "output_rate": cost_output_rate if cost_output_rate is not None else 0.0,
+                },
+                "_metadata": {
+                    "source": "user",
+                    "addedBy": "console-plugin",
+                    "addedAt": datetime.utcnow().isoformat() + "Z"
+                }
+            }
 
         if description:
             model_config["description"] = description
@@ -450,23 +633,16 @@ def add_model_to_config(
         # Add/update model in config
         current_config[model_key] = model_config
 
-        # Update ConfigMap
+        # Update ConfigMap using PATCH (strategic merge)
         configmap_name = "ai-model-config"
         url = f"{K8S_API_URL}/api/v1/namespaces/{ns}/configmaps/{configmap_name}"
         headers = _get_k8s_headers()
+        headers["Content-Type"] = "application/strategic-merge-patch+json"
         verify = K8S_SA_CA_PATH if os.path.exists(K8S_SA_CA_PATH) else True
 
-        configmap_payload = {
-            "apiVersion": "v1",
-            "kind": "ConfigMap",
+        # Use strategic merge patch to update data and annotations
+        patch_payload = {
             "metadata": {
-                "name": configmap_name,
-                "namespace": ns,
-                "labels": {
-                    "app.kubernetes.io/name": "mcp-server",
-                    "app.kubernetes.io/component": "model-config",
-                    "app.kubernetes.io/managed-by": "mcp-server"
-                },
                 "annotations": {
                     "config.kubernetes.io/last-modified": datetime.utcnow().isoformat() + "Z"
                 }
@@ -476,7 +652,7 @@ def add_model_to_config(
             }
         }
 
-        r = requests.put(url, headers=headers, json=configmap_payload, timeout=10, verify=verify)
+        r = requests.patch(url, headers=headers, json=patch_payload, timeout=10, verify=verify)
 
         if r.status_code not in (200, 201):
             raise MCPException(
@@ -505,6 +681,130 @@ def add_model_to_config(
         logger.error(f"Error adding model to config: {e}")
         err = MCPException(
             message=f"Failed to add model to config: {str(e)}",
+            error_code=MCPErrorCode.INTERNAL_ERROR,
+        )
+        return err.to_mcp_response()
+
+
+def update_maas_model_api_key(
+    model_id: str,
+    api_key: str,
+    api_url: Optional[str] = None
+) -> List[Dict[str, Any]]:
+    """
+    Update API key and optionally endpoint for an existing MAAS model.
+
+    Args:
+        model_id: Model identifier (e.g., 'qwen3-14b')
+        api_key: New API key for the model
+        api_url: Optional new endpoint URL
+
+    Returns:
+        MCP response with result
+    """
+    try:
+        logger.info(f"Updating MAAS model API key: {model_id}")
+
+        if not model_id or not api_key:
+            raise MCPException(
+                message="model_id and api_key are required",
+                error_code=MCPErrorCode.INVALID_INPUT,
+            )
+
+        # Clean up model_id (remove maas/ prefix if present)
+        clean_model_id = model_id.replace("maas/", "").strip()
+        model_key = f"maas/{clean_model_id}"
+
+        # Verify model exists in config
+        from core.model_config_manager import get_model_config
+        current_config = get_model_config(force_refresh=True)
+
+        if model_key not in current_config:
+            raise MCPException(
+                message=f"Model {model_key} not found in configuration. Use Add Model to add it first.",
+                error_code=MCPErrorCode.INVALID_INPUT,
+            )
+
+        # Update API key in Secret
+        secret_field = clean_model_id
+        save_result = _save_maas_model_api_key(secret_field, api_key)
+        if not save_result["success"]:
+            raise MCPException(
+                message=f"Failed to update MAAS API key: {save_result.get('error', 'Unknown error')}",
+                error_code=MCPErrorCode.KUBERNETES_API_ERROR,
+            )
+
+        # Update endpoint in ConfigMap if provided
+        if api_url:
+            ns = os.getenv("NAMESPACE", "")
+            if not ns:
+                raise MCPException(
+                    message="Server namespace not detected; cannot update ConfigMap",
+                    error_code=MCPErrorCode.INTERNAL_ERROR,
+                )
+
+            # Normalize endpoint URL
+            normalized_url = api_url.rstrip('/')
+            if not normalized_url.endswith('/chat/completions'):
+                final_api_url = f"{normalized_url}/chat/completions"
+            else:
+                final_api_url = normalized_url
+
+            # Update model config
+            model_config = current_config[model_key]
+            model_config["apiUrl"] = final_api_url
+            model_config["_metadata"]["lastUpdated"] = datetime.utcnow().isoformat() + "Z"
+            model_config["_metadata"]["updatedBy"] = "console-plugin"
+
+            # Update ConfigMap
+            configmap_name = "ai-model-config"
+            url = f"{K8S_API_URL}/api/v1/namespaces/{ns}/configmaps/{configmap_name}"
+            headers = _get_k8s_headers()
+            headers["Content-Type"] = "application/strategic-merge-patch+json"
+            verify = K8S_SA_CA_PATH if os.path.exists(K8S_SA_CA_PATH) else True
+
+            patch_payload = {
+                "metadata": {
+                    "annotations": {
+                        "config.kubernetes.io/last-modified": datetime.utcnow().isoformat() + "Z"
+                    }
+                },
+                "data": {
+                    "model-config.json": json.dumps(current_config, indent=2)
+                }
+            }
+
+            r = requests.patch(url, headers=headers, json=patch_payload, timeout=10, verify=verify)
+
+            if r.status_code not in (200, 201):
+                # API key was updated but endpoint update failed
+                logger.warning(f"API key updated but endpoint update failed: {r.status_code}")
+                result = {
+                    "success": True,
+                    "model_key": model_key,
+                    "warning": f"API key updated successfully, but endpoint update failed: {r.status_code}",
+                    "message": f"Model {model_key} API key updated (endpoint update failed)"
+                }
+                return make_mcp_text_response(json.dumps(result))
+
+            # Force refresh runtime config
+            from core.model_config_manager import reload_model_config
+            reload_model_config()
+
+        result = {
+            "success": True,
+            "model_key": model_key,
+            "message": f"Model {model_key} updated successfully" + (" with new endpoint" if api_url else "")
+        }
+        logger.info(f"MAAS model {model_key} updated successfully")
+        return make_mcp_text_response(json.dumps(result))
+
+    except MCPException as e:
+        return e.to_mcp_response()
+    except Exception as e:
+        logger.error(f"Error updating MAAS model: {e}")
+        err = MCPException(
+            message=f"Failed to update MAAS model: {str(e)}",
             error_code=MCPErrorCode.INTERNAL_ERROR,
         )
         return err.to_mcp_response()

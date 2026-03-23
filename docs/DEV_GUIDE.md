@@ -24,7 +24,6 @@ summarizer/
 │   │   ├── config.py      # Configuration management
 │   │   ├── llm_client.py  # LLM communication
 │   │   ├── metrics.py     # Metrics discovery & fetching
-│   │   ├── analysis.py    # Statistical analysis
 │   │   ├── reports.py     # Report generation
 │   │   ├── promql_service.py # PromQL generation
 │   │   └── thanos_service.py # Thanos integration

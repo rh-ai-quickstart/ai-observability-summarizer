@@ -429,7 +429,7 @@ avg(DCGM_FI_DEV_FB_USED) / (1024*1024*1024) or avg(habanalabs_memory_used_bytes)
 
 ### Automatic Discovery
 
-The observability stack automatically discovers available Intel Gaudi metrics through the `discover_intel_gaudi_metrics()` function in `src/core/metrics.py`. This function:
+The observability stack automatically discovers available Intel Gaudi metrics through the GPU discovery system in `src/core/gpu_metrics_discovery.py`. The discovery process:
 
 1. Queries Prometheus for all metrics with the `habanalabs_` prefix
 2. Maps them to friendly names for dashboard display

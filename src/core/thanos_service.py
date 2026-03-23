@@ -4,9 +4,8 @@ Core Thanos Query Service
 Moved from metrics_api.py to separate business logic
 """
 
-import os
 import requests
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any
 from datetime import datetime
 
 import logging
@@ -144,45 +143,4 @@ def get_metric_key(promql: str) -> str:
     key = key.strip("_")
     
     return key or "unknown_metric"
-
-
-def find_primary_promql_for_question(question: str, promql_queries: List[str]) -> str:
-    """
-    Find the most relevant PromQL query for the given question
-    """
-    if not promql_queries:
-        return ""
-    
-    question_lower = question.lower()
-    
-    # Priority order based on question keywords
-    priority_patterns = [
-        # GPU-related
-        (["gpu", "temperature", "utilization"], ["DCGM_FI_DEV_GPU", "gpu"]),
-        # vLLM-related
-        (["vllm", "llm", "model", "inference"], ["vllm:"]),
-        # Kubernetes-related
-        (["pod", "pods", "deployment", "service"], ["kube_"]),
-        # Alert-related
-        (["alert", "alerts", "firing"], ["ALERTS"]),
-        # Network-related
-        (["network", "bandwidth", "traffic"], ["network", "net_"]),
-        # Memory-related
-        (["memory", "mem", "ram"], ["memory", "mem"]),
-        # CPU-related
-        (["cpu", "processor"], ["cpu"]),
-    ]
-    
-    # Find the highest priority match
-    for question_keywords, promql_keywords in priority_patterns:
-        if any(keyword in question_lower for keyword in question_keywords):
-            for promql in promql_queries:
-                if any(keyword in promql for keyword in promql_keywords):
-                    return promql
-    
-    # If no specific match, return the first non-empty query
-    for promql in promql_queries:
-        if promql and promql.strip():
-            return promql
-    
-    return "" 
+ 

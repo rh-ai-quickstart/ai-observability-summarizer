@@ -71,6 +71,7 @@ class ObservabilityMCPServer:
         from .tools.model_config_tools import (
             list_provider_models,
             add_model_to_config,
+            update_maas_model_api_key,
         )
 
         # Register vLLM tools
@@ -133,3 +134,4 @@ class ObservabilityMCPServer:
         # Register model config tools
         self.mcp.tool()(list_provider_models)
         self.mcp.tool()(add_model_to_config)
+        self.mcp.tool()(update_maas_model_api_key)

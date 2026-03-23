@@ -1,4 +1,22 @@
 {
+  "maas/qwen3-14b": {
+    "external": true,
+    "requiresApiKey": true,
+    "serviceName": null,
+    "provider": "maas",
+    "apiUrl": "https://litellm-prod.apps.maas.redhatworkshops.io/v1/chat/completions",
+    "modelName": "qwen3-14b",
+    "apiKeySecretField": "qwen3-14b",
+    "cost": {
+      "prompt_rate": 0.0,
+      "output_rate": 0.0
+    },
+    "_metadata": {
+      "source": "default",
+      "description": "Alibaba Qwen 14B model via Model as a Service (MaaS)",
+      "note": "MAAS apiUrl can be overridden via MAAS_API_URL environment variable"
+    }
+  },
   "openai/gpt-4o-mini": {
     "external": true,
     "requiresApiKey": true,

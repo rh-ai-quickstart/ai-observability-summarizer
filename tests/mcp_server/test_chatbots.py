@@ -151,6 +151,128 @@ def test_factory_creates_google_bot(mock_mcp_tools):
     assert isinstance(bot, GoogleChatBot)
 
 
+def test_factory_creates_openai_bot_for_maas(mock_mcp_tools):
+    """Test that factory creates OpenAIChatBot for MAAS models (OpenAI-compatible)."""
+    from chatbots import create_chatbot, OpenAIChatBot
+
+    # MAAS uses OpenAI-compatible API, so should route to OpenAIChatBot
+    bot = create_chatbot("maas/qwen3-14b", api_key="test-maas-key", tool_executor=mock_mcp_tools)
+    assert isinstance(bot, OpenAIChatBot)
+    assert bot.model_name == "maas/qwen3-14b"
+
+
+def test_factory_maas_with_api_url(mock_mcp_tools):
+    """Test that factory passes api_url to OpenAIChatBot for MAAS models."""
+    from chatbots import create_chatbot, OpenAIChatBot
+
+    with patch('openai.OpenAI') as mock_openai_class:
+        bot = create_chatbot(
+            "maas/qwen3-14b",
+            api_key="test-maas-key",
+            api_url="https://custom-maas.example.com/v1/chat/completions",
+            tool_executor=mock_mcp_tools
+        )
+        assert isinstance(bot, OpenAIChatBot)
+
+        # Verify OpenAI client was created with custom base_url
+        # The api_url includes /chat/completions suffix which should be removed for base_url
+        mock_openai_class.assert_called_once_with(
+            api_key="test-maas-key",
+            base_url="https://custom-maas.example.com/v1"
+        )
+
+
+def test_factory_maas_pattern_matching(mock_mcp_tools):
+    """Test that factory correctly identifies MAAS models by pattern."""
+    from chatbots import create_chatbot, OpenAIChatBot
+
+    # Test various MAAS model name patterns
+    maas_patterns = [
+        "maas/qwen3-14b",
+        "maas/granite-3.1-8b-instruct",
+        "MAAS/model-name",  # Case insensitive
+    ]
+
+    for model_name in maas_patterns:
+        bot = create_chatbot(model_name, api_key="test-key", tool_executor=mock_mcp_tools)
+        assert isinstance(bot, OpenAIChatBot), f"Failed for pattern: {model_name}"
+
+
+def test_openai_bot_with_custom_base_url(mock_mcp_tools):
+    """Test that OpenAIChatBot correctly handles custom base_url from api_url."""
+    from chatbots import OpenAIChatBot
+
+    # Test with /v1/chat/completions suffix - should strip /chat/completions, leaving /v1
+    with patch('openai.OpenAI') as mock_openai_class:
+        bot = OpenAIChatBot(
+            "maas/qwen3-14b",
+            api_key="test-key",
+            api_url="https://test.api.com/v1/chat/completions",
+            tool_executor=mock_mcp_tools
+        )
+
+        mock_openai_class.assert_called_once_with(
+            api_key="test-key",
+            base_url="https://test.api.com/v1"
+        )
+
+    # Test with just /chat/completions suffix - should strip it completely
+    with patch('openai.OpenAI') as mock_openai_class:
+        bot = OpenAIChatBot(
+            "maas/qwen3-14b",
+            api_key="test-key",
+            api_url="https://custom.api.com/chat/completions",
+            tool_executor=mock_mcp_tools
+        )
+
+        mock_openai_class.assert_called_once_with(
+            api_key="test-key",
+            base_url="https://custom.api.com"
+        )
+
+    # Test with URL that has no known suffix - should use as-is
+    with patch('openai.OpenAI') as mock_openai_class:
+        bot = OpenAIChatBot(
+            "maas/qwen3-14b",
+            api_key="test-key",
+            api_url="https://another.api.com/v1",
+            tool_executor=mock_mcp_tools
+        )
+
+        mock_openai_class.assert_called_once_with(
+            api_key="test-key",
+            base_url="https://another.api.com/v1"
+        )
+
+
+def test_openai_bot_api_url_priority(mock_mcp_tools):
+    """Test that passed api_url takes priority over model config."""
+    from chatbots import OpenAIChatBot
+
+    with patch('openai.OpenAI') as mock_openai_class:
+        with patch('core.model_config_manager.get_model_config') as mock_get_config:
+            # Mock model config with different URL
+            mock_get_config.return_value = {
+                "maas/qwen3-14b": {
+                    "apiUrl": "https://config-url.example.com/v1/chat/completions"
+                }
+            }
+
+            # Pass api_url explicitly (should take priority)
+            bot = OpenAIChatBot(
+                "maas/qwen3-14b",
+                api_key="test-key",
+                api_url="https://passed-url.example.com/v1/chat/completions",
+                tool_executor=mock_mcp_tools
+            )
+
+            # Should use the passed URL, not the config URL
+            mock_openai_class.assert_called_once_with(
+                api_key="test-key",
+                base_url="https://passed-url.example.com/v1"
+            )
+
+
 class TestAPIKeyRetrieval:
     """Test API key retrieval for all bot types."""
 
@@ -1272,42 +1394,47 @@ class TestLlamaGracefulFallback:
 
 
 class TestToolLoopDetection:
-    """Test the consecutive same-tool loop detection in BaseChatBot."""
+    """Test the consecutive same-tool loop detection in BaseChatBot.
+
+    Loop detection operates at the iteration level: each call to
+    _check_tool_loop represents one LLM response (iteration) and receives
+    the *set* of tool names used in that response.
+    """
 
     def test_no_loop_different_tools(self, mock_mcp_tools):
-        """Test that different tools don't trigger loop detection."""
+        """Test that different single-tool iterations don't trigger loop detection."""
         from chatbots import LlamaChatBot
 
         bot = LlamaChatBot(LLAMA_3_1_8B, tool_executor=mock_mcp_tools)
         tracker = {"name": None, "count": 0}
 
-        assert bot._check_tool_loop("execute_promql", tracker) is False
-        assert bot._check_tool_loop("get_label_values", tracker) is False
-        assert bot._check_tool_loop("execute_promql", tracker) is False
+        assert bot._check_tool_loop({"execute_promql"}, tracker) is False
+        assert bot._check_tool_loop({"get_label_values"}, tracker) is False
+        assert bot._check_tool_loop({"execute_promql"}, tracker) is False
         assert tracker["count"] == 1  # Reset on tool change
 
     def test_same_tool_below_threshold(self, mock_mcp_tools):
-        """Test that same tool called < 5 times doesn't trigger."""
+        """Test that same single-tool iterations < 5 times doesn't trigger."""
         from chatbots import LlamaChatBot
 
         bot = LlamaChatBot(LLAMA_3_1_8B, tool_executor=mock_mcp_tools)
         tracker = {"name": None, "count": 0}
 
         for i in range(4):
-            assert bot._check_tool_loop("execute_promql", tracker) is False
+            assert bot._check_tool_loop({"execute_promql"}, tracker) is False
         assert tracker["count"] == 4
 
     def test_same_tool_at_threshold_triggers(self, mock_mcp_tools):
-        """Test that same tool called 5 times triggers loop detection."""
+        """Test that same single-tool iteration 5 times triggers loop detection."""
         from chatbots import LlamaChatBot
 
         bot = LlamaChatBot(LLAMA_3_1_8B, tool_executor=mock_mcp_tools)
         tracker = {"name": None, "count": 0}
 
         for i in range(4):
-            assert bot._check_tool_loop("query_tempo_tool", tracker) is False
-        # 5th call triggers
-        assert bot._check_tool_loop("query_tempo_tool", tracker) is True
+            assert bot._check_tool_loop({"query_tempo_tool"}, tracker) is False
+        # 5th iteration triggers
+        assert bot._check_tool_loop({"query_tempo_tool"}, tracker) is True
 
     def test_counter_resets_on_different_tool(self, mock_mcp_tools):
         """Test that the counter resets when a different tool is called."""
@@ -1316,15 +1443,53 @@ class TestToolLoopDetection:
         bot = LlamaChatBot(LLAMA_3_1_8B, tool_executor=mock_mcp_tools)
         tracker = {"name": None, "count": 0}
 
-        # Call same tool 4 times (just below threshold)
+        # Call same tool in 4 consecutive iterations (just below threshold)
         for i in range(4):
-            bot._check_tool_loop("query_tempo_tool", tracker)
+            bot._check_tool_loop({"query_tempo_tool"}, tracker)
         assert tracker["count"] == 4
 
         # Different tool resets counter
-        bot._check_tool_loop("execute_promql", tracker)
+        bot._check_tool_loop({"execute_promql"}, tracker)
         assert tracker["count"] == 1
         assert tracker["name"] == "execute_promql"
+
+    def test_parallel_same_tool_calls_not_flagged(self, mock_mcp_tools):
+        """Test that one iteration with multiple calls to the same tool is NOT a loop.
+
+        This is the key scenario: Haiku issues 5x execute_promql in a single
+        response for different pod-phase queries. That's one iteration with
+        parallel queries, not 5 consecutive loop iterations.
+        """
+        from chatbots import LlamaChatBot
+
+        bot = LlamaChatBot(LLAMA_3_1_8B, tool_executor=mock_mcp_tools)
+        tracker = {"name": None, "count": 0}
+
+        # One iteration with 5 calls to the same tool — the set has 1 element,
+        # but it's only 1 iteration so count goes to 1, not 5.
+        assert bot._check_tool_loop({"execute_promql"}, tracker) is False
+        assert tracker["count"] == 1
+
+        # A second iteration with different tools resets counter
+        assert bot._check_tool_loop({"execute_promql", "get_label_values"}, tracker) is False
+        assert tracker["count"] == 0
+
+    def test_multi_tool_iteration_resets_counter(self, mock_mcp_tools):
+        """Test that an iteration with multiple different tools resets the counter."""
+        from chatbots import LlamaChatBot
+
+        bot = LlamaChatBot(LLAMA_3_1_8B, tool_executor=mock_mcp_tools)
+        tracker = {"name": None, "count": 0}
+
+        # Build up 4 consecutive same-tool iterations
+        for i in range(4):
+            bot._check_tool_loop({"execute_promql"}, tracker)
+        assert tracker["count"] == 4
+
+        # An iteration with multiple different tools resets the counter
+        bot._check_tool_loop({"execute_promql", "query_tempo_tool"}, tracker)
+        assert tracker["count"] == 0
+        assert tracker["name"] is None
 
     def test_tool_loop_breaks_chat_loop(self, mock_mcp_tools):
         """Test that tool loop detection breaks the chat iteration loop."""
@@ -1332,7 +1497,7 @@ class TestToolLoopDetection:
 
         bot = LlamaChatBot(LLAMA_3_1_8B, tool_executor=mock_mcp_tools)
 
-        # Create 6 responses that all call the same tool
+        # Create 6 responses that each call the same single tool
         def make_tool_response():
             tc = MagicMock()
             tc.id = "call_1"
@@ -1357,7 +1522,7 @@ class TestToolLoopDetection:
 
         result = bot.chat("find traces")
 
-        # Should break after 5 consecutive same-tool calls, not use all 6
+        # Should break after 5 consecutive same-tool iterations, not use all 6
         assert bot.client.chat.completions.create.call_count == 5
         assert "got stuck in a loop" in result
 

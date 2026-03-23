@@ -12,9 +12,9 @@ from datetime import datetime, timedelta
 
 from common.pylogger import get_python_logger
 
-from core.question_classification import TempoQuestionClassifier as QuestionClassifier, QuestionType, TraceErrorDetector
-from core.config import SLOW_TRACE_THRESHOLD_MS, DEFAULT_QUERY_LIMIT, DEFAULT_CHAT_QUERY_LIMIT
-from core.time_utils import extract_time_range_from_question, convert_time_range_to_iso, calculate_duration_ms
+from core.question_classification import TempoQuestionClassifier as QuestionClassifier, QuestionType
+from core.config import DEFAULT_QUERY_LIMIT, DEFAULT_CHAT_QUERY_LIMIT
+from core.time_utils import extract_time_range_from_question, convert_time_range_to_iso
 from core.trace_analysis import TraceAnalyzer
 from core.tempo_service import TempoQueryService
 

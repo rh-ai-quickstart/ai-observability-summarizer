@@ -14,9 +14,8 @@ dynamically, enabling vendor-agnostic GPU support without rebuilding containers.
 import logging
 import os
 import re
-import threading
-from dataclasses import dataclass, field
-from typing import Callable, Dict, List, Optional, Set
+from dataclasses import dataclass
+from typing import Dict, List, Optional, Set
 from enum import Enum
 
 import requests
@@ -465,30 +464,6 @@ class GPUMetricsDiscovery:
         except Exception as e:
             logger.warning(f"Failed to fetch metadata: {e}")
             return {}
-
-    def discover_async(
-        self,
-        callback: Optional[Callable[[object], None]] = None,
-        timeout_seconds: float = DISCOVERY_TIMEOUT_SECONDS
-    ) -> threading.Thread:
-        """
-        Discover GPU metrics asynchronously.
-
-        Args:
-            callback: Optional callback function(result: GPUDiscoveryResult)
-            timeout_seconds: Timeout for Prometheus API calls
-
-        Returns:
-            Thread object (already started)
-        """
-        def _discover_thread():
-            result = self.discover(timeout_seconds)
-            if callback:
-                callback(result)
-
-        thread = threading.Thread(target=_discover_thread, daemon=True)
-        thread.start()
-        return thread
 
 
 # Convenience function for direct discovery

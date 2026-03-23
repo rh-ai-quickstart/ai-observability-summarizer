@@ -7,8 +7,7 @@ to various observability services (Tempo, Prometheus, Thanos, etc.).
 
 import httpx
 import requests
-from typing import Dict, Any, Optional, List, Union
-from datetime import datetime
+from typing import Dict, Any, Optional, List
 import logging
 
 from .config import VERIFY_SSL, K8S_SERVICE_ACCOUNT_TOKEN_PATH, DEV_FALLBACK_TOKEN
@@ -263,53 +262,3 @@ class PrometheusClient(HTTPClient):
             headers["Authorization"] = f"Bearer {self.token}"
         
         return headers
-    
-    def query_range(self, query: str, start: int, end: int, step: str = "15m") -> Dict[str, Any]:
-        """
-        Execute PromQL range query.
-        
-        Args:
-            query: PromQL query string
-            start: Start timestamp
-            end: End timestamp
-            step: Query step interval
-            
-        Returns:
-            Query response data
-        """
-        try:
-            endpoint = "/api/v1/query_range"
-            params = {
-                "query": query,
-                "start": start,
-                "end": end,
-                "step": step
-            }
-            response = self.get_sync(endpoint, params=params, headers=self._get_prometheus_headers())
-            return response
-        except Exception as e:
-            logger.error(f"Error executing PromQL range query: {e}")
-            raise
-    
-    def query_instant(self, query: str, time: Optional[int] = None) -> Dict[str, Any]:
-        """
-        Execute PromQL instant query.
-        
-        Args:
-            query: PromQL query string
-            time: Optional timestamp for instant query
-            
-        Returns:
-            Query response data
-        """
-        try:
-            endpoint = "/api/v1/query"
-            params = {"query": query}
-            if time:
-                params["time"] = time
-            
-            response = self.get_sync(endpoint, params=params, headers=self._get_prometheus_headers())
-            return response
-        except Exception as e:
-            logger.error(f"Error executing PromQL instant query: {e}")
-            raise

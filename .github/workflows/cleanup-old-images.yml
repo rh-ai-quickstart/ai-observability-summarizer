@@ -32,15 +32,17 @@ jobs:
     name: Cleanup old Summarizer container images
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         component:
-          - metrics-ui
           - metrics-alerting
           - mcp-server
+          - console-plugin
+          - react-ui
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install skopeo
         run: |
@@ -170,9 +172,8 @@ jobs:
               else
                 echo "🗑️  Deleting tag: $TAG (age: ${AGE_DAYS} days, created: $IMAGE_CREATED)"
 
-                # Attempt deletion
-                DELETE_OUTPUT=$(skopeo delete docker://$IMAGE_NAME:$TAG 2>&1)
-                DELETE_EXIT_CODE=$?
+                # Attempt deletion (|| true prevents set -e from killing the script)
+                DELETE_OUTPUT=$(skopeo delete docker://$IMAGE_NAME:$TAG 2>&1) && DELETE_EXIT_CODE=0 || DELETE_EXIT_CODE=$?
 
                 if [ $DELETE_EXIT_CODE -eq 0 ]; then
                   # Verify deletion by checking if tag still exists

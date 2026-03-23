@@ -40,8 +40,8 @@ export const ModelsTab: React.FC<ModelsTabProps> = ({
 
   const selectedValue = state.selectedModel || '';
   const hasSelectableInternal = state.internalModels.length > 0; // internal models don't need keys
-  const hasSelectableExternal = state.externalModels.some(m => state.providers[m.provider]?.status === 'configured');
-  const hasSelectableCustom = state.customModels.some(m => !m.requiresApiKey || state.providers[m.provider]?.status === 'configured');
+  const hasSelectableExternal = state.externalModels.some(m => m.provider === 'maas' || state.providers[m.provider]?.status === 'configured');
+  const hasSelectableCustom = state.customModels.some(m => !m.requiresApiKey || m.provider === 'maas' || state.providers[m.provider]?.status === 'configured');
   const hasAnySelectable = hasSelectableInternal || hasSelectableExternal || hasSelectableCustom;
 
   if (!hasModels && !state.loading.models) {
@@ -101,11 +101,11 @@ export const ModelsTab: React.FC<ModelsTabProps> = ({
                 No Models Available
               </Title>
               <EmptyStateBody>
-                No models are currently available to select. Configure an API key for an external provider or add a custom model.
+                No models are currently available to select. Configure an API key for an external provider or add an external model.
               </EmptyStateBody>
               <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
                 <Button variant="primary" onClick={onGoToApiKeys}>Configure API key</Button>
-                <Button variant="secondary" onClick={onGoToAddModel}>Add custom model</Button>
+                <Button variant="secondary" onClick={onGoToAddModel}>Add external model</Button>
               </div>
             </EmptyState>
           </CardBody>
@@ -147,18 +147,22 @@ export const ModelsTab: React.FC<ModelsTabProps> = ({
                 value="__grp__external"
                 label={`— External Models (API Key Required) —`}
               />
-              {state.externalModels.map((m) => (
-                <FormSelectOption
-                  key={m.id}
-                  value={m.name}
-                  label={
-                    state.providers[m.provider]?.status === 'configured'
-                      ? m.name
-                      : `${m.name} — API key required (configure in API Keys tab)`
-                  }
-                  isDisabled={state.providers[m.provider]?.status !== 'configured'}
-                />
-              ))}
+              {state.externalModels.map((m) => {
+                // MAAS models have per-model API keys configured when added
+                const isConfigured = m.provider === 'maas' || state.providers[m.provider]?.status === 'configured';
+                return (
+                  <FormSelectOption
+                    key={m.id}
+                    value={m.name}
+                    label={
+                      isConfigured
+                        ? m.name
+                        : `${m.name} — API key required (configure in API Keys tab)`
+                    }
+                    isDisabled={!isConfigured}
+                  />
+                );
+              })}
 
               {/* Custom group header and items (if any) */}
               {state.customModels.length > 0 && (
@@ -169,26 +173,30 @@ export const ModelsTab: React.FC<ModelsTabProps> = ({
                     value="__grp__custom"
                     label="— Custom Models —"
                   />
-                  {state.customModels.map((m) => (
-                    <FormSelectOption
-                      key={m.id}
-                      value={m.name}
-                      label={
-                        m.requiresApiKey && state.providers[m.provider]?.status !== 'configured'
-                          ? `${m.name} — API key required (configure in API Keys tab)`
-                          : m.name
-                      }
-                      isDisabled={m.requiresApiKey && state.providers[m.provider]?.status !== 'configured'}
-                    />
-                  ))}
+                  {state.customModels.map((m) => {
+                    // MAAS models have per-model API keys configured when added
+                    const needsConfig = m.requiresApiKey && m.provider !== 'maas' && state.providers[m.provider]?.status !== 'configured';
+                    return (
+                      <FormSelectOption
+                        key={m.id}
+                        value={m.name}
+                        label={
+                          needsConfig
+                            ? `${m.name} — API key required (configure in API Keys tab)`
+                            : m.name
+                        }
+                        isDisabled={needsConfig}
+                      />
+                    );
+                  })}
                 </>
               )}
             </FormSelect>
           </FormGroup>
           {/* Inline hint + link to configure API keys when any models are disabled */}
           {(
-            state.externalModels.some(m => state.providers[m.provider]?.status !== 'configured') ||
-            state.customModels.some(m => m.requiresApiKey && state.providers[m.provider]?.status !== 'configured')
+            state.externalModels.some(m => m.provider !== 'maas' && state.providers[m.provider]?.status !== 'configured') ||
+            state.customModels.some(m => m.requiresApiKey && m.provider !== 'maas' && state.providers[m.provider]?.status !== 'configured')
           ) && (
             <TextContent>
               <Text component={TextVariants.small} style={{ color: 'var(--pf-v5-global--Color--200)' }}>

@@ -44,7 +44,7 @@ This approach ensures consistent, clean responses while preserving all required 
 
 import re
 import logging
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List
 from enum import Enum
 from common.pylogger import get_python_logger
 
@@ -657,98 +657,3 @@ class ResponseValidator:
                 return text[:last_punct + 1].strip()
         
         return text
-
-    @staticmethod
-    def validate_required_content(response: str, response_type: ResponseType) -> Dict[str, any]:
-        """
-        Validate that the response contains all required elements
-        
-        Returns:
-            Dict with validation results including missing elements
-        """
-        
-        if response_type == ResponseType.OPENSHIFT_ANALYSIS:
-            return ResponseValidator._validate_openshift_content(response)
-        elif response_type == ResponseType.VLLM_ANALYSIS:
-            return ResponseValidator._validate_vllm_content(response)
-        else:
-            return {'status': 'skipped', 'reason': 'general_chat_not_validated'}
-
-    @staticmethod
-    def _validate_openshift_content(response: str) -> Dict[str, any]:
-        """Validate OpenShift 4-question response completeness"""
-        
-        questions_found = []
-        patterns = ResponseValidator.OPENSHIFT_QUESTIONS
-        
-        for i, pattern in enumerate(patterns, 1):
-            if re.search(pattern, response, re.IGNORECASE):
-                questions_found.append(i)
-        
-        missing_questions = [i for i in range(1, 5) if i not in questions_found]
-        
-        return {
-            'status': 'complete' if len(questions_found) == 4 else 'incomplete',
-            'questions_found': questions_found,
-            'missing_questions': missing_questions,
-            'completeness_score': len(questions_found) / 4.0
-        }
-
-    @staticmethod
-    def _validate_vllm_content(response: str) -> Dict[str, any]:
-        """Validate vLLM 5-requirement response completeness"""
-        
-        requirements_found = []
-        patterns = ResponseValidator.VLLM_REQUIREMENTS
-        
-        for i, pattern in enumerate(patterns, 1):
-            if re.search(pattern, response, re.IGNORECASE):
-                requirements_found.append(i)
-        
-        missing_requirements = [i for i in range(1, 6) if i not in requirements_found]
-        
-        return {
-            'status': 'complete' if len(requirements_found) == 5 else 'incomplete', 
-            'requirements_found': requirements_found,
-            'missing_requirements': missing_requirements,
-            'completeness_score': len(requirements_found) / 5.0
-        }
-
-    @staticmethod 
-    def remove_repetitive_patterns(text: str) -> str:
-        """
-        Remove specific repetitive patterns commonly seen in Llama-3.2-3B-instruct
-        """
-        # Remove repeated "Note:" sections
-        lines = text.split('\n')
-        cleaned_lines = []
-        seen_notes = set()
-        
-        for line in lines:
-            line_stripped = line.strip()
-            
-            # Check for repetitive note patterns
-            if line_stripped.startswith("Note:") or "However, since" in line_stripped:
-                # Normalize for comparison
-                normalized = re.sub(r'\s+', ' ', line_stripped.lower())
-                if normalized in seen_notes:
-                    continue  # Skip this repetitive line
-                seen_notes.add(normalized)
-            
-            cleaned_lines.append(line)
-        
-        # Join back and remove obvious repetitive sentences
-        cleaned_text = '\n'.join(cleaned_lines)
-        
-        # Remove repeated sentences (exact matches)
-        sentences = cleaned_text.split('.')
-        unique_sentences = []
-        seen_sentences = set()
-        
-        for sentence in sentences:
-            normalized_sentence = re.sub(r'\s+', ' ', sentence.strip().lower())
-            if normalized_sentence and normalized_sentence not in seen_sentences:
-                unique_sentences.append(sentence)
-                seen_sentences.add(normalized_sentence)
-        
-        return '.'.join(unique_sentences)

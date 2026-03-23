@@ -26,10 +26,30 @@ class OpenAIChatBot(BaseChatBot):
         """GPT-4 supports 128K token context - 10K chars is reasonable."""
         return 10000
 
+    def _get_base_url_from_config(self) -> Optional[str]:
+        """Get custom base URL from model config (for MAAS, custom endpoints)."""
+        try:
+            from core.model_config_manager import get_model_config
+            config = get_model_config()
+            model_config = config.get(self.model_name, {})
+            api_url = model_config.get("apiUrl", "")
+
+            if api_url:
+                # Extract base URL by removing /chat/completions suffix
+                for suffix in ["/chat/completions", "/v1/chat/completions"]:
+                    if api_url.endswith(suffix):
+                        return api_url[:-len(suffix)]
+                return api_url  # Return as-is if no known suffix
+            return None
+        except Exception as e:
+            logger.warning(f"Could not get base_url from config: {e}")
+            return None
+
     def __init__(
         self,
         model_name: str,
         api_key: Optional[str] = None,
+        api_url: Optional[str] = None,
         tool_executor: ToolExecutor = None):
         super().__init__(model_name, api_key, tool_executor)
 
@@ -40,7 +60,27 @@ class OpenAIChatBot(BaseChatBot):
             # Only create client if API key is provided
             # This matches the pattern used by other providers
             if self.api_key:
-                self.client = OpenAI(api_key=self.api_key)
+                # Priority: 1) Passed api_url (from DEV mode), 2) Model config (production)
+                base_url = None
+                if api_url:
+                    # Extract base URL by removing /chat/completions suffix if present
+                    for suffix in ["/chat/completions", "/v1/chat/completions"]:
+                        if api_url.endswith(suffix):
+                            base_url = api_url[:-len(suffix)]
+                            break
+                    if not base_url:
+                        base_url = api_url  # Use as-is if no known suffix
+                    logger.info(f"Using passed api_url for {self.model_name}: {base_url}")
+                else:
+                    # Check if model config specifies custom base_url (for MAAS, custom endpoints)
+                    base_url = self._get_base_url_from_config()
+                    if base_url:
+                        logger.info(f"Using custom base_url from config for {self.model_name}: {base_url}")
+
+                if base_url:
+                    self.client = OpenAI(api_key=self.api_key, base_url=base_url)
+                else:
+                    self.client = OpenAI(api_key=self.api_key)
             else:
                 self.client = None
         except ImportError:
@@ -60,16 +100,23 @@ You MUST call `search_metrics` or `search_metrics_by_category` BEFORE calling
 (e.g., `vllm:gpu_cache_usage_perc` not `vllm:kv_cache_usage_percentage`,
 `DCGM_FI_DEV_GPU_TEMP` not `DCGM_FI_DEV_TEMP`).
 
+**CRITICAL — ALWAYS Execute Queries, NEVER Just Show Them:**
+When you construct a PromQL query, you MUST immediately call `execute_promql` to run it
+and get the actual data. NEVER show the query to the user without executing it first.
+
 Correct flow:
 1. `search_metrics("GPU temperature")` → discover `DCGM_FI_DEV_GPU_TEMP`
-2. `execute_promql("avg(DCGM_FI_DEV_GPU_TEMP) by (pod)")` → get data
+2. `execute_promql("avg(DCGM_FI_DEV_GPU_TEMP) by (pod)")` → get actual data
+3. Present the results to the user
 
-Wrong flow:
-1. `execute_promql("avg(DCGM_FI_DEV_TEMP)")` → no data (wrong name)
+Wrong flow (DO NOT DO THIS):
+1. `search_metrics("GPU temperature")` → discover `DCGM_FI_DEV_GPU_TEMP`
+2. Tell the user "Here's the PromQL query: avg(DCGM_FI_DEV_GPU_TEMP) by (pod)" ❌ WRONG - you must EXECUTE it!
 
 **Best Practices:**
 - Provide detailed breakdowns by pod and namespace
-- Balance comprehensiveness with conciseness"""
+- Balance comprehensiveness with conciseness
+- Always execute your queries to provide real data"""
 
     def _convert_tools_to_openai_format(self) -> List[Dict[str, Any]]:
         """Convert MCP tools to OpenAI function calling format."""
@@ -174,8 +221,18 @@ Wrong flow:
                 if finish_reason == 'tool_calls' and message.tool_calls:
                     logger.info(f"🤖 OpenAI requesting {len(message.tool_calls)} tool(s)")
 
+                    # Collect tool names for iteration-level loop detection
+                    tool_names_this_iteration = {
+                        tc.function.name for tc in message.tool_calls
+                    }
+
+                    if self._check_tool_loop(tool_names_this_iteration, consecutive_tool_tracker):
+                        return (
+                            "I got stuck in a loop calling the same tool repeatedly. "
+                            "Please try rephrasing your question or being more specific."
+                        )
+
                     tool_results = []
-                    tool_loop_detected = False
                     for tool_call in message.tool_calls:
                         tool_name = tool_call.function.name
                         tool_args_str = tool_call.function.arguments
@@ -186,10 +243,6 @@ Wrong flow:
                             tool_args = json.loads(tool_args_str)
                         except json.JSONDecodeError:
                             tool_args = {}
-
-                        if self._check_tool_loop(tool_name, consecutive_tool_tracker):
-                            tool_loop_detected = True
-                            break
 
                         if progress_callback:
                             progress_callback(f"🔧 Using tool: {tool_name}")
@@ -202,12 +255,6 @@ Wrong flow:
                             "tool_call_id": tool_id,
                             "content": tool_result
                         })
-
-                    if tool_loop_detected:
-                        return (
-                            "I got stuck in a loop calling the same tool repeatedly. "
-                            "Please try rephrasing your question or being more specific."
-                        )
 
                     # Add tool results to conversation
                     messages.extend(tool_results)

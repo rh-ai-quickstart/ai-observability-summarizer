@@ -39,7 +39,6 @@ from core.metrics import (
     get_vllm_namespaces_helper,
     get_vllm_metrics,
     fetch_metrics,
-    get_summarization_models,
     get_cluster_gpu_info,
     get_namespace_model_deployment_info,
     execute_instant_queries_parallel,
@@ -68,23 +67,6 @@ from mcp_server.exceptions import (
 
 # Configure structured logging
 logger = get_python_logger()
-
-
-def check_rag_availability():
-    """Check if RAG infrastructure is available for vLLM operations."""
-    try:
-        from core.config import RAG_AVAILABLE
-        if not RAG_AVAILABLE:
-            error = MCPException(
-                message="vLLM infrastructure not available",
-                error_code=MCPErrorCode.CONFIGURATION_ERROR,
-                recovery_suggestion="RAG infrastructure is not installed or accessible. vLLM metrics require local model deployment. Install with: make install ENABLE_RAG=true"
-            )
-            return error.to_mcp_response()
-        return None
-    except Exception:
-        # If we can't determine availability, allow the operation to continue
-        return None
 
 
 def resolve_time_range(
@@ -558,6 +540,7 @@ def analyze_vllm(
     start_datetime: Optional[str] = None,
     end_datetime: Optional[str] = None,
     api_key: Optional[str] = None,
+    api_url: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """Analyze vLLM metrics and generate AI summary.
 
@@ -682,6 +665,7 @@ def analyze_vllm(
             summarize_model_id,
             ResponseType.VLLM_ANALYSIS,
             resolved_api_key,
+            api_url,
         )
         time_llm_summarization = time.perf_counter() - t_start
         logger.debug(
@@ -922,6 +906,7 @@ def chat_vllm(
     question: str,
     summarize_model_id: str,
     api_key: Optional[str] = None,
+    api_url: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """
     Chat about vLLM metrics - ask follow-up questions about analyzed data.
@@ -976,6 +961,7 @@ def chat_vllm(
             summarize_model_id,
             ResponseType.GENERAL_CHAT,
             resolved_api_key,
+            api_url,
             max_tokens=1500
         )
         

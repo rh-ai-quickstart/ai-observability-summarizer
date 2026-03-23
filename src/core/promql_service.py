@@ -4,10 +4,7 @@ Core PromQL Generation Service
 Moved from metrics_api.py to separate business logic
 """
 
-import os
-import re
-from typing import Dict, List, Optional, Any, Tuple
-from datetime import datetime, timedelta
+from typing import Dict, List, Optional, Any
 import requests
 
 import logging
@@ -19,7 +16,7 @@ get_python_logger()
 logger = logging.getLogger(__name__)
 
 # Import configuration
-from .config import PROMETHEUS_URL, THANOS_TOKEN, VERIFY_SSL as verify, CHAT_SCOPE_FLEET_WIDE, FLEET_WIDE_DISPLAY
+from .config import PROMETHEUS_URL, THANOS_TOKEN, VERIFY_SSL as verify, FLEET_WIDE_DISPLAY
 
 def generate_promql_from_question(question: str, namespace: Optional[str], model_name: str, start_ts: int, end_ts: int, is_fleet_wide: bool = False) -> List[str]:
     """

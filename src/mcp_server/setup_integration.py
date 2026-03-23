@@ -18,7 +18,6 @@ import json
 import os
 import sys
 import shutil
-import subprocess
 import platform
 from pathlib import Path
 from typing import Dict, Any, Optional

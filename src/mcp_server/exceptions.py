@@ -13,9 +13,8 @@ Features:
 """
 
 import logging
-from typing import Dict, Any, List, Optional, Union
+from typing import Dict, Any, List, Optional
 from enum import Enum
-import traceback
 import json
 
 logger = logging.getLogger(__name__)
@@ -64,15 +63,13 @@ class MCPException(Exception):
         message: str,
         error_code: MCPErrorCode,
         details: Optional[Dict[str, Any]] = None,
-        recovery_suggestion: Optional[str] = None,
-        original_exception: Optional[Exception] = None
+        recovery_suggestion: Optional[str] = None
     ):
         super().__init__(message)
         self.message = message
         self.error_code = error_code
         self.details = details or {}
         self.recovery_suggestion = recovery_suggestion
-        self.original_exception = original_exception
         
     def to_mcp_response(self) -> List[Dict[str, Any]]:
         """Convert exception to MCP-compliant error response."""
@@ -247,8 +244,7 @@ def handle_mcp_exception(func):
                 message=f"An unexpected error occurred: {str(e)}",
                 error_code=MCPErrorCode.INTERNAL_ERROR,
                 details={"error_type": type(e).__name__},
-                recovery_suggestion="Please try again. If the problem persists, contact support.",
-                original_exception=e
+                recovery_suggestion="Please try again. If the problem persists, contact support."
             )
             return internal_error.to_mcp_response()
     

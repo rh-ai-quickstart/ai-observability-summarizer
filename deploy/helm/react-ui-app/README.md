@@ -73,7 +73,7 @@ helm install ai-obs-react-ui . -f custom-values.yaml -n openshift-ai-observabili
 |-----------|-------------|---------|
 | `oauth.enabled` | Enable OAuth proxy | `true` |
 | `oauth.image.repository` | OAuth proxy image | `quay.io/openshift/origin-oauth-proxy` |
-| `oauth.image.tag` | OAuth proxy tag | `4.14` |
+| `oauth.image.tag` | OAuth proxy tag | `4.22.0` |
 | `oauth.port` | OAuth proxy port | `8443` |
 | `oauth.cookieSecret` | Cookie secret (auto-generated if empty) | `""` |
 | `oauth.cookieExpire` | Cookie expiration | `24h` |

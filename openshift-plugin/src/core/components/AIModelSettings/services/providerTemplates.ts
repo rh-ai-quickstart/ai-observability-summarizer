@@ -58,6 +58,19 @@ export const PROVIDER_TEMPLATES: Record<Provider, ProviderTemplate> = {
     commonModels: ['llama-2-7b', 'llama-2-13b', 'llama-2-70b', 'llama-3-8b'],
     documentationUrl: 'https://llama.meta.com/docs/',
   },
+  maas: {
+    provider: 'maas',
+    label: 'Model as a Service (MaaS)',
+    description: 'Model as a Service from Red Hat. Each model requires its own API key and endpoint.',
+    defaultEndpoint: 'https://litellm-prod.apps.maas.redhatworkshops.io/v1',
+    requiresApiKey: true,
+    iconClass: 'fa-redhat',
+    color: '#ee0000',
+    commonModels: [
+      'qwen3-14b',
+    ],
+    documentationUrl: 'https://docs.redhat.com/maas',
+  },
   internal: {
     provider: 'internal',
     label: 'Cluster Models',
@@ -91,7 +104,7 @@ export const getAllProviders = (): ProviderTemplate[] => {
 };
 
 export const getExternalProviders = (): ProviderTemplate[] => {
-  return Object.values(PROVIDER_TEMPLATES).filter(p => p.requiresApiKey && p.provider !== 'other');
+  return Object.values(PROVIDER_TEMPLATES).filter(p => p.requiresApiKey && p.provider !== 'other' && p.provider !== 'maas');
 };
 
 export const formatModelName = (provider: Provider, modelId: string): string => {
@@ -116,7 +129,7 @@ export const parseModelName = (modelName: string): { provider: Provider; modelId
 
 export const detectProvider = (modelName: string): Provider => {
   const lowerName = modelName.toLowerCase();
-  
+
   if (lowerName.includes('gpt') || lowerName.includes('openai')) {
     return 'openai';
   }
@@ -126,10 +139,13 @@ export const detectProvider = (modelName: string): Provider => {
   if (lowerName.includes('gemini') || lowerName.includes('google') || lowerName.includes('bard')) {
     return 'google';
   }
+  if (lowerName.includes('maas')) {
+    return 'maas';
+  }
   if (lowerName.includes('llama') || lowerName.includes('meta')) {
     return 'meta';
   }
-  
+
   return 'internal';
 };
 
@@ -155,6 +171,8 @@ export const isValidApiKey = (provider: Provider, apiKey: string): boolean => {
       return apiKey.length > 20; // Google API keys vary in format
     case 'meta':
       return apiKey.length > 10; // Meta API keys vary in format
+    case 'maas':
+      return apiKey.length > 20; // MAAS API keys vary in format
     default:
       return apiKey.length > 10; // Generic validation
   }

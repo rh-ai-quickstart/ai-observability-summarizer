@@ -309,17 +309,24 @@ class GoogleChatBot(BaseChatBot):
                     tool_count = sum(1 for p in parts if hasattr(p, 'function_call') and p.function_call)
                     logger.info(f"🤖 Google Gemini requesting {tool_count} tool(s)")
 
+                    # Collect tool names for iteration-level loop detection
+                    tool_names_this_iteration = {
+                        p.function_call.name for p in parts
+                        if hasattr(p, 'function_call') and p.function_call
+                    }
+
+                    if self._check_tool_loop(tool_names_this_iteration, consecutive_tool_tracker):
+                        return (
+                            "I got stuck in a loop calling the same tool repeatedly. "
+                            "Please try rephrasing your question or being more specific."
+                        )
+
                     # Build function responses for next iteration
-                    function_responses = []  # Clear previous responses
-                    tool_loop_detected = False
+                    function_responses = []
                     for part in parts:
                         if hasattr(part, 'function_call') and part.function_call:
                             func_call = part.function_call
                             tool_name = func_call.name
-
-                            if self._check_tool_loop(tool_name, consecutive_tool_tracker):
-                                tool_loop_detected = True
-                                break
 
                             # Convert proto args to native Python types (dict with proto values -> dict with native values)
                             tool_args = self._convert_proto_to_native(dict(func_call.args))
@@ -339,12 +346,6 @@ class GoogleChatBot(BaseChatBot):
                                     )
                                 )
                             )
-
-                    if tool_loop_detected:
-                        return (
-                            "I got stuck in a loop calling the same tool repeatedly. "
-                            "Please try rephrasing your question or being more specific."
-                        )
 
                     logger.info(f"Prepared {len(function_responses)} function response(s) for next iteration")
                     # Continue loop to send function responses
@@ -385,15 +386,21 @@ class GoogleChatBot(BaseChatBot):
                                 if has_nudge_function_calls:
                                     # Process function calls from nudge response
                                     parts = nudge_parts
+                                    tool_names_nudge = {
+                                        p.function_call.name for p in parts
+                                        if hasattr(p, 'function_call') and p.function_call
+                                    }
+                                    if self._check_tool_loop(tool_names_nudge, consecutive_tool_tracker):
+                                        return (
+                                            "I got stuck in a loop calling the same tool repeatedly. "
+                                            "Please try rephrasing your question or being more specific."
+                                        )
                                     function_responses = []
                                     for part in parts:
                                         if hasattr(part, 'function_call') and part.function_call:
                                             func_call = part.function_call
                                             tool_name = func_call.name
                                             tool_args = self._convert_proto_to_native(dict(func_call.args))
-
-                                            if self._check_tool_loop(tool_name, consecutive_tool_tracker):
-                                                break
 
                                             if progress_callback:
                                                 progress_callback(f"🔧 Using tool: {tool_name}")

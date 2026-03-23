@@ -581,30 +581,6 @@ class TestGPUDiscoveryIntegration:
         assert metadata.get("catalog_type") == "base"
         assert metadata.get("gpu_discovery") == "runtime"
 
-    def test_gpu_discovery_status_initial(self, base_catalog_file):
-        """Test initial GPU discovery status."""
-        catalog = MetricsCatalog(
-            catalog_path=base_catalog_file,
-            enable_gpu_discovery=False
-        )
-        catalog._load_catalog()
-
-        status = catalog.get_gpu_discovery_status()
-        assert status["enabled"] is False
-        assert status["ready"] is False
-        assert status["error"] is None
-
-    def test_is_gpu_catalog_ready_no_discovery(self, base_catalog_file):
-        """Test is_gpu_catalog_ready when discovery is disabled."""
-        catalog = MetricsCatalog(
-            catalog_path=base_catalog_file,
-            enable_gpu_discovery=False
-        )
-        catalog._load_catalog()
-
-        # Without discovery, it should report not ready initially
-        assert catalog.is_gpu_catalog_ready() is False
-
     def test_gpu_category_empty_in_base_catalog(self, base_catalog_file):
         """Test that gpu_ai category is empty in base catalog."""
         catalog = MetricsCatalog(
@@ -698,18 +674,6 @@ class TestGPUDiscoveryIntegration:
         assert "DCGM_FI_DEV_GPU_TEMP" in catalog._lookup
         assert catalog._lookup["DCGM_FI_DEV_GPU_TEMP"]["category_id"] == "gpu_ai"
         assert catalog._lookup["DCGM_FI_DEV_GPU_TEMP"]["priority"] == "High"
-
-    def test_wait_for_gpu_discovery_no_thread(self, base_catalog_file):
-        """Test wait_for_gpu_discovery when no discovery was started."""
-        catalog = MetricsCatalog(
-            catalog_path=base_catalog_file,
-            enable_gpu_discovery=False
-        )
-        catalog._load_catalog()
-
-        # Should return immediately
-        result = catalog.wait_for_gpu_discovery(timeout=1.0)
-        assert result is True
 
     def test_concurrent_gpu_merge_and_lookup_iteration(self, base_catalog_file):
         """Test that iterating _lookup while GPU discovery merges doesn't raise.

@@ -30,7 +30,7 @@ import { APIKeysTab } from './tabs/APIKeysTab';
 import { AddModelTab } from './tabs/AddModelTab';
 import { ChatSettingsTab } from './tabs/ChatSettingsTab';
 import { MetricsSettingsTab } from './tabs/MetricsSettingsTab';
-import { isDevMode } from '../../services/devCredentials';
+import { isDevMode } from '../../services/runtimeConfig';
 import { useChatSettings } from '../../hooks/useChatSettings';
 
 interface AIModelSettingsProps {
@@ -147,8 +147,8 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
 
   const hasSelectableModels = (s: AIModelState): boolean => {
     const internal = s.internalModels.length > 0;
-    const external = s.externalModels.some(m => s.providers[m.provider]?.status === 'configured');
-    const custom = s.customModels.some(m => !m.requiresApiKey || s.providers[m.provider]?.status === 'configured');
+    const external = s.externalModels.some(m => m.provider === 'maas' || s.providers[m.provider]?.status === 'configured');
+    const custom = s.customModels.some(m => !m.requiresApiKey || m.provider === 'maas' || s.providers[m.provider]?.status === 'configured');
     return internal || external || custom;
   };
 
@@ -158,6 +158,8 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
     const m = all.find(mm => mm.name === modelName);
     if (!m) return false;
     if (!m.requiresApiKey) return true;
+    // MAAS models have per-model API keys configured when added
+    if (m.provider === 'maas') return true;
     return s.providers[m.provider]?.status === 'configured';
   };
 
@@ -251,6 +253,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
           <APIKeysTab
             state={state}
             onProviderUpdate={handleProviderUpdate}
+            onGoToAddModel={() => setState(prev => ({ ...prev, activeTab: 'addmodel' }))}
           />
         );
       case 'addmodel':
@@ -259,6 +262,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
             state={state}
             onModelAdd={handleModelAdd}
             onSuccess={() => setState(prev => ({ ...prev, activeTab: 'models' }))}
+            onGoToApiKeys={() => setState(prev => ({ ...prev, activeTab: 'apikeys' }))}
           />
         );
       case 'chatsettings':
@@ -363,14 +367,14 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
           >
             <TextContent>
               <Text component={TextVariants.p}>
-                No models are available to select. Configure an API key or add a custom model.
+                No models are available to select. Configure an API key or add an external model.
               </Text>
               <div style={{ display: 'flex', gap: 8 }}>
                 <Button variant="link" isInline onClick={() => setState(prev => ({ ...prev, activeTab: 'apikeys' }))}>
                   Configure API key
                 </Button>
                 <Button variant="link" isInline onClick={() => setState(prev => ({ ...prev, activeTab: 'addmodel' }))}>
-                  Add custom model
+                  Add external model
                 </Button>
               </div>
             </TextContent>
@@ -443,7 +447,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
                 Add Model
               </TabTitleText>
             }
-            aria-label="Add Custom Model"
+            aria-label="Add External Model"
           >
             {state.activeTab === 'addmodel' && renderTabContent()}
           </Tab>

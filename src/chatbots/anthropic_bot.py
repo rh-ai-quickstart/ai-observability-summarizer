@@ -152,16 +152,21 @@ class AnthropicChatBot(BaseChatBot):
                     tool_count = sum(1 for block in response.content if block.type == "tool_use")
                     logger.info(f"🤖 Anthropic requesting {tool_count} tool(s)")
 
+                    # Collect tool names for iteration-level loop detection
+                    tool_names_this_iteration = {
+                        block.name for block in response.content if block.type == "tool_use"
+                    }
+
+                    if self._check_tool_loop(tool_names_this_iteration, consecutive_tool_tracker):
+                        return (
+                            "I got stuck in a loop calling the same tool repeatedly. "
+                            "Please try rephrasing your question or being more specific."
+                        )
+
                     tool_results = []
-                    tool_loop_detected = False
                     for content_block in response.content:
                         if content_block.type == "tool_use":
                             tool_name = content_block.name
-
-                            if self._check_tool_loop(tool_name, consecutive_tool_tracker):
-                                tool_loop_detected = True
-                                break
-
                             tool_args = content_block.input
                             tool_id = content_block.id
 
@@ -176,12 +181,6 @@ class AnthropicChatBot(BaseChatBot):
                                 "tool_use_id": tool_id,
                                 "content": tool_result
                             })
-
-                    if tool_loop_detected:
-                        return (
-                            "I got stuck in a loop calling the same tool repeatedly. "
-                            "Please try rephrasing your question or being more specific."
-                        )
 
                     # Add tool results to conversation
                     messages.append({

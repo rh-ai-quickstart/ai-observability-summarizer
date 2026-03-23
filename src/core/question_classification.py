@@ -6,7 +6,7 @@ different observability services (Tempo, Prometheus, etc.).
 """
 
 import re
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 from enum import Enum
 
 
@@ -101,16 +101,6 @@ class QuestionClassifier:
     }
 
     @classmethod
-    def get_all_patterns(cls) -> Dict[QuestionType, List[str]]:
-        """
-        Get all question patterns.
-
-        Returns:
-            Dict mapping question types to their patterns
-        """
-        return cls.QUESTION_PATTERNS.copy()
-
-    @classmethod
     def classify_question(cls, question: str) -> QuestionType:
         """
         Classify a user question to determine the appropriate query type.
@@ -129,31 +119,6 @@ class QuestionClassifier:
                     return question_type
 
         return QuestionType.GENERAL
-
-    @classmethod
-    def get_confidence_score(cls, question: str, question_type: QuestionType) -> float:
-        """
-        Calculate confidence score for a classification.
-
-        Args:
-            question: The user's question
-            question_type: The classified question type
-
-        Returns:
-            float: Confidence score between 0.0 and 1.0
-        """
-        question_lower = question.lower()
-        patterns = cls.QUESTION_PATTERNS.get(question_type, [])
-        
-        if not patterns:
-            return 0.0
-        
-        matches = 0
-        for pattern in patterns:
-            if re.search(pattern, question_lower, re.IGNORECASE):
-                matches += 1
-        
-        return min(matches / len(patterns), 1.0)
 
     @classmethod
     def extract_key_concepts(cls, question: str) -> Dict[str, Any]:
@@ -255,30 +220,6 @@ class TempoQuestionClassifier(QuestionClassifier):
 class PrometheusQuestionClassifier(QuestionClassifier):
     """Prometheus-specific question classifier with PromQL query generation."""
 
-    @classmethod
-    def get_promql_query(cls, question_type: QuestionType, question: str, 
-                        metric_name: Optional[str] = None) -> str:
-        """
-        Get the appropriate PromQL query based on the question type.
-
-        Args:
-            question_type: The classified question type
-            question: The original question
-            metric_name: Optional specific metric name
-
-        Returns:
-            str: The appropriate PromQL query
-        """
-        if not metric_name:
-            return "up"  # Default query
-        
-        if question_type == QuestionType.PERFORMANCE_ANALYSIS:
-            return f"rate({metric_name}[5m])"
-        elif question_type == QuestionType.ALERT_ANALYSIS:
-            return "ALERTS"
-        else:
-            return metric_name
-
 
 class TraceErrorDetector:
     """Detects errors in trace data using pattern matching."""
@@ -312,37 +253,3 @@ class TraceErrorDetector:
                 return True
 
         return False
-
-    @classmethod
-    def extract_error_details(cls, trace: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Extract detailed error information from a trace.
-
-        Args:
-            trace: Trace data dictionary
-
-        Returns:
-            Dict containing error details
-        """
-        trace_str = str(trace).lower()
-        error_details = {
-            "has_error": False,
-            "error_type": None,
-            "error_message": None,
-            "status_code": None
-        }
-
-        for pattern in cls.ERROR_PATTERNS:
-            match = re.search(pattern, trace_str, re.IGNORECASE)
-            if match:
-                error_details["has_error"] = True
-                error_details["error_type"] = pattern
-                error_details["error_message"] = match.group(0)
-                
-                # Extract HTTP status codes
-                status_match = re.search(r"http[:\s]*(\d{3})", trace_str)
-                if status_match:
-                    error_details["status_code"] = int(status_match.group(1))
-                break
-
-        return error_details
