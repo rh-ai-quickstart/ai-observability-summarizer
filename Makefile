@@ -222,7 +222,7 @@ help:
 	@echo "  uninstall-console-plugin - Uninstall OpenShift Console Plugin"
 	@echo "  install-react-ui   - Install React UI standalone application"
 	@echo "  uninstall-react-ui - Uninstall React UI standalone application"
-	@echo "  uninstall          - Uninstall from OpenShift"
+	@echo "  uninstall          - what from OpenShift"
 	@echo "  status             - Check deployment status"
 	@echo "  list-models        - List available models"
 	@echo "  generate-model-config - Generate JSON config for specified LLM using template"
@@ -1272,11 +1272,13 @@ uninstall-minio:
 	@echo "Removing minio PVCs from $(MINIO_NAMESPACE)"
 	- @oc delete pvc -n $(MINIO_NAMESPACE) -l app.kubernetes.io/name=$(MINIO_CHART) --timeout=30s ||:
 
-# Cleanup Loki ClusterRoles and ClusterRoleBindings (reusable target)
+# Cleanup Loki ClusterRoles, ClusterRoleBindings, and ServiceAccount (reusable target)
+# This ensures fresh RBAC creation on every install, avoiding stale/orphaned resources
 .PHONY: cleanup-loki-clusterroles
 cleanup-loki-clusterroles:
 	- @oc delete clusterrole logging-collector-logs-writer collect-application-logs collect-audit-logs collect-infrastructure-logs --ignore-not-found 2>/dev/null ||:
 	- @oc delete clusterrolebinding logging-collector-logs-writer collect-application-logs collect-audit-logs collect-infrastructure-logs --ignore-not-found 2>/dev/null ||:
+	- @oc delete serviceaccount collector -n $(LOKI_NAMESPACE) --ignore-not-found 2>/dev/null ||:
 
 .PHONY: install-loki
 install-loki:

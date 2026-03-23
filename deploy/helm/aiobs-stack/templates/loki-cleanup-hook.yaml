@@ -37,6 +37,9 @@ rules:
 - apiGroups: ["rbac.authorization.k8s.io"]
   resources: ["clusterroles", "clusterrolebindings"]
   verbs: ["get", "list", "delete"]
+- apiGroups: [""]
+  resources: ["serviceaccounts"]
+  verbs: ["get", "delete"]
 ---
 # ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
@@ -117,6 +120,14 @@ spec:
               echo "  → ClusterRoleBinding not found (OK): $resource"
             fi
           done
+
+          # Delete collector ServiceAccount (ignore if not found)
+          if oc get serviceaccount collector -n openshift-logging >/dev/null 2>&1; then
+            echo "  → Deleting ServiceAccount: collector (openshift-logging)"
+            oc delete serviceaccount collector -n openshift-logging --ignore-not-found=true
+          else
+            echo "  → ServiceAccount not found (OK): collector"
+          fi
 
           echo "✅ Cleanup complete - ready for fresh installation"
         securityContext:
