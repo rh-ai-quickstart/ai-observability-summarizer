@@ -30,6 +30,7 @@ lokiStack:
         days: 3 # Reduced from 7 to 3 days default
       ingestionRateLimit: 10485760 # 10MB in bytes per second
       ingestionBurstLimit: 20971520 # 20MB in bytes
+      ingestionMaxLineSize: 2097152 # 2MB max line size (default 256KB was causing OOMKilled)
       queriesMaxEntriesLimitPerQuery: 50000
 
     # Per-tenant retention policies (reduced to save storage)
