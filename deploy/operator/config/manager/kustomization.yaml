@@ -5,4 +5,4 @@ kind: Kustomization
 images:
 - name: controller
   newName: quay.io/ahameed/aiobs-operator
-  newTag: v2.1.1-operator
+  newTag: v2.2.0-operator

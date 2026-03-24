@@ -23,7 +23,7 @@ mcpServer:
   enabled: true  # Always deployed
   image:
     repository: quay.io/ahameed/aiobs-mcp-server
-    tag: 2.1.0-operator
+    tag: 2.2.0-operator
   # NOTE: DEV_MODE env var is automatically set from global.devMode by mcp-server chart
 
 # OpenShift Console Plugin - Native console integration
@@ -34,7 +34,7 @@ consolePlugin:
     description: "AI Observability Plugin"
     image:
       repository: quay.io/ahameed/aiobs-console-plugin
-      tag: 2.1.0-operator
+      tag: 2.2.0-operator
     imagePullPolicy: Always
     replicas: 2
     port: 9443
@@ -70,7 +70,7 @@ rag:
 tempo: {}
 
 # LokiStack - Log aggregation (openshift-logging)
-# NOTE: Makefile sets rbac.collector.create dynamically; Operator uses pre-install hook for cleanup
+# NOTE: Makefile sets rbac.collector.create dynamically; Operator uses loki-rbac-job.yaml
 loki:
   lokiStack:
     storageClassName: "auto"  # Auto-detect cluster default storage class (or specify: gp3, gp2, standard, managed-premium, thin, etc.)
@@ -78,7 +78,7 @@ loki:
     namespace: openshift-logging  # Deploy LokiStack to openshift-logging (not ai-observability)
   rbac:
     collector:
-      create: true  # Makefile: dynamic via check_collector_sa_and_get_flag; Operator: set to true
+      create: false  # Disabled - RBAC created by loki-rbac-job.yaml to avoid Helm ownership conflicts
 
 # OpenTelemetry Collector - Trace/metric collection (observability-hub)
 otelCollector: {}

@@ -197,6 +197,16 @@ clusterLogging:
     # Rate limiting per tenant
     rateLimiting:
       enabled: true
+
+    # Collector pod resource limits
+    collector:
+      resources:
+        limits:
+          memory: 1Gi
+          cpu: 500m
+        requests:
+          memory: 512Mi
+          cpu: 200m
       audit:
         maxLogsPerSecond: 1000
       application:
