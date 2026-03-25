@@ -207,4 +207,66 @@ describe('useChatHistory', () => {
       }
     });
   });
+
+  it('should show vLLM in greeting when GPU is available', () => {
+    const { result } = renderHook(() => useChatHistory(true));
+
+    expect(result.current.messages).toHaveLength(1);
+    expect(result.current.messages[0].role).toBe('assistant');
+    expect(result.current.messages[0].content).toContain('vLLM and OpenShift metrics');
+  });
+
+  it('should not show vLLM in greeting when GPU is not available', () => {
+    const { result } = renderHook(() => useChatHistory(false));
+
+    expect(result.current.messages).toHaveLength(1);
+    expect(result.current.messages[0].role).toBe('assistant');
+    expect(result.current.messages[0].content).toContain('OpenShift metrics');
+    expect(result.current.messages[0].content).not.toContain('vLLM');
+  });
+
+  it('should use GPU-aware greeting when clearing history with GPU available', () => {
+    const mockMessages: Message[] = [
+      {
+        id: '1',
+        role: 'user',
+        content: 'Test message',
+        timestamp: new Date(),
+      },
+    ];
+
+    localStorage.setItem('openshift_ai_chat_history', JSON.stringify(mockMessages));
+
+    const { result } = renderHook(() => useChatHistory(true));
+
+    act(() => {
+      result.current.clearHistory();
+    });
+
+    expect(result.current.messages).toHaveLength(1);
+    expect(result.current.messages[0].content).toContain('vLLM and OpenShift metrics');
+  });
+
+  it('should use non-GPU greeting when clearing history without GPU', () => {
+    const mockMessages: Message[] = [
+      {
+        id: '1',
+        role: 'user',
+        content: 'Test message',
+        timestamp: new Date(),
+      },
+    ];
+
+    localStorage.setItem('openshift_ai_chat_history', JSON.stringify(mockMessages));
+
+    const { result } = renderHook(() => useChatHistory(false));
+
+    act(() => {
+      result.current.clearHistory();
+    });
+
+    expect(result.current.messages).toHaveLength(1);
+    expect(result.current.messages[0].content).toContain('OpenShift metrics');
+    expect(result.current.messages[0].content).not.toContain('vLLM');
+  });
 });

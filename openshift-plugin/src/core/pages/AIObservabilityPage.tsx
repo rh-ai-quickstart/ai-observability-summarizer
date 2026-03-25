@@ -233,7 +233,9 @@ const AIObservabilityPage: React.FC<AIObservabilityPageProps> = ({
             </Title>
             <TextContent>
               <Text component={TextVariants.p} style={{ color: 'var(--pf-v5-global--Color--200)' }}>
-                Monitor, analyze, and get AI-powered insights for your vLLM and OpenShift workloads
+                {gpuAvailable === true
+                  ? "Monitor, analyze, and get AI-powered insights for your vLLM and OpenShift workloads"
+                  : "Monitor, analyze and get AI-powered insights for OpenShift metrics"}
               </Text>
             </TextContent>
           </FlexItem>

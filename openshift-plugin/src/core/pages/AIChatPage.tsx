@@ -54,7 +54,7 @@ interface AIChatPageProps {
 }
 
 const AIChatPage: React.FC<AIChatPageProps> = ({ gpuAvailable }) => {
-  const { messages, setMessages, clearHistory, exportToMarkdown } = useChatHistory();
+  const { messages, setMessages, clearHistory, exportToMarkdown } = useChatHistory(gpuAvailable);
   const { progressMessage, startProgress, stopProgress } = useProgressIndicator();
   const { settings: chatSettings } = useChatSettings();
   const { useAIConfigWarningDismissal, AI_CONFIG_WARNING } = useSettings();

@@ -36,12 +36,18 @@ export interface Message {
   namespace?: string;
 }
 
-const getInitialGreeting = (): Message => ({
+const getInitialGreeting = (gpuAvailable?: boolean): Message => ({
   id: '1',
   role: 'assistant',
-  content: `👋 Hello! I'm your AI Observability Assistant.
+  content: gpuAvailable === true
+    ? `👋 Hello! I'm your AI Observability Assistant.
 
 I can help you understand your vLLM and OpenShift metrics. Try asking me questions or click one of the suggested questions below to get started.
+
+How can I help you today?`
+    : `👋 Hello! I'm your AI Observability Assistant.
+
+I can help you understand your OpenShift metrics. Try asking me questions or click one of the suggested questions below to get started.
 
 How can I help you today?`,
   timestamp: new Date(),
@@ -50,7 +56,7 @@ How can I help you today?`,
 /**
  * Custom hook for managing chat message history with localStorage persistence
  */
-export function useChatHistory() {
+export function useChatHistory(gpuAvailable?: boolean) {
   const [messages, setMessagesState] = React.useState<Message[]>([]);
   const [isLoaded, setIsLoaded] = React.useState(false);
 
@@ -68,15 +74,15 @@ export function useChatHistory() {
         setMessagesState(messagesWithDates);
       } else {
         // No stored messages, show initial greeting
-        setMessagesState([getInitialGreeting()]);
+        setMessagesState([getInitialGreeting(gpuAvailable)]);
       }
     } catch (error) {
       console.error('Error loading chat history from localStorage:', error);
       // On error, show initial greeting
-      setMessagesState([getInitialGreeting()]);
+      setMessagesState([getInitialGreeting(gpuAvailable)]);
     }
     setIsLoaded(true);
-  }, []);
+  }, [gpuAvailable]);
 
   // Save messages to localStorage when they change (debounced)
   React.useEffect(() => {
@@ -112,11 +118,11 @@ export function useChatHistory() {
   const clearHistory = React.useCallback(() => {
     try {
       localStorage.removeItem(STORAGE_KEY);
-      setMessagesState([getInitialGreeting()]);
+      setMessagesState([getInitialGreeting(gpuAvailable)]);
     } catch (error) {
       console.error('Error clearing chat history:', error);
     }
-  }, []);
+  }, [gpuAvailable]);
 
   // Export messages to markdown format
   const exportToMarkdown = React.useCallback(() => {
