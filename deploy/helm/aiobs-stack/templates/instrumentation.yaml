@@ -2,9 +2,11 @@
 # Instrumentation CR for auto-instrumenting Python applications
 # This enables automatic tracing for pods with the annotation:
 #   instrumentation.opentelemetry.io/inject-python: "true"
-# 
+#
 # To enable auto-instrumentation for a namespace, add annotation:
 #   oc annotate namespace <namespace> instrumentation.opentelemetry.io/inject-python="true"
+#
+# NOTE: Created early via pre-install hook to ensure webhook is ready before app pods start
 apiVersion: opentelemetry.io/v1alpha1
 kind: Instrumentation
 metadata:
@@ -16,6 +18,10 @@ metadata:
     app.kubernetes.io/component: auto-instrumentation
     app.kubernetes.io/part-of: aiobs-operator
     app.kubernetes.io/managed-by: {{ .Release.Service }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation
 spec:
   exporter:
     # OTEL Collector endpoint for trace ingestion

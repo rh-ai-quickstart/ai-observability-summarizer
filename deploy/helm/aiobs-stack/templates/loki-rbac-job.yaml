@@ -39,6 +39,14 @@ rules:
 - apiGroups: ["rbac.authorization.k8s.io"]
   resources: ["clusterrolebindings"]
   verbs: ["create", "get", "patch", "update", "bind"]
+# Permissions required to bind ClusterRoles (must have same permissions being granted)
+- apiGroups: ["logging.openshift.io", "observability.openshift.io"]
+  resources: ["logs"]
+  resourceNames: ["application", "infrastructure", "audit"]
+  verbs: ["collect"]
+- apiGroups: ["loki.grafana.com"]
+  resources: ["application", "infrastructure", "audit"]
+  verbs: ["create"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
