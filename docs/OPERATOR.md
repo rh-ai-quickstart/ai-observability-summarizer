@@ -6,7 +6,7 @@ A Helm-based Kubernetes Operator for deploying the complete AI Observability sta
 
 ### Prerequisites
 
-- OpenShift 4.12+
+- OpenShift 4.18+
 - Cluster admin access
 - GPU node (optional, only if RAG Stack is enabled)
 - HuggingFace API token (optional, only if RAG Stack is enabled): https://huggingface.co/settings/tokens
@@ -45,6 +45,8 @@ Option B - Via OpenShift Console:
   - Select **Model** (default: Llama 3.1 8B - 16GB VRAM)
   - Choose **Device Type** (default: gpu)
 - Click **Create**
+
+> **Security Note**: The HuggingFace token is stored base64-encoded in the CR and is visible to users with cluster view role. For production deployments, consider using OpenShift's Secret management with restricted RBAC. Future versions will support Secret references for enhanced security.
 
 **Done!** The operator will automatically deploy all components and configure your cluster.
 
