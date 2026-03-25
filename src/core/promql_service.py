@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 # Import configuration
 from .config import PROMETHEUS_URL, THANOS_TOKEN, VERIFY_SSL as verify, FLEET_WIDE_DISPLAY
+from .metrics import calculate_histogram_quantile_optimal_lookback
 
 def generate_promql_from_question(question: str, namespace: Optional[str], model_name: str, start_ts: int, end_ts: int, is_fleet_wide: bool = False) -> List[str]:
     """
@@ -26,20 +27,13 @@ def generate_promql_from_question(question: str, namespace: Optional[str], model
     question_lower = question.lower()
     queries = []
     logger.info("Analyzing question: %s", question)
-    
+
     # Calculate time range duration for dynamic intervals
     duration_seconds = end_ts - start_ts
     duration_hours = duration_seconds / 3600
-    
-    # Smart interval selection based on time range
-    if duration_hours <= 1:
-        rate_interval = "5m"  # For 1 hour, use 5m intervals (12 data points)
-    elif duration_hours <= 6:
-        rate_interval = "15m"  # For up to 6 hours, use 15m intervals
-    elif duration_hours <= 24:
-        rate_interval = "1h"  # For up to a day, use 1h intervals
-    else:
-        rate_interval = "6h"   # For longer periods, use 6h intervals
+
+    # Use the shared 7-tier mapping from metrics.py (single source of truth)
+    rate_interval = calculate_histogram_quantile_optimal_lookback(duration_hours)
     
     logger.info("Time range: %.1fh, interval=%s", duration_hours, rate_interval)
     logger.info("Scope: %s", FLEET_WIDE_DISPLAY if is_fleet_wide else f"Namespace: {namespace}")

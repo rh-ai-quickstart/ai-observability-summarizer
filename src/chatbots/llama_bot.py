@@ -133,6 +133,7 @@ class LlamaChatBot(BaseChatBot):
 - Always use aggregation (sum/avg/max) and group by (pod, namespace)
 - Use rate() for counters, append == 1 for boolean metrics
 - Use regex for pod names: pod=~"name.*" (pods have hash suffixes)
+- When the user specifies a time range, call convert_time_to_promql_duration to get the correct PromQL duration for query time windows
 
 **Response Format:**
 - Use markdown (bold, lists) — no code block wrappers

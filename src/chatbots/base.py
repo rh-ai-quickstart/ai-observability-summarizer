@@ -670,7 +670,7 @@ Key metrics (DO NOT guess names — always search first):
 - Throughput: `vllm:prompt_tokens_total`, `vllm:generation_tokens_total`, `vllm:num_requests_total`
 - Cache: `vllm:gpu_cache_usage_perc`, `vllm:cpu_cache_usage_perc`
 - GPU: `DCGM_FI_DEV_GPU_TEMP`, `DCGM_FI_DEV_POWER_USAGE`, `DCGM_FI_DEV_GPU_UTIL`
-For decimal hour time ranges (e.g., "2.3 hours"), use `convert_time_to_promql_duration()` to get the correct PromQL format.
+When the user specifies a time range (e.g., "last 24 hours", "2.3 hours", "past 5 hours"), call `convert_time_to_promql_duration` to get the correct PromQL duration for query time windows.
 
 **Tool Selection Rules (ALWAYS follow these):**
 - Traces/spans/latency → `chat_tempo_tool` (search) or `get_trace_details_tool` (by ID)

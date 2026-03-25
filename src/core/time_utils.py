@@ -6,8 +6,44 @@ the observability summarizer for parsing user questions and
 converting time ranges to appropriate formats.
 """
 
+import re
 from typing import Tuple
 from datetime import datetime, timedelta
+
+_DURATION_PATTERN = re.compile(r'(\d+(?:\.\d+)?)\s*([smhd])')
+
+
+def parse_duration_to_timedelta(duration_str: str, default: timedelta | None = None) -> timedelta:
+    """Parse a PromQL-style duration string into a timedelta.
+
+    Supports single or compound durations: '3h', '30m', '2d', '1h30m', '90s'.
+
+    Args:
+        duration_str: Duration string to parse.
+        default: Value returned when parsing fails.  Defaults to 1 hour.
+
+    Returns:
+        Corresponding timedelta, or *default* on failure.
+    """
+    if default is None:
+        default = timedelta(hours=1)
+
+    matches = _DURATION_PATTERN.findall(duration_str)
+    if not matches:
+        return default
+
+    total = timedelta()
+    for value, unit in matches:
+        n = float(value)
+        if unit == 's':
+            total += timedelta(seconds=n)
+        elif unit == 'm':
+            total += timedelta(minutes=n)
+        elif unit == 'h':
+            total += timedelta(hours=n)
+        elif unit == 'd':
+            total += timedelta(days=n)
+    return total or default
 
 
 def extract_time_range_from_question(question: str) -> str:
@@ -60,15 +96,15 @@ def extract_time_range_from_question(question: str) -> str:
 def convert_time_range_to_iso(time_range: str) -> Tuple[str, str]:
     """
     Convert time range string to ISO format start and end times.
-    
+
     Args:
         time_range: Time range string (e.g., "last 24h", "last 7d")
-        
+
     Returns:
         Tuple of (start_time_iso, end_time_iso)
     """
     now = datetime.now()
-    
+
     if time_range == "last 24h":
         start_time = now - timedelta(hours=24)
     elif time_range == "last 7d":
@@ -92,7 +128,7 @@ def convert_time_range_to_iso(time_range: str) -> Tuple[str, str]:
     else:
         # Default to last 24 hours
         start_time = now - timedelta(hours=24)
-    
+
     return start_time.isoformat() + "Z", now.isoformat() + "Z"
 
 
