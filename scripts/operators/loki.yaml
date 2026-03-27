@@ -27,3 +27,4 @@ spec:
   source: redhat-operators
   sourceNamespace: openshift-marketplace
   installPlanApproval: Automatic
+  startingCSV: loki-operator.v6.3.4
