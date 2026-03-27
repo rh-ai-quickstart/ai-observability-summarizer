@@ -112,7 +112,7 @@ LOKI_NAMESPACE ?= openshift-logging
 # LLM URL processing constants
 DEFAULT_LLM_PORT_AND_PATH := :8080/v1
 
-OPERATOR_MANAGER_SCRIPT := scripts/operator-manager.sh
+OPERATOR_MANAGER_SCRIPT := bash scripts/operator-manager.sh
 
 # Helm argument templates
 
@@ -1070,7 +1070,7 @@ upgrade-observability:
 
 .PHONY: check-observability-drift
 check-observability-drift:
-	@scripts/check-observability-drift.sh $(OBSERVABILITY_NAMESPACE) $(LOKI_NAMESPACE)
+	@bash scripts/check-observability-drift.sh $(OBSERVABILITY_NAMESPACE) $(LOKI_NAMESPACE)
 
 
 # ---- Alert Example (Python) ----
