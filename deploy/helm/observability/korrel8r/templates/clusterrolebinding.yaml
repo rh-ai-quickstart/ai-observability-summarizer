@@ -1,0 +1,55 @@
+# ClusterRoleBindings for Korrel8r to access logs from LokiStack
+# Korrel8r needs these permissions to correlate logs with metrics and traces
+#
+# IMPORTANT: This file grants OpenShift-specific log collection permissions.
+# For Loki tenant access, Korrel8r must ALSO be added to the Loki tenant
+# ClusterRoleBinding (e.g., openshift-logging-cluster-ai-observability-loki-tenant-logs)
+# This is done via a Helm post-install hook in ../../aiobs-stack/templates/loki-korrel8r-rbac-job.yaml
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "korrel8r.fullname" . }}-collect-application-logs
+  labels:
+    {{- include "korrel8r.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: collect-application-logs
+subjects:
+- kind: ServiceAccount
+  name: {{ include "korrel8r.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "korrel8r.fullname" . }}-collect-infrastructure-logs
+  labels:
+    {{- include "korrel8r.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: collect-infrastructure-logs
+subjects:
+- kind: ServiceAccount
+  name: {{ include "korrel8r.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "korrel8r.fullname" . }}-collect-audit-logs
+  labels:
+    {{- include "korrel8r.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: collect-audit-logs
+subjects:
+- kind: ServiceAccount
+  name: {{ include "korrel8r.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}

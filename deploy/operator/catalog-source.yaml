@@ -5,7 +5,7 @@ metadata:
   namespace: openshift-marketplace
 spec:
   sourceType: grpc
-  image: quay.io/ahameed/aiobs-operator-catalog:v2.2.3-operator
+  image: quay.io/ecosystem-appeng/aiobs-operator-catalog:2.2.0 # This required update
   displayName: AI Observability Operator
   publisher: RH AI Quickstart
   # Lower priority than redhat-operators (-100) so OLM resolves dependencies from there

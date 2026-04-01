@@ -60,7 +60,6 @@ metadata:
     containerImage: quay.io/ecosystem-appeng/aiobs-operator:v1.2.5-operator
     createdAt: "2024-12-08T00:00:00Z"
     description: Deploy AI-powered observability summarization for OpenShift
-    operatorframework.io/suggested-namespace: ai-observability
     repository: https://github.com/rh-ai-quickstart/openshift-ai-observability-summarizer
     support: Community
   name: aiobs-operator.v1.2.5-operator

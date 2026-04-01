@@ -11,7 +11,45 @@ appVersion: "1.0.0"
 
 dependencies:
   # =============================================================================
+  # INFRASTRUCTURE COMPONENTS (deployed to fixed namespaces)
+  # NOTE: All infrastructure components are always installed (no conditions)
+  # Install infrastructure first to ensure backends are ready before applications
+  # =============================================================================
+
+  # MinIO - S3-compatible object storage (observability-hub)
+  # Must be first - Tempo and Loki depend on it for storage
+  - name: minio-observability-storage
+    version: ">=0.0.0"
+    repository: "file://../minio"
+    alias: minio
+
+  # TempoStack - Distributed tracing backend (observability-hub)
+  - name: tempo-stack
+    version: ">=0.0.0"
+    repository: "file://../observability/tempo"
+    alias: tempo
+
+  # LokiStack - Log aggregation (openshift-logging)
+  # NOTE: rbac.collector.create is disabled to avoid conflicts with OLM-managed ClusterRoles
+  - name: loki-stack
+    version: ">=0.0.0"
+    repository: "file://../observability/loki"
+    alias: loki
+
+  # OpenTelemetry Collector - Trace/metric collection (observability-hub)
+  - name: otel-collector
+    version: ">=0.0.0"
+    repository: "file://../observability/otel-collector"
+    alias: otelCollector
+
+  # Korrel8r - Signal correlation engine (openshift-cluster-observability-operator)
+  - name: korrel8r
+    version: ">=0.0.0"
+    repository: "file://../observability/korrel8r"
+
+  # =============================================================================
   # APPLICATION COMPONENTS (deployed in CR namespace)
+  # Install applications after infrastructure is deployed
   # =============================================================================
 
   # MCP Server - Model Context Protocol server for AI observability
@@ -40,39 +78,3 @@ dependencies:
     version: ">=0.0.0"
     repository: "file://../rag"
     condition: rag.enabled
-
-  # =============================================================================
-  # INFRASTRUCTURE COMPONENTS (deployed to fixed namespaces)
-  # NOTE: All infrastructure components are always installed (no conditions)
-  # Matches behavior of 'make install' - single CR per cluster
-  # =============================================================================
-
-  # TempoStack - Distributed tracing backend (observability-hub)
-  - name: tempo-stack
-    version: ">=0.0.0"
-    repository: "file://../observability/tempo"
-    alias: tempo
-
-  # LokiStack - Log aggregation (openshift-logging)
-  # NOTE: rbac.collector.create is disabled to avoid conflicts with OLM-managed ClusterRoles
-  - name: loki-stack
-    version: ">=0.0.0"
-    repository: "file://../observability/loki"
-    alias: loki
-
-  # OpenTelemetry Collector - Trace/metric collection (observability-hub)
-  - name: otel-collector
-    version: ">=0.0.0"
-    repository: "file://../observability/otel-collector"
-    alias: otelCollector
-
-  # Korrel8r - Signal correlation engine (openshift-cluster-observability-operator)
-  - name: korrel8r
-    version: ">=0.0.0"
-    repository: "file://../observability/korrel8r"
-
-  # MinIO - S3-compatible object storage (observability-hub)
-  - name: minio-observability-storage
-    version: ">=0.0.0"
-    repository: "file://../minio"
-    alias: minio

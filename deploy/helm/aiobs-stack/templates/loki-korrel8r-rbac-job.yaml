@@ -1,0 +1,253 @@
+# Job to add service accounts to Loki tenant ClusterRoleBinding
+# This allows Korrel8r and MCP Server to query logs from LokiStack
+# Service accounts added:
+#   - korrel8r-summarizer (for log correlation)
+#   - mcp-analyzer (for AI observability queries)
+# NOTE: Always runs - these are required application components
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-loki-korrel8r-rbac
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: loki-korrel8r-rbac
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: post-install-hook
+    app.kubernetes.io/part-of: aiobs-operator
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  ttlSecondsAfterFinished: 300
+  backoffLimit: 3
+  template:
+    metadata:
+      name: {{ .Release.Name }}-loki-korrel8r-rbac
+      labels:
+        app.kubernetes.io/name: loki-korrel8r-rbac
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: post-install-hook
+    spec:
+      serviceAccountName: {{ .Release.Name }}-loki-korrel8r-rbac
+      restartPolicy: OnFailure
+      containers:
+      - name: patch-clusterrolebinding
+        image: image-registry.openshift-image-registry.svc:5000/openshift/cli:latest
+        command:
+        - /bin/bash
+        - -c
+        - |
+          set -euo pipefail
+
+          echo "Waiting for Loki tenant ClusterRoleBinding to be created..."
+          LOKI_CRB="openshift-logging-{{ .Release.Name }}-loki-tenant-logs"
+          TIMEOUT=120
+          ELAPSED=0
+          while ! oc get clusterrolebinding $LOKI_CRB 2>/dev/null; do
+            if [ $ELAPSED -ge $TIMEOUT ]; then
+              echo "ERROR: Timeout waiting for ClusterRoleBinding $LOKI_CRB"
+              exit 1
+            fi
+            echo "  Still waiting... ($ELAPSED/$TIMEOUT seconds)"
+            sleep 5
+            ELAPSED=$((ELAPSED + 5))
+          done
+
+          echo "Checking if Korrel8r service account exists..."
+          if ! oc get sa korrel8r-summarizer -n {{ .Values.global.korrel8rNamespace }} 2>/dev/null; then
+            echo "WARNING: Korrel8r service account not found in {{ .Values.global.korrel8rNamespace }}"
+            echo "Waiting up to 60 seconds for Korrel8r to be deployed..."
+            ELAPSED=0
+            while ! oc get sa korrel8r-summarizer -n {{ .Values.global.korrel8rNamespace }} 2>/dev/null; do
+              if [ $ELAPSED -ge 60 ]; then
+                echo "ERROR: Korrel8r service account still not found. Cannot configure RBAC."
+                exit 1
+              fi
+              sleep 5
+              ELAPSED=$((ELAPSED + 5))
+            done
+          fi
+
+          echo "Checking if Korrel8r is already in the ClusterRoleBinding..."
+          if oc get clusterrolebinding $LOKI_CRB -o json | \
+             jq -e '.subjects // [] | any(.kind == "ServiceAccount" and .name == "korrel8r-summarizer" and .namespace == "{{ .Values.global.korrel8rNamespace }}")' > /dev/null 2>&1; then
+            echo "  → Korrel8r already in $LOKI_CRB"
+          else
+            echo "Adding Korrel8r to Loki tenant ClusterRoleBinding..."
+            oc patch clusterrolebinding $LOKI_CRB --type=json -p='[
+              {
+                "op": "add",
+                "path": "/subjects/-",
+                "value": {
+                  "kind": "ServiceAccount",
+                  "name": "korrel8r-summarizer",
+                  "namespace": "{{ .Values.global.korrel8rNamespace }}"
+                }
+              }
+            ]'
+            echo "  ✓ Added Korrel8r to $LOKI_CRB"
+          fi
+
+          echo "Checking if MCP Server is already in the ClusterRoleBinding..."
+          if oc get clusterrolebinding $LOKI_CRB -o json | \
+             jq -e '.subjects // [] | any(.kind == "ServiceAccount" and .name == "mcp-analyzer" and .namespace == "{{ .Release.Namespace }}")' > /dev/null 2>&1; then
+            echo "  → MCP Server already in $LOKI_CRB"
+          else
+            echo "Adding MCP Server to Loki tenant ClusterRoleBinding..."
+            oc patch clusterrolebinding $LOKI_CRB --type=json -p='[
+              {
+                "op": "add",
+                "path": "/subjects/-",
+                "value": {
+                  "kind": "ServiceAccount",
+                  "name": "mcp-analyzer",
+                  "namespace": "{{ .Release.Namespace }}"
+                }
+              }
+            ]'
+            echo "  ✓ Added MCP Server to $LOKI_CRB"
+          fi
+
+          # Also add Korrel8r and MCP Server to logging-collector-logs-writer ClusterRoleBinding
+          COLLECTOR_CRB="logging-collector-logs-writer"
+          echo "Adding service accounts to $COLLECTOR_CRB ClusterRoleBinding..."
+          if ! oc get clusterrolebinding $COLLECTOR_CRB 2>/dev/null; then
+            echo "  WARNING: $COLLECTOR_CRB not found, skipping..."
+          else
+            if oc get clusterrolebinding $COLLECTOR_CRB -o json | \
+               jq -e '.subjects // [] | any(.kind == "ServiceAccount" and .name == "korrel8r-summarizer" and .namespace == "{{ .Values.global.korrel8rNamespace }}")' > /dev/null 2>&1; then
+              echo "  → Korrel8r already in $COLLECTOR_CRB"
+            else
+              oc patch clusterrolebinding $COLLECTOR_CRB --type=json -p='[
+                {
+                  "op": "add",
+                  "path": "/subjects/-",
+                  "value": {
+                    "kind": "ServiceAccount",
+                    "name": "korrel8r-summarizer",
+                    "namespace": "{{ .Values.global.korrel8rNamespace }}"
+                  }
+                }
+              ]'
+              echo "  ✓ Added Korrel8r to $COLLECTOR_CRB"
+            fi
+
+            if oc get clusterrolebinding $COLLECTOR_CRB -o json | \
+               jq -e '.subjects // [] | any(.kind == "ServiceAccount" and .name == "mcp-analyzer" and .namespace == "{{ .Release.Namespace }}")' > /dev/null 2>&1; then
+              echo "  → MCP Server already in $COLLECTOR_CRB"
+            else
+              oc patch clusterrolebinding $COLLECTOR_CRB --type=json -p='[
+                {
+                  "op": "add",
+                  "path": "/subjects/-",
+                  "value": {
+                    "kind": "ServiceAccount",
+                    "name": "mcp-analyzer",
+                    "namespace": "{{ .Release.Namespace }}"
+                  }
+                }
+              ]'
+              echo "  ✓ Added MCP Server to $COLLECTOR_CRB"
+            fi
+          fi
+
+          echo ""
+          echo "✅ Successfully configured RBAC for Loki access"
+          echo "Korrel8r and MCP Server can now query logs from LokiStack"
+---
+# ServiceAccount for the RBAC setup job
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Release.Name }}-loki-korrel8r-rbac
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: loki-korrel8r-rbac
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: post-install-hook
+    app.kubernetes.io/part-of: aiobs-operator
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+---
+# ClusterRole for the RBAC setup job
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Release.Name }}-loki-korrel8r-rbac
+  labels:
+    app.kubernetes.io/name: loki-korrel8r-rbac
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: post-install-hook
+    app.kubernetes.io/part-of: aiobs-operator
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - serviceaccounts
+  verbs:
+  - get
+  - list
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - clusterrolebindings
+  verbs:
+  - get
+  - list
+  - patch
+  - bind
+# Permissions required to bind ClusterRoles (must have same permissions being granted)
+- apiGroups:
+  - logging.openshift.io
+  - observability.openshift.io
+  resources:
+  - logs
+  resourceNames:
+  - application
+  - infrastructure
+  - audit
+  verbs:
+  - collect
+- apiGroups:
+  - loki.grafana.com
+  resources:
+  - application
+  - infrastructure
+  - audit
+  verbs:
+  - create
+  - get
+---
+# ClusterRoleBinding for the RBAC setup job
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Release.Name }}-loki-korrel8r-rbac
+  labels:
+    app.kubernetes.io/name: loki-korrel8r-rbac
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: post-install-hook
+    app.kubernetes.io/part-of: aiobs-operator
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ .Release.Name }}-loki-korrel8r-rbac
+subjects:
+- kind: ServiceAccount
+  name: {{ .Release.Name }}-loki-korrel8r-rbac
+  namespace: {{ .Release.Namespace }}

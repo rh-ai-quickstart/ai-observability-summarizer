@@ -1,15 +1,6 @@
 dependencies:
-- name: mcp-server
-  repository: file://../mcp-server
-  version: 0.1.0
-- name: openshift-console-plugin
-  repository: file://../openshift-console-plugin
-  version: 0.1.0
-- name: alerts
-  repository: file://../alerting
-  version: 0.1.0
-- name: rag
-  repository: file://../rag
+- name: minio-observability-storage
+  repository: file://../minio
   version: 0.1.0
 - name: tempo-stack
   repository: file://../observability/tempo
@@ -23,8 +14,17 @@ dependencies:
 - name: korrel8r
   repository: file://../observability/korrel8r
   version: 0.1.0
-- name: minio-observability-storage
-  repository: file://../minio
+- name: mcp-server
+  repository: file://../mcp-server
   version: 0.1.0
-digest: sha256:fa28f9e89a94de5f3510edaa7bf720fb8e7cb5f0d9bb9d45401b4da0f5ac3945
-generated: "2026-02-11T13:18:35.082217-05:00"
+- name: openshift-console-plugin
+  repository: file://../openshift-console-plugin
+  version: 0.1.0
+- name: alerts
+  repository: file://../alerting
+  version: 0.1.0
+- name: rag
+  repository: file://../rag
+  version: 0.1.0
+digest: sha256:ef982f1365d8f1419c736936198146b7b399a252873418c2e6b305a10356907f
+generated: "2026-03-31T12:50:29.849096-04:00"

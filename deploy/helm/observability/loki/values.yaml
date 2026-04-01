@@ -176,8 +176,14 @@ clusterLogging:
     inputs:
       application:
         # Collect from all namespaces (no filtering)
+        # Set to false and configure namespaceFilter to collect only specific namespaces
         allNamespaces: true
         customName: application-all-namespaces
+        # Optional: Filter to specific namespaces (uncomment to enable)
+        # namespaceFilter:
+        #   - ai-observability
+        #   - observability-hub
+        #   - openshift-logging
       infrastructure:
         # Filter infrastructure logs to reduce volume
         filtered: true
@@ -203,10 +209,10 @@ clusterLogging:
     collector:
       resources:
         limits:
-          memory: 1Gi
+          memory: 2Gi  # Increased from 1Gi to handle all-namespace log collection
           cpu: 500m
         requests:
-          memory: 512Mi
+          memory: 1Gi  # Increased from 512Mi for better stability
           cpu: 200m
       audit:
         maxLogsPerSecond: 1000

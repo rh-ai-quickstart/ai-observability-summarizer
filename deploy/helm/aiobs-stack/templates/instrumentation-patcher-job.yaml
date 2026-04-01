@@ -1,5 +1,11 @@
 {{- if .Values.instrumentation.enabled }}
 # Job to annotate the namespace for Python auto-instrumentation
+# CRITICAL: Must run as pre-install (not post-install) to avoid race condition
+# Execution order:
+#   1. pre-install weight -10: Instrumentation resource created
+#   2. pre-install weight -5:  THIS JOB - annotates namespace
+#   3. main install weight 0:  Application pods created (WITH instrumentation)
+# If this ran post-install, pods would start without instrumentation and require restart
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -11,8 +17,8 @@ metadata:
     app.kubernetes.io/component: patcher
     app.kubernetes.io/part-of: aiobs-operator
   annotations:
-    "helm.sh/hook": post-install,post-upgrade
-    "helm.sh/hook-weight": "10"
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-5"
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 spec:
   template:
@@ -58,6 +64,10 @@ metadata:
   labels:
     app.kubernetes.io/name: instrumentation-patcher
     app.kubernetes.io/instance: {{ .Release.Name }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 ---
 # ClusterRole to annotate namespaces
 apiVersion: rbac.authorization.k8s.io/v1
@@ -67,6 +77,10 @@ metadata:
   labels:
     app.kubernetes.io/name: instrumentation-patcher
     app.kubernetes.io/instance: {{ .Release.Name }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 rules:
 - apiGroups: [""]
   resources: ["namespaces"]
@@ -80,6 +94,10 @@ metadata:
   labels:
     app.kubernetes.io/name: instrumentation-patcher
     app.kubernetes.io/instance: {{ .Release.Name }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole

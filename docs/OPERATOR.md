@@ -34,11 +34,15 @@ Option B - Via OpenShift Console:
 - Navigate to **Operators → OperatorHub**
 - Search for **"AI Observability"**
 - Click **Install**
-- Select/create **ai-observability** namespace (created automatically)
+- **Choose installation namespace:**
+  - **Recommended:** `openshift-operators` (all namespaces, default for Red Hat operators)
+  - **Alternative:** `openshift-operators-redhat` (privileged namespace for Loki operator compatibility)
+  - All dependency operators (Loki, Tempo, etc.) will install in the same namespace
 - Click **Install**
 
 **3. Create AIObservabilitySummarizer CR**
 - Go to **Installed Operators → AI Observability Summarizer**
+- In the namespace dropdown, select/create **ai-observability** namespace
 - Click **Create AIObservabilitySummarizer**
 - **Enable RAG Stack** (default: enabled)
   - If enabled, enter your **HuggingFace Token** (required)
@@ -86,6 +90,8 @@ The following operators are automatically installed when you install the AI Obse
 - **Tempo Operator** (v0.16.x - pinned, Manual approval)
 - **Cluster Logging Operator** (v6.3.x-6.4.x)
 - **Loki Operator** (v6.3.x-6.4.x)
+
+> **Note:** All dependency operators install in the same namespace as the AI Observability Operator. For best results, install in `openshift-operators` or `openshift-operators-redhat` to ensure operators have sufficient cluster privileges.
 
 ---
 
@@ -196,10 +202,11 @@ When you create an `AIObservabilitySummarizer` CR:
 
 ### Check Operator Status
 ```bash
-# Verify operator is running
-oc get csv -n ai-observability | grep aiobs-operator
+# Verify operator is running (check the namespace where you installed it)
+# Common namespaces: openshift-operators, openshift-operators-redhat
+oc get csv -A | grep aiobs-operator
 
-# Check CR status
+# Check CR status (CR is in ai-observability namespace)
 oc get aiobservabilitysummarizer -n ai-observability
 
 # View deployment details
@@ -281,20 +288,20 @@ oc get pods -n openshift-user-workload-monitoring | grep alertmanager
 
 ### Via CLI
 ```bash
-# Delete CR
+# Delete CR (in ai-observability namespace)
 oc delete aiobservabilitysummarizer cluster-ai-observability -n ai-observability
 
-# Delete operator subscription and CSV
-oc delete subscription aiobs-operator -n ai-observability
-oc delete csv -l operators.coreos.com/aiobs-operator.ai-observability -n ai-observability
+# Delete operator subscription and CSV (in openshift-operators-redhat namespace)
+oc delete subscription aiobs-operator -n openshift-operators-redhat
+oc delete csv -l operators.coreos.com/aiobs-operator.openshift-operators-redhat -n openshift-operators-redhat
 
 # Uninstall dependency operators (optional - if no longer needed)
 # List all installed operators to find dependency operators
-oc get csv -n ai-observability
+oc get csv -n openshift-operators-redhat
 
 # Delete each dependency operator (example for Tempo)
-oc delete subscription tempo-operator -n ai-observability
-oc delete csv tempo-operator.v0.16.0 -n ai-observability
+oc delete subscription tempo-operator -n openshift-operators-redhat
+oc delete csv tempo-operator.v0.16.0 -n openshift-operators-redhat
 
 # Repeat for: cluster-observability-operator, opentelemetry-operator,
 # cluster-logging, loki-operator
@@ -311,19 +318,22 @@ oc delete catalogsource aiobs-operator-catalog -n openshift-marketplace
 
 **Operator pod not running**
 ```bash
+# Find which namespace the operator is in
+OPERATOR_NS=$(oc get csv -A | grep aiobs-operator | awk '{print $1}')
+
 # Check operator logs
-oc logs -n ai-observability -l control-plane=controller-manager -f
+oc logs -n $OPERATOR_NS -l control-plane=controller-manager -f
 
 # Check operator resources
-oc get deployment aiobs-operator-controller-manager -n ai-observability
+oc get deployment aiobs-operator-controller-manager -n $OPERATOR_NS
 ```
 
 **CR stuck in pending**
 ```bash
-# Check CR status
+# Check CR status (CR is in ai-observability)
 oc get aiobservabilitysummarizer cluster-ai-observability -n ai-observability -o yaml
 
-# Check Helm release status
+# Check Helm release status (Helm releases are in CR namespace)
 oc get secret -n ai-observability | grep helm
 ```
 
@@ -350,8 +360,11 @@ oc get inferenceservice -n ai-observability
 
 **TempoStack not ready**
 ```bash
+# Find operator namespace
+OPERATOR_NS=$(oc get csv -A | grep tempo-operator | awk '{print $1}')
+
 # Check Tempo operator logs
-oc logs -n ai-observability deployment/tempo-operator-controller
+oc logs -n $OPERATOR_NS deployment/tempo-operator-controller
 
 # Check TempoStack status
 oc get tempostack tempostack -n observability-hub -o yaml
@@ -359,8 +372,11 @@ oc get tempostack tempostack -n observability-hub -o yaml
 
 **LokiStack not ready**
 ```bash
+# Find operator namespace
+OPERATOR_NS=$(oc get csv -A | grep loki-operator | awk '{print $1}')
+
 # Check Loki operator logs
-oc logs -n ai-observability deployment/loki-operator-controller-manager
+oc logs -n $OPERATOR_NS deployment/loki-operator-controller-manager
 
 # Check LokiStack status
 oc get lokistack logging-loki -n openshift-logging -o yaml
@@ -368,7 +384,7 @@ oc get lokistack logging-loki -n openshift-logging -o yaml
 
 **User Workload Monitoring not enabled**
 ```bash
-# Check UWM enabler job logs
+# Check UWM enabler job logs (hook jobs run in CR namespace)
 oc logs -n ai-observability job/cluster-ai-observability-uwm-enabler
 
 # Manually verify configuration

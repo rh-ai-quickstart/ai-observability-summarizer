@@ -135,33 +135,9 @@ Without this project, teams typically:
 
 ## Deploy
 
-### Option 1: Install via Operator (Recommended)
+### Option 1: Install via Helm (Recommended)
 
-One-click installation via OperatorHub with automatic dependency management and cluster configuration.
-
-**Quick Install:**
-1. **Install CatalogSource:** `oc apply -f deploy/operator/catalog-source.yaml` (or Import YAML via Console UI)
-2. **Install Operator:** Search "AI Observability" in OperatorHub → Install to `ai-observability` namespace (auto-created)
-3. **Create CR:** Configure HuggingFace token and model → Create
-
-**What Gets Installed:**
-- Application: MCP Server, Console Plugin, RAG Stack (LlamaStack, LLM Service, PGVector)
-- Infrastructure: TempoStack, LokiStack, OTEL Collector, MinIO, Korrel8r (auto-deployed to multiple namespaces)
-- Dependency Operators: Cluster Observability, OpenTelemetry, Tempo, Logging, Loki (auto-installed by OLM)
-- Cluster Config: User Workload Monitoring + Alertmanager (auto-configured)
-
-**📚 Documentation:**
-- **User Guide:** [docs/OPERATOR.md](docs/OPERATOR.md) - Installation, configuration, troubleshooting
-- **Technical Reference:** [deploy/operator/README.md](deploy/operator/README.md) - Architecture, development, building images
-
-**Development:**
-```bash
-make operator-config  # Show current configuration
-make operator-deploy  # Build and push all operator images
-```
-
-### Option 2: Install via Helm
-### Quick Start - OpenShift Deployment
+#### Quick Start - OpenShift Deployment
 
 **Default (production-style): OpenShift Console Plugin UI**
 
@@ -193,7 +169,7 @@ make install NAMESPACE=your-namespace DEV_MODE=true
 - Traces menu: `make enable-tracing-ui`
 - Logs menu: `make enable-logging-ui`
 
-### Quick Start - Local Development
+#### Quick Start - Local Development
 
 Use the local dev helper to port-forward dependencies and run local components.
 
@@ -202,7 +178,7 @@ uv sync
 ./scripts/local-dev.sh -n your-namespace
 ```
 
-### Usage
+#### Usage
 
 #### Enable AI Assistance
 
@@ -258,11 +234,11 @@ You can also navigate to suggested metrics and choose from the questions there -
 
 ![Question page](docs/images/question.png)
 
-#### Reports
+##### Reports
 
 Export reports when needed (HTML/PDF/Markdown).
 
-### Configuration
+#### Configuration
 
 #### Model as a Service (MaaS) Setup
 
@@ -381,7 +357,44 @@ If enabled in your cluster, use:
 - **Observe → Traces** to view traces
 - **Observe → Logs** to query logs
 
-### Delete
+---
+
+### Option 2: Install via Operator (Optional)
+
+For production environments requiring OLM-managed lifecycle and automatic dependency management, an operator-based installation is available.
+
+**When to use the Operator:**
+- Production deployments requiring centralized operator management
+- Environments where OLM manages all infrastructure components
+- Need for automatic dependency operator installation (Loki, Tempo, OTEL, etc.)
+- Cluster-wide singleton deployment pattern required
+
+**Quick Install:**
+1. **Install CatalogSource:** `oc apply -f deploy/operator/catalog-source.yaml`
+2. **Install Operator:** OperatorHub → Search "AI Observability" → Install
+3. **Create CR:** Configure and create AIObservabilitySummarizer custom resource
+
+**What the Operator Provides:**
+- **Automatic dependency management**: OLM installs Cluster Observability, OpenTelemetry, Tempo, Logging, and Loki operators
+- **Multi-namespace deployment**: Components automatically deployed to appropriate namespaces (ai-observability, observability-hub, openshift-logging, etc.)
+- **Cluster auto-configuration**: User Workload Monitoring, Alertmanager, and Console Plugin registration
+- **Lifecycle management**: OLM handles upgrades, dependencies, and version compatibility
+
+**📚 Full Documentation:**
+- **User Guide:** [docs/OPERATOR.md](docs/OPERATOR.md) - Complete installation, configuration, and troubleshooting
+- **Technical Reference:** [deploy/operator/README.md](deploy/operator/README.md) - Architecture, development, building operator images
+
+**Development:**
+```bash
+make operator-config  # Show current operator configuration
+make operator-deploy  # Build and push all operator images
+```
+
+> **Note:** The operator and Helm installation methods are mutually exclusive. Choose one approach for your cluster.
+
+---
+
+## Delete
 
 Uninstall the deployment from the namespace:
 

@@ -22,8 +22,8 @@ global:
 mcpServer:
   enabled: true  # Always deployed
   image:
-    repository: quay.io/ahameed/aiobs-mcp-server
-    tag: 2.2.0-operator
+    repository: quay.io/ecosystem-appeng/aiobs-mcp-server
+    tag: latest
   # NOTE: DEV_MODE env var is automatically set from global.devMode by mcp-server chart
 
 # OpenShift Console Plugin - Native console integration
@@ -33,8 +33,8 @@ consolePlugin:
     name: "aiobs-console-plugin"
     description: "AI Observability Plugin"
     image:
-      repository: quay.io/ahameed/aiobs-console-plugin
-      tag: 2.2.0-operator
+      repository: quay.io/ecosystem-appeng/aiobs-console-plugin
+      tag: latest
     imagePullPolicy: Always
     replicas: 2
     port: 9443
