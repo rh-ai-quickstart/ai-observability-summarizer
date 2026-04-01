@@ -2,6 +2,13 @@
 global:
   namespace: observability-hub
 
+# Auto-instrumentation configuration
+instrumentation:
+  python:
+    # Version of the OpenTelemetry Python auto-instrumentation image
+    # https://github.com/open-telemetry/opentelemetry-operator/releases
+    image: "ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-python:0.60b0"
+
 # Common configuration for all collectors
 common:
   nameOverride: ""

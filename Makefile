@@ -922,7 +922,8 @@ setup-tracing: namespace
 		echo "  → Instrumentation already exists in namespace $(NAMESPACE), skipping..."; \
 	else \
 		echo "  → Applying instrumentation configuration to namespace $(NAMESPACE)"; \
-		cd deploy/helm && oc apply -f $(INSTRUMENTATION_PATH) -n $(NAMESPACE); \
+		export INSTRUMENTATION_PYTHON_IMAGE=$$(yq eval '.instrumentation.python.image' deploy/helm/observability/otel-collector/values.yaml); \
+		envsubst < deploy/helm/$(INSTRUMENTATION_PATH) | oc apply -f - -n $(NAMESPACE); \
 	fi
 	@oc annotate namespace $(NAMESPACE) instrumentation.opentelemetry.io/inject-python="true" --overwrite
 
@@ -1085,7 +1086,7 @@ push-alert-example:
 	$(BUILD_TOOL) push $(ALERT_EXAMPLE_IMAGE)
 
 .PHONY: install-alert-example
-install-alert-example: namespace
+install-alert-example: namespace setup-tracing
 	@echo "→ Installing/Upgrading alert-example helm chart (deploys alert-example and trace-example)"
 	@helm upgrade --install alert-example $(ALERT_EXAMPLE_CHART_PATH) -n $(NAMESPACE) \
 		--create-namespace \
