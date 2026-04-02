@@ -62,3 +62,14 @@ Create the namespace
 {{- .Values.global.namespace }}
 {{- end }}
 
+{{/*
+Create the service account name
+*/}}
+{{- define "korrel8r.serviceAccountName" -}}
+{{- if .Values.serviceAccount.create }}
+{{- default .Values.korrel8r.name .Values.serviceAccount.name }}
+{{- else }}
+{{- default "default" .Values.serviceAccount.name }}
+{{- end }}
+{{- end }}
+

@@ -4,5 +4,3 @@ metadata:
   name: trusted-ca-bundle-alerts
   annotations:
     service.beta.openshift.io/inject-cabundle: "true"
-data:
-  service-ca.crt: "" 

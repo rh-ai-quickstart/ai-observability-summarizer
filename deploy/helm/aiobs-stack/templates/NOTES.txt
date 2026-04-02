@@ -1,0 +1,37 @@
+AI Observability Summarizer installed successfully!
+
+Release: {{ .Release.Name }}
+Namespace: {{ .Release.Namespace }}
+
+{{- if .Values.global.devMode }}
+
+⚠️  DEVELOPMENT MODE ENABLED ⚠️
+This installation is running in development mode with browser-cached API keys.
+DO NOT use this configuration in production environments.
+
+{{- end }}
+
+Components deployed:
+- MCP Server: {{ .Values.mcpServer.enabled }}
+- Console Plugin: {{ .Values.consolePlugin.enabled }}
+- RAG Stack: {{ .Values.rag.enabled }}
+- Alerting: {{ .Values.alerting.enabled }}
+
+Infrastructure components (always installed):
+- TempoStack
+- LokiStack
+- OpenTelemetry Collector
+- Korrel8r
+- MinIO
+
+To view the AIObservabilitySummarizer resource:
+  oc get aiobservabilitysummarizer -n {{ .Release.Namespace }}
+
+To check component status:
+  oc get pods -n {{ .Release.Namespace }}
+  oc get pods -n observability-hub
+
+⚠️  Tempo Operator - Manual Approval Required
+The Tempo operator is configured with Manual installPlanApproval to prevent
+automatic upgrades to buggy versions. Future Tempo operator upgrades will
+require manual approval via the OpenShift Console or CLI.

@@ -75,9 +75,10 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 
 {{/*
 Create the name of the namespace to use
+Priority: .Values.global.namespace > .Release.Namespace
 */}}
 {{- define "loki-stack.namespace" -}}
-{{- default .Values.global.namespace .Release.Namespace }}
+{{- default .Release.Namespace .Values.global.namespace }}
 {{- end }}
 
 {{/*
@@ -89,4 +90,35 @@ across different Helm releases and namespaces.
 {{- $fullname := include "loki-stack.fullname" . -}}
 {{- $namespace := include "loki-stack.namespace" . -}}
 {{- printf "%s-%s" $namespace $fullname | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{/*
+Detect storage class to use for LokiStack.
+Tries multiple strategies in order:
+1. Use explicitly provided value (if not empty or "auto")
+2. Detect cluster default storage class using lookup
+3. Fall back to "gp3" (AWS default)
+
+Usage: {{ include "loki-stack.storageClass" . }}
+*/}}
+{{- define "loki-stack.storageClass" -}}
+{{- $providedSC := .Values.lokiStack.storageClassName -}}
+{{- if and $providedSC (ne $providedSC "auto") (ne $providedSC "") -}}
+  {{- $providedSC -}}
+{{- else -}}
+  {{- $defaultSC := "" -}}
+  {{- $storageClasses := lookup "storage.k8s.io/v1" "StorageClass" "" "" -}}
+  {{- if $storageClasses -}}
+    {{- range $storageClasses.items -}}
+      {{- if and .metadata.annotations (or (eq (index .metadata.annotations "storageclass.kubernetes.io/is-default-class") "true") (eq (index .metadata.annotations "storageclass.beta.kubernetes.io/is-default-class") "true")) -}}
+        {{- $defaultSC = .metadata.name -}}
+      {{- end -}}
+    {{- end -}}
+  {{- end -}}
+  {{- if $defaultSC -}}
+    {{- $defaultSC -}}
+  {{- else -}}
+    gp3
+  {{- end -}}
+{{- end -}}
 {{- end }}

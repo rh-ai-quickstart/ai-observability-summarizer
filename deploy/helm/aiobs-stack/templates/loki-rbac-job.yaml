@@ -1,0 +1,161 @@
+{{/*
+Always create RBAC via Job for operator installations.
+This avoids Helm ownership validation issues when transitioning from make install.
+*/}}
+{{/*
+Post-install Job to create Loki collector RBAC using kubectl apply.
+This avoids Helm ownership conflicts when transitioning from make install to operator.
+kubectl apply can adopt existing resources regardless of who created them.
+*/}}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Release.Name }}-loki-rbac-creator
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: loki-rbac-creator
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Release.Name }}-loki-rbac-creator
+  labels:
+    app.kubernetes.io/name: loki-rbac-creator
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+rules:
+- apiGroups: [""]
+  resources: ["serviceaccounts"]
+  verbs: ["create", "get", "patch", "update"]
+- apiGroups: ["rbac.authorization.k8s.io"]
+  resources: ["clusterrolebindings"]
+  verbs: ["create", "get", "patch", "update", "bind"]
+# Permissions required to bind ClusterRoles (must have same permissions being granted)
+- apiGroups: ["logging.openshift.io", "observability.openshift.io"]
+  resources: ["logs"]
+  resourceNames: ["application", "infrastructure", "audit"]
+  verbs: ["collect"]
+- apiGroups: ["loki.grafana.com"]
+  resources: ["application", "infrastructure", "audit"]
+  verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Release.Name }}-loki-rbac-creator
+  labels:
+    app.kubernetes.io/name: loki-rbac-creator
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ .Release.Name }}-loki-rbac-creator
+subjects:
+- kind: ServiceAccount
+  name: {{ .Release.Name }}-loki-rbac-creator
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-loki-rbac-creator
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: loki-rbac-creator
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 5
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: loki-rbac-creator
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ .Release.Name }}-loki-rbac-creator
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: rbac-creator
+        image: registry.redhat.io/openshift4/ose-cli:latest
+        command:
+        - /bin/bash
+        - -c
+        - |
+          set -e
+          echo "📝 Creating Loki collector RBAC bindings via kubectl apply..."
+
+          # NOTE: ClusterRoles already exist - managed by cluster-logging operator
+          # We only need to create ServiceAccount and ClusterRoleBindings
+
+          # Create ServiceAccount
+          cat <<EOF | oc apply -f -
+          apiVersion: v1
+          kind: ServiceAccount
+          metadata:
+            name: collector
+            namespace: openshift-logging
+            labels:
+              app.kubernetes.io/name: loki
+              app.kubernetes.io/instance: {{ .Release.Name }}
+              app.kubernetes.io/managed-by: Helm
+            annotations:
+              meta.helm.sh/release-name: {{ .Release.Name }}
+              meta.helm.sh/release-namespace: {{ .Release.Namespace }}
+          EOF
+          echo "  ✅ ServiceAccount created/updated"
+
+          # Create ClusterRoleBindings (bind to existing ClusterRoles from cluster-logging operator)
+          for role in collect-application-logs collect-infrastructure-logs collect-audit-logs logging-collector-logs-writer; do
+            cat <<EOF | oc apply -f -
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: ClusterRoleBinding
+          metadata:
+            name: $role
+            labels:
+              app.kubernetes.io/name: loki
+              app.kubernetes.io/instance: {{ .Release.Name }}
+              app.kubernetes.io/managed-by: Helm
+            annotations:
+              meta.helm.sh/release-name: {{ .Release.Name }}
+              meta.helm.sh/release-namespace: {{ .Release.Namespace }}
+          roleRef:
+            apiGroup: rbac.authorization.k8s.io
+            kind: ClusterRole
+            name: $role
+          subjects:
+          - kind: ServiceAccount
+            name: collector
+            namespace: openshift-logging
+          EOF
+            echo "  ✅ ClusterRoleBinding $role created/updated"
+          done
+
+          echo "✅ All Loki collector RBAC resources created successfully"
+        securityContext:
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          seccompProfile:
+            type: RuntimeDefault

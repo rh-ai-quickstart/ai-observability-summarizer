@@ -5,7 +5,7 @@ deployment:
 
 image:
   repository: quay.io/ecosystem-appeng/aiobs-mcp-server
-  tag: 2.2.3
+  tag: 4.0.2
   pullPolicy: IfNotPresent
 
 service:
@@ -95,8 +95,8 @@ rbac:
 resources:
   requests:
     cpu: "1"
-    memory: "1Gi"
+    memory: "2Gi"
   limits:
     cpu: "1"
-    memory: "1Gi"
+    memory: "2Gi"
 

@@ -1,0 +1,17 @@
+{{- $namespace := include "minio.namespace" . }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "minio.fullname" . }}-data
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "minio.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- with .Values.minio.storage.storageClassName }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.minio.storage.size }}

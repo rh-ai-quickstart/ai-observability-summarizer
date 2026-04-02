@@ -15,6 +15,9 @@ spec:
   managementState: Managed
   serviceAccount:
     name: {{ .Values.clusterLogging.logForwarder.serviceAccount.name }}
+  collector:
+    resources:
+      {{- toYaml .Values.clusterLogging.logForwarder.collector.resources | nindent 6 }}
   {{- if or .Values.clusterLogging.logForwarder.inputs.application.allNamespaces .Values.clusterLogging.logForwarder.inputs.infrastructure.filtered }}
   inputs:
   {{- if .Values.clusterLogging.logForwarder.inputs.application.allNamespaces }}

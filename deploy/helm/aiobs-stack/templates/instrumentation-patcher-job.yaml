@@ -1,0 +1,110 @@
+{{- if .Values.instrumentation.enabled }}
+# Job to annotate the namespace for Python auto-instrumentation
+# CRITICAL: Must run as pre-install (not post-install) to avoid race condition
+# Execution order:
+#   1. pre-install weight -10: Instrumentation resource created
+#   2. pre-install weight -5:  THIS JOB - annotates namespace
+#   3. main install weight 0:  Application pods created (WITH instrumentation)
+# If this ran post-install, pods would start without instrumentation and require restart
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-instrumentation-patcher
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: instrumentation-patcher
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: patcher
+    app.kubernetes.io/part-of: aiobs-operator
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: instrumentation-patcher
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ .Release.Name }}-instrumentation-patcher
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: patcher
+        image: registry.redhat.io/openshift4/ose-cli:latest
+        command:
+        - /bin/bash
+        - -c
+        - |
+          set -e
+          echo "Annotating namespace {{ .Release.Namespace }} for Python auto-instrumentation..."
+          oc annotate namespace {{ .Release.Namespace }} \
+            instrumentation.opentelemetry.io/inject-python="true" \
+            --overwrite
+          echo "✅ Namespace annotated successfully!"
+        securityContext:
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          seccompProfile:
+            type: RuntimeDefault
+---
+# ServiceAccount for the patcher job
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Release.Name }}-instrumentation-patcher
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: instrumentation-patcher
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+---
+# ClusterRole to annotate namespaces
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Release.Name }}-instrumentation-patcher
+  labels:
+    app.kubernetes.io/name: instrumentation-patcher
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+rules:
+- apiGroups: [""]
+  resources: ["namespaces"]
+  verbs: ["get", "patch"]
+---
+# ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Release.Name }}-instrumentation-patcher
+  labels:
+    app.kubernetes.io/name: instrumentation-patcher
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ .Release.Name }}-instrumentation-patcher
+subjects:
+- kind: ServiceAccount
+  name: {{ .Release.Name }}-instrumentation-patcher
+  namespace: {{ .Release.Namespace }}
+{{- end }}
+

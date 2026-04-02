@@ -1,0 +1,44 @@
+{{- if .Values.instrumentation.enabled }}
+# Instrumentation CR for auto-instrumenting Python applications
+# This enables automatic tracing for pods with the annotation:
+#   instrumentation.opentelemetry.io/inject-python: "true"
+#
+# To enable auto-instrumentation for a namespace, add annotation:
+#   oc annotate namespace <namespace> instrumentation.opentelemetry.io/inject-python="true"
+#
+# NOTE: Created early via pre-install hook to ensure webhook is ready before app pods start
+apiVersion: opentelemetry.io/v1alpha1
+kind: Instrumentation
+metadata:
+  name: {{ .Values.instrumentation.name | default "python-instrumentation" }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: instrumentation
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: auto-instrumentation
+    app.kubernetes.io/part-of: aiobs-operator
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  exporter:
+    # OTEL Collector endpoint for trace ingestion
+    endpoint: {{ .Values.instrumentation.exporter.endpoint | default "http://otel-collector-collector.observability-hub.svc.cluster.local:4318" }}
+  propagators:
+    {{- if .Values.instrumentation.propagators }}
+    {{- toYaml .Values.instrumentation.propagators | nindent 4 }}
+    {{- else }}
+    - tracecontext
+    - baggage
+    - b3
+    {{- end }}
+  python:
+    image: {{ .Values.instrumentation.python.image | default "ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-python:latest" }}
+    {{- if .Values.instrumentation.python.env }}
+    env:
+      {{- toYaml .Values.instrumentation.python.env | nindent 6 }}
+    {{- end }}
+{{- end }}
+

@@ -2,6 +2,13 @@
 global:
   namespace: observability-hub
 
+# Auto-instrumentation configuration
+instrumentation:
+  python:
+    # Version of the OpenTelemetry Python auto-instrumentation image
+    # https://github.com/open-telemetry/opentelemetry-operator/releases
+    image: "ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-python:0.60b0"
+
 # Common configuration for all collectors
 common:
   nameOverride: ""
@@ -147,6 +154,24 @@ collector:
             - memory_limiter
           exporters:
             - debug
+
+# Auto-instrumentation configuration
+# Creates an Instrumentation CR for automatic tracing of Python applications
+instrumentation:
+  enabled: true
+  name: python-instrumentation
+  exporter:
+    # OTEL Collector endpoint for trace ingestion
+    endpoint: http://otel-collector-collector.observability-hub.svc.cluster.local:4318
+  propagators:
+    - tracecontext
+    - baggage
+    - b3
+  python:
+    image: "ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-python:latest"
+    env:
+      - name: OTEL_PYTHON_PLATFORM
+        value: "glibc"
 
 # Tempo configuration for exporters
 tempo:

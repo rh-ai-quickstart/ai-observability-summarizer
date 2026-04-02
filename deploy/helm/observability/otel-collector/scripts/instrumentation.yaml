@@ -12,7 +12,7 @@ spec:
     - baggage
     - b3
   python:
-    image: "ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-python:latest"
+    image: "${INSTRUMENTATION_PYTHON_IMAGE}"
     # The operator automatically injects environment variables,
     # but you can add more here if needed.
     env:

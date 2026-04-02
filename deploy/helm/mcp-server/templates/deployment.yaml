@@ -36,7 +36,11 @@ spec:
             - name: PYTHON_LOG_LEVEL
               value: "{{ .Values.env.PYTHON_LOG_LEVEL }}"
             - name: DEV_MODE
+              {{- if and .Values.global (hasKey .Values.global "devMode") }}
+              value: "{{ ternary "true" "false" .Values.global.devMode }}"
+              {{- else }}
               value: "{{ .Values.env.DEV_MODE }}"
+              {{- end }}
             {{- if .Values.tls.enabled }}
             - name: MCP_SSL_KEYFILE
               value: "/run/secrets/tls/tls.key"

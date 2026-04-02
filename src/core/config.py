@@ -78,8 +78,8 @@ def detect_environment() -> str:
         return "local"  # Default to local for safety
 
 
-def is_rag_available() -> bool:
-    """Check if RAG (local model) infrastructure is available."""
+def _check_rag_available() -> bool:
+    """Check if RAG (local model) infrastructure is available via HTTP probe."""
     # Auto-detect based on LLAMA_STACK_URL availability
     llama_stack_url = os.getenv("LLAMA_STACK_URL", "http://localhost:8321/v1/openai/v1")
     try:
@@ -92,6 +92,25 @@ def is_rag_available() -> bool:
     except Exception:
         # If we can't reach llama stack or don't have requests, assume RAG unavailable
         return False
+
+
+# Mutable cache for RAG availability — caches True permanently, retries on False.
+_rag_available_cache: bool = None
+
+
+def is_rag_available() -> bool:
+    """Check if RAG infrastructure is available, with sticky-True caching.
+
+    Once LlamaStack is detected as available the result is cached permanently.
+    If it was previously unavailable, re-probe on every call so that startup
+    ordering issues resolve themselves without a process restart.
+    """
+    global _rag_available_cache
+    if _rag_available_cache is True:
+        return True
+    result = _check_rag_available()
+    _rag_available_cache = result
+    return result
 
 def get_prometheus_url() -> str:
     """Get Prometheus URL based on environment."""
@@ -148,6 +167,7 @@ LLM_TIMEOUT_SECONDS = float(os.getenv("LLM_TIMEOUT_SECONDS", "180.0"))  # LLM AP
 MODEL_CONFIG = load_model_config()
 THANOS_TOKEN = load_thanos_token()
 VERIFY_SSL = get_ca_verify_setting()
+# Seed the cache at startup (logged below); consumers must call is_rag_available()
 RAG_AVAILABLE = is_rag_available()
 
 # Import new dynamic config manager functions

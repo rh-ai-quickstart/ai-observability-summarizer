@@ -3,7 +3,7 @@
 
 # NAMESPACE validation for deployment targets
 ifeq ($(NAMESPACE),)
-ifeq (,$(filter install-local depend install-ingestion-pipeline list-models% generate-model-config help build build-alerting build-mcp-server build-console-plugin build-react-ui push push-alerting push-mcp-server push-console-plugin push-react-ui clean config test test-python test-react check-observability-drift install-operators uninstall-operators check-operators verify-operators-ready cleanup-loki-clusterroles install-cluster-observability-operator install-opentelemetry-operator install-tempo-operator install-logging-operator install-loki-operator uninstall-cluster-observability-operator uninstall-opentelemetry-operator uninstall-tempo-operator uninstall-logging-operator uninstall-loki-operator enable-tracing-ui disable-tracing-ui enable-logging-ui disable-logging-ui install-loki uninstall-loki upgrade-observability install-korrel8r uninstall-korrel8r,$(MAKECMDGOALS)))
+ifeq (,$(filter install-local depend install-ingestion-pipeline list-models% generate-model-config help build build-alerting build-mcp-server build-console-plugin build-react-ui push push-alerting push-mcp-server push-console-plugin push-react-ui clean config test test-python test-react check-observability-drift install-operators uninstall-operators check-operators verify-operators-ready verify-gpu-metrics cleanup-loki-clusterroles install-cluster-observability-operator install-opentelemetry-operator install-tempo-operator install-logging-operator install-loki-operator uninstall-cluster-observability-operator uninstall-opentelemetry-operator uninstall-tempo-operator uninstall-logging-operator uninstall-loki-operator enable-tracing-ui disable-tracing-ui enable-logging-ui disable-logging-ui install-loki uninstall-loki upgrade-observability install-korrel8r uninstall-korrel8r install-minio uninstall-minio operator-build operator-push operator-bundle-build operator-bundle-push operator-catalog-build operator-catalog-push operator-build-all operator-push-all operator-deploy operator-config,$(MAKECMDGOALS)))
 $(error NAMESPACE is not set)
 endif
 endif
@@ -14,7 +14,7 @@ MAKEFLAGS += --no-print-directory
 REGISTRY ?= quay.io
 ORG ?= ecosystem-appeng
 IMAGE_PREFIX ?= aiobs
-VERSION ?= 2.2.3
+VERSION ?= 4.0.2
 PLATFORM ?= linux/amd64
 DEV_MODE ?= false
 
@@ -59,6 +59,8 @@ MINIO_HOST ?= minio
 MINIO_PORT ?= 9000
 # MinIO bucket configuration (comma-separated list)
 MINIO_BUCKETS ?= tempo,loki
+# After install, verify DCGM ServiceMonitor and optionally restart GPU operator (GPU clusters only)
+VERIFY_GPU_METRICS ?= false
 
 # HF_TOKEN is only required if LLM_URL is not set
 HF_TOKEN ?= $(shell \
@@ -84,6 +86,11 @@ REACT_UI_CHART_PATH ?= react-ui-app
 KORREL8R_RELEASE_NAME ?= korrel8r-summarizer
 KORREL8R_CHART_PATH ?= observability/korrel8r
 KORREL8R_NAMESPACE ?= openshift-cluster-observability-operator
+
+# Component toggles
+RAG_ENABLED ?= true
+ALERTING_ENABLED ?= false
+INFRASTRUCTURE_ENABLED ?= true
 
 TOLERATIONS_TEMPLATE=[{"key":"$(1)","effect":"NoSchedule","operator":"Exists"}]
 GEN_MODEL_CONFIG_PREFIX = /tmp/gen_model_config
@@ -210,7 +217,7 @@ help:
 	@echo "  uninstall-console-plugin - Uninstall OpenShift Console Plugin"
 	@echo "  install-react-ui   - Install React UI standalone application"
 	@echo "  uninstall-react-ui - Uninstall React UI standalone application"
-	@echo "  uninstall          - Uninstall from OpenShift"
+	@echo "  uninstall          - what from OpenShift"
 	@echo "  status             - Check deployment status"
 	@echo "  list-models        - List available models"
 	@echo "  generate-model-config - Generate JSON config for specified LLM using template"
@@ -236,6 +243,7 @@ help:
 	@echo "  uninstall-loki-operator - Uninstall Loki Operator only"
 	@echo "  check-operators - Check status of all mandatory operators"
 	@echo "  verify-operators-ready - Verify all operators are installed and ready (used internally)"
+	@echo "  verify-gpu-metrics - Verify nvidia-dcgm-exporter ServiceMonitor; restart GPU operator if missing (no NAMESPACE required)"
 	@echo ""
 	@echo "Individual Components:"
 	@echo "  install-observability - Install TempoStack, LokiStack and OTEL Collector only"
@@ -290,14 +298,15 @@ help:
 	@echo "  LLM                - Model id (eg. llama-3-1-8b-instruct)"
 	@echo "  LLM_URL            - Use existing model URL (auto-adds :8080/v1 if no port specified)"
 	@echo "  SAFETY             - Safety model id"
-	@echo "  ENABLE_RAG         - Set to 'false' to skip RAG backend services (default: true)"
-	@echo "  ALERTS             - Set to TRUE to install alerting with main deployment"
+	@echo "  RAG_ENABLED         - Set to 'false' to skip RAG backend services (default: true)"
+	@echo "  ALERTING_ENABLED    - Set to 'true' to install alerting (default: false)"
 	@echo "  SLACK_WEBHOOK_URL  - Slack Webhook URL for alerting (will prompt if not provided)"
 	@echo "  MINIO_USER         - MinIO username for observability storage (default: admin)"
 	@echo "  MINIO_PASSWORD     - MinIO password for observability storage (default: minio123)"
 	@echo "  MINIO_BUCKETS      - Comma-separated list of MinIO buckets to create (default: tempo,loki)"
 	@echo "  UNINSTALL_OBSERVABILITY - Set to 'true' to uninstall observability stack during uninstall"
 	@echo "  UNINSTALL_OPERATORS     - Set to 'true' to uninstall operators during uninstall"
+	@echo "  VERIFY_GPU_METRICS      - Set to 'true' to run verify-gpu-metrics at end of make install (default: false)"
 	@echo "  GPU_PREFIX_NVIDIA  - Extra NVIDIA metric prefixes (comma-separated, additive to defaults)"
 	@echo "  GPU_PREFIX_INTEL   - Extra Intel metric prefixes (comma-separated, additive to defaults)"
 	@echo "  GPU_PREFIX_AMD     - Extra AMD metric prefixes (comma-separated, additive to defaults)"
@@ -399,11 +408,15 @@ namespace:
 .PHONY: depend
 depend:
 	@echo "Updating Helm dependencies (for $(RAG_CHART))..."
+	@rm -rf deploy/helm/$(RAG_CHART)/charts
 	@cd deploy/helm && helm dependency update $(RAG_CHART) || exit 1
 
 	@echo "Updating Helm dependencies (for $(MINIO_CHART))..."
+	@rm -rf deploy/helm/$(MINIO_CHART_PATH)/charts
 	@cd deploy/helm && helm dependency update $(MINIO_CHART_PATH) || exit 1
 
+
+# Install observability stack using individual charts
 
 .PHONY: install-mcp-server
 install-mcp-server: namespace
@@ -535,13 +548,17 @@ install: namespace enable-user-workload-monitoring depend validate-llm install-o
 		echo "→ DEV_MODE=false: Installing OpenShift Console Plugin only"; \
 		$(MAKE) install-console-plugin NAMESPACE=$(NAMESPACE); \
 	fi
-	@if [ "$(ENABLE_RAG)" != "false" ]; then \
-		echo "Installing RAG backend services (set ENABLE_RAG=false to skip)..."; \
+	@if [ "$(RAG_ENABLED)" != "false" ]; then \
+		echo "Installing RAG backend services (set RAG_ENABLED=false to skip)..."; \
 		$(MAKE) install-rag NAMESPACE=$(NAMESPACE); \
 	fi
-	@if [ "$(ALERTS)" = "TRUE" ]; then \
-		echo "ALERTS flag is set to TRUE. Installing alerting..."; \
+	@if [ "$(ALERTING_ENABLED)" = "true" ]; then \
+		echo "ALERTING_ENABLED is set to true. Installing alerting..."; \
 		$(MAKE) install-alerts NAMESPACE=$(NAMESPACE); \
+	fi
+	@if [ "$(VERIFY_GPU_METRICS)" = "true" ]; then \
+		echo "→ VERIFY_GPU_METRICS=true: checking DCGM ServiceMonitor..."; \
+		$(MAKE) verify-gpu-metrics; \
 	fi
 	@echo "Installation complete."
 
@@ -922,7 +939,8 @@ setup-tracing: namespace
 		echo "  → Instrumentation already exists in namespace $(NAMESPACE), skipping..."; \
 	else \
 		echo "  → Applying instrumentation configuration to namespace $(NAMESPACE)"; \
-		cd deploy/helm && oc apply -f $(INSTRUMENTATION_PATH) -n $(NAMESPACE); \
+		export INSTRUMENTATION_PYTHON_IMAGE=$$(yq eval '.instrumentation.python.image' deploy/helm/observability/otel-collector/values.yaml); \
+		envsubst < deploy/helm/$(INSTRUMENTATION_PATH) | oc apply -f - -n $(NAMESPACE); \
 	fi
 	@oc annotate namespace $(NAMESPACE) instrumentation.opentelemetry.io/inject-python="true" --overwrite
 
@@ -1085,7 +1103,7 @@ push-alert-example:
 	$(BUILD_TOOL) push $(ALERT_EXAMPLE_IMAGE)
 
 .PHONY: install-alert-example
-install-alert-example: namespace
+install-alert-example: namespace setup-tracing
 	@echo "→ Installing/Upgrading alert-example helm chart (deploys alert-example and trace-example)"
 	@helm upgrade --install alert-example $(ALERT_EXAMPLE_CHART_PATH) -n $(NAMESPACE) \
 		--create-namespace \
@@ -1161,6 +1179,8 @@ install-minio:
 		echo "  → $(MINIO_CHART) already installed, skipping..."; \
 	else \
 		echo "Installing $(MINIO_CHART) helm chart"; \
+		echo "→ Cleaning stale subchart artifacts..."; \
+		rm -rf deploy/helm/$(MINIO_CHART_PATH)/charts; \
 		cd deploy/helm && helm -n $(MINIO_NAMESPACE) upgrade --install $(MINIO_CHART) $(MINIO_CHART_PATH) \
 		--create-namespace \
 		--atomic --wait --timeout 10m \
@@ -1191,6 +1211,21 @@ uninstall-korrel8r:
 	@echo "→ Cleaning up leftover resources (if any)"
 	- @oc delete configmap korrel8r-patch -n $(KORREL8R_NAMESPACE) --ignore-not-found
 	- @oc delete route korrel8r -n $(KORREL8R_NAMESPACE) --ignore-not-found
+	@echo "→ Cleaning up Korrel8r ClusterRoleBindings..."
+	@KORREL8R_CRBS="$(KORREL8R_RELEASE_NAME)-collect-application-logs $(KORREL8R_RELEASE_NAME)-collect-infrastructure-logs $(KORREL8R_RELEASE_NAME)-collect-audit-logs"; \
+	for crb in $$KORREL8R_CRBS; do \
+		if oc get clusterrolebinding $$crb >/dev/null 2>&1; then \
+			if oc delete clusterrolebinding $$crb 2>/dev/null; then \
+				echo "  → Deleted ClusterRoleBinding $$crb"; \
+			else \
+				echo "  → Cannot delete ClusterRoleBinding $$crb (ROSA restriction). Annotating for Helm adoption on next install..."; \
+				oc annotate clusterrolebinding $$crb meta.helm.sh/release-name=$(KORREL8R_RELEASE_NAME) meta.helm.sh/release-namespace=$(KORREL8R_NAMESPACE) --overwrite 2>/dev/null ||:; \
+				oc label clusterrolebinding $$crb app.kubernetes.io/managed-by=Helm --overwrite 2>/dev/null ||:; \
+			fi; \
+		fi; \
+	done
+	@echo "→ Cleaning up stuck Helm release secrets (if any)..."
+	- @oc delete secrets -n $(KORREL8R_NAMESPACE) -l owner=helm,name=$(KORREL8R_RELEASE_NAME) --ignore-not-found
 	@echo "✅ Korrel8r helm-managed resources removed"
 
 .PHONY: uninstall-minio
@@ -1201,11 +1236,41 @@ uninstall-minio:
 	@echo "Removing minio PVCs from $(MINIO_NAMESPACE)"
 	- @oc delete pvc -n $(MINIO_NAMESPACE) -l app.kubernetes.io/name=$(MINIO_CHART) --timeout=30s ||:
 
-# Cleanup Loki ClusterRoles and ClusterRoleBindings (reusable target)
+# Verify DCGM metrics scrape config exists (NVIDIA GPU Operator). Safe on non-GPU clusters (no-op if namespace missing).
+.PHONY: verify-gpu-metrics
+verify-gpu-metrics:
+	@if ! oc get namespace nvidia-gpu-operator >/dev/null 2>&1; then \
+		echo "→ Skipping GPU metrics verify: namespace nvidia-gpu-operator not found."; \
+	elif ! oc get servicemonitor nvidia-dcgm-exporter -n nvidia-gpu-operator >/dev/null 2>&1; then \
+		echo "WARNING: DCGM ServiceMonitor missing. Restarting GPU operator to trigger reconciliation..."; \
+		oc rollout restart deployment/gpu-operator -n nvidia-gpu-operator; \
+		oc rollout status deployment/gpu-operator -n nvidia-gpu-operator --timeout=120s; \
+		echo "→ Waiting for ClusterPolicy controller to reconcile ServiceMonitor (up to 4 minutes)..."; \
+		attempt=0; \
+		while [ $$attempt -lt 16 ]; do \
+			if oc get servicemonitor nvidia-dcgm-exporter -n nvidia-gpu-operator >/dev/null 2>&1; then \
+				echo "DCGM ServiceMonitor restored."; \
+				break; \
+			fi; \
+			attempt=$$((attempt + 1)); \
+			echo "  ⏳ Waiting for ServiceMonitor (attempt $$attempt/16)..."; \
+			sleep 15; \
+		done; \
+		if ! oc get servicemonitor nvidia-dcgm-exporter -n nvidia-gpu-operator >/dev/null 2>&1; then \
+			echo "ERROR: DCGM ServiceMonitor still missing after GPU operator restart. Manual intervention required."; \
+			exit 1; \
+		fi; \
+	else \
+		echo "DCGM ServiceMonitor exists. GPU metrics OK."; \
+	fi
+
+# Cleanup Loki ClusterRoles, ClusterRoleBindings, and ServiceAccount (reusable target)
+# This ensures fresh RBAC creation on every install, avoiding stale/orphaned resources
 .PHONY: cleanup-loki-clusterroles
 cleanup-loki-clusterroles:
 	- @oc delete clusterrole logging-collector-logs-writer collect-application-logs collect-audit-logs collect-infrastructure-logs --ignore-not-found 2>/dev/null ||:
 	- @oc delete clusterrolebinding logging-collector-logs-writer collect-application-logs collect-audit-logs collect-infrastructure-logs --ignore-not-found 2>/dev/null ||:
+	- @oc delete serviceaccount collector -n $(LOKI_NAMESPACE) --ignore-not-found 2>/dev/null ||:
 
 .PHONY: install-loki
 install-loki:
@@ -1285,6 +1350,60 @@ uninstall-loki:
 	@echo "  → ClusterRole cleanup complete"
 
 	@$(MAKE) disable-logging-ui
+
+# -- Operator Image Build targets (delegates to deploy/operator/Makefile) --
+
+OPERATOR_DIR := deploy/operator
+OPERATOR_IMAGE_TAG_BASE := $(REGISTRY)/$(ORG)/aiobs-operator
+
+# Common args to pass to operator Makefile
+OPERATOR_MAKE_ARGS := VERSION=$(VERSION) IMAGE_TAG_BASE=$(OPERATOR_IMAGE_TAG_BASE) PLATFORMS=$(PLATFORM)
+
+.PHONY: operator-build operator-push operator-bundle-build operator-bundle-push operator-catalog-build operator-catalog-push operator-build-all operator-push-all operator-deploy operator-config
+
+operator-config:
+	@echo "🔧 Operator Build Configuration:"
+	@echo "  Registry: $(REGISTRY)"
+	@echo "  Org: $(ORG)"
+	@echo "  Version: $(VERSION)"
+	@echo "  Platform: $(PLATFORM)"
+	@echo "  Image Tag Base: $(OPERATOR_IMAGE_TAG_BASE)"
+	@echo "  Operator Image: $(OPERATOR_IMAGE_TAG_BASE):v$(VERSION)"
+	@echo "  Bundle Image: $(OPERATOR_IMAGE_TAG_BASE)-bundle:v$(VERSION)"
+	@echo "  Catalog Image: $(OPERATOR_IMAGE_TAG_BASE)-catalog:v$(VERSION)"
+
+operator-build:
+	@echo "🔨 Building operator image..."
+	$(MAKE) -C $(OPERATOR_DIR) docker-build $(OPERATOR_MAKE_ARGS)
+
+operator-push:
+	@echo "📤 Pushing operator image..."
+	$(MAKE) -C $(OPERATOR_DIR) docker-push $(OPERATOR_MAKE_ARGS)
+
+operator-bundle-build:
+	@echo "📦 Building bundle image..."
+	$(MAKE) -C $(OPERATOR_DIR) bundle-build $(OPERATOR_MAKE_ARGS)
+
+operator-bundle-push:
+	@echo "📤 Pushing bundle image..."
+	$(MAKE) -C $(OPERATOR_DIR) bundle-push $(OPERATOR_MAKE_ARGS)
+
+operator-catalog-build:
+	@echo "📚 Building catalog image..."
+	$(MAKE) -C $(OPERATOR_DIR) catalog-build $(OPERATOR_MAKE_ARGS)
+
+operator-catalog-push:
+	@echo "📤 Pushing catalog image..."
+	$(MAKE) -C $(OPERATOR_DIR) catalog-push $(OPERATOR_MAKE_ARGS)
+
+operator-build-all: operator-build operator-bundle-build operator-catalog-build
+	@echo "✅ All operator images built"
+
+operator-push-all: operator-push operator-bundle-push operator-catalog-push
+	@echo "✅ All operator images pushed"
+
+operator-deploy: operator-build-all operator-push-all
+	@echo "✅ All operator images built and pushed"
 
 # -- Operator Installation targets --
 

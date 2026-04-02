@@ -1,0 +1,54 @@
+# OLM Operator Dependencies
+# These operators will be automatically installed by OLM when this operator is installed.
+# Version constraints ensure only tested, compatible versions are deployed.
+
+dependencies:
+  # Cluster Observability Operator - Korrel8r and UIPlugin
+  # Provides: UIPlugin, Korrel8r CRDs
+  # Matches: subscription channel=stable with automatic approval
+  # Available: v1.3.1 in stable channel
+  # Range: Allow 1.x updates, block 2.x breaking changes
+  - type: olm.package
+    value:
+      packageName: cluster-observability-operator
+      version: ">=1.0.0 <2.0.0"
+
+  # Red Hat build of OpenTelemetry Operator - Trace collection
+  # Provides: OpenTelemetryCollector, Instrumentation CRDs
+  # Matches: subscription channel=stable with automatic approval
+  # Available: v0.140.0-2 in stable channel
+  # Range: Allow 0.x updates, block 1.x breaking changes
+  - type: olm.package
+    value:
+      packageName: opentelemetry-product
+      version: ">=0.108.0 <1.0.0"
+
+  # Tempo Operator - Distributed tracing backend
+  # Provides: TempoStack CRD
+  # Tested with: v0.19.0-3 in production (crash bug from v0.18.x is fixed in v0.19.x)
+  # NOTE: installPlanApproval is set to Manual via post-install hook (tempo-subscription-patcher.yaml)
+  #       This prevents automatic upgrades. Manual approval required for upgrades.
+  # Range: >=0.19.0 allows v0.19.x series, blocks v0.20.0+ (untested breaking changes)
+  - type: olm.package
+    value:
+      packageName: tempo-product
+      version: ">=0.19.0 <0.20.0"
+
+  # Red Hat OpenShift Logging Operator - Log forwarding
+  # Provides: ClusterLogForwarder CRD
+  # Range: Allow 6.3.x and 6.4.x series, block 6.5.x
+  - type: olm.package
+    value:
+      packageName: cluster-logging
+      version: ">=6.3.0 <6.5.0"
+
+  # Loki Operator - Log storage backend
+  # Provides: LokiStack CRD
+  # Range: Allow 6.3.x and 6.4.x series (must match cluster-logging version)
+  - type: olm.package
+    value:
+      packageName: loki-operator
+      version: ">=6.3.0 <6.5.0"
+
+  # NOTE: User Workload Monitoring is automatically enabled by the operator.
+  # A pre-install hook job configures cluster-monitoring-config (idempotent).

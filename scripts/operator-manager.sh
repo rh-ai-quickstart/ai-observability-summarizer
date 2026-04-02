@@ -2,6 +2,10 @@
 
 # OpenShift Operator Management Script
 # Handles installation/uninstallation and checking of OpenShift operators
+#
+# Requirements:
+# - python3 on PATH when installing into openshift-operators-redhat while an
+#   OperatorGroup already exists (YAML is filtered to avoid duplicate OGs).
 
 # Source common utilities
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -35,6 +39,10 @@ readonly YAML_LOKI="loki.yaml"
 readonly OPERATOR_ACTION_CHECK="check"
 readonly OPERATOR_ACTION_INSTALL="install"
 readonly OPERATOR_ACTION_UNINSTALL="uninstall"
+
+# Shared Red Hat OperatorHub namespace: multiple unrelated Subscriptions coexist here.
+# Never run `operatorgroup --all` in this namespace — it breaks every operator installed there.
+readonly SHARED_REDHAT_OPERATORS_NS="openshift-operators-redhat"
 
 readonly OBSERVABILITY_CRDS="monitoring.rhobs perses.dev observability.openshift.io"
 readonly OTEL_CRDS="opentelemetry.io"
@@ -331,11 +339,33 @@ uninstall_operator() {
     # Example CSVs: cluster-observability-operator.v1.2.2, opentelemetry-operator.v0.135.0-1, tempo-operator.v0.18.0-1
     local csv_name=$(oc get subscription "$subscription_name" -n "$namespace" -o jsonpath='{.status.installedCSV}' 2>/dev/null)
 
-    echo -e "${BLUE}  📋 Step 1: Deleting Subscription and OperatorGroup...${NC}"
+    echo -e "${BLUE}  📋 Step 1: Deleting Subscription (and OperatorGroup only in dedicated namespaces)...${NC}"
     echo -e "${BLUE}     → This prevents OLM from recreating the operator${NC}"
-    # Delete subscription FIRST to prevent OLM from recreating the operator
-    # We use individual resource deletion instead of 'oc delete -f' to preserve the namespace
-    oc delete subscription,operatorgroup --all -n "$namespace" --ignore-not-found=true
+    if [ -z "$subscription_name" ]; then
+        echo -e "${RED}❌ Could not parse Subscription metadata.name from $yaml_path${NC}"
+        exit 1
+    fi
+    # Delete only this Subscription — never `subscription --all` in shared catalog namespaces.
+    oc delete subscription "$subscription_name" -n "$namespace" --ignore-not-found=true
+    if [ "$namespace" = "$SHARED_REDHAT_OPERATORS_NS" ]; then
+        echo -e "${YELLOW}     ⚠️  Namespace $namespace is shared by many Red Hat operators.${NC}"
+        echo -e "${BLUE}     → Skipping OperatorGroup bulk delete (would remove other teams' operators).${NC}"
+        # If multiple OperatorGroups exist (e.g. from a previous install that created a duplicate),
+        # OLM deadlocks. Clean up duplicates, keeping only the oldest one.
+        local og_count=$(oc get operatorgroup -n "$namespace" --no-headers 2>/dev/null | wc -l | tr -d ' ')
+        if [ "$og_count" -gt 1 ]; then
+            echo -e "${YELLOW}     ⚠️  Found $og_count OperatorGroups in $namespace (expected 1). Cleaning up duplicates...${NC}"
+            local oldest_og=$(oc get operatorgroup -n "$namespace" --sort-by=.metadata.creationTimestamp -o name 2>/dev/null | head -1)
+            for og in $(oc get operatorgroup -n "$namespace" -o name 2>/dev/null); do
+                if [ "$og" != "$oldest_og" ]; then
+                    echo -e "${BLUE}     → Deleting duplicate: $og (keeping $oldest_og)${NC}"
+                    oc delete "$og" -n "$namespace" --ignore-not-found=true 2>/dev/null ||:
+                fi
+            done
+        fi
+    else
+        oc delete operatorgroup --all -n "$namespace" --ignore-not-found=true
+    fi
 
     echo -e "${BLUE}  📋 Step 2: Deleting ClusterServiceVersion (CSV)...${NC}"
     if [ -n "$csv_name" ] && [ "$csv_name" != "null" ]; then
@@ -548,7 +578,29 @@ install_operator() {
     # which is only supported by 'create'. We add --save-config to enable future kubectl apply operations.
     # Suppress "AlreadyExists" errors for namespaces since uninstall preserves them by design.
     export NAMESPACE="$namespace"
-    envsubst < "$yaml_path" | oc create --save-config -f - 2>&1 | grep -v "namespaces.*already exists" || true
+
+    # In shared namespaces (e.g. openshift-operators-redhat), an OperatorGroup likely already exists
+    # from other operators. Creating a second one causes OLM to deadlock (no InstallPlans created).
+    # Strip the entire OperatorGroup document from the YAML if one already exists.
+    if [ "$namespace" = "$SHARED_REDHAT_OPERATORS_NS" ]; then
+        local existing_og=$(oc get operatorgroup -n "$namespace" -o name 2>/dev/null | head -1)
+        if [ -n "$existing_og" ]; then
+            echo -e "${BLUE}     → OperatorGroup already exists in shared namespace $namespace ($existing_og). Skipping creation.${NC}"
+            # python3: splits multi-doc YAML and drops OperatorGroup (see file header).
+            envsubst < "$yaml_path" | python3 -c "
+import sys
+docs = sys.stdin.read().split('---')
+for doc in docs:
+    if 'kind: OperatorGroup' not in doc and doc.strip():
+        print('---')
+        print(doc, end='')
+" | oc create --save-config -f - 2>&1 | grep -v "namespaces.*already exists" || true
+        else
+            envsubst < "$yaml_path" | oc create --save-config -f - 2>&1 | grep -v "namespaces.*already exists" || true
+        fi
+    else
+        envsubst < "$yaml_path" | oc create --save-config -f - 2>&1 | grep -v "namespaces.*already exists" || true
+    fi
 
     echo -e "${GREEN}  ✅ $operator_name installation initiated${NC}"
 

@@ -1,0 +1,55 @@
+{{/*
+Create required namespaces for infrastructure components.
+
+Infrastructure components are ALWAYS deployed (no conditions):
+- observability-hub: Tempo, OTEL Collector, MinIO
+- openshift-cluster-observability-operator: Korrel8r
+- openshift-logging: LokiStack and log forwarding
+
+NOTE: Namespaces have "helm.sh/resource-policy: keep" to prevent Helm from deleting them
+during uninstall. This avoids uninstall failures due to permission issues or stuck deletions.
+*/}}
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.global.observabilityNamespace }}
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/part-of: aiobs-operator
+    app.kubernetes.io/created-by: aiobs-stack
+  annotations:
+    openshift.io/description: "AI Observability infrastructure components (Tempo, OTEL, MinIO)"
+    helm.sh/resource-policy: keep
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.global.korrel8rNamespace }}
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/part-of: aiobs-operator
+    app.kubernetes.io/created-by: aiobs-stack
+  annotations:
+    openshift.io/description: "Cluster Observability Operator namespace for Korrel8r"
+    helm.sh/resource-policy: keep
+
+{{- if not (lookup "v1" "Namespace" "" .Values.global.lokiNamespace) }}
+---
+# Only create openshift-logging namespace if it doesn't exist
+# Normally this is managed by OpenShift Logging operator
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.global.lokiNamespace }}
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/part-of: aiobs-operator
+    app.kubernetes.io/created-by: aiobs-stack
+  annotations:
+    openshift.io/description: "OpenShift Logging namespace for LokiStack"
+    helm.sh/resource-policy: keep
+{{- end }}
+

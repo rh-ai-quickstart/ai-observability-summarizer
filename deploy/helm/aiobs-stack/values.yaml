@@ -1,0 +1,111 @@
+# AI Observability Summarizer - Full Stack Values
+# Single umbrella chart combining all application and infrastructure components
+
+# =============================================================================
+# GLOBAL SETTINGS
+# =============================================================================
+
+# Global settings shared across all subcharts
+global:
+  observabilityNamespace: observability-hub
+  lokiNamespace: openshift-logging
+  korrel8rNamespace: openshift-cluster-observability-operator
+  # Development mode - enables browser-cached API keys (sessionStorage)
+  # Default: false (production mode)
+  devMode: false
+
+# =============================================================================
+# APPLICATION COMPONENTS (deployed in CR namespace)
+# =============================================================================
+
+# MCP Server - Model Context Protocol server for AI observability
+mcpServer:
+  enabled: true  # Always deployed
+  image:
+    repository: quay.io/ecosystem-appeng/aiobs-mcp-server
+    tag: latest
+  # NOTE: DEV_MODE env var is automatically set from global.devMode by mcp-server chart
+
+# OpenShift Console Plugin - Native console integration
+consolePlugin:
+  enabled: true  # Always deployed
+  plugin:
+    name: "aiobs-console-plugin"
+    description: "AI Observability Plugin"
+    image:
+      repository: quay.io/ecosystem-appeng/aiobs-console-plugin
+      tag: latest
+    imagePullPolicy: Always
+    replicas: 2
+    port: 9443
+
+# Alerting - Alert processing CronJob
+alerting:
+  enabled: false  # Optional - toggle in OLM form
+
+# RAG - LLM Stack (llama-stack, llm-service, pgvector)
+rag:
+  enabled: true  # Always enabled
+  
+  # Model selection - Enable ONE model via OLM UI toggle
+  global:
+    models:
+      # Default: Llama 3.1 8B (RECOMMENDED, 16GB GPU)
+      llama-3-1-8b-instruct:
+        enabled: true
+  
+  # LLM Service configuration
+  llm-service:
+    device: gpu  # Options: gpu, hpu, gpu-amd, cpu
+    secret:
+      hf_token: ""  # Required - set via OLM UI
+
+# =============================================================================
+# INFRASTRUCTURE COMPONENTS (deployed to fixed namespaces)
+# NOTE: All infrastructure components are always installed (no toggles)
+# Matches 'make install' behavior - single CR per cluster
+# =============================================================================
+
+# TempoStack - Distributed tracing backend (observability-hub)
+tempo: {}
+
+# LokiStack - Log aggregation (openshift-logging)
+# NOTE: Makefile sets rbac.collector.create dynamically; Operator uses loki-rbac-job.yaml
+loki:
+  lokiStack:
+    storageClassName: "auto"  # Auto-detect cluster default storage class (or specify: gp3, gp2, standard, managed-premium, thin, etc.)
+  global:
+    namespace: openshift-logging  # Deploy LokiStack to openshift-logging (not ai-observability)
+  rbac:
+    collector:
+      create: false  # Disabled - RBAC created by loki-rbac-job.yaml to avoid Helm ownership conflicts
+
+# OpenTelemetry Collector - Trace/metric collection (observability-hub)
+otelCollector: {}
+
+# Korrel8r - Signal correlation engine (openshift-cluster-observability-operator)
+korrel8r: {}
+
+# MinIO - S3-compatible object storage (observability-hub)
+minio: {}
+
+# =============================================================================
+# AUTO-INSTRUMENTATION (for automatic tracing of Python applications)
+# =============================================================================
+
+# Instrumentation CR - creates auto-instrumentation for Python apps
+# To enable for a namespace: oc annotate namespace <ns> instrumentation.opentelemetry.io/inject-python="true"
+instrumentation:
+  enabled: true
+  name: python-instrumentation
+  exporter:
+    endpoint: http://otel-collector-collector.observability-hub.svc.cluster.local:4318
+  propagators:
+    - tracecontext
+    - baggage
+    - b3
+  python:
+    image: "ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-python:latest"
+    env:
+      - name: OTEL_PYTHON_PLATFORM
+        value: "glibc"

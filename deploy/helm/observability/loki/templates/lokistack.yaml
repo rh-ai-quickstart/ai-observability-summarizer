@@ -18,7 +18,7 @@ spec:
     secret:
       name: minio-loki-credentials
       type: s3
-  storageClassName: {{ .Values.lokiStack.storageClassName | quote }}
+  storageClassName: {{ include "loki-stack.storageClass" . }}
   size: {{ .Values.lokiStack.size }}
   tenants:
     mode: {{ .Values.lokiStack.tenants.mode }}
@@ -30,6 +30,7 @@ spec:
       ingestion:
         ingestionRate: {{ .Values.lokiStack.limits.global.ingestionRateLimit }}
         ingestionBurstSize: {{ .Values.lokiStack.limits.global.ingestionBurstLimit }}
+        maxLineSize: {{ .Values.lokiStack.limits.global.ingestionMaxLineSize }}
     tenants:
       {{- range $tenant, $config := .Values.lokiStack.limits.tenants }}
       {{ $tenant }}:

@@ -17,7 +17,7 @@ global:
 lokiStack:
   name: logging-loki
   size: 1x.demo # Options: 1x.demo, 1x.extra-small, 1x.small, 1x.medium
-  storageClassName: "gp3"
+  storageClassName: "auto" # auto = detect cluster default, or specify: gp3, gp2, standard, managed-premium, thin, etc.
 
   # Tenant configuration - OpenShift Logging mode for proper RBAC
   tenants:
@@ -30,6 +30,7 @@ lokiStack:
         days: 3 # Reduced from 7 to 3 days default
       ingestionRateLimit: 10485760 # 10MB in bytes per second
       ingestionBurstLimit: 20971520 # 20MB in bytes
+      ingestionMaxLineSize: 2097152 # 2MB max line size (default 256KB was causing OOMKilled)
       queriesMaxEntriesLimitPerQuery: 50000
 
     # Per-tenant retention policies (reduced to save storage)
@@ -152,10 +153,9 @@ clusterLogging:
   logForwarder:
     enabled: true
 
-    # Service account for log collection
+    # Service account for log collection (created by rbac.collector.create setting above)
     serviceAccount:
       name: collector
-      create: false # Use existing service account from OpenShift Logging
 
     # Target LokiStack configuration
     target:
@@ -176,8 +176,14 @@ clusterLogging:
     inputs:
       application:
         # Collect from all namespaces (no filtering)
+        # Set to false and configure namespaceFilter to collect only specific namespaces
         allNamespaces: true
         customName: application-all-namespaces
+        # Optional: Filter to specific namespaces (uncomment to enable)
+        # namespaceFilter:
+        #   - ai-observability
+        #   - observability-hub
+        #   - openshift-logging
       infrastructure:
         # Filter infrastructure logs to reduce volume
         filtered: true
@@ -198,6 +204,16 @@ clusterLogging:
     # Rate limiting per tenant
     rateLimiting:
       enabled: true
+
+    # Collector pod resource limits
+    collector:
+      resources:
+        limits:
+          memory: 2Gi  # Increased from 1Gi to handle all-namespace log collection
+          cpu: 500m
+        requests:
+          memory: 1Gi  # Increased from 512Mi for better stability
+          cpu: 200m
       audit:
         maxLogsPerSecond: 1000
       application:

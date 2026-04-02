@@ -4,7 +4,5 @@ metadata:
   name: {{ .Values.trustedCA.configMapName | default "aiobs-mcp-server-trusted-ca-bundle" }}
   annotations:
     service.beta.openshift.io/inject-cabundle: "true"
-data:
-  service-ca.crt: ""
 
 
