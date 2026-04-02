@@ -86,8 +86,8 @@ Option B - Via OpenShift Console:
 The following operators are automatically installed when you install the AI Observability Operator:
 
 - **Cluster Observability Operator** (v1.0.0+)
-- **OpenTelemetry Operator** (v0.108.0+)
-- **Tempo Operator** (v0.16.x - pinned, Manual approval)
+- **OpenTelemetry Operator** (v0.140.0+)
+- **Tempo Operator** (v0.20.x)
 - **Cluster Logging Operator** (v6.3.x-6.4.x)
 - **Loki Operator** (v6.3.x-6.4.x)
 
@@ -191,7 +191,7 @@ When you create an `AIObservabilitySummarizer` CR:
 1. **OLM installs dependency operators** (if not already present)
 2. **Pre-install hooks** enable User Workload Monitoring + Alertmanager
 3. **Operator renders Helm charts** to deploy all components
-4. **Post-install hooks** configure Tempo Manual approval and Console Plugin
+4. **Post-install hooks** configure Console Plugin
 5. **Reconciliation loop** watches CR for changes and re-deploys as needed
 
 **Total deployment time:** ~5-10 minutes (depending on model download)
@@ -415,9 +415,6 @@ Install the complete AI observability stack with a single CR via OperatorHub
 ### 🔄 **Automatic Dependency Management**
 OLM automatically installs and manages all required operators
 
-### 🛡️ **Built-in Protection**
-Tempo operator set to Manual approval to prevent buggy auto-upgrades
-
 ### 🎯 **Multi-Namespace Deployment**
 Intelligent component placement across namespaces for optimal organization
 
@@ -442,11 +439,6 @@ Pure Helm operator - no custom Go code, easy to customize
 - Anyone with `get` access to the CR can view the token
 - **Trade-off:** Simplicity (paste token in form) vs. Security (visible in CR)
 - **For production:** Consider creating a Secret manually and referencing it (requires code changes)
-
-### Tempo Manual Approval
-- Tempo operator upgrades require manual approval for security
-- Prevents automatic upgrades to versions with known bugs
-- You maintain control over when Tempo operator upgrades occur
 
 ### Resource Isolation
 - Infrastructure components deployed to dedicated namespaces
