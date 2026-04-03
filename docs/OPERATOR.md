@@ -140,10 +140,9 @@ The operator automatically configures your cluster with these settings:
 - Enables Alertmanager for User Workload Monitoring
 - Required for PrometheusRules and custom alerting
 
-### ✅ Tempo Operator Protection
-- Sets Tempo operator `installPlanApproval: Manual`
-- Prevents automatic upgrades to buggy versions (v0.18.0+)
-- You control when Tempo operator upgrades happen
+### ✅ Tempo Operator Configuration
+- Configures Tempo operator for optimal deployment
+- Ensures compatibility with cluster observability stack
 
 ### ✅ Console Plugin Registration
 - Automatically registers the AI Observability plugin
@@ -291,17 +290,17 @@ oc get pods -n openshift-user-workload-monitoring | grep alertmanager
 # Delete CR (in ai-observability namespace)
 oc delete aiobservabilitysummarizer cluster-ai-observability -n ai-observability
 
-# Delete operator subscription and CSV (in openshift-operators-redhat namespace)
-oc delete subscription aiobs-operator -n openshift-operators-redhat
-oc delete csv -l operators.coreos.com/aiobs-operator.openshift-operators-redhat -n openshift-operators-redhat
+# Delete operator subscription and CSV (in openshift-operators namespace)
+oc delete subscription aiobs-operator -n openshift-operators
+oc delete csv -l operators.coreos.com/aiobs-operator.openshift-operators -n openshift-operators
 
 # Uninstall dependency operators (optional - if no longer needed)
 # List all installed operators to find dependency operators
-oc get csv -n openshift-operators-redhat
+oc get csv -n openshift-operators
 
 # Delete each dependency operator (example for Tempo)
-oc delete subscription tempo-operator -n openshift-operators-redhat
-oc delete csv tempo-operator.v0.16.0 -n openshift-operators-redhat
+oc delete subscription tempo-operator -n openshift-operators
+oc delete csv tempo-operator.v0.20.0 -n openshift-operators
 
 # Repeat for: cluster-observability-operator, opentelemetry-operator,
 # cluster-logging, loki-operator

@@ -24,6 +24,7 @@ mcpServer:
   image:
     repository: quay.io/ecosystem-appeng/aiobs-mcp-server
     tag: latest
+    pullPolicy: Always
   # NOTE: DEV_MODE env var is automatically set from global.devMode by mcp-server chart
 
 # OpenShift Console Plugin - Native console integration
