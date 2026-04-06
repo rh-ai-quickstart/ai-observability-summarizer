@@ -70,6 +70,16 @@ jobs:
             echo "Updated deploy/helm/react-ui-app/values.yaml"
           fi
 
+      - name: Update aiobs-stack values.yaml (parent chart)
+        run: |
+          if [ -f "deploy/helm/aiobs-stack/values.yaml" ]; then
+            # Update MCP server tag (same pattern as child charts)
+            sed -i '/repository:.*aiobs-mcp-server/{n;s|tag: .*|tag: '"${{ inputs.version }}"'|}' deploy/helm/aiobs-stack/values.yaml
+            # Update Console Plugin tag (same pattern as child charts)
+            sed -i '/repository:.*aiobs-console-plugin/{n;s|tag: .*|tag: '"${{ inputs.version }}"'|}' deploy/helm/aiobs-stack/values.yaml
+            echo "Updated deploy/helm/aiobs-stack/values.yaml"
+          fi
+
       - name: Update Makefile version
         run: |
           if [ -f "Makefile" ]; then
