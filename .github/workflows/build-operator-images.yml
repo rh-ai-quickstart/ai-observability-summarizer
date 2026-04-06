@@ -1,0 +1,131 @@
+name: "Shared: Build Operator Images"
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: 'Version to tag operator images with'
+        required: true
+        type: string
+      registry:
+        description: 'Container registry (default: quay.io)'
+        required: false
+        default: 'quay.io'
+        type: string
+      org:
+        description: 'Organization/namespace in registry'
+        required: true
+        type: string
+      push_changes:
+        description: 'Whether to commit and push catalog-source.yaml changes'
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  build-operator:
+    name: Build and push operator images
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ inputs.registry }}
+          username: ${{ secrets.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_PASSWORD }}
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: '3.12.0'
+
+      - name: Build and push operator image
+        run: |
+          make operator-build operator-push \
+            VERSION=${{ inputs.version }} \
+            ORG=${{ inputs.org }} \
+            REGISTRY=${{ inputs.registry }}
+        env:
+          DOCKER_BUILDKIT: 1
+
+      - name: Build and push bundle image
+        run: |
+          make operator-bundle-build operator-bundle-push \
+            VERSION=${{ inputs.version }} \
+            ORG=${{ inputs.org }} \
+            REGISTRY=${{ inputs.registry }}
+        env:
+          DOCKER_BUILDKIT: 1
+
+      - name: Build and push catalog image
+        run: |
+          make operator-catalog-build operator-catalog-push \
+            VERSION=${{ inputs.version }} \
+            ORG=${{ inputs.org }} \
+            REGISTRY=${{ inputs.registry }}
+        env:
+          DOCKER_BUILDKIT: 1
+
+      - name: Update catalog-source.yaml
+        if: ${{ inputs.push_changes }}
+        run: |
+          # Update catalog image version in catalog-source.yaml
+          sed -i 's|image: ${{ inputs.registry }}/${{ inputs.org }}/aiobs-operator-catalog:.*|image: ${{ inputs.registry }}/${{ inputs.org }}/aiobs-operator-catalog:v${{ inputs.version }}|' deploy/operator/catalog-source.yaml
+
+          echo "Updated catalog-source.yaml:"
+          grep "image:" deploy/operator/catalog-source.yaml
+
+      - name: Configure Git
+        if: ${{ inputs.push_changes }}
+        run: |
+          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+
+      - name: Commit and push operator manifest changes
+        if: ${{ inputs.push_changes }}
+        run: |
+          # Add all files updated by make bundle and catalog image update
+          git add deploy/operator/catalog-source.yaml
+          git add deploy/operator/bundle/manifests/aiobs-operator.clusterserviceversion.yaml
+          git add deploy/operator/config/manager/kustomization.yaml
+
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            echo "Changes to commit:"
+            git diff --staged --name-only
+            git commit -m "$(cat <<'EOF'
+          chore: update operator manifests to v${{ inputs.version }}
+
+          - Update CSV containerImage and version
+          - Update config/manager/kustomization.yaml operator image
+          - Update catalog-source.yaml catalog image reference
+          EOF
+          )"
+            git push origin ${GITHUB_REF#refs/heads/}
+          fi
+
+      - name: Summary
+        run: |
+          echo "## Operator Images Built Successfully! :rocket:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** \`v${{ inputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Images:" >> $GITHUB_STEP_SUMMARY
+          echo "- [${{ inputs.registry }}/${{ inputs.org }}/aiobs-operator:v${{ inputs.version }}](https://${{ inputs.registry }}/repository/${{ inputs.org }}/aiobs-operator?tab=tags)" >> $GITHUB_STEP_SUMMARY
+          echo "- [${{ inputs.registry }}/${{ inputs.org }}/aiobs-operator-bundle:v${{ inputs.version }}](https://${{ inputs.registry }}/repository/${{ inputs.org }}/aiobs-operator-bundle?tab=tags)" >> $GITHUB_STEP_SUMMARY
+          echo "- [${{ inputs.registry }}/${{ inputs.org }}/aiobs-operator-catalog:v${{ inputs.version }}](https://${{ inputs.registry }}/repository/${{ inputs.org }}/aiobs-operator-catalog?tab=tags)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Catalog Source Updated:" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`yaml" >> $GITHUB_STEP_SUMMARY
+          echo "image: ${{ inputs.registry }}/${{ inputs.org }}/aiobs-operator-catalog:v${{ inputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY

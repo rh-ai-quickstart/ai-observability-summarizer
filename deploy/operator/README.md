@@ -74,16 +74,15 @@ graph TB
         end
 
         subgraph "Dependency Operators (Auto-installed by OLM)"
-            TEMPO_OP[Tempo Operator<br/>v0.19.x<br/>Manual Approval]
+            TEMPO_OP[Tempo Operator<br/>v0.20.x]
             LOKI_OP[Loki Operator<br/>v6.3.x-6.4.x]
-            OTEL_OP[OpenTelemetry Operator<br/>v0.108.0+]
+            OTEL_OP[OpenTelemetry Operator<br/>v0.140.0+]
             LOGGING_OP[Cluster Logging Operator<br/>v6.3.x-6.4.x]
             OBSERV_OP[Cluster Observability Operator<br/>v1.0.0+]
         end
 
         subgraph "Helm Hooks (Pre-install/Post-install)"
             UWM[UWM Enabler Job<br/>Enables User Workload Monitoring<br/>+ Alertmanager]
-            TEMPO_PATCH[Tempo Subscription Patcher<br/>Sets installPlanApproval: Manual]
             CONSOLE_PATCH[Console Plugin Patcher<br/>Enables plugin in console]
         end
 
@@ -120,13 +119,11 @@ graph TB
 
     %% Helm Hooks
     OP -->|Triggers| UWM
-    OP -->|Triggers| TEMPO_PATCH
     OP -->|Triggers| CONSOLE_PATCH
 
     %% Hooks configure cluster
     UWM -->|Creates/Updates| CM_MON
     UWM -->|Creates/Updates| CM_UWM
-    TEMPO_PATCH -->|Patches| TEMPO_OP
 
     %% Operators manage CRs
     TEMPO_OP -->|Manages| TEMPO
@@ -146,7 +143,6 @@ graph TB
     style OLM fill:#fff9c4
     style CS fill:#fff59d
     style UWM fill:#c8e6c9
-    style TEMPO_PATCH fill:#c8e6c9
     style CONSOLE_PATCH fill:#c8e6c9
     style TEMPO_OP fill:#ffccbc
     style LOKI_OP fill:#ffccbc
@@ -160,7 +156,7 @@ graph TB
 1. **OLM Dependency Management**
    - Operator declares dependencies in `bundle/metadata/dependencies.yaml`
    - OLM automatically installs required operators with version constraints
-   - Tempo operator pinned to v0.16.0-2 and set to Manual approval to prevent buggy upgrades
+   - Tested with Tempo operator v0.20.x for stable distributed tracing
 
 2. **Multi-Namespace Deployment**
    - **ai-observability**: Application components (MCP Server, Console Plugin, RAG stack)
@@ -170,7 +166,6 @@ graph TB
 
 3. **Automated Cluster Configuration**
    - **UWM Enabler Hook**: Enables User Workload Monitoring and Alertmanager (pre-install)
-   - **Tempo Subscription Patcher**: Sets Tempo operator to Manual approval (post-install)
    - **Console Plugin Patcher**: Enables plugin in OpenShift Console (post-install)
 
 4. **Helm-Based Operator Pattern**
@@ -192,7 +187,7 @@ When you create an `AIObservabilitySummarizer` CR, the following happens automat
 1. OLM installs dependency operators (if not already installed)
    ├── Cluster Observability Operator
    ├── OpenTelemetry Operator
-   ├── Tempo Operator (with Manual approval)
+   ├── Tempo Operator
    ├── Cluster Logging Operator
    └── Loki Operator
 
@@ -217,8 +212,6 @@ When you create an `AIObservabilitySummarizer` CR, the following happens automat
        └── Alert CronJob (if alerting enabled)
 
 4. Post-install Helm Hooks execute (hook-weight: 5-10)
-   ├── tempo-subscription-patcher job
-   │   └── Sets Tempo operator to Manual approval
    └── console-plugin-patcher job
        └── Enables plugin in OpenShift Console
 
@@ -236,7 +229,6 @@ All hook jobs are configured with:
 | Job | Hook Type | Weight | Purpose | Namespace |
 |-----|-----------|--------|---------|-----------|
 | **uwm-enabler** | pre-install, pre-upgrade | -15 | Enable UWM + Alertmanager | ai-observability |
-| **tempo-subscription-patcher** | post-install, post-upgrade | 5 | Set Tempo to Manual approval | ai-observability |
 | **console-plugin-patcher** | post-install, post-upgrade | 10 | Enable Console Plugin | ai-observability |
 
 ### Component Deployment Map
@@ -274,12 +266,7 @@ The operator automatically configures the following cluster-level settings via H
    - Required for PrometheusRules, ServiceMonitors, and alerting
    - Idempotent - checks if already enabled before applying
 
-2. **Tempo Operator Protection** (via `tempo-subscription-patcher` job)
-   - Sets Tempo operator `installPlanApproval: Manual`
-   - Prevents automatic upgrades to buggy versions (v0.18.0+)
-   - Requires manual approval for Tempo operator upgrades
-
-3. **Console Plugin Registration** (via `console-plugin-patcher` job)
+2. **Console Plugin Registration** (via `console-plugin-patcher` job)
    - Registers AI Observability plugin with OpenShift Console
    - Enables native console integration
 
@@ -291,11 +278,9 @@ These operators are declared as OLM dependencies and will be **automatically ins
 |----------|--------------|-------------------|--------------|-------|
 | **Cluster Observability Operator** | `cluster-observability-operator` | `>=1.0.0 <2.0.0` | `UIPlugin`, `Korrel8r` | Signal correlation |
 | **OpenTelemetry Operator** | `opentelemetry-product` | `>=0.108.0 <1.0.0` | `OpenTelemetryCollector` | Trace collection |
-| **Tempo Operator** | `tempo-product` | `>=0.16.0-2 <0.17.0` | `TempoStack` | **Pinned to v0.16.x*** |
+| **Tempo Operator** | `tempo-product` | `>=0.19.0 <0.21.0` | `TempoStack` | Distributed tracing |
 | **Cluster Logging Operator** | `cluster-logging` | `>=6.3.0 <6.5.0` | `ClusterLogForwarder` | Log forwarding |
 | **Loki Operator** | `loki-operator` | `>=6.3.0 <6.5.0` | `LokiStack` | Log storage |
-
-> **\*Tempo Operator Security:** The operator automatically sets Tempo's `installPlanApproval: Manual` to prevent automatic upgrades to buggy versions (v0.18.0+ has container crash issues - [APPENG-3916](https://issues.redhat.com/browse/APPENG-3916)). Tempo operator upgrades will require manual approval via the OpenShift Console or CLI.
 
 > **Note:** OpenShift AI (RHOAI) for KServe/InferenceService is NOT auto-installed and must be installed separately if using RAG with local LLM deployment.
 
@@ -400,7 +385,7 @@ oc get csv -n ai-observability
 
 # Delete each dependency operator (example for Tempo)
 oc delete subscription tempo-operator -n ai-observability
-oc delete csv tempo-operator.v0.16.0 -n ai-observability
+oc delete csv tempo-operator.v0.20.0 -n ai-observability
 
 # Repeat for: cluster-observability-operator, opentelemetry-operator,
 # cluster-logging, loki-operator

@@ -184,10 +184,22 @@ jobs:
       image_prefix: aiobs
     secrets: inherit
 
+  build-operator:
+    name: Build and Push operator images
+    needs: version-bump-commit
+    if: ${{ !inputs.dry_run }}
+    uses: ./.github/workflows/build-operator-images.yml
+    with:
+      version: ${{ needs.version-bump-commit.outputs.expected_version }}
+      registry: quay.io
+      org: ecosystem-appeng
+      push_changes: true
+    secrets: inherit
+
   create-pr:
     name: Create PR from dev to main
     runs-on: ubuntu-latest
-    needs: [version-bump-commit, build-image]
+    needs: [version-bump-commit, build-image, build-operator]
     if: ${{ !inputs.dry_run && inputs.target_branch == 'dev' }}
     permissions:
       contents: write
@@ -224,11 +236,17 @@ jobs:
           - **Commit:** ${{ needs.version-bump-commit.outputs.commit_sha }}
           
           ### Container Images
+          **Application Components:**
           - \`${{ env.IMAGE_PREFIX }}-metrics-alerting:$VERSION_NUMBER\`
           - \`${{ env.IMAGE_PREFIX }}-mcp-server:$VERSION_NUMBER\`
           - \`${{ env.IMAGE_PREFIX }}-console-plugin:$VERSION_NUMBER\`
           - \`${{ env.IMAGE_PREFIX }}-react-ui:$VERSION_NUMBER\`
-          
+
+          **Operator:**
+          - \`${{ env.IMAGE_PREFIX }}-operator:v$VERSION_NUMBER\`
+          - \`${{ env.IMAGE_PREFIX }}-operator-bundle:v$VERSION_NUMBER\`
+          - \`${{ env.IMAGE_PREFIX }}-operator-catalog:v$VERSION_NUMBER\`
+
           ### Checklist
           - [ ] All images verified in Quay.io
           - [ ] Version files updated correctly
@@ -293,7 +311,7 @@ jobs:
   summary:
     name: Summary
     runs-on: ubuntu-latest
-    needs: [compute-next-version, version-bump-commit, build-image, create-pr]
+    needs: [compute-next-version, version-bump-commit, build-image, build-operator, create-pr]
     if: always() && (needs.create-pr.result == 'success' || needs.create-pr.result == 'skipped')
     steps:
       - name: Summary
@@ -312,10 +330,17 @@ jobs:
             echo "2. Commit would be created with message: \`${{ needs.compute-next-version.outputs.commit_message }}\`" >> $GITHUB_STEP_SUMMARY
             echo "3. Commit would be pushed to \`${{ inputs.target_branch }}\`" >> $GITHUB_STEP_SUMMARY
             echo "4. Images would be built with version \`${{ needs.compute-next-version.outputs.expected_version }}\`:" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "   **Application Components:**" >> $GITHUB_STEP_SUMMARY
             echo "   - \`${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-metrics-alerting:${{ needs.compute-next-version.outputs.expected_version }}\`" >> $GITHUB_STEP_SUMMARY
             echo "   - \`${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-mcp-server:${{ needs.compute-next-version.outputs.expected_version }}\`" >> $GITHUB_STEP_SUMMARY
             echo "   - \`${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-console-plugin:${{ needs.compute-next-version.outputs.expected_version }}\`" >> $GITHUB_STEP_SUMMARY
             echo "   - \`${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-react-ui:${{ needs.compute-next-version.outputs.expected_version }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "   **Operator:**" >> $GITHUB_STEP_SUMMARY
+            echo "   - \`${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-operator:v${{ needs.compute-next-version.outputs.expected_version }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "   - \`${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-operator-bundle:v${{ needs.compute-next-version.outputs.expected_version }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "   - \`${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-operator-catalog:v${{ needs.compute-next-version.outputs.expected_version }}\`" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "### To Execute for Real:" >> $GITHUB_STEP_SUMMARY
             echo "Run this workflow again with the same settings but **uncheck the dry_run option**" >> $GITHUB_STEP_SUMMARY
@@ -328,10 +353,17 @@ jobs:
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "### Next Steps:" >> $GITHUB_STEP_SUMMARY
             echo "1. Verify images are built with version \`${{ needs.version-bump-commit.outputs.expected_version }}\`:" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "   **Application Components:**" >> $GITHUB_STEP_SUMMARY
             echo "   - [${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-metrics-alerting:${{ needs.version-bump-commit.outputs.expected_version }}](https://${{ env.REGISTRY }}/repository/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-metrics-alerting?tab=tags)" >> $GITHUB_STEP_SUMMARY
             echo "   - [${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-mcp-server:${{ needs.version-bump-commit.outputs.expected_version }}](https://${{ env.REGISTRY }}/repository/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-mcp-server?tab=tags)" >> $GITHUB_STEP_SUMMARY
             echo "   - [${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-console-plugin:${{ needs.version-bump-commit.outputs.expected_version }}](https://${{ env.REGISTRY }}/repository/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-console-plugin?tab=tags)" >> $GITHUB_STEP_SUMMARY
             echo "   - [${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-react-ui:${{ needs.version-bump-commit.outputs.expected_version }}](https://${{ env.REGISTRY }}/repository/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-react-ui?tab=tags)" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "   **Operator:**" >> $GITHUB_STEP_SUMMARY
+            echo "   - [${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-operator:v${{ needs.version-bump-commit.outputs.expected_version }}](https://${{ env.REGISTRY }}/repository/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-operator?tab=tags)" >> $GITHUB_STEP_SUMMARY
+            echo "   - [${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-operator-bundle:v${{ needs.version-bump-commit.outputs.expected_version }}](https://${{ env.REGISTRY }}/repository/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-operator-bundle?tab=tags)" >> $GITHUB_STEP_SUMMARY
+            echo "   - [${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-operator-catalog:v${{ needs.version-bump-commit.outputs.expected_version }}](https://${{ env.REGISTRY }}/repository/${{ env.ORG }}/${{ env.IMAGE_PREFIX }}-operator-catalog?tab=tags)" >> $GITHUB_STEP_SUMMARY
             if [ "${{ inputs.target_branch }}" = "dev" ]; then
               # Check if PR was created (create-pr job succeeded)
               if [ "${{ needs.create-pr.result }}" = "success" ]; then

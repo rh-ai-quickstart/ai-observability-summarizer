@@ -88,6 +88,17 @@ run: helm-operator ## Run against the configured Kubernetes cluster in ~/.kube/c
 
 .PHONY: prepare-build
 prepare-build: ## Copy helm charts from deploy/helm for container build
+	@echo "Updating image tags in source charts to version $(VERSION)..."
+	@# Update parent chart (aiobs-stack) in source
+	@sed -i.bak '/repository:.*aiobs-mcp-server/{n;s|tag: .*|tag: $(VERSION)|;}' ../helm/aiobs-stack/values.yaml && rm -f ../helm/aiobs-stack/values.yaml.bak
+	@sed -i.bak '/repository:.*aiobs-console-plugin/{n;s|tag: .*|tag: $(VERSION)|;}' ../helm/aiobs-stack/values.yaml && rm -f ../helm/aiobs-stack/values.yaml.bak
+	@sed -i.bak '/repository:.*aiobs-metrics-alerting/{n;s|tag: .*|tag: $(VERSION)|;}' ../helm/aiobs-stack/values.yaml && rm -f ../helm/aiobs-stack/values.yaml.bak
+	@# Update child charts in source
+	@sed -i.bak '/repository:.*aiobs-mcp-server/{n;s|tag: .*|tag: $(VERSION)|;}' ../helm/mcp-server/values.yaml && rm -f ../helm/mcp-server/values.yaml.bak
+	@sed -i.bak '/repository:.*aiobs-console-plugin/{n;s|tag: .*|tag: $(VERSION)|;}' ../helm/openshift-console-plugin/values.yaml && rm -f ../helm/openshift-console-plugin/values.yaml.bak
+	@sed -i.bak '/repository:.*aiobs-metrics-alerting/{n;s|tag: .*|tag: $(VERSION)|;}' ../helm/alerting/values.yaml && rm -f ../helm/alerting/values.yaml.bak
+	@echo "✅ Source charts updated to $(VERSION)"
+	@echo ""
 	@echo "Updating dependencies in deploy/helm/aiobs-stack..."
 	@cd ../helm/aiobs-stack && helm dependency update >/dev/null
 	@echo "✅ Source chart dependencies updated"
@@ -95,7 +106,7 @@ prepare-build: ## Copy helm charts from deploy/helm for container build
 	@echo "Copying helm charts from deploy/helm to operator..."
 	@# Preserve config files
 	@cp -f helm-charts/*.json helm-charts/*.template /tmp/ 2>/dev/null || true
-	@# Copy all charts from deploy/helm
+	@# Copy all charts from deploy/helm (now with updated versions)
 	@rm -rf helm-charts/aiobs-stack helm-charts/alerting helm-charts/mcp-server \
 		helm-charts/minio helm-charts/observability helm-charts/openshift-console-plugin helm-charts/rag
 	@cp -r ../helm/aiobs-stack helm-charts/
