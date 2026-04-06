@@ -26,5 +26,5 @@ spec:
   name: loki-operator
   source: redhat-operators
   sourceNamespace: openshift-marketplace
-  installPlanApproval: Automatic
+  installPlanApproval: Manual
   startingCSV: loki-operator.v6.3.4
