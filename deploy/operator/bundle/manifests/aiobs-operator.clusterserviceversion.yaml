@@ -58,7 +58,7 @@ metadata:
     capabilities: Basic Install
     categories: AI/Machine Learning, Monitoring
     containerImage: quay.io/ecosystem-appeng/aiobs-operator:v1.2.5-operator
-    createdAt: "2026-04-07T15:44:13Z"
+    createdAt: "2026-04-07T16:48:44Z"
     description: Deploy AI-powered observability summarization for OpenShift
     operators.operatorframework.io/builder: operator-sdk-v1.37.0
     operators.operatorframework.io/project_layout: helm.sdk.operatorframework.io/v1
