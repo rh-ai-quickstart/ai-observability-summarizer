@@ -3,7 +3,7 @@ app:
   name: "aiobs-react-ui"
   replicas: 1
   image:
-    repository: "quay.io/ecosystem-appeng/aiobs-react-ui"
+    repository: quay.io/ecosystem-appeng/aiobs-react-ui
     tag: 4.1.1
     pullPolicy: Always
 

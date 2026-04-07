@@ -31,6 +31,12 @@ BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
 # quay.io/ecosystem-appeng/aiobs-operator-bundle:$VERSION and quay.io/ecosystem-appeng/aiobs-operator-catalog:$VERSION.
 IMAGE_TAG_BASE ?= quay.io/ecosystem-appeng/aiobs-operator
 
+# Component image repositories (can be overridden from parent Makefile)
+MCP_SERVER_IMAGE ?= quay.io/ecosystem-appeng/aiobs-mcp-server
+CONSOLE_PLUGIN_IMAGE ?= quay.io/ecosystem-appeng/aiobs-console-plugin
+METRICS_ALERTING_IMAGE ?= quay.io/ecosystem-appeng/aiobs-metrics-alerting
+REACT_UI_IMAGE ?= quay.io/ecosystem-appeng/aiobs-react-ui
+
 # LOCALBIN is the directory for local binaries
 LOCALBIN ?= $(shell pwd)/bin
 
@@ -88,16 +94,28 @@ run: helm-operator ## Run against the configured Kubernetes cluster in ~/.kube/c
 
 .PHONY: prepare-build
 prepare-build: ## Copy helm charts from deploy/helm for container build
-	@echo "Updating image tags in source charts to version $(VERSION)..."
-	@# Update parent chart (aiobs-stack) in source
+	@echo "Updating image repositories and tags in source charts..."
+	@echo "  MCP Server: $(MCP_SERVER_IMAGE):$(VERSION)"
+	@echo "  Console Plugin: $(CONSOLE_PLUGIN_IMAGE):$(VERSION)"
+	@echo "  Metrics Alerting: $(METRICS_ALERTING_IMAGE):$(VERSION)"
+	@echo "  React UI: $(REACT_UI_IMAGE):$(VERSION)"
+	@# Update parent chart (aiobs-stack) in source - both repository and tag
+	@sed -i.bak '/repository:.*aiobs-mcp-server/s|repository: .*|repository: $(MCP_SERVER_IMAGE)|' ../helm/aiobs-stack/values.yaml && rm -f ../helm/aiobs-stack/values.yaml.bak
 	@sed -i.bak '/repository:.*aiobs-mcp-server/{n;s|tag: .*|tag: $(VERSION)|;}' ../helm/aiobs-stack/values.yaml && rm -f ../helm/aiobs-stack/values.yaml.bak
+	@sed -i.bak '/repository:.*aiobs-console-plugin/s|repository: .*|repository: $(CONSOLE_PLUGIN_IMAGE)|' ../helm/aiobs-stack/values.yaml && rm -f ../helm/aiobs-stack/values.yaml.bak
 	@sed -i.bak '/repository:.*aiobs-console-plugin/{n;s|tag: .*|tag: $(VERSION)|;}' ../helm/aiobs-stack/values.yaml && rm -f ../helm/aiobs-stack/values.yaml.bak
+	@sed -i.bak '/repository:.*aiobs-metrics-alerting/s|repository: .*|repository: $(METRICS_ALERTING_IMAGE)|' ../helm/aiobs-stack/values.yaml && rm -f ../helm/aiobs-stack/values.yaml.bak
 	@sed -i.bak '/repository:.*aiobs-metrics-alerting/{n;s|tag: .*|tag: $(VERSION)|;}' ../helm/aiobs-stack/values.yaml && rm -f ../helm/aiobs-stack/values.yaml.bak
-	@# Update child charts in source
+	@# Update child charts in source - both repository and tag
+	@sed -i.bak '/repository:.*aiobs-mcp-server/s|repository: .*|repository: $(MCP_SERVER_IMAGE)|' ../helm/mcp-server/values.yaml && rm -f ../helm/mcp-server/values.yaml.bak
 	@sed -i.bak '/repository:.*aiobs-mcp-server/{n;s|tag: .*|tag: $(VERSION)|;}' ../helm/mcp-server/values.yaml && rm -f ../helm/mcp-server/values.yaml.bak
+	@sed -i.bak '/repository:.*aiobs-console-plugin/s|repository: .*|repository: $(CONSOLE_PLUGIN_IMAGE)|' ../helm/openshift-console-plugin/values.yaml && rm -f ../helm/openshift-console-plugin/values.yaml.bak
 	@sed -i.bak '/repository:.*aiobs-console-plugin/{n;s|tag: .*|tag: $(VERSION)|;}' ../helm/openshift-console-plugin/values.yaml && rm -f ../helm/openshift-console-plugin/values.yaml.bak
+	@sed -i.bak '/repository:.*aiobs-metrics-alerting/s|repository: .*|repository: $(METRICS_ALERTING_IMAGE)|' ../helm/alerting/values.yaml && rm -f ../helm/alerting/values.yaml.bak
 	@sed -i.bak '/repository:.*aiobs-metrics-alerting/{n;s|tag: .*|tag: $(VERSION)|;}' ../helm/alerting/values.yaml && rm -f ../helm/alerting/values.yaml.bak
-	@echo "✅ Source charts updated to $(VERSION)"
+	@sed -i.bak '/repository:.*aiobs-react-ui/s|repository: .*|repository: $(REACT_UI_IMAGE)|' ../helm/react-ui-app/values.yaml && rm -f ../helm/react-ui-app/values.yaml.bak
+	@sed -i.bak '/repository:.*aiobs-react-ui/{n;s|tag: .*|tag: $(VERSION)|;}' ../helm/react-ui-app/values.yaml && rm -f ../helm/react-ui-app/values.yaml.bak
+	@echo "✅ Source charts updated with repositories and tags"
 	@echo ""
 	@echo "Updating dependencies in deploy/helm/aiobs-stack..."
 	@cd ../helm/aiobs-stack && helm dependency update >/dev/null
@@ -174,48 +192,36 @@ ARCH := $(shell uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/')
 KUSTOMIZE = $(shell pwd)/bin/kustomize
 kustomize: ## Download kustomize locally if necessary.
 ifeq (,$(wildcard $(KUSTOMIZE)))
-ifeq (,$(shell which kustomize 2>/dev/null))
 	@{ \
 	set -e ;\
 	mkdir -p $(dir $(KUSTOMIZE)) ;\
 	curl -sSLo - https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize/v5.3.0/kustomize_v5.3.0_$(OS)_$(ARCH).tar.gz | \
 	tar xzf - -C bin/ ;\
 	}
-else
-KUSTOMIZE = $(shell which kustomize)
-endif
 endif
 
 .PHONY: helm-operator
 HELM_OPERATOR = $(shell pwd)/bin/helm-operator
-helm-operator: ## Download helm-operator locally if necessary, preferring the $(pwd)/bin path over global if both exist.
+helm-operator: ## Download helm-operator locally if necessary.
 ifeq (,$(wildcard $(HELM_OPERATOR)))
-ifeq (,$(shell which helm-operator 2>/dev/null))
 	@{ \
 	set -e ;\
 	mkdir -p $(dir $(HELM_OPERATOR)) ;\
 	curl -sSLo $(HELM_OPERATOR) https://github.com/operator-framework/operator-sdk/releases/download/v1.37.0/helm-operator_$(OS)_$(ARCH) ;\
 	chmod +x $(HELM_OPERATOR) ;\
 	}
-else
-HELM_OPERATOR = $(shell which helm-operator)
-endif
 endif
 
 .PHONY: operator-sdk
 OPERATOR_SDK ?= $(LOCALBIN)/operator-sdk
 operator-sdk: ## Download operator-sdk locally if necessary.
 ifeq (,$(wildcard $(OPERATOR_SDK)))
-ifeq (, $(shell which operator-sdk 2>/dev/null))
 	@{ \
 	set -e ;\
 	mkdir -p $(dir $(OPERATOR_SDK)) ;\
 	curl -sSLo $(OPERATOR_SDK) https://github.com/operator-framework/operator-sdk/releases/download/$(OPERATOR_SDK_VERSION)/operator-sdk_$(OS)_$(ARCH) ;\
 	chmod +x $(OPERATOR_SDK) ;\
 	}
-else
-OPERATOR_SDK = $(shell which operator-sdk)
-endif
 endif
 
 .PHONY: bundle
@@ -237,16 +243,12 @@ bundle-push: ## Push the bundle image.
 OPM = $(LOCALBIN)/opm
 opm: ## Download opm locally if necessary.
 ifeq (,$(wildcard $(OPM)))
-ifeq (,$(shell which opm 2>/dev/null))
 	@{ \
 	set -e ;\
 	mkdir -p $(dir $(OPM)) ;\
 	curl -sSLo $(OPM) https://github.com/operator-framework/operator-registry/releases/download/v1.23.0/$(OS)-$(ARCH)-opm ;\
 	chmod +x $(OPM) ;\
 	}
-else
-OPM = $(shell which opm)
-endif
 endif
 
 # A comma-separated list of bundle images (e.g. make catalog-build BUNDLE_IMGS=example.com/operator-bundle:v0.1.0,example.com/operator-bundle:v0.2.0).

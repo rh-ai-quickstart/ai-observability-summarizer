@@ -1357,7 +1357,9 @@ OPERATOR_DIR := deploy/operator
 OPERATOR_IMAGE_TAG_BASE := $(REGISTRY)/$(ORG)/aiobs-operator
 
 # Common args to pass to operator Makefile
-OPERATOR_MAKE_ARGS := VERSION=$(VERSION) IMAGE_TAG_BASE=$(OPERATOR_IMAGE_TAG_BASE) PLATFORMS=$(PLATFORM)
+OPERATOR_MAKE_ARGS := VERSION=$(VERSION) IMAGE_TAG_BASE=$(OPERATOR_IMAGE_TAG_BASE) PLATFORMS=$(PLATFORM) \
+	MCP_SERVER_IMAGE=$(MCP_SERVER_IMAGE) CONSOLE_PLUGIN_IMAGE=$(CONSOLE_PLUGIN_IMAGE) \
+	METRICS_ALERTING_IMAGE=$(METRICS_ALERTING_IMAGE) REACT_UI_IMAGE=$(REACT_UI_IMAGE)
 
 .PHONY: operator-build operator-push operator-bundle-build operator-bundle-push operator-catalog-build operator-catalog-push operator-build-all operator-push-all operator-deploy operator-config
 
@@ -1402,7 +1404,7 @@ operator-build-all: operator-build operator-bundle-build operator-catalog-build
 operator-push-all: operator-push operator-bundle-push operator-catalog-push
 	@echo "✅ All operator images pushed"
 
-operator-deploy: operator-build-all operator-push-all
+operator-deploy: operator-build operator-push operator-bundle-build operator-bundle-push operator-catalog-build operator-catalog-push
 	@echo "✅ All operator images built and pushed"
 
 # -- Operator Installation targets --
