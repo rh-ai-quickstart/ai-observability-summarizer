@@ -94,8 +94,9 @@ jobs:
         if: ${{ inputs.push_changes }}
         run: |
           # Add all files updated by make bundle and catalog image update
+          # Use git add -A to catch any files created by bundle generation
           git add deploy/operator/catalog-source.yaml
-          git add deploy/operator/bundle/manifests/aiobs-operator.clusterserviceversion.yaml
+          git add deploy/operator/bundle/
           git add deploy/operator/config/manager/kustomization.yaml
 
           if git diff --staged --quiet; then
@@ -112,9 +113,24 @@ jobs:
           EOF
           )"
 
+            # Stash any remaining unstaged changes before pulling
+            if ! git diff --quiet || ! git diff --cached --quiet; then
+              echo "Stashing unstaged changes..."
+              git stash push -u -m "temp stash before pull"
+              STASHED=true
+            else
+              STASHED=false
+            fi
+
             # Pull latest changes before pushing (handles race conditions)
             echo "Pulling latest changes..."
             git pull --rebase origin ${GITHUB_REF#refs/heads/}
+
+            # Pop stash if we stashed
+            if [ "$STASHED" = "true" ]; then
+              echo "Restoring stashed changes..."
+              git stash pop || true
+            fi
 
             # Push with retry logic
             echo "Pushing changes..."
