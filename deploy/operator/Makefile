@@ -117,6 +117,10 @@ prepare-build: ## Copy helm charts from deploy/helm for container build
 	@sed -i.bak '/repository:.*aiobs-react-ui/{n;s|tag: .*|tag: $(VERSION)|;}' ../helm/react-ui-app/values.yaml && rm -f ../helm/react-ui-app/values.yaml.bak
 	@echo "✅ Source charts updated with repositories and tags"
 	@echo ""
+	@echo "Updating RAG chart dependencies first..."
+	@cd ../helm/rag && helm dependency update >/dev/null
+	@echo "✅ RAG chart dependencies updated"
+	@echo ""
 	@echo "Updating dependencies in deploy/helm/aiobs-stack..."
 	@cd ../helm/aiobs-stack && helm dependency update >/dev/null
 	@echo "✅ Source chart dependencies updated"
