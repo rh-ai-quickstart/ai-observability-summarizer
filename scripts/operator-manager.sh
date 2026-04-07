@@ -40,6 +40,13 @@ readonly OPERATOR_ACTION_CHECK="check"
 readonly OPERATOR_ACTION_INSTALL="install"
 readonly OPERATOR_ACTION_UNINSTALL="uninstall"
 
+# Fully-qualified OLM resource names to avoid conflicts (e.g. ACM Subscription CRD)
+readonly OLM_OPERATOR_RESOURCE="operators.operators.coreos.com"
+readonly OLM_SUBSCRIPTION_RESOURCE="subscriptions.operators.coreos.com"
+readonly OLM_INSTALLPLAN_RESOURCE="installplans.operators.coreos.com"
+readonly OLM_CSV_RESOURCE="clusterserviceversions.operators.coreos.com"
+readonly OLM_OPERATORGROUP_RESOURCE="operatorgroups.operators.coreos.com"
+
 # Shared Red Hat OperatorHub namespace: multiple unrelated Subscriptions coexist here.
 # Never run `operatorgroup --all` in this namespace — it breaks every operator installed there.
 readonly SHARED_REDHAT_OPERATORS_NS="openshift-operators-redhat"
@@ -214,15 +221,77 @@ validate_namespace() {
     fi
 }
 
-# Function to check if an operator exists
+# Function to get subscription name and namespace from operator full name
+get_subscription_info() {
+    local operator_name="$1"
+    case "$operator_name" in
+        "$FULL_NAME_OBSERVABILITY")
+            echo "cluster-observability-operator:openshift-cluster-observability-operator"
+            ;;
+        "$FULL_NAME_OTEL")
+            echo "opentelemetry-product:openshift-opentelemetry-operator"
+            ;;
+        "$FULL_NAME_TEMPO")
+            echo "tempo-product:openshift-tempo-operator"
+            ;;
+        "$FULL_NAME_LOGGING")
+            echo "cluster-logging:openshift-logging"
+            ;;
+        "$FULL_NAME_LOKI")
+            echo "loki-operator:openshift-operators-redhat"
+            ;;
+        *)
+            echo ""
+            ;;
+    esac
+}
+
+# Function to check if an operator is fully installed
+# Returns 0 if operator exists AND has a Succeeded CSV, 1 otherwise
 check_operator() {
     local operator_name="$1"
     [[ "$DEBUG" == "true" ]] && echo -e "${BLUE}📋 Checking operator: $operator_name${NC}"
-    if oc get operator "$operator_name" >/dev/null 2>&1; then
-        return 0  # Operator exists
-    else
+
+    # First check if operator resource exists
+    if ! oc get "$OLM_OPERATOR_RESOURCE" "$operator_name" >/dev/null 2>&1; then
+        [[ "$DEBUG" == "true" ]] && echo -e "${BLUE}   → Operator resource does not exist${NC}"
         return 1  # Operator does not exist
     fi
+
+    # Get subscription name and namespace
+    local sub_info=$(get_subscription_info "$operator_name")
+    if [ -z "$sub_info" ]; then
+        # Fallback: try to extract from operator name (format: subscription.namespace)
+        local namespace="${operator_name##*.}"
+        local subscription_name="${operator_name%%.*}"
+    else
+        local subscription_name="${sub_info%%:*}"
+        local namespace="${sub_info##*:}"
+    fi
+
+    [[ "$DEBUG" == "true" ]] && echo -e "${BLUE}   → Looking for subscription '$subscription_name' in namespace '$namespace'${NC}"
+
+    # Check if subscription exists
+    if ! oc get "$OLM_SUBSCRIPTION_RESOURCE" "$subscription_name" -n "$namespace" >/dev/null 2>&1; then
+        [[ "$DEBUG" == "true" ]] && echo -e "${BLUE}   → Subscription does not exist${NC}"
+        return 1  # Subscription missing
+    fi
+
+    # Check if CSV exists and is in Succeeded phase
+    local csv_name=$(oc get "$OLM_SUBSCRIPTION_RESOURCE" "$subscription_name" -n "$namespace" -o jsonpath='{.status.installedCSV}' 2>/dev/null)
+    if [ -z "$csv_name" ] || [ "$csv_name" = "null" ]; then
+        [[ "$DEBUG" == "true" ]] && echo -e "${BLUE}   → CSV not yet installed${NC}"
+        return 1  # CSV not installed
+    fi
+
+    local csv_phase=$(oc get "$OLM_CSV_RESOURCE" "$csv_name" -n "$namespace" -o jsonpath='{.status.phase}' 2>/dev/null)
+    if [ "$csv_phase" != "Succeeded" ]; then
+        [[ "$DEBUG" == "true" ]] && echo -e "${BLUE}   → CSV phase is '$csv_phase' (expected 'Succeeded')${NC}"
+        return 1  # CSV not ready
+    fi
+
+    [[ "$DEBUG" == "true" ]] && echo -e "${BLUE}   → Operator fully installed (CSV: $csv_name, Phase: $csv_phase)${NC}"
+    return 0  # Operator fully installed
 }
 
 # Function to get full operator name from simple name
@@ -337,7 +406,7 @@ uninstall_operator() {
 
     # Get the CSV name from subscription status BEFORE deleting subscription
     # Example CSVs: cluster-observability-operator.v1.2.2, opentelemetry-operator.v0.135.0-1, tempo-operator.v0.18.0-1
-    local csv_name=$(oc get subscription "$subscription_name" -n "$namespace" -o jsonpath='{.status.installedCSV}' 2>/dev/null)
+    local csv_name=$(oc get "$OLM_SUBSCRIPTION_RESOURCE" "$subscription_name" -n "$namespace" -o jsonpath='{.status.installedCSV}' 2>/dev/null)
 
     echo -e "${BLUE}  📋 Step 1: Deleting Subscription (and OperatorGroup only in dedicated namespaces)...${NC}"
     echo -e "${BLUE}     → This prevents OLM from recreating the operator${NC}"
@@ -346,17 +415,17 @@ uninstall_operator() {
         exit 1
     fi
     # Delete only this Subscription — never `subscription --all` in shared catalog namespaces.
-    oc delete subscription "$subscription_name" -n "$namespace" --ignore-not-found=true
+    oc delete "$OLM_SUBSCRIPTION_RESOURCE" "$subscription_name" -n "$namespace" --ignore-not-found=true
     if [ "$namespace" = "$SHARED_REDHAT_OPERATORS_NS" ]; then
         echo -e "${YELLOW}     ⚠️  Namespace $namespace is shared by many Red Hat operators.${NC}"
         echo -e "${BLUE}     → Skipping OperatorGroup bulk delete (would remove other teams' operators).${NC}"
         # If multiple OperatorGroups exist (e.g. from a previous install that created a duplicate),
         # OLM deadlocks. Clean up duplicates, keeping only the oldest one.
-        local og_count=$(oc get operatorgroup -n "$namespace" --no-headers 2>/dev/null | wc -l | tr -d ' ')
+        local og_count=$(oc get "$OLM_OPERATORGROUP_RESOURCE" -n "$namespace" --no-headers 2>/dev/null | wc -l | tr -d ' ')
         if [ "$og_count" -gt 1 ]; then
             echo -e "${YELLOW}     ⚠️  Found $og_count OperatorGroups in $namespace (expected 1). Cleaning up duplicates...${NC}"
-            local oldest_og=$(oc get operatorgroup -n "$namespace" --sort-by=.metadata.creationTimestamp -o name 2>/dev/null | head -1)
-            for og in $(oc get operatorgroup -n "$namespace" -o name 2>/dev/null); do
+            local oldest_og=$(oc get "$OLM_OPERATORGROUP_RESOURCE" -n "$namespace" --sort-by=.metadata.creationTimestamp -o name 2>/dev/null | head -1)
+            for og in $(oc get "$OLM_OPERATORGROUP_RESOURCE" -n "$namespace" -o name 2>/dev/null); do
                 if [ "$og" != "$oldest_og" ]; then
                     echo -e "${BLUE}     → Deleting duplicate: $og (keeping $oldest_og)${NC}"
                     oc delete "$og" -n "$namespace" --ignore-not-found=true 2>/dev/null ||:
@@ -364,17 +433,17 @@ uninstall_operator() {
             done
         fi
     else
-        oc delete operatorgroup --all -n "$namespace" --ignore-not-found=true
+        oc delete "$OLM_OPERATORGROUP_RESOURCE" --all -n "$namespace" --ignore-not-found=true
     fi
 
     echo -e "${BLUE}  📋 Step 2: Deleting ClusterServiceVersion (CSV)...${NC}"
     if [ -n "$csv_name" ] && [ "$csv_name" != "null" ]; then
         echo -e "${BLUE}     → Deleting CSV: $csv_name${NC}"
-        oc delete csv "$csv_name" -n "$namespace" --ignore-not-found=true
+        oc delete "$OLM_CSV_RESOURCE" "$csv_name" -n "$namespace" --ignore-not-found=true
     else
         echo -e "${YELLOW}     ⚠️  No CSV found for subscription $subscription_name${NC}"
         echo -e "${BLUE}     → You can manually delete CSVs by running:${NC}"
-        echo -e "${BLUE}       oc delete csv -n $namespace --all --ignore-not-found=true${NC}"
+        echo -e "${BLUE}       oc delete $OLM_CSV_RESOURCE -n $namespace --all --ignore-not-found=true${NC}"
     fi
 
     # CRDs are intentionally NOT deleted during uninstall. This follows standard OLM
@@ -386,14 +455,14 @@ uninstall_operator() {
 
     echo -e "${BLUE}  📋 Step 3: Deleting operator resource: $operator_name${NC}"
     # Delete the operator resource directly
-    oc delete operator "$operator_name" --ignore-not-found=true --wait=false
+    oc delete "$OLM_OPERATOR_RESOURCE" "$operator_name" --ignore-not-found=true --wait=false
 
     # Wait for OLM to clean up the operator resource (max 2 minutes)
     echo -e "${BLUE}     → Waiting for OLM to clean up operator resource...${NC}"
     local wait_attempts=24  # 2 minutes with 5-second intervals
     local wait_count=0
     while [ $wait_count -lt $wait_attempts ]; do
-        if ! oc get operator "$operator_name" >/dev/null 2>&1; then
+        if ! oc get "$OLM_OPERATOR_RESOURCE" "$operator_name" >/dev/null 2>&1; then
             echo -e "${GREEN}     ✅ Operator resource removed${NC}"
             break
         fi
@@ -422,27 +491,27 @@ approve_install_plan_if_manual() {
     local attempts=0
     local max_attempts=60  # up to 10 minutes
     while [ $attempts -lt $max_attempts ]; do
-        if oc get subscription "$subscription_name" -n "$namespace" >/dev/null 2>&1; then
+        if oc get "$OLM_SUBSCRIPTION_RESOURCE" "$subscription_name" -n "$namespace" >/dev/null 2>&1; then
             break
         fi
         attempts=$((attempts + 1))
         sleep 10
     done
 
-    if ! oc get subscription "$subscription_name" -n "$namespace" >/dev/null 2>&1; then
+    if ! oc get "$OLM_SUBSCRIPTION_RESOURCE" "$subscription_name" -n "$namespace" >/dev/null 2>&1; then
         echo -e "${YELLOW}  ⚠️  Subscription $subscription_name not found; skipping InstallPlan approval${NC}"
         return 0
     fi
 
     local approval
-    approval=$(oc get subscription "$subscription_name" -n "$namespace" -o jsonpath='{.spec.installPlanApproval}' 2>/dev/null || echo "")
+    approval=$(oc get "$OLM_SUBSCRIPTION_RESOURCE" "$subscription_name" -n "$namespace" -o jsonpath='{.spec.installPlanApproval}' 2>/dev/null || echo "")
     if [ "$(echo "$approval" | tr '[:upper:]' '[:lower:]')" != "manual" ]; then
         [[ "$DEBUG" == "true" ]] && echo -e "${BLUE}  📋 Install plan approval is '$approval' (not Manual); nothing to approve${NC}"
         return 0
     fi
 
     local target_csv
-    target_csv=$(oc get subscription "$subscription_name" -n "$namespace" -o jsonpath='{.spec.startingCSV}' 2>/dev/null || echo "")
+    target_csv=$(oc get "$OLM_SUBSCRIPTION_RESOURCE" "$subscription_name" -n "$namespace" -o jsonpath='{.spec.startingCSV}' 2>/dev/null || echo "")
     if [ -z "$target_csv" ] || [ "$target_csv" = "null" ]; then
         echo -e "${YELLOW}  ⚠️  Subscription has Manual approval but no startingCSV set; will approve first pending InstallPlan${NC}"
     else
@@ -453,10 +522,10 @@ approve_install_plan_if_manual() {
     attempts=0
     local installplan_name=""
     while [ $attempts -lt $max_attempts ]; do
-        installplan_name=$(oc get subscription "$subscription_name" -n "$namespace" \
+        installplan_name=$(oc get "$OLM_SUBSCRIPTION_RESOURCE" "$subscription_name" -n "$namespace" \
             -o jsonpath='{.status.installplan.name}' 2>/dev/null)
         if [ -z "$installplan_name" ] || [ "$installplan_name" = "null" ]; then
-            installplan_name=$(oc get subscription "$subscription_name" -n "$namespace" \
+            installplan_name=$(oc get "$OLM_SUBSCRIPTION_RESOURCE" "$subscription_name" -n "$namespace" \
                 -o jsonpath='{.status.installPlanRef.name}' 2>/dev/null)
         fi
 
@@ -479,7 +548,7 @@ approve_install_plan_if_manual() {
     # Validate the InstallPlan targets the desired CSV (if provided)
     if [ -n "$target_csv" ] && [ "$target_csv" != "null" ]; then
         local csv_list
-        csv_list=$(oc get installplan "$installplan_name" -n "$namespace" -o jsonpath='{.spec.clusterServiceVersionNames[*]}' 2>/dev/null || echo "")
+        csv_list=$(oc get "$OLM_INSTALLPLAN_RESOURCE" "$installplan_name" -n "$namespace" -o jsonpath='{.spec.clusterServiceVersionNames[*]}' 2>/dev/null || echo "")
         if ! echo "$csv_list" | tr ' ' '\n' | grep -q "^${target_csv}\$"; then
             echo -e "${YELLOW}  ⚠️  InstallPlan does not include expected CSV '${target_csv}'. Planned CSV(s): ${csv_list}${NC}"
             echo -e "${YELLOW}  ⚠️  Skipping auto-approval to avoid unintended upgrades${NC}"
@@ -489,13 +558,13 @@ approve_install_plan_if_manual() {
 
     # Approve the InstallPlan
     echo -e "${BLUE}  ✍️  Approving InstallPlan: $installplan_name${NC}"
-    oc patch installplan "$installplan_name" -n "$namespace" --type merge -p '{"spec":{"approved":true}}' >/dev/null
+    oc patch "$OLM_INSTALLPLAN_RESOURCE" "$installplan_name" -n "$namespace" --type merge -p '{"spec":{"approved":true}}' >/dev/null
 
     # Optionally, wait briefly for the plan to move forward
     attempts=0
     while [ $attempts -lt 12 ]; do  # up to ~2 minutes
         local phase
-        phase=$(oc get installplan "$installplan_name" -n "$namespace" -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
+        phase=$(oc get "$OLM_INSTALLPLAN_RESOURCE" "$installplan_name" -n "$namespace" -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
         if [ "$phase" = "Complete" ]; then
             echo -e "${GREEN}  ✅ InstallPlan $installplan_name completed${NC}"
             break
@@ -526,7 +595,7 @@ install_operator() {
     # from other operators. Creating a second one causes OLM to deadlock (no InstallPlans created).
     # Strip the entire OperatorGroup document from the YAML if one already exists.
     if [ "$namespace" = "$SHARED_REDHAT_OPERATORS_NS" ]; then
-        local existing_og=$(oc get operatorgroup -n "$namespace" -o name 2>/dev/null | head -1)
+        local existing_og=$(oc get "$OLM_OPERATORGROUP_RESOURCE" -n "$namespace" -o name 2>/dev/null | head -1)
         if [ -n "$existing_og" ]; then
             echo -e "${BLUE}     → OperatorGroup already exists in shared namespace $namespace ($existing_og). Skipping creation.${NC}"
             # python3: splits multi-doc YAML and drops OperatorGroup (see file header).
@@ -583,9 +652,9 @@ for doc in docs:
     max_attempts=60  # 10 minutes
 
     while [ $attempt -lt $max_attempts ]; do
-        local csv_phase=$(oc get subscription "$subscription_name" -n "$namespace" -o jsonpath='{.status.installedCSV}' 2>/dev/null)
+        local csv_phase=$(oc get "$OLM_SUBSCRIPTION_RESOURCE" "$subscription_name" -n "$namespace" -o jsonpath='{.status.installedCSV}' 2>/dev/null)
         if [ -n "$csv_phase" ] && [ "$csv_phase" != "null" ]; then
-            local phase=$(oc get csv "$csv_phase" -n "$namespace" -o jsonpath='{.status.phase}' 2>/dev/null)
+            local phase=$(oc get "$OLM_CSV_RESOURCE" "$csv_phase" -n "$namespace" -o jsonpath='{.status.phase}' 2>/dev/null)
             if [ "$phase" = "Succeeded" ]; then
                 echo -e "${GREEN}  ✅ CSV $csv_phase is in Succeeded phase${NC}"
                 break

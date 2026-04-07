@@ -3,7 +3,7 @@
 
 # NAMESPACE validation for deployment targets
 ifeq ($(NAMESPACE),)
-ifeq (,$(filter install-local depend install-ingestion-pipeline list-models% generate-model-config help build build-alerting build-mcp-server build-console-plugin build-react-ui push push-alerting push-mcp-server push-console-plugin push-react-ui clean config test test-python test-react check-observability-drift install-operators uninstall-operators check-operators verify-operators-ready cleanup-loki-clusterroles install-cluster-observability-operator install-opentelemetry-operator install-tempo-operator install-logging-operator install-loki-operator uninstall-cluster-observability-operator uninstall-opentelemetry-operator uninstall-tempo-operator uninstall-logging-operator uninstall-loki-operator enable-tracing-ui disable-tracing-ui enable-logging-ui disable-logging-ui install-loki uninstall-loki upgrade-observability install-korrel8r uninstall-korrel8r install-minio uninstall-minio operator-build operator-push operator-bundle-build operator-bundle-push operator-catalog-build operator-catalog-push operator-build-all operator-push-all operator-deploy operator-config,$(MAKECMDGOALS)))
+ifeq (,$(filter install-local depend install-ingestion-pipeline list-models% generate-model-config help build build-alerting build-mcp-server build-console-plugin build-react-ui push push-alerting push-mcp-server push-console-plugin push-react-ui clean config test test-python test-react test-scripts check-observability-drift install-operators uninstall-operators check-operators verify-operators-ready cleanup-loki-clusterroles install-cluster-observability-operator install-opentelemetry-operator install-tempo-operator install-logging-operator install-loki-operator uninstall-cluster-observability-operator uninstall-opentelemetry-operator uninstall-tempo-operator uninstall-logging-operator uninstall-loki-operator enable-tracing-ui disable-tracing-ui enable-logging-ui disable-logging-ui install-loki uninstall-loki upgrade-observability install-korrel8r uninstall-korrel8r install-minio uninstall-minio operator-build operator-push operator-bundle-build operator-bundle-push operator-catalog-build operator-catalog-push operator-build-all operator-push-all operator-deploy operator-config,$(MAKECMDGOALS)))
 $(error NAMESPACE is not set)
 endif
 endif
@@ -277,9 +277,10 @@ help:
 	@echo "  config             - Show current configuration"
 	@echo ""
 	@echo "Tests:"
-	@echo "  test               - Run all tests (Python + React)"
+	@echo "  test               - Run all tests (Python + React + Shell Scripts)"
 	@echo "  test-python        - Run Python tests only"
 	@echo "  test-react         - Run React tests only"
+	@echo "  test-scripts       - Run shell script tests (operator validation)"
 	@echo ""
 	@echo "Configuration (set via environment variables):"
 	@echo "  REGISTRY           - Container registry (default: quay.io)"
@@ -705,9 +706,9 @@ clean:
 		echo "⚠️  Cleanup completed with $$ERRORS warning(s)"; \
 	fi
 
-# Run all tests (Python + React)
+# Run all tests (Python + React + Shell Scripts)
 .PHONY: test
-test: test-python test-react
+test: test-python test-react test-scripts
 	@echo "✅ All tests completed successfully"
 
 # Run Python tests only
@@ -728,6 +729,23 @@ test-react:
 	@cd openshift-plugin && yarn build:react-ui
 	@echo "🧪 Running Jest tests..."
 	@cd openshift-plugin && yarn test --ci
+
+# Run shell script tests (operator validation)
+.PHONY: test-scripts
+test-scripts:
+	@echo "🧪 Running shell script tests..."
+	@echo "  → Validating operator-manager.sh syntax..."
+	@bash -n scripts/operator-manager.sh || (echo "❌ Syntax error in operator-manager.sh" && exit 1)
+	@echo "  → Testing operator check functionality..."
+	@if oc whoami >/dev/null 2>&1; then \
+		echo "  → Checking all operators..."; \
+		$(MAKE) check-operators || (echo "❌ Operator check failed" && exit 1); \
+		echo "  → Verifying operators are ready..."; \
+		$(MAKE) verify-operators-ready || (echo "❌ Operator verification failed" && exit 1); \
+	else \
+		echo "  ⚠️  Skipping operator checks (not logged into OpenShift)"; \
+	fi
+	@echo "✅ Shell script tests passed"
 
 # Convenience targets for common workflows
 .PHONY: build-and-push
