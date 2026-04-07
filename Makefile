@@ -1359,7 +1359,7 @@ OPERATOR_IMAGE_TAG_BASE := $(REGISTRY)/$(ORG)/aiobs-operator
 # Common args to pass to operator Makefile
 OPERATOR_MAKE_ARGS := VERSION=$(VERSION) IMAGE_TAG_BASE=$(OPERATOR_IMAGE_TAG_BASE) PLATFORMS=$(PLATFORM)
 
-.PHONY: operator-build operator-push operator-bundle-build operator-bundle-push operator-catalog-build operator-catalog-push operator-build-all operator-push-all operator-deploy operator-config
+.PHONY: operator-build operator-push operator-bundle-build operator-bundle-push operator-catalog-build operator-catalog-push operator-deploy operator-config
 
 operator-config:
 	@echo "🔧 Operator Build Configuration:"
@@ -1388,7 +1388,7 @@ operator-bundle-push:
 	@echo "📤 Pushing bundle image..."
 	$(MAKE) -C $(OPERATOR_DIR) bundle-push $(OPERATOR_MAKE_ARGS)
 
-operator-catalog-build:
+operator-catalog-build: operator-bundle-push
 	@echo "📚 Building catalog image..."
 	$(MAKE) -C $(OPERATOR_DIR) catalog-build $(OPERATOR_MAKE_ARGS)
 
@@ -1396,13 +1396,7 @@ operator-catalog-push:
 	@echo "📤 Pushing catalog image..."
 	$(MAKE) -C $(OPERATOR_DIR) catalog-push $(OPERATOR_MAKE_ARGS)
 
-operator-build-all: operator-build operator-bundle-build operator-catalog-build
-	@echo "✅ All operator images built"
-
-operator-push-all: operator-push operator-bundle-push operator-catalog-push
-	@echo "✅ All operator images pushed"
-
-operator-deploy: operator-build-all operator-push-all
+operator-deploy: operator-build operator-bundle-build operator-push operator-bundle-push operator-catalog-build operator-catalog-push
 	@echo "✅ All operator images built and pushed"
 
 # -- Operator Installation targets --
