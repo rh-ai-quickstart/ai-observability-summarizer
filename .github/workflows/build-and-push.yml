@@ -179,3 +179,15 @@ jobs:
       push_changes: true
       target_branch: ${{ github.ref_name }}
     secrets: inherit
+
+  build-operator:
+    name: Build and Push operator images
+    needs: [semantic-version, build-image]
+    if: (github.event_name == 'push' && github.ref_name != 'main') || github.event_name == 'workflow_dispatch'
+    uses: ./.github/workflows/build-operator-images.yml
+    with:
+      version: ${{ needs.semantic-version.outputs.version }}
+      registry: quay.io
+      org: ecosystem-appeng
+      push_changes: true
+    secrets: inherit
