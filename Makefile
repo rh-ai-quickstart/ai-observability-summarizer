@@ -3,7 +3,7 @@
 
 # NAMESPACE validation for deployment targets
 ifeq ($(NAMESPACE),)
-ifeq (,$(filter install-local depend install-ingestion-pipeline list-models% generate-model-config help build build-alerting build-mcp-server build-console-plugin build-react-ui push push-alerting push-mcp-server push-console-plugin push-react-ui clean config test test-python test-react check-observability-drift install-operators uninstall-operators check-operators verify-operators-ready verify-gpu-metrics cleanup-loki-clusterroles install-cluster-observability-operator install-opentelemetry-operator install-tempo-operator install-logging-operator install-loki-operator uninstall-cluster-observability-operator uninstall-opentelemetry-operator uninstall-tempo-operator uninstall-logging-operator uninstall-loki-operator enable-tracing-ui disable-tracing-ui enable-logging-ui disable-logging-ui install-loki uninstall-loki upgrade-observability install-korrel8r uninstall-korrel8r install-minio uninstall-minio operator-build operator-push operator-bundle-build operator-bundle-push operator-catalog-build operator-catalog-push operator-build-all operator-push-all operator-deploy operator-config,$(MAKECMDGOALS)))
+ifeq (,$(filter install-local depend install-ingestion-pipeline list-models% generate-model-config help build build-alerting build-mcp-server build-console-plugin build-react-ui push push-alerting push-mcp-server push-console-plugin push-react-ui clean config test test-python test-react check-observability-drift install-operators uninstall-operators check-operators verify-operators-ready cleanup-loki-clusterroles install-cluster-observability-operator install-opentelemetry-operator install-tempo-operator install-logging-operator install-loki-operator uninstall-cluster-observability-operator uninstall-opentelemetry-operator uninstall-tempo-operator uninstall-logging-operator uninstall-loki-operator enable-tracing-ui disable-tracing-ui enable-logging-ui disable-logging-ui install-loki uninstall-loki upgrade-observability install-korrel8r uninstall-korrel8r install-minio uninstall-minio operator-build operator-push operator-bundle-build operator-bundle-push operator-catalog-build operator-catalog-push operator-build-all operator-push-all operator-deploy operator-config,$(MAKECMDGOALS)))
 $(error NAMESPACE is not set)
 endif
 endif
@@ -59,8 +59,6 @@ MINIO_HOST ?= minio
 MINIO_PORT ?= 9000
 # MinIO bucket configuration (comma-separated list)
 MINIO_BUCKETS ?= tempo,loki
-# After install, verify DCGM ServiceMonitor and optionally restart GPU operator (GPU clusters only)
-VERIFY_GPU_METRICS ?= false
 
 # HF_TOKEN is only required if LLM_URL is not set
 HF_TOKEN ?= $(shell \
@@ -243,7 +241,6 @@ help:
 	@echo "  uninstall-loki-operator - Uninstall Loki Operator only"
 	@echo "  check-operators - Check status of all mandatory operators"
 	@echo "  verify-operators-ready - Verify all operators are installed and ready (used internally)"
-	@echo "  verify-gpu-metrics - Verify nvidia-dcgm-exporter ServiceMonitor; restart GPU operator if missing (no NAMESPACE required)"
 	@echo ""
 	@echo "Individual Components:"
 	@echo "  install-observability - Install TempoStack, LokiStack and OTEL Collector only"
@@ -306,7 +303,6 @@ help:
 	@echo "  MINIO_BUCKETS      - Comma-separated list of MinIO buckets to create (default: tempo,loki)"
 	@echo "  UNINSTALL_OBSERVABILITY - Set to 'true' to uninstall observability stack during uninstall"
 	@echo "  UNINSTALL_OPERATORS     - Set to 'true' to uninstall operators during uninstall"
-	@echo "  VERIFY_GPU_METRICS      - Set to 'true' to run verify-gpu-metrics at end of make install (default: false)"
 	@echo "  GPU_PREFIX_NVIDIA  - Extra NVIDIA metric prefixes (comma-separated, additive to defaults)"
 	@echo "  GPU_PREFIX_INTEL   - Extra Intel metric prefixes (comma-separated, additive to defaults)"
 	@echo "  GPU_PREFIX_AMD     - Extra AMD metric prefixes (comma-separated, additive to defaults)"
@@ -555,10 +551,6 @@ install: namespace enable-user-workload-monitoring depend validate-llm install-o
 	@if [ "$(ALERTING_ENABLED)" = "true" ]; then \
 		echo "ALERTING_ENABLED is set to true. Installing alerting..."; \
 		$(MAKE) install-alerts NAMESPACE=$(NAMESPACE); \
-	fi
-	@if [ "$(VERIFY_GPU_METRICS)" = "true" ]; then \
-		echo "→ VERIFY_GPU_METRICS=true: checking DCGM ServiceMonitor..."; \
-		$(MAKE) verify-gpu-metrics; \
 	fi
 	@echo "Installation complete."
 
@@ -1235,34 +1227,6 @@ uninstall-minio:
 
 	@echo "Removing minio PVCs from $(MINIO_NAMESPACE)"
 	- @oc delete pvc -n $(MINIO_NAMESPACE) -l app.kubernetes.io/name=$(MINIO_CHART) --timeout=30s ||:
-
-# Verify DCGM metrics scrape config exists (NVIDIA GPU Operator). Safe on non-GPU clusters (no-op if namespace missing).
-.PHONY: verify-gpu-metrics
-verify-gpu-metrics:
-	@if ! oc get namespace nvidia-gpu-operator >/dev/null 2>&1; then \
-		echo "→ Skipping GPU metrics verify: namespace nvidia-gpu-operator not found."; \
-	elif ! oc get servicemonitor nvidia-dcgm-exporter -n nvidia-gpu-operator >/dev/null 2>&1; then \
-		echo "WARNING: DCGM ServiceMonitor missing. Restarting GPU operator to trigger reconciliation..."; \
-		oc rollout restart deployment/gpu-operator -n nvidia-gpu-operator; \
-		oc rollout status deployment/gpu-operator -n nvidia-gpu-operator --timeout=120s; \
-		echo "→ Waiting for ClusterPolicy controller to reconcile ServiceMonitor (up to 4 minutes)..."; \
-		attempt=0; \
-		while [ $$attempt -lt 16 ]; do \
-			if oc get servicemonitor nvidia-dcgm-exporter -n nvidia-gpu-operator >/dev/null 2>&1; then \
-				echo "DCGM ServiceMonitor restored."; \
-				break; \
-			fi; \
-			attempt=$$((attempt + 1)); \
-			echo "  ⏳ Waiting for ServiceMonitor (attempt $$attempt/16)..."; \
-			sleep 15; \
-		done; \
-		if ! oc get servicemonitor nvidia-dcgm-exporter -n nvidia-gpu-operator >/dev/null 2>&1; then \
-			echo "ERROR: DCGM ServiceMonitor still missing after GPU operator restart. Manual intervention required."; \
-			exit 1; \
-		fi; \
-	else \
-		echo "DCGM ServiceMonitor exists. GPU metrics OK."; \
-	fi
 
 # Cleanup Loki ClusterRoles, ClusterRoleBindings, and ServiceAccount (reusable target)
 # This ensures fresh RBAC creation on every install, avoiding stale/orphaned resources
