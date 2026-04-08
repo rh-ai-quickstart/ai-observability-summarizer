@@ -620,6 +620,27 @@ uninstall:
 
 	@echo "Uninstalling $(MCP_SERVER_RELEASE_NAME) helm chart (if installed)"
 	- @helm -n $(NAMESPACE) uninstall $(MCP_SERVER_RELEASE_NAME) --ignore-not-found
+	@echo "→ Cleaning up grafana-prometheus-reader ClusterRole and binding..."
+	@MCP_CRB="grafana-prometheus-reader-binding-$(NAMESPACE)-mcp"; \
+	if oc get clusterrolebinding $$MCP_CRB >/dev/null 2>&1; then \
+		echo "  → Deleting ClusterRoleBinding $$MCP_CRB"; \
+		oc delete clusterrolebinding $$MCP_CRB --ignore-not-found 2>/dev/null ||:; \
+	fi
+	@echo "  → Checking if grafana-prometheus-reader ClusterRole should be deleted..."
+	@if oc get clusterrole grafana-prometheus-reader >/dev/null 2>&1; then \
+		OWNER=$$(oc get clusterrole grafana-prometheus-reader -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-name}' 2>/dev/null); \
+		if [ "$$OWNER" = "$(MCP_SERVER_RELEASE_NAME)" ]; then \
+			REMAINING_BINDINGS=$$(oc get clusterrolebindings -o json 2>/dev/null | jq -r '.items[] | select(.roleRef.name=="grafana-prometheus-reader") | .metadata.name' 2>/dev/null | wc -l); \
+			if [ "$$REMAINING_BINDINGS" -eq 0 ]; then \
+				echo "  → ClusterRole was created by make install and no other bindings exist. Deleting..."; \
+				oc delete clusterrole grafana-prometheus-reader --ignore-not-found 2>/dev/null ||:; \
+			else \
+				echo "  → ClusterRole still in use by $$REMAINING_BINDINGS binding(s). Skipping deletion."; \
+			fi; \
+		else \
+			echo "  → ClusterRole owned by '$$OWNER' (not $(MCP_SERVER_RELEASE_NAME)). Skipping deletion."; \
+		fi; \
+	fi
 	@echo "Uninstalling UI components (both Console Plugin and React UI if they exist)"
 	@$(MAKE) uninstall-console-plugin NAMESPACE=$(NAMESPACE) || true
 	@$(MAKE) uninstall-react-ui NAMESPACE=$(NAMESPACE) || true
