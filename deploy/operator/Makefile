@@ -5,6 +5,9 @@
 # - use environment variables to overwrite this value (e.g export VERSION=0.0.2)
 VERSION ?= 0.0.1
 
+# OPM_VERSION defines the version of the Operator Package Manager (OPM) tool and image to use.
+OPM_VERSION ?= v1.65.0
+
 # CHANNELS define the bundle channels used in the bundle.
 # Add a new line here if you would like to change its default config. (E.g CHANNELS = "candidate,fast,stable")
 # To re-generate a bundle for other specific channels without changing the standard setup, you can:
@@ -100,19 +103,19 @@ prepare-build: ## Copy helm charts from deploy/helm for container build
 	@echo "  Metrics Alerting: $(METRICS_ALERTING_IMAGE):$(VERSION)"
 	@echo "  React UI: $(REACT_UI_IMAGE):$(VERSION)"
 	@# Update parent chart (aiobs-stack) in source - both repository and tag
-	@sed -i.bak '/repository:.*aiobs-mcp-server/s|repository: .*|repository: $(MCP_SERVER_IMAGE)|' ../helm/aiobs-stack/values.yaml && rm -f ../helm/aiobs-stack/values.yaml.bak
-	@sed -i.bak '/repository:.*aiobs-mcp-server/{n;s|tag: .*|tag: $(VERSION)|;}' ../helm/aiobs-stack/values.yaml && rm -f ../helm/aiobs-stack/values.yaml.bak
+	@sed -i.bak '/repository:.*mcp-server/s|repository: .*|repository: $(MCP_SERVER_IMAGE)|' ../helm/aiobs-stack/values.yaml && rm -f ../helm/aiobs-stack/values.yaml.bak
+	@sed -i.bak '/repository:.*mcp-server/{n;s|tag: .*|tag: $(VERSION)|;}' ../helm/aiobs-stack/values.yaml && rm -f ../helm/aiobs-stack/values.yaml.bak
 	@sed -i.bak '/repository:.*aiobs-console-plugin/s|repository: .*|repository: $(CONSOLE_PLUGIN_IMAGE)|' ../helm/aiobs-stack/values.yaml && rm -f ../helm/aiobs-stack/values.yaml.bak
 	@sed -i.bak '/repository:.*aiobs-console-plugin/{n;s|tag: .*|tag: $(VERSION)|;}' ../helm/aiobs-stack/values.yaml && rm -f ../helm/aiobs-stack/values.yaml.bak
-	@sed -i.bak '/repository:.*aiobs-metrics-alerting/s|repository: .*|repository: $(METRICS_ALERTING_IMAGE)|' ../helm/aiobs-stack/values.yaml && rm -f ../helm/aiobs-stack/values.yaml.bak
-	@sed -i.bak '/repository:.*aiobs-metrics-alerting/{n;s|tag: .*|tag: $(VERSION)|;}' ../helm/aiobs-stack/values.yaml && rm -f ../helm/aiobs-stack/values.yaml.bak
+	@sed -i.bak '/repository:.*metric-alerting/s|repository: .*|repository: $(METRICS_ALERTING_IMAGE)|' ../helm/aiobs-stack/values.yaml && rm -f ../helm/aiobs-stack/values.yaml.bak
+	@sed -i.bak '/repository:.*metric-alerting/{n;s|tag: .*|tag: $(VERSION)|;}' ../helm/aiobs-stack/values.yaml && rm -f ../helm/aiobs-stack/values.yaml.bak
 	@# Update child charts in source - both repository and tag
-	@sed -i.bak '/repository:.*aiobs-mcp-server/s|repository: .*|repository: $(MCP_SERVER_IMAGE)|' ../helm/mcp-server/values.yaml && rm -f ../helm/mcp-server/values.yaml.bak
-	@sed -i.bak '/repository:.*aiobs-mcp-server/{n;s|tag: .*|tag: $(VERSION)|;}' ../helm/mcp-server/values.yaml && rm -f ../helm/mcp-server/values.yaml.bak
+	@sed -i.bak '/repository:.*mcp-server/s|repository: .*|repository: $(MCP_SERVER_IMAGE)|' ../helm/mcp-server/values.yaml && rm -f ../helm/mcp-server/values.yaml.bak
+	@sed -i.bak '/repository:.*mcp-server/{n;s|tag: .*|tag: $(VERSION)|;}' ../helm/mcp-server/values.yaml && rm -f ../helm/mcp-server/values.yaml.bak
 	@sed -i.bak '/repository:.*aiobs-console-plugin/s|repository: .*|repository: $(CONSOLE_PLUGIN_IMAGE)|' ../helm/openshift-console-plugin/values.yaml && rm -f ../helm/openshift-console-plugin/values.yaml.bak
 	@sed -i.bak '/repository:.*aiobs-console-plugin/{n;s|tag: .*|tag: $(VERSION)|;}' ../helm/openshift-console-plugin/values.yaml && rm -f ../helm/openshift-console-plugin/values.yaml.bak
-	@sed -i.bak '/repository:.*aiobs-metrics-alerting/s|repository: .*|repository: $(METRICS_ALERTING_IMAGE)|' ../helm/alerting/values.yaml && rm -f ../helm/alerting/values.yaml.bak
-	@sed -i.bak '/repository:.*aiobs-metrics-alerting/{n;s|tag: .*|tag: $(VERSION)|;}' ../helm/alerting/values.yaml && rm -f ../helm/alerting/values.yaml.bak
+	@sed -i.bak '/repository:.*metric-alerting/s|repository: .*|repository: $(METRICS_ALERTING_IMAGE)|' ../helm/alerting/values.yaml && rm -f ../helm/alerting/values.yaml.bak
+	@sed -i.bak '/repository:.*metric-alerting/{n;s|tag: .*|tag: $(VERSION)|;}' ../helm/alerting/values.yaml && rm -f ../helm/alerting/values.yaml.bak
 	@sed -i.bak '/repository:.*aiobs-react-ui/s|repository: .*|repository: $(REACT_UI_IMAGE)|' ../helm/react-ui-app/values.yaml && rm -f ../helm/react-ui-app/values.yaml.bak
 	@sed -i.bak '/repository:.*aiobs-react-ui/{n;s|tag: .*|tag: $(VERSION)|;}' ../helm/react-ui-app/values.yaml && rm -f ../helm/react-ui-app/values.yaml.bak
 	@echo "✅ Source charts updated with repositories and tags"
@@ -246,7 +249,7 @@ ifeq (,$(wildcard $(OPM)))
 	@{ \
 	set -e ;\
 	mkdir -p $(dir $(OPM)) ;\
-	curl -sSLo $(OPM) https://github.com/operator-framework/operator-registry/releases/download/v1.23.0/$(OS)-$(ARCH)-opm ;\
+	curl -sSLo $(OPM) https://github.com/operator-framework/operator-registry/releases/download/$(OPM_VERSION)/$(OS)-$(ARCH)-opm ;\
 	chmod +x $(OPM) ;\
 	}
 endif
@@ -267,8 +270,16 @@ endif
 # This recipe invokes 'opm' in 'semver' bundle add mode. For more information on add modes, see:
 # https://github.com/operator-framework/community-operators/blob/7f1438c/docs/packaging-operator.md#updating-your-existing-operator
 .PHONY: catalog-build
-catalog-build: opm prepare-build ## Build a catalog image.
-	$(OPM) index add --container-tool podman --mode semver --tag $(CATALOG_IMG) --bundles $(BUNDLE_IMGS) $(FROM_INDEX_OPT)
+catalog-build: opm bundle-push prepare-build ## Build a catalog image.
+	@echo "Building catalog for platform $(PLATFORMS)..."
+	@# Pull the platform-specific opm base image first
+	$(CONTAINER_TOOL) pull --platform=$(PLATFORMS) quay.io/operator-framework/opm:$(OPM_VERSION)
+	@# Build catalog using platform-specific base
+	$(OPM) index add --build-tool $(CONTAINER_TOOL) --pull-tool $(CONTAINER_TOOL) \
+		--mode semver --tag $(CATALOG_IMG) \
+		--bundles $(BUNDLE_IMGS) $(FROM_INDEX_OPT) \
+		--binary-image quay.io/operator-framework/opm:$(OPM_VERSION)
+	@echo "✓ Catalog image built for $(PLATFORMS)"
 
 # Push the catalog image.
 .PHONY: catalog-push

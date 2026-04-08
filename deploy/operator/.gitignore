@@ -26,3 +26,7 @@ helm-charts/ui/
 
 # Temporary/generated files
 helm-charts/gen_model_config*.json
+
+# OPM catalog build artifacts
+database/
+index.Dockerfile*
