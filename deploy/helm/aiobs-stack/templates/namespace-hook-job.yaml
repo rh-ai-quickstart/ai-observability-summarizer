@@ -1,0 +1,91 @@
+{{/*
+Pre-install/pre-upgrade hook job to create required namespaces.
+This replaces the lookup-based approach which doesn't work reliably in Helm operators.
+
+The job checks if each namespace exists and creates it if missing.
+This ensures idempotent namespace creation without relying on the lookup function.
+*/}}
+
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "aiobs-stack.fullname" . }}-namespace-setup
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "aiobs-stack.labels" . | nindent 4 }}
+    app.kubernetes.io/component: namespace-setup
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "-5"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  ttlSecondsAfterFinished: 300
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        {{- include "aiobs-stack.labels" . | nindent 8 }}
+        app.kubernetes.io/component: namespace-setup
+    spec:
+      serviceAccountName: {{ include "aiobs-stack.fullname" . }}-namespace-hook
+      restartPolicy: OnFailure
+      containers:
+      - name: namespace-creator
+        image: registry.redhat.io/openshift4/ose-cli:latest
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/bash
+        - -c
+        - |
+          set -euo pipefail
+
+          echo "=== AI Observability Namespace Setup Hook ==="
+          echo "Ensuring required namespaces exist..."
+
+          # Function to create namespace if it doesn't exist
+          create_namespace_if_missing() {
+            local ns_name="$1"
+            local description="$2"
+
+            echo ""
+            echo "Checking namespace: $ns_name"
+
+            if kubectl get namespace "$ns_name" &>/dev/null; then
+              echo "✓ Namespace '$ns_name' already exists"
+            else
+              echo "✗ Namespace '$ns_name' does not exist, creating..."
+
+              cat <<EOF | kubectl apply -f -
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: $ns_name
+            labels:
+              app.kubernetes.io/managed-by: {{ .Release.Service }}
+              app.kubernetes.io/part-of: aiobs-operator
+              app.kubernetes.io/created-by: aiobs-stack
+            annotations:
+              openshift.io/description: "$description"
+              helm.sh/resource-policy: keep
+          EOF
+
+              echo "✓ Namespace '$ns_name' created successfully"
+            fi
+          }
+
+          # Create all required namespaces
+          create_namespace_if_missing \
+            "{{ .Values.global.observabilityNamespace }}" \
+            "AI Observability infrastructure components (Tempo, OTEL, MinIO)"
+
+          create_namespace_if_missing \
+            "{{ .Values.global.korrel8rNamespace }}" \
+            "Cluster Observability Operator namespace for Korrel8r"
+
+          create_namespace_if_missing \
+            "{{ .Values.global.lokiNamespace }}" \
+            "OpenShift Logging namespace for LokiStack"
+
+          echo ""
+          echo "=== Namespace setup completed successfully ==="
