@@ -623,8 +623,13 @@ uninstall:
 	@echo "→ Cleaning up grafana-prometheus-reader ClusterRole and binding..."
 	@MCP_CRB="grafana-prometheus-reader-binding-$(NAMESPACE)-mcp"; \
 	if oc get clusterrolebinding $$MCP_CRB >/dev/null 2>&1; then \
-		echo "  → Deleting ClusterRoleBinding $$MCP_CRB"; \
-		oc delete clusterrolebinding $$MCP_CRB --ignore-not-found 2>/dev/null ||:; \
+		OWNER=$$(oc get clusterrolebinding $$MCP_CRB -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-name}' 2>/dev/null); \
+		if [ "$$OWNER" = "$(MCP_SERVER_RELEASE_NAME)" ] || [ -z "$$OWNER" ]; then \
+			echo "  → Deleting ClusterRoleBinding $$MCP_CRB (owned by: $$OWNER)"; \
+			oc delete clusterrolebinding $$MCP_CRB --ignore-not-found 2>/dev/null ||:; \
+		else \
+			echo "  → Skipping ClusterRoleBinding $$MCP_CRB (owned by '$$OWNER', not $(MCP_SERVER_RELEASE_NAME))"; \
+		fi; \
 	fi
 	@echo "  → Checking if grafana-prometheus-reader ClusterRole should be deleted..."
 	@if oc get clusterrole grafana-prometheus-reader >/dev/null 2>&1; then \
@@ -1267,13 +1272,39 @@ uninstall-minio:
 	@echo "Removing minio PVCs from $(MINIO_NAMESPACE)"
 	- @oc delete pvc -n $(MINIO_NAMESPACE) -l app.kubernetes.io/name=$(MINIO_CHART) --timeout=30s ||:
 
-# Cleanup Loki ClusterRoles, ClusterRoleBindings, and ServiceAccount (reusable target)
-# This ensures fresh RBAC creation on every install, avoiding stale/orphaned resources
+# Cleanup Loki RBAC resources created by our Helm installation
+# NOTE: ClusterRoles are owned by cluster-logging operator - we never delete them
+# We only clean up ClusterRoleBindings and ServiceAccount created by our loki-stack release
+# Resources created by operator (different release name) are left alone
 .PHONY: cleanup-loki-clusterroles
 cleanup-loki-clusterroles:
-	- @oc delete clusterrole logging-collector-logs-writer collect-application-logs collect-audit-logs collect-infrastructure-logs --ignore-not-found 2>/dev/null ||:
-	- @oc delete clusterrolebinding logging-collector-logs-writer collect-application-logs collect-audit-logs collect-infrastructure-logs --ignore-not-found 2>/dev/null ||:
-	- @oc delete serviceaccount collector -n $(LOKI_NAMESPACE) --ignore-not-found 2>/dev/null ||:
+	@echo "  → Checking Loki ClusterRoleBinding ownership before cleanup..."
+	@for crb in logging-collector-logs-writer collect-application-logs collect-audit-logs collect-infrastructure-logs; do \
+		if oc get clusterrolebinding $$crb >/dev/null 2>&1; then \
+			OWNER=$$(oc get clusterrolebinding $$crb -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-name}' 2>/dev/null); \
+			if [ "$$OWNER" = "loki-stack" ]; then \
+				echo "  → Deleting ClusterRoleBinding $$crb (created by make install - release: loki-stack)"; \
+				oc delete clusterrolebinding $$crb --ignore-not-found 2>/dev/null ||:; \
+			elif [ -n "$$OWNER" ]; then \
+				echo "  → Skipping ClusterRoleBinding $$crb (owned by '$$OWNER', not loki-stack)"; \
+			else \
+				echo "  → Skipping ClusterRoleBinding $$crb (no Helm ownership - likely cluster-logging operator)"; \
+			fi; \
+		fi; \
+	done
+	@echo "  → Checking Loki collector ServiceAccount ownership before cleanup..."
+	@if oc get serviceaccount collector -n $(LOKI_NAMESPACE) >/dev/null 2>&1; then \
+		OWNER=$$(oc get serviceaccount collector -n $(LOKI_NAMESPACE) -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-name}' 2>/dev/null); \
+		if [ "$$OWNER" = "loki-stack" ]; then \
+			echo "  → Deleting ServiceAccount collector (created by make install - release: loki-stack)"; \
+			oc delete serviceaccount collector -n $(LOKI_NAMESPACE) --ignore-not-found 2>/dev/null ||:; \
+		elif [ -n "$$OWNER" ]; then \
+			echo "  → Skipping ServiceAccount collector (owned by '$$OWNER', not loki-stack)"; \
+		else \
+			echo "  → Skipping ServiceAccount collector (no Helm ownership - likely cluster-logging operator)"; \
+		fi; \
+	fi
+	@echo "  → Loki RBAC cleanup complete (ClusterRoles left intact - owned by cluster-logging operator)"
 
 .PHONY: install-loki
 install-loki:
