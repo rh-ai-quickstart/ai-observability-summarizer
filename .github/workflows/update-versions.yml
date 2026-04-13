@@ -71,9 +71,11 @@ jobs:
           fi
 
       - name: Update Makefile version
+        # NOTE: Anchor with ^ to match only the VERSION line, not RHOAI_VERSION
+        # or any other variable whose name ends in VERSION.
         run: |
           if [ -f "Makefile" ]; then
-            sed -i 's|VERSION ?= .*|VERSION ?= '"${{ inputs.version }}"'|' Makefile
+            sed -i 's|^VERSION ?= .*|VERSION ?= '"${{ inputs.version }}"'|' Makefile
             echo "Updated Makefile"
           fi
 
