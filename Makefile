@@ -217,7 +217,7 @@ helm_llama_stack_args = \
     $(if $(SAFETY_API_TOKEN),--set global.models.$(SAFETY).apiToken='$(SAFETY_API_TOKEN)',) \
     $(if $(LLAMA_STACK_ENV),--set-json llama-stack.secrets='$(LLAMA_STACK_ENV)',) \
     $(if $(RAW_DEPLOYMENT),--set llama-stack.rawDeploymentMode=$(RAW_DEPLOYMENT),) \
-    $(if $(filter true,$(USE_LLAMA_STACK_OPERATOR)),--set llama-stack.useByOperator=true --set llama-stack.network.allowedFrom.labels='ai-observability-summarizer/lls-allowed',)
+    $(if $(filter true,$(USE_LLAMA_STACK_OPERATOR)),--set llama-stack.useByOperator=true --set-json llama-stack.network.allowedFrom.labels='["ai-observability-summarizer/lls-allowed"]',)
 
 helm_pgvector_args = \
     --set pgvector.secret.user=$(POSTGRES_USER) \
