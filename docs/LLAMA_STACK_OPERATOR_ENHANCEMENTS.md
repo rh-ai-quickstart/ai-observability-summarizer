@@ -11,6 +11,7 @@ This document describes the enhancements made to support deploying LlamaStack wi
 - Updated `llama-stack` dependency to use enhanced chart from operator branch
 - Repository changed to: `file://.llama-stack-operator-chart`
 - Source: https://github.com/jianrongzhang89/ai-architecture-charts/tree/operator/llama-stack
+- **Removed**: `llama-stack-instance` subchart (no longer needed - enhanced chart handles both modes)
 - **Note**: This is temporary until the operator branch is merged and released
 
 ### 2. Makefile Enhancements
@@ -21,11 +22,13 @@ This document describes the enhancements made to support deploying LlamaStack wi
 - Updates on subsequent runs via `git pull`
 
 #### B. Enhanced `helm_llama_stack_args`
-When `USE_LLAMA_STACK_OPERATOR=true`, now passes:
-```makefile
---set llama-stack.useByOperator=true
---set llama-stack.network.allowedFrom.labels='ai-observability-summarizer/lls-allowed'
-```
+- Simplified to always use `llama-stack` chart (no more chart prefix switching)
+- When `USE_LLAMA_STACK_OPERATOR=true`, passes:
+  ```makefile
+  --set llama-stack.useByOperator=true
+  --set llama-stack.network.allowedFrom.labels='ai-observability-summarizer/lls-allowed'
+  ```
+- Removed `llama-stack-instance.enabled` toggle (enhanced chart handles mode internally)
 
 #### C. Enhanced `namespace` Target
 - Auto-labels namespace with `ai-observability-summarizer/lls-allowed=true` when `USE_LLAMA_STACK_OPERATOR=true`
@@ -36,12 +39,20 @@ When `USE_LLAMA_STACK_OPERATOR=true`, now passes:
 
 ### 3. Values Documentation (deploy/helm/rag/values.yaml)
 
-Added documentation explaining:
-- The new `useByOperator` parameter
-- Network policy label selector configuration
-- Auto-labeling behavior for namespaces
+- Added documentation explaining the new `useByOperator` parameter
+- Documented network policy label selector configuration
+- Documented auto-labeling behavior for namespaces
+- **Removed**: `llama-stack-instance` values section (no longer needed)
 
-### 4. Gitignore (.gitignore)
+### 4. Removed llama-stack-instance Subchart
+
+The local `deploy/helm/rag/llama-stack-instance/` subchart has been completely removed because:
+- The enhanced ai-architecture-chart `llama-stack` now handles **both** deployment modes internally
+- When `useByOperator=false` (default): deploys as raw Helm Deployment
+- When `useByOperator=true`: deploys via operator CR (LlamaStackDistribution)
+- This eliminates duplicate configuration and maintenance burden
+
+### 5. Gitignore (.gitignore)
 
 Added entry to ignore the temporary operator chart directory:
 ```

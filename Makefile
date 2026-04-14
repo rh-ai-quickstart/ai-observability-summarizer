@@ -160,12 +160,11 @@ endif
 export USE_LLAMA_STACK_OPERATOR
 export RHOAI_VERSION
 
-# LlamaStack deployment mode: Helm chart (default) vs Operator
+# LlamaStack service name: Helm chart (default) vs Operator
+# Note: The enhanced llama-stack chart handles both modes; service name changes based on useByOperator flag
 ifeq ($(USE_LLAMA_STACK_OPERATOR),true)
-  LLAMA_STACK_CHART_PREFIX := llama-stack-instance
   LLAMA_STACK_SVC_NAME := llamastack-service
 else
-  LLAMA_STACK_CHART_PREFIX := llama-stack
   LLAMA_STACK_SVC_NAME := llamastack
 endif
 
@@ -216,9 +215,9 @@ helm_llama_stack_args = \
     $(if $(SAFETY_URL),--set global.models.$(SAFETY).url='$(SAFETY_URL)',) \
     $(if $(LLM_API_TOKEN),--set global.models.$(LLM).apiToken='$(LLM_API_TOKEN)',) \
     $(if $(SAFETY_API_TOKEN),--set global.models.$(SAFETY).apiToken='$(SAFETY_API_TOKEN)',) \
-    $(if $(LLAMA_STACK_ENV),--set-json $(LLAMA_STACK_CHART_PREFIX).secrets='$(LLAMA_STACK_ENV)',) \
-    $(if $(RAW_DEPLOYMENT),--set $(LLAMA_STACK_CHART_PREFIX).rawDeploymentMode=$(RAW_DEPLOYMENT),) \
-    $(if $(filter true,$(USE_LLAMA_STACK_OPERATOR)),--set llama-stack.enabled=false --set llama-stack-instance.enabled=true --set llama-stack.useByOperator=true --set llama-stack.network.allowedFrom.labels='ai-observability-summarizer/lls-allowed',)
+    $(if $(LLAMA_STACK_ENV),--set-json llama-stack.secrets='$(LLAMA_STACK_ENV)',) \
+    $(if $(RAW_DEPLOYMENT),--set llama-stack.rawDeploymentMode=$(RAW_DEPLOYMENT),) \
+    $(if $(filter true,$(USE_LLAMA_STACK_OPERATOR)),--set llama-stack.useByOperator=true --set llama-stack.network.allowedFrom.labels='ai-observability-summarizer/lls-allowed',)
 
 helm_pgvector_args = \
     --set pgvector.secret.user=$(POSTGRES_USER) \

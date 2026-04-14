@@ -14,12 +14,9 @@ dependencies:
     # Using enhanced chart with operator mode support (useByOperator, network.allowedFrom.labels)
     # Temporarily using local copy from git branch until operator support is released
     # See 'make depend' target for how this is fetched
+    # This chart handles BOTH Helm deployment and operator mode (no separate llama-stack-instance needed)
     repository: "file://.llama-stack-operator-chart"
     condition: llama-stack.enabled
-  - name: llama-stack-instance
-    version: 1.0.0
-    repository: "file://llama-stack-instance"
-    condition: llama-stack-instance.enabled
   - name: pgvector
     version: 0.5.0
     repository: https://rh-ai-quickstart.github.io/ai-architecture-charts
