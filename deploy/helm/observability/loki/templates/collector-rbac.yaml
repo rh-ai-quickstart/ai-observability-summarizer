@@ -4,8 +4,9 @@
 Collector Service Account and RBAC for OpenShift Logging.
 This creates the necessary service account and permissions for log collection.
 
-NOTE: Set rbac.collector.create=false if using OLM-managed Logging Operator,
-as it will create these resources automatically.
+The collector ClusterRoles are provided by the cluster-logging operator bundle
+(installed via OLM) and are NOT created here. Only the ServiceAccount and
+ClusterRoleBindings are managed by this chart.
 */}}
 
 {{/* ServiceAccount */}}
@@ -19,84 +20,6 @@ metadata:
     {{- include "loki-stack.labels" . | nindent 4 }}
   annotations:
     helm.sh/resource-policy: keep
-
-{{/* ClusterRole: collect-application-logs */}}
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: collect-application-logs
-  labels:
-    {{- include "loki-stack.labels" . | nindent 4 }}
-  annotations:
-    helm.sh/resource-policy: keep
-rules:
-- apiGroups:
-  - logging.openshift.io
-  - observability.openshift.io
-  resourceNames:
-  - application
-  resources:
-  - logs
-  verbs:
-  - collect
-
-{{/* ClusterRole: collect-infrastructure-logs */}}
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: collect-infrastructure-logs
-  labels:
-    {{- include "loki-stack.labels" . | nindent 4 }}
-  annotations:
-    helm.sh/resource-policy: keep
-rules:
-- apiGroups:
-  - logging.openshift.io
-  - observability.openshift.io
-  resourceNames:
-  - infrastructure
-  resources:
-  - logs
-  verbs:
-  - collect
-
-{{/* ClusterRole: collect-audit-logs */}}
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: collect-audit-logs
-  labels:
-    {{- include "loki-stack.labels" . | nindent 4 }}
-  annotations:
-    helm.sh/resource-policy: keep
-rules:
-- apiGroups:
-  - logging.openshift.io
-  - observability.openshift.io
-  resourceNames:
-  - audit
-  resources:
-  - logs
-  verbs:
-  - collect
-
-{{/* ClusterRole: logging-collector-logs-writer */}}
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: logging-collector-logs-writer
-  labels:
-    {{- include "loki-stack.labels" . | nindent 4 }}
-  annotations:
-    helm.sh/resource-policy: keep
-rules:
-- apiGroups: ["loki.grafana.com"]
-  resources: ["application", "infrastructure", "audit"]
-  verbs: ["create"]
 
 {{/* ClusterRoleBinding: collect-application-logs */}}
 ---

@@ -18,7 +18,7 @@ VERSION ?= 5.0.0
 PLATFORM ?= linux/amd64
 DEV_MODE ?= false
 USE_LLAMA_STACK_OPERATOR ?= false
-RHOAI_VERSION ?= 5.0.0
+RHOAI_VERSION ?= 2
 
 # GPU Metrics Discovery - custom prefix overrides (comma-separated, additive)
 GPU_PREFIX_NVIDIA ?=
@@ -1078,7 +1078,7 @@ install-observability:
 			--create-namespace \
 			--wait --timeout 10m \
 			--set global.namespace=$(OBSERVABILITY_NAMESPACE) \
-			$(helm_tempo_args); \
+			$(helm_tempo_args) && \
 		echo "  ✅ TempoStack deployed and ready"; \
 	fi
 
@@ -1090,7 +1090,7 @@ install-observability:
 			--namespace $(OBSERVABILITY_NAMESPACE) \
 			--create-namespace \
 			--wait --timeout 10m \
-			--set global.namespace=$(OBSERVABILITY_NAMESPACE); \
+			--set global.namespace=$(OBSERVABILITY_NAMESPACE) && \
 		echo "  ✅ OpenTelemetry Collector deployed and ready"; \
 	fi
 
@@ -1359,7 +1359,7 @@ install-minio:
 		cd deploy/helm && helm -n $(MINIO_NAMESPACE) upgrade --install $(MINIO_CHART) $(MINIO_CHART_PATH) \
 		--create-namespace \
 		--atomic --wait --timeout 10m \
-		$(MINIO_ARGS); \
+		$(MINIO_ARGS) && \
 		echo "  ✅ $(MINIO_CHART) deployed and ready"; \
 	fi
 	@echo "→ Cleaning up broken upstream routes (pointing to non-existent 'minio' service)"
@@ -1483,7 +1483,7 @@ install-loki:
 		else \
 			echo "  ✅ LokiStack CRD is available"; \
 		fi; \
-		echo "→ Cleaning up any pre-existing ClusterRoles that might conflict..."; \
+		echo "→ Cleaning up any pre-existing Helm-owned ClusterRoleBindings/ServiceAccount..."; \
 		$(MAKE) cleanup-loki-clusterroles; \
 		echo "  ✅ Cleanup complete"; \
 		echo "→ Installing loki-stack helm chart"; \
@@ -1505,7 +1505,7 @@ install-loki:
 			--set global.namespace=$(LOKI_NAMESPACE) \
 			--set rbac.collector.create=$$COLLECTOR_CREATE \
 			--set lokiStack.storageClassName=$$DEFAULT_SC \
-			$(helm_loki_args); \
+			$(helm_loki_args) && \
 		echo "✅ loki-stack installed successfully"; \
 	fi
 	@$(MAKE) enable-logging-ui
