@@ -18,7 +18,6 @@ VERSION ?= 5.0.1
 PLATFORM ?= linux/amd64
 DEV_MODE ?= false
 USE_LLAMA_STACK_OPERATOR ?= false
-RHOAI_VERSION ?= 5.0.1
 
 # GPU Metrics Discovery - custom prefix overrides (comma-separated, additive)
 GPU_PREFIX_NVIDIA ?=
@@ -123,13 +122,16 @@ OPERATOR_MANAGER_SCRIPT := scripts/operator-manager.sh
 # Auto-detect RHOAI version from the cluster when not explicitly set on the command line.
 # Prevents the footgun of deploying on RHOAI 3.x with RHOAI_VERSION=2 defaults, which
 # would install logging/loki operators on stable-6.3 channels instead of stable-6.4.
-# $(origin RHOAI_VERSION) is "file" when set via ?= above, "command line" when explicit.
-ifeq ($(origin RHOAI_VERSION),file)
+# RHOAI_VERSION is NOT declared with ?= to avoid corruption by the version-bump workflow.
+# $(origin RHOAI_VERSION) is "undefined" when not set, "command line" when explicit.
+ifneq ($(origin RHOAI_VERSION),command line)
   _RHOAI_CSV := $(shell oc get csv -n redhat-ods-operator -l operators.coreos.com/rhods-operator.redhat-ods-operator \
     -o jsonpath='{.items[0].spec.version}' 2>/dev/null)
   ifneq ($(findstring 3.,$(_RHOAI_CSV)),)
     $(info ℹ️  Auto-detected RHOAI 3.x ($(_RHOAI_CSV)) — setting RHOAI_VERSION=3)
     RHOAI_VERSION := 3
+  else
+    RHOAI_VERSION := 2
   endif
 endif
 
