@@ -218,7 +218,7 @@ helm_llama_stack_args = \
     $(if $(SAFETY_API_TOKEN),--set global.models.$(SAFETY).apiToken='$(SAFETY_API_TOKEN)',) \
     $(if $(LLAMA_STACK_ENV),--set-json $(LLAMA_STACK_CHART_PREFIX).secrets='$(LLAMA_STACK_ENV)',) \
     $(if $(RAW_DEPLOYMENT),--set $(LLAMA_STACK_CHART_PREFIX).rawDeploymentMode=$(RAW_DEPLOYMENT),) \
-    $(if $(filter true,$(USE_LLAMA_STACK_OPERATOR)),--set llama-stack.enabled=false --set llama-stack-instance.enabled=true,)
+    $(if $(filter true,$(USE_LLAMA_STACK_OPERATOR)),--set llama-stack.enabled=false --set llama-stack-instance.enabled=true --set llama-stack.useByOperator=true --set llama-stack.network.allowedFrom.labels='ai-observability-summarizer/lls-allowed',)
 
 helm_pgvector_args = \
     --set pgvector.secret.user=$(POSTGRES_USER) \
@@ -278,7 +278,7 @@ help:
 	@echo "  install            - Deploy to OpenShift using Helm (DEV_MODE=false: Console Plugin only, DEV_MODE=true: React UI only)"
 	@echo "  install-with-alerts - Deploy with alerting enabled"
 	@echo "  install-local      - Set up local development environment"
-	@echo "  install-rag        - Install RAG backend services only (uses Helm chart by default, operator with USE_LLAMA_STACK_OPERATOR=true)"
+	@echo "  install-rag        - Install RAG backend services only (uses Helm chart by default, operator with USE_LLAMA_STACK_OPERATOR=true; operator mode uses enhanced ai-architecture-chart with network access control)"
 	@echo "  enable-llamastack-operator - Enable LlamaStack operator in DataScienceCluster (auto-detected if already Managed)"
 	@echo "  install-mcp-server - Install MCP server only"
 	@echo "  install-console-plugin - Install OpenShift Console Plugin"
@@ -368,7 +368,7 @@ help:
 	@echo "  SAFETY             - Safety model id"
 	@echo "  RAG_ENABLED         - Set to 'false' to skip RAG backend services (default: true)"
 	@echo "  RHOAI_VERSION          - Set to '2' for RHOAI 2.x or '3' for RHOAI 3.x (auto-detected from cluster, controls operator channels: stable-6.3 vs stable-6.4) (default: auto-detect, fallback: 2)"
-	@echo "  USE_LLAMA_STACK_OPERATOR - Set to 'true' to deploy LlamaStack via operator instead of Helm chart (requires RHOAI_VERSION=3) (default: false)"
+	@echo "  USE_LLAMA_STACK_OPERATOR - Set to 'true' to deploy LlamaStack via operator instead of Helm chart (requires RHOAI_VERSION=3; auto-labels namespace with 'ai-observability-summarizer/lls-allowed=true' for network access control) (default: false)"
 	@echo "  ALERTING_ENABLED    - Set to 'true' to install alerting (default: false)"
 	@echo "  SLACK_WEBHOOK_URL  - Slack Webhook URL for alerting (will prompt if not provided)"
 	@echo "  MINIO_USER         - MinIO username for observability storage (default: admin)"
@@ -471,12 +471,34 @@ namespace:
 		echo "✅ Namespace $(NAMESPACE) created..."; \
 	fi
 
+	@if [ "$(USE_LLAMA_STACK_OPERATOR)" = "true" ]; then \
+		echo "→ Ensuring namespace has label for LlamaStack operator mode access..."; \
+		if ! oc get namespace $(NAMESPACE) -o jsonpath='{.metadata.labels.ai-observability-summarizer/lls-allowed}' | grep -q 'true'; then \
+			oc label namespace $(NAMESPACE) ai-observability-summarizer/lls-allowed=true --overwrite; \
+			echo "  ✅ Label 'ai-observability-summarizer/lls-allowed=true' applied to namespace $(NAMESPACE)"; \
+		else \
+			echo "  ✅ Namespace $(NAMESPACE) already has label 'ai-observability-summarizer/lls-allowed=true'"; \
+		fi; \
+	fi
+
 	@echo "Setting [$(NAMESPACE)] as default namespace..."
 	@oc project $(NAMESPACE) > /dev/null
 
 .PHONY: depend
 depend:
 	@echo "Updating Helm dependencies (for $(RAG_CHART))..."
+	@echo "→ Fetching enhanced llama-stack chart with operator mode support..."
+	@if [ -d deploy/helm/$(RAG_CHART)/.llama-stack-operator-chart ]; then \
+		echo "  → Updating existing llama-stack operator chart..."; \
+		cd deploy/helm/$(RAG_CHART)/.llama-stack-operator-chart && git fetch origin operator && git checkout operator && git pull origin operator; \
+	else \
+		echo "  → Cloning llama-stack operator chart (branch: operator)..."; \
+		git clone --depth 1 --branch operator https://github.com/jianrongzhang89/ai-architecture-charts.git deploy/helm/$(RAG_CHART)/.llama-stack-operator-chart-tmp; \
+		mkdir -p deploy/helm/$(RAG_CHART)/.llama-stack-operator-chart; \
+		cp -r deploy/helm/$(RAG_CHART)/.llama-stack-operator-chart-tmp/llama-stack/* deploy/helm/$(RAG_CHART)/.llama-stack-operator-chart/; \
+		rm -rf deploy/helm/$(RAG_CHART)/.llama-stack-operator-chart-tmp; \
+	fi
+	@echo "  ✅ llama-stack operator chart ready"
 	@rm -rf deploy/helm/$(RAG_CHART)/charts
 	@cd deploy/helm && helm dependency update $(RAG_CHART) || exit 1
 

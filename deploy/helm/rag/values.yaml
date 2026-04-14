@@ -3,6 +3,11 @@
 #   Default (Helm chart):  llama-stack.enabled=true   -> deploys raw LlamaStack Deployment (service: llamastack)
 #   Operator mode:         llama-stack-instance.enabled=true -> creates LlamaStackDistribution CR (service: llamastack-service)
 # To switch to operator mode, set RHOAI_VERSION=3 USE_LLAMA_STACK_OPERATOR=true when running make install
+#
+# Operator mode enhancements (requires enhanced ai-architecture-chart from operator branch):
+#   - llama-stack.useByOperator=true: Signals the chart to use operator-compatible configurations
+#   - llama-stack.network.allowedFrom.labels='ai-observability-summarizer/lls-allowed': Network policy label selector
+#   - Namespace is auto-labeled with 'ai-observability-summarizer/lls-allowed=true' for network access
 
 # Common model values for llm-service and llama-stack / llama-stack-instance
 # See format in https://github.com/RHEcosystemAppEng/ai-architecture-charts/blob/main/helm/llm-service/values.yaml
