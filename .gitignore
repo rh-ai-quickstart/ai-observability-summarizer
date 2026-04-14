@@ -188,7 +188,8 @@ src/mcp_log.txt
 charts/
 
 # Temporary llama-stack operator chart (fetched from git branch)
-deploy/helm/rag/.llama-stack-operator-chart/
+deploy/helm/rag/.llama-stack-operator-repo/
+deploy/helm/rag/.llama-stack-operator-chart
 
 # TMP directory (if any)
 TMP/

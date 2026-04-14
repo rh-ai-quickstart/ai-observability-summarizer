@@ -10,7 +10,7 @@ dependencies:
     version: 0.5.4
     repository: https://rh-ai-quickstart.github.io/ai-architecture-charts
   - name: llama-stack
-    version: 0.5.3
+    version: 0.7.3
     # Using enhanced chart with operator mode support (useByOperator, network.allowedFrom.labels)
     # Temporarily using local copy from git branch until operator support is released
     # See 'make depend' target for how this is fetched
