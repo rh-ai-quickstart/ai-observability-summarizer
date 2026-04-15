@@ -497,9 +497,6 @@ depend:
 		cp -r deploy/helm/$(RAG_CHART)/.llama-stack-operator-chart-tmp/llama-stack/helm/* deploy/helm/$(RAG_CHART)/.llama-stack-operator-chart/; \
 		rm -rf deploy/helm/$(RAG_CHART)/.llama-stack-operator-chart-tmp; \
 	fi
-	@echo "  → Creating chart symlink..."
-	@rm -f deploy/helm/$(RAG_CHART)/.llama-stack-operator-chart
-	@ln -sf .llama-stack-operator-repo/llama-stack/helm deploy/helm/$(RAG_CHART)/.llama-stack-operator-chart
 	@echo "  ✅ llama-stack operator chart ready"
 	@rm -rf deploy/helm/$(RAG_CHART)/charts
 	@cd deploy/helm && helm dependency update $(RAG_CHART) || exit 1
