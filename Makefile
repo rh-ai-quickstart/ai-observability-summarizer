@@ -524,7 +524,7 @@ install-mcp-server: namespace
 			--set LLM_PREDICTOR=$(LLM)-predictor \
 			--set env.DEV_MODE=$(DEV_MODE) \
 			$(if $(MCP_SERVER_ROUTE_HOST),--set route.host='$(MCP_SERVER_ROUTE_HOST)',) \
-			$(if $(LLAMA_STACK_URL),--set llm.url='$(LLAMA_STACK_URL)',$(if $(filter true,$(USE_LLAMA_STACK_OPERATOR)),--set llm.url='http://$(LLAMA_STACK_SVC_NAME).$(NAMESPACE).svc.cluster.local:8321/v1/openai/v1',)) \
+			$(if $(LLAMA_STACK_URL),--set llm.url='$(LLAMA_STACK_URL)',$(if $(filter true,$(USE_LLAMA_STACK_OPERATOR)),--set llm.url='http://$(LLAMA_STACK_SVC_NAME).$(NAMESPACE).svc.cluster.local:8321',)) \
 			$(if $(GPU_PREFIX_NVIDIA),--set env.GPU_METRICS_PREFIX_NVIDIA='$(GPU_PREFIX_NVIDIA)',) \
 			$(if $(GPU_PREFIX_INTEL),--set env.GPU_METRICS_PREFIX_INTEL='$(GPU_PREFIX_INTEL)',) \
 			$(if $(GPU_PREFIX_AMD),--set env.GPU_METRICS_PREFIX_AMD='$(GPU_PREFIX_AMD)',) \
@@ -538,7 +538,7 @@ install-mcp-server: namespace
 			--set LLM_PREDICTOR=$(LLM)-predictor \
 			--set env.DEV_MODE=$(DEV_MODE) \
 			$(if $(MCP_SERVER_ROUTE_HOST),--set route.host='$(MCP_SERVER_ROUTE_HOST)',) \
-			$(if $(LLAMA_STACK_URL),--set llm.url='$(LLAMA_STACK_URL)',$(if $(filter true,$(USE_LLAMA_STACK_OPERATOR)),--set llm.url='http://$(LLAMA_STACK_SVC_NAME).$(NAMESPACE).svc.cluster.local:8321/v1/openai/v1',)) \
+			$(if $(LLAMA_STACK_URL),--set llm.url='$(LLAMA_STACK_URL)',$(if $(filter true,$(USE_LLAMA_STACK_OPERATOR)),--set llm.url='http://$(LLAMA_STACK_SVC_NAME).$(NAMESPACE).svc.cluster.local:8321',)) \
 			$(if $(GPU_PREFIX_NVIDIA),--set env.GPU_METRICS_PREFIX_NVIDIA='$(GPU_PREFIX_NVIDIA)',) \
 			$(if $(GPU_PREFIX_INTEL),--set env.GPU_METRICS_PREFIX_INTEL='$(GPU_PREFIX_INTEL)',) \
 			$(if $(GPU_PREFIX_AMD),--set env.GPU_METRICS_PREFIX_AMD='$(GPU_PREFIX_AMD)',) \
