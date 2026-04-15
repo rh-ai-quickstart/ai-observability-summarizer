@@ -44,6 +44,8 @@ minio:
 
 llama-stack:
   enabled: true
+  # Note: pgvector.enabled=true by default in llama-stack chart
+  # PostgreSQL env vars are automatically injected when pgvector is enabled
   env:
     - name: VLLM_MAX_TOKENS
       value: "4096"
@@ -53,31 +55,8 @@ llama-stack:
       value: http://otel-collector-collector.observability-hub.svc.cluster.local:4318/v1/traces
     - name: OTEL_PYTHON_DISABLED_INSTRUMENTATIONS
       value: sqlite3
-    - name: POSTGRES_USER
-      valueFrom:
-        secretKeyRef:
-          key: user
-          name: pgvector
-    - name: POSTGRES_PASSWORD
-      valueFrom:
-        secretKeyRef:
-          key: password
-          name: pgvector
-    - name: POSTGRES_HOST
-      valueFrom:
-        secretKeyRef:
-          key: host
-          name: pgvector
-    - name: POSTGRES_PORT
-      valueFrom:
-        secretKeyRef:
-          key: port
-          name: pgvector
-    - name: POSTGRES_DBNAME
-      valueFrom:
-        secretKeyRef:
-          key: dbname
-          name: pgvector
+    # Note: POSTGRES_* env vars are automatically injected by llama-stack chart
+    # when pgvector.enabled=true (see chart template). No need to duplicate here.
   secrets:
     TAVILY_SEARCH_API_KEY: "Paste-your-key-here"
   # For llama-stack-instance, {{ .Release.Namespace }} is expanded via tpl in the subchart ConfigMap.

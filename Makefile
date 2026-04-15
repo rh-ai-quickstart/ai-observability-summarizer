@@ -161,7 +161,7 @@ export USE_LLAMA_STACK_OPERATOR
 export RHOAI_VERSION
 
 # LlamaStack service name: Helm chart (default) vs Operator
-# Note: The enhanced llama-stack chart handles both modes; service name changes based on useByOperator flag
+# Note: The enhanced llama-stack chart handles both modes; service name changes based on managedByOperator flag
 ifeq ($(USE_LLAMA_STACK_OPERATOR),true)
   LLAMA_STACK_SVC_NAME := llamastack-service
 else
@@ -217,7 +217,7 @@ helm_llama_stack_args = \
     $(if $(SAFETY_API_TOKEN),--set global.models.$(SAFETY).apiToken='$(SAFETY_API_TOKEN)',) \
     $(if $(LLAMA_STACK_ENV),--set-json llama-stack.secrets='$(LLAMA_STACK_ENV)',) \
     $(if $(RAW_DEPLOYMENT),--set llama-stack.rawDeploymentMode=$(RAW_DEPLOYMENT),) \
-    $(if $(filter true,$(USE_LLAMA_STACK_OPERATOR)),--set llama-stack.managedByOperator=true --set-json llama-stack.network.allowedFrom.labels='["ai-observability-summarizer/lls-allowed"]',)
+    $(if $(filter true,$(USE_LLAMA_STACK_OPERATOR)),--set llama-stack.managedByOperator=true --set-json llama-stack.network.allowedFrom.labels='["ai-observability-summarizer/lls-allowed"]' --set llama-stack.userConfig.configMapNamespace=$(NAMESPACE),)
 
 helm_pgvector_args = \
     --set pgvector.secret.user=$(POSTGRES_USER) \
@@ -492,7 +492,10 @@ depend:
 		cd deploy/helm/$(RAG_CHART)/.llama-stack-operator-repo && git fetch origin operator && git checkout operator && git pull origin operator; \
 	else \
 		echo "  → Cloning llama-stack operator chart (branch: operator)..."; \
-		git clone --depth 1 --branch operator https://github.com/jianrongzhang89/ai-architecture-charts.git deploy/helm/$(RAG_CHART)/.llama-stack-operator-repo; \
+		git clone --depth 1 --branch operator https://github.com/jianrongzhang89/ai-architecture-charts.git deploy/helm/$(RAG_CHART)/.llama-stack-operator-chart-tmp; \
+		mkdir -p deploy/helm/$(RAG_CHART)/.llama-stack-operator-chart; \
+		cp -r deploy/helm/$(RAG_CHART)/.llama-stack-operator-chart-tmp/llama-stack/helm/* deploy/helm/$(RAG_CHART)/.llama-stack-operator-chart/; \
+		rm -rf deploy/helm/$(RAG_CHART)/.llama-stack-operator-chart-tmp; \
 	fi
 	@echo "  → Creating chart symlink..."
 	@rm -f deploy/helm/$(RAG_CHART)/.llama-stack-operator-chart
