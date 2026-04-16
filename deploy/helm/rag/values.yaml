@@ -86,6 +86,22 @@ llama-stack:
 
 llama-stack-instance:
   enabled: false
+  # Explicitly disable all built-in models - models should come from global.models or llm-service chart
+  models:
+    llama-3-2-3b-instruct:
+      enabled: false
+    llama-guard-3-8b:
+      enabled: false
+    llama-3-2-1b-instruct:
+      enabled: false
+    llama-3-1-8b-instruct:
+      enabled: false
+    llama-guard-3-1b:
+      enabled: false
+    llama-3-3-70b-instruct:
+      enabled: false
+    llama-3-2-1b-instruct-quantized:
+      enabled: false
   env:
     - name: VLLM_MAX_TOKENS
       value: "4096"
