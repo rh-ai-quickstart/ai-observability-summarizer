@@ -9,7 +9,12 @@
 # For e.g., to add a new model add the following block and it will append to the list of models defined in the llm-service
 
 global:
-  models: {}
+  models:
+    llama-3-1-8b-instruct:
+      id: meta-llama/Llama-3.1-8B-Instruct
+      enabled: true
+      # The llm-service and llama-stack charts will auto-generate the URL
+      # based on the service name: http://llama-3-1-8b-instruct.<namespace>.svc.cluster.local/v1
 
 
 pgvector:
@@ -39,6 +44,7 @@ minio:
 
 llama-stack:
   enabled: true
+  # Models are inherited from global.models
   env:
     - name: VLLM_MAX_TOKENS
       value: "4096"
