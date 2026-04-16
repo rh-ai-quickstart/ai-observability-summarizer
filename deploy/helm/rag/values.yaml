@@ -42,6 +42,11 @@ minio:
     - https://raw.githubusercontent.com/rh-ai-quickstart/RAG/refs/heads/main/notebooks/Zippity_Zoo_and_the_Town_of_Whispering_Willows.pdf
 
 
+llm-service:
+  # Explicitly enable llm-service chart to deploy vLLM pods
+  # Models are inherited from global.models
+  enabled: true
+
 llama-stack:
   enabled: true
   # Models configuration - explicitly define for the remote chart
