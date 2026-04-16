@@ -120,8 +120,6 @@ DEFAULT_LLM_PORT_AND_PATH := :8080/v1
 OPERATOR_MANAGER_SCRIPT := scripts/operator-manager.sh
 
 # Auto-detect RHOAI version from the cluster when not explicitly set on the command line.
-# Prevents the footgun of deploying on RHOAI 3.x with RHOAI_VERSION=2 defaults, which
-# would install logging/loki operators on stable-6.3 channels instead of stable-6.4.
 # RHOAI_VERSION is NOT declared with ?= to avoid corruption by the version-bump workflow.
 # $(origin RHOAI_VERSION) is "undefined" when not set, "command line" when explicit.
 ifneq ($(origin RHOAI_VERSION),command line)
@@ -171,15 +169,31 @@ else
   LLAMA_STACK_SVC_NAME := llamastack
 endif
 
-# Logging/Loki operator channel and starting CSV: RHOAI 3.x uses stable-6.4, RHOAI 2.x uses stable-6.3
-ifeq ($(RHOAI_VERSION),3)
-  LOGGING_LOKI_CHANNEL := stable-6.4
-  LOGGING_STARTING_CSV := cluster-logging.v6.4.3
-  LOKI_STARTING_CSV := loki-operator.v6.4.3
-else
-  LOGGING_LOKI_CHANNEL := stable-6.3
-  LOGGING_STARTING_CSV := cluster-logging.v6.3.4
-  LOKI_STARTING_CSV := loki-operator.v6.3.4
+# Logging/Loki operator channel and starting CSV.
+# Auto-detected from the cluster's redhat-operators catalog (defaultChannel + currentCSV).
+# Fails if the cluster is unreachable — no hardcoded fallback to avoid installing untested versions.
+# NOTE: Must query with -l catalog=redhat-operators because loki-operator also exists
+# in community-operators (with only an 'alpha' channel).
+LOGGING_LOKI_CHANNEL := $(shell oc get packagemanifest -l catalog=redhat-operators \
+    -o jsonpath='{range .items[?(@.metadata.name=="cluster-logging")]}{.status.defaultChannel}{end}' 2>/dev/null)
+ifeq ($(LOGGING_LOKI_CHANNEL),)
+  $(info )
+  $(info  🛑 Could not detect logging/loki operator channel from the redhat-operators catalog.)
+  $(info     Verify the cluster is reachable and the catalog is healthy:)
+  $(info       - oc get catalogsource redhat-operators -n openshift-marketplace)
+  $(info  Exiting!!!)
+  $(info )
+  $(error Aborting)
+endif
+
+LOGGING_STARTING_CSV := $(shell oc get packagemanifest -l catalog=redhat-operators \
+    -o jsonpath='{range .items[?(@.metadata.name=="cluster-logging")].status.channels[?(@.name=="$(LOGGING_LOKI_CHANNEL)")]}{.currentCSV}{end}' 2>/dev/null)
+
+LOKI_STARTING_CSV := $(shell oc get packagemanifest -l catalog=redhat-operators \
+    -o jsonpath='{range .items[?(@.metadata.name=="loki-operator")].status.channels[?(@.name=="$(LOGGING_LOKI_CHANNEL)")]}{.currentCSV}{end}' 2>/dev/null)
+
+ifneq ($(LOGGING_LOKI_CHANNEL),)
+  $(info ℹ️  Operator channels: $(LOGGING_LOKI_CHANNEL) (logging=$(LOGGING_STARTING_CSV), loki=$(LOKI_STARTING_CSV)))
 endif
 
 # Validate: LlamaStack operator requires RHOAI 3.x (operator v0.3.0 on RHOAI 2.x is not supported)
