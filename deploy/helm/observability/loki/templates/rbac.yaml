@@ -39,6 +39,13 @@ subjects:
   name: {{ .Values.rbac.serviceAccounts.logForwarder.name }}
   namespace: {{ include "loki-stack.namespace" . }}
 {{- end }}
+# Additional service accounts for Korrel8r and MCP Server
+- kind: ServiceAccount
+  name: korrel8r-summarizer
+  namespace: {{ .Values.global.korrel8rNamespace | default "openshift-cluster-observability-operator" }}
+- kind: ServiceAccount
+  name: mcp-analyzer
+  namespace: {{ .Release.Namespace }}
 ---
 {{- if .Values.rbac.serviceAccounts.logForwarder.create }}
 # Service account for log forwarding
