@@ -220,6 +220,8 @@ rules:
   - collect
 - apiGroups:
   - loki.grafana.com
+  resourceNames:
+  - logs
   resources:
   - application
   - infrastructure
