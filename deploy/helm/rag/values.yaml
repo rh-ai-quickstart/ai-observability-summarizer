@@ -50,8 +50,11 @@ llama-stack:
       value: "4096"
     - name: VLLM_API_TOKEN
       value: fake
-    - name: OTEL_ENDPOINT
-      value: http://otel-collector-collector.observability-hub.svc.cluster.local:4318/v1/traces
+    # Disable OTEL export until observability-hub namespace has OTEL collector deployed
+    # - name: OTEL_ENDPOINT
+    #   value: http://otel-collector-collector.observability-hub.svc.cluster.local:4318/v1/traces
+    - name: OTEL_SDK_DISABLED
+      value: "true"
     - name: OTEL_PYTHON_DISABLED_INSTRUMENTATIONS
       value: sqlite3
     - name: POSTGRES_USER
@@ -113,8 +116,11 @@ llama-stack-instance:
       value: "4096"
     - name: VLLM_API_TOKEN
       value: fake
-    - name: OTEL_ENDPOINT
-      value: http://otel-collector-collector.observability-hub.svc.cluster.local:4318/v1/traces
+    # Disable OTEL export until observability-hub namespace has OTEL collector deployed
+    # - name: OTEL_ENDPOINT
+    #   value: http://otel-collector-collector.observability-hub.svc.cluster.local:4318/v1/traces
+    - name: OTEL_SDK_DISABLED
+      value: "true"
     - name: OTEL_PYTHON_DISABLED_INSTRUMENTATIONS
       value: sqlite3
     - name: POSTGRES_USER
