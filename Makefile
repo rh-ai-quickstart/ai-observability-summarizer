@@ -169,29 +169,36 @@ else
   LLAMA_STACK_SVC_NAME := llamastack
 endif
 
-# Logging/Loki operator channel and starting CSV.
-# Auto-detected from the cluster's redhat-operators catalog (defaultChannel + currentCSV).
+# Logging/Loki operator channels and starting CSVs.
+# Auto-detected independently from the cluster's redhat-operators catalog.
 # No hardcoded fallback — install targets fail fast if detection fails.
 # NOTE: Must query with -l catalog=redhat-operators because loki-operator also exists
 # in community-operators (with only an 'alpha' channel).
-LOGGING_LOKI_CHANNEL := $(shell oc get packagemanifest -l catalog=redhat-operators \
+
+# Logging operator channel + CSV
+LOGGING_CHANNEL := $(shell oc get packagemanifest -l catalog=redhat-operators \
     -o jsonpath='{range .items[?(@.metadata.name=="cluster-logging")]}{.status.defaultChannel}{end}' 2>/dev/null)
-
 LOGGING_STARTING_CSV := $(shell oc get packagemanifest -l catalog=redhat-operators \
-    -o jsonpath='{range .items[?(@.metadata.name=="cluster-logging")].status.channels[?(@.name=="$(LOGGING_LOKI_CHANNEL)")]}{.currentCSV}{end}' 2>/dev/null)
+    -o jsonpath='{range .items[?(@.metadata.name=="cluster-logging")].status.channels[?(@.name=="$(LOGGING_CHANNEL)")]}{.currentCSV}{end}' 2>/dev/null)
 
+# Loki operator channel + CSV (queried independently — channels may diverge from logging)
+LOKI_CHANNEL := $(shell oc get packagemanifest -l catalog=redhat-operators \
+    -o jsonpath='{range .items[?(@.metadata.name=="loki-operator")]}{.status.defaultChannel}{end}' 2>/dev/null)
 LOKI_STARTING_CSV := $(shell oc get packagemanifest -l catalog=redhat-operators \
-    -o jsonpath='{range .items[?(@.metadata.name=="loki-operator")].status.channels[?(@.name=="$(LOGGING_LOKI_CHANNEL)")]}{.currentCSV}{end}' 2>/dev/null)
+    -o jsonpath='{range .items[?(@.metadata.name=="loki-operator")].status.channels[?(@.name=="$(LOKI_CHANNEL)")]}{.currentCSV}{end}' 2>/dev/null)
 
-ifneq ($(LOGGING_LOKI_CHANNEL),)
-  $(info ℹ️  Operator channels: $(LOGGING_LOKI_CHANNEL) (logging=$(LOGGING_STARTING_CSV), loki=$(LOKI_STARTING_CSV)))
+ifneq ($(LOGGING_CHANNEL),)
+  $(info ℹ️  Logging operator: channel=$(LOGGING_CHANNEL), csv=$(LOGGING_STARTING_CSV))
+endif
+ifneq ($(LOKI_CHANNEL),)
+  $(info ℹ️  Loki operator: channel=$(LOKI_CHANNEL), csv=$(LOKI_STARTING_CSV))
 endif
 
 # Guard macro: fails with actionable error when operator channel was not detected.
 # Called at recipe time by install targets that need the channel, so non-cluster
 # targets (test, build, help) are not affected.
 define _require_operator_channel
-	@if [ -z "$(LOGGING_LOKI_CHANNEL)" ]; then \
+	@if [ -z "$(LOGGING_CHANNEL)" ] || [ -z "$(LOKI_CHANNEL)" ]; then \
 		echo ""; \
 		echo "🛑 Could not detect logging/loki operator channel from the redhat-operators catalog."; \
 		echo "   Verify the cluster is reachable and the catalog is healthy:"; \
@@ -1627,14 +1634,14 @@ install-tempo-operator:
 install-logging-operator:
 	$(call _require_operator_channel)
 	@echo ""
-	@CHANNEL=$(LOGGING_LOKI_CHANNEL) STARTING_CSV=$(LOGGING_STARTING_CSV) $(OPERATOR_MANAGER_SCRIPT) -i logging -n openshift-logging
+	@CHANNEL=$(LOGGING_CHANNEL) STARTING_CSV=$(LOGGING_STARTING_CSV) $(OPERATOR_MANAGER_SCRIPT) -i logging -n openshift-logging
 
 # Install Loki Operator
 .PHONY: install-loki-operator
 install-loki-operator:
 	$(call _require_operator_channel)
 	@echo ""
-	@CHANNEL=$(LOGGING_LOKI_CHANNEL) STARTING_CSV=$(LOKI_STARTING_CSV) $(OPERATOR_MANAGER_SCRIPT) -i loki -n openshift-operators-redhat
+	@CHANNEL=$(LOKI_CHANNEL) STARTING_CSV=$(LOKI_STARTING_CSV) $(OPERATOR_MANAGER_SCRIPT) -i loki -n openshift-operators-redhat
 
 # Verify all required operators are installed and ready
 .PHONY: verify-operators-ready
