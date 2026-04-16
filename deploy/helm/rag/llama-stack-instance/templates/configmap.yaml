@@ -28,7 +28,7 @@ data:
     providers:
       inference:
       {{- range $key, $model := $models }}
-      {{- if $model.enabled }}
+      {{- if and $model.enabled $model.url }}
       - provider_id: {{ $key }}
         provider_type: remote::vllm
         config:
@@ -130,7 +130,7 @@ data:
       {{- toYaml .Values.metadataStore | nindent 6 }}
     models:
     {{- range $key, $model := $models }}
-    {{- if $model.enabled }}
+    {{- if and $model.enabled $model.url }}
     - metadata: {}
       model_id: {{ $model.id }}
       provider_id: {{ $key }}
