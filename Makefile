@@ -171,20 +171,11 @@ endif
 
 # Logging/Loki operator channel and starting CSV.
 # Auto-detected from the cluster's redhat-operators catalog (defaultChannel + currentCSV).
-# Fails if the cluster is unreachable — no hardcoded fallback to avoid installing untested versions.
+# No hardcoded fallback — install targets fail fast if detection fails.
 # NOTE: Must query with -l catalog=redhat-operators because loki-operator also exists
 # in community-operators (with only an 'alpha' channel).
 LOGGING_LOKI_CHANNEL := $(shell oc get packagemanifest -l catalog=redhat-operators \
     -o jsonpath='{range .items[?(@.metadata.name=="cluster-logging")]}{.status.defaultChannel}{end}' 2>/dev/null)
-ifeq ($(LOGGING_LOKI_CHANNEL),)
-  $(info )
-  $(info  🛑 Could not detect logging/loki operator channel from the redhat-operators catalog.)
-  $(info     Verify the cluster is reachable and the catalog is healthy:)
-  $(info       - oc get catalogsource redhat-operators -n openshift-marketplace)
-  $(info  Exiting!!!)
-  $(info )
-  $(error Aborting)
-endif
 
 LOGGING_STARTING_CSV := $(shell oc get packagemanifest -l catalog=redhat-operators \
     -o jsonpath='{range .items[?(@.metadata.name=="cluster-logging")].status.channels[?(@.name=="$(LOGGING_LOKI_CHANNEL)")]}{.currentCSV}{end}' 2>/dev/null)
@@ -195,6 +186,21 @@ LOKI_STARTING_CSV := $(shell oc get packagemanifest -l catalog=redhat-operators 
 ifneq ($(LOGGING_LOKI_CHANNEL),)
   $(info ℹ️  Operator channels: $(LOGGING_LOKI_CHANNEL) (logging=$(LOGGING_STARTING_CSV), loki=$(LOKI_STARTING_CSV)))
 endif
+
+# Guard macro: fails with actionable error when operator channel was not detected.
+# Called at recipe time by install targets that need the channel, so non-cluster
+# targets (test, build, help) are not affected.
+define _require_operator_channel
+	@if [ -z "$(LOGGING_LOKI_CHANNEL)" ]; then \
+		echo ""; \
+		echo "🛑 Could not detect logging/loki operator channel from the redhat-operators catalog."; \
+		echo "   Verify the cluster is reachable and the catalog is healthy:"; \
+		echo "     - oc get catalogsource redhat-operators -n openshift-marketplace"; \
+		echo "Exiting!!!"; \
+		echo ""; \
+		exit 1; \
+	fi
+endef
 
 # Validate: LlamaStack operator requires RHOAI 3.x (operator v0.3.0 on RHOAI 2.x is not supported)
 ifeq ($(USE_LLAMA_STACK_OPERATOR),true)
@@ -1619,12 +1625,14 @@ install-tempo-operator:
 # Install OpenShift Logging Operator
 .PHONY: install-logging-operator
 install-logging-operator:
+	$(call _require_operator_channel)
 	@echo ""
 	@CHANNEL=$(LOGGING_LOKI_CHANNEL) STARTING_CSV=$(LOGGING_STARTING_CSV) $(OPERATOR_MANAGER_SCRIPT) -i logging -n openshift-logging
 
 # Install Loki Operator
 .PHONY: install-loki-operator
 install-loki-operator:
+	$(call _require_operator_channel)
 	@echo ""
 	@CHANNEL=$(LOGGING_LOKI_CHANNEL) STARTING_CSV=$(LOKI_STARTING_CSV) $(OPERATOR_MANAGER_SCRIPT) -i loki -n openshift-operators-redhat
 
