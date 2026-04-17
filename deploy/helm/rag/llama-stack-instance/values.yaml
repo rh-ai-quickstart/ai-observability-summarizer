@@ -22,6 +22,8 @@ service:
   port: 8321
 
 env:
+  - name: RUN_CONFIG_PATH
+    value: /app-config/config.yaml
   - name: VLLM_MAX_TOKENS
     value: "4096"
   - name: VLLM_API_TOKEN
