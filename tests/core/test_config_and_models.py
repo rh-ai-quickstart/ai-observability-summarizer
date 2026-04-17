@@ -91,7 +91,7 @@ class TestEnvironmentVariables:
     
     def test_llama_stack_url_default(self):
         """Should have correct default LLama stack URL"""
-        assert LLAMA_STACK_URL == os.getenv("LLAMA_STACK_URL", "http://localhost:8321/v1/openai/v1")
+        assert LLAMA_STACK_URL == os.getenv("LLAMA_STACK_URL", "http://localhost:8321/v1")
     
     def test_llm_api_token_default(self):
         """Should have empty default LLM API token"""

@@ -77,7 +77,7 @@ spec:
                   name: mcp-analyzer
                   key: token
             - name: LLM_URL
-              value: "http://{{ .Values.LLM_PREDICTOR }}.{{ .Release.Namespace }}.svc.cluster.local:8080/v1/openai/v1"
+              value: "http://{{ .Values.LLM_PREDICTOR }}.{{ .Release.Namespace }}.svc.cluster.local:8080/v1"
             - name: LLM_API_TOKEN
               value: "{{ .Values.llm.apiToken }}"
             {{- if .Values.llm.url }}
@@ -85,7 +85,7 @@ spec:
               value: "{{ .Values.llm.url }}"
             {{- else }}
             - name: LLAMA_STACK_URL
-              value: "http://llamastack.{{ .Release.Namespace }}.svc.cluster.local:8321/v1/openai/v1"
+              value: "http://llamastack.{{ .Release.Namespace }}.svc.cluster.local:8321/v1"
             {{- end }}
             {{- if .Values.env.GPU_METRICS_PREFIX_NVIDIA }}
             - name: GPU_METRICS_PREFIX_NVIDIA

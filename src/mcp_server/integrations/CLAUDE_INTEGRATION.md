@@ -42,7 +42,7 @@ cp src/mcp_server/integrations/claude-desktop-config.json \
       "args": ["--local"],
       "env": {
         "PROMETHEUS_URL": "http://localhost:9090",
-        "LLAMA_STACK_URL": "http://localhost:8321/v1/openai/v1",
+        "LLAMA_STACK_URL": "http://localhost:8321/v1",
         "MODEL_CONFIG": "<your model config JSON>",
         "THANOS_TOKEN": "<oc whoami -t>"
       },
