@@ -10,7 +10,7 @@ dependencies:
     version: 0.5.8
     repository: https://rh-ai-quickstart.github.io/ai-architecture-charts
   - name: llama-stack
-    version: 0.6.0
+    version: 0.7.3
     repository: https://rh-ai-quickstart.github.io/ai-architecture-charts
     condition: llama-stack.enabled
   - name: llama-stack-instance
