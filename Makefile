@@ -194,13 +194,14 @@ ifneq ($(LOKI_CHANNEL),)
   $(info ℹ️  Loki operator: channel=$(LOKI_CHANNEL), csv=$(LOKI_STARTING_CSV))
 endif
 
-# Guard macro: fails with actionable error when operator channel was not detected.
-# Called at recipe time by install targets that need the channel, so non-cluster
-# targets (test, build, help) are not affected.
+# Guard macro: fails with actionable error when operator channel or starting CSV
+# was not detected.  Called at recipe time by install targets that need them, so
+# non-cluster targets (test, build, help) are not affected.
 define _require_operator_channel
-	@if [ -z "$(LOGGING_CHANNEL)" ] || [ -z "$(LOKI_CHANNEL)" ]; then \
+	@if [ -z "$(LOGGING_CHANNEL)" ] || [ -z "$(LOKI_CHANNEL)" ] || \
+	    [ -z "$(LOGGING_STARTING_CSV)" ] || [ -z "$(LOKI_STARTING_CSV)" ]; then \
 		echo ""; \
-		echo "🛑 Could not detect logging/loki operator channel from the redhat-operators catalog."; \
+		echo "🛑 Could not detect logging/loki operator channel or starting CSV from the redhat-operators catalog."; \
 		echo "   Verify the cluster is reachable and the catalog is healthy:"; \
 		echo "     - oc get catalogsource redhat-operators -n openshift-marketplace"; \
 		echo "Exiting!!!"; \
