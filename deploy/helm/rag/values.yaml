@@ -10,11 +10,8 @@
 
 global:
   models:
-    llama-3-1-8b-instruct:
-      id: meta-llama/Llama-3.1-8B-Instruct
-      enabled: true
-      # The llm-service and llama-stack charts will auto-generate the URL
-      # based on the service name: http://llama-3-1-8b-instruct.<namespace>.svc.cluster.local/v1
+    # Model configuration moved to llama-stack.models section
+    # to control the exact provider_id and model_id for clean registration
 
 
 pgvector:
