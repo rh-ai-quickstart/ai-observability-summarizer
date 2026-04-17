@@ -10,8 +10,12 @@
 
 global:
   models:
-    # Model configuration moved to llama-stack.models section
-    # to control the exact provider_id and model_id for clean registration
+    meta-llama:
+      id: Llama-3.1-8B-Instruct
+      enabled: true
+      # llm-service will create vLLM service: meta-llama-predictor
+      # llama-stack will register model: meta-llama/Llama-3.1-8B-Instruct
+      url: http://meta-llama-predictor.jianrong.svc.cluster.local:8080/v1
 
 
 pgvector:
@@ -46,13 +50,8 @@ llm-service:
 
 llama-stack:
   enabled: true
-  # Models configuration - explicitly define for the remote chart
-  models:
-    meta-llama:
-      id: Llama-3.1-8B-Instruct
-      enabled: true
-      url: http://llama-3-1-8b-instruct-predictor.jianrong.svc.cluster.local:8080/v1
-      apiToken: fake
+  # Models are inherited from global.models
+  # Resulted in ID: llama-3-1-8b-instruct/meta-llama/Llama-3.1-8B-Instruct
   env:
     - name: RUN_CONFIG_PATH
       value: /app-config/config.yaml
