@@ -57,6 +57,8 @@ llama-stack:
       url: http://llama-3-1-8b-instruct-predictor.jianrong.svc.cluster.local:8080/v1
       apiToken: fake
   env:
+    - name: RUN_CONFIG_PATH
+      value: /app-config/config.yaml
     - name: VLLM_MAX_TOKENS
       value: "4096"
     - name: VLLM_API_TOKEN
