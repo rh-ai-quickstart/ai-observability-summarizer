@@ -51,7 +51,7 @@ llm-service:
 llama-stack:
   enabled: true
   # Models are inherited from global.models
-  # Resulted in ID: llama-3-1-8b-instruct/meta-llama/Llama-3.1-8B-Instruct
+  # Model ID: meta-llama/Llama-3.1-8B-Instruct
   env:
     - name: RUN_CONFIG_PATH
       value: /app-config/config.yaml
