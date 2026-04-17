@@ -9,7 +9,7 @@ image:
   repository: llamastack/distribution-starter
   pullPolicy: IfNotPresent
   # Align with ai-architecture-charts llama-stack (distribution-starter); override if operator pins another version.
-  tag: "0.2.22"
+  tag: "0.6.0"
 
 nameOverride: "llamastack"
 fullnameOverride: "llamastack"
