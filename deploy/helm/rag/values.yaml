@@ -54,7 +54,7 @@ llama-stack:
     llama-3-1-8b-instruct:
       id: meta-llama/Llama-3.1-8B-Instruct
       enabled: true
-      url: http://llama-3-1-8b-instruct-predictor.jianrong.svc.cluster.local/v1
+      url: http://llama-3-1-8b-instruct-predictor.jianrong.svc.cluster.local:8080/v1
       apiToken: fake
   env:
     - name: VLLM_MAX_TOKENS
