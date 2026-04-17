@@ -12,7 +12,8 @@ RUN yarn install --frozen-lockfile
 # Copy source code
 COPY . .
 
-# Build React UI
+# Build React UI with increased memory limit
+ENV NODE_OPTIONS="--max-old-space-size=4096"
 RUN yarn build:react-ui
 
 # Runtime stage
