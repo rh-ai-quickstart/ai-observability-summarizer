@@ -453,7 +453,7 @@ build-react-ui:
 	@echo "  → Installing yarn dependencies..."
 	@cd openshift-plugin && yarn install --frozen-lockfile
 	@echo "  → Building React UI assets..."
-	@cd openshift-plugin && NODE_OPTIONS="--max-old-space-size=4096" yarn build:react-ui
+	@cd openshift-plugin && NODE_OPTIONS="--max-old-space-size=8192" yarn build:react-ui
 	@echo "  → Building container image..."
 	@$(BUILD_TOOL) buildx build --platform $(PLATFORM) \
 		-f openshift-plugin/Dockerfile.react-ui \
