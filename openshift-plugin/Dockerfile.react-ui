@@ -4,8 +4,7 @@ FROM node:24 AS builder
 WORKDIR /app
 
 # Set Node.js memory limit for build (must be before RUN commands that need it)
-# 8GB should be more than enough for webpack build
-ENV NODE_OPTIONS="--max-old-space-size=8192"
+ENV NODE_OPTIONS="--max-old-space-size=4096"
 
 # Copy package files
 COPY package.json yarn.lock ./
