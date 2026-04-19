@@ -432,15 +432,6 @@ def summarize_with_llm(
         if LLM_API_TOKEN:
             headers["Authorization"] = f"Bearer {LLM_API_TOKEN}"
 
-        # Determine correct local model identifier: prefer serviceName if present
-        # summarize_model_id may be a human/registry id (e.g., "meta-llama/..."), while
-        # LlamaStack typically expects the backend service name (e.g., "llama-3-1-8b-instruct").
-        model_id_to_use = (
-            model_info.get("serviceName")
-            or model_info.get("modelName")
-            or summarize_model_id
-        )
-
         # Build messages array for chat completions API
         chat_messages = []
         if messages:

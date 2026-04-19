@@ -90,7 +90,7 @@ llama-stack-instance:
   enabled: false
   env:
     - name: RUN_CONFIG_PATH
-      value: /app-config/config.yaml
+      value: /etc/llama-stack/config.yaml
     - name: VLLM_MAX_TOKENS
       value: "4096"
     - name: VLLM_API_TOKEN
