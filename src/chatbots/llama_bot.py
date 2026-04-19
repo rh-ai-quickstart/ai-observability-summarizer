@@ -74,22 +74,33 @@ class LlamaChatBot(BaseChatBot):
         """Limit tools to reduce context usage for Llama's constrained context."""
         return self._TOOL_ALLOWLIST
 
-    def _extract_model_name(self) -> str:
-        """LlamaStack expects provider-prefixed model ID for 0.6.0+ compatibility.
+    def _get_model_id_candidates(self) -> List[str]:
+        """Get ordered list of candidate model IDs for llama-stack 0.6.0+ compatibility.
 
-        Returns the provider-prefixed model ID (e.g., "llama-3-1-8b-instruct/meta-llama/Llama-3.1-8B-Instruct")
-        as the primary candidate for llama-stack 0.6.0+.
+        Returns prioritized candidates to try:
+        1. provider-prefixed: "llama-3-1-8b-instruct/meta-llama/Llama-3.1-8B-Instruct"
+        2. serviceName: "llama-3-1-8b-instruct"
+        3. modelName: alternate ID if present
+        4. original model_name: user-facing key
 
-        Falls back to the original model_name if provider-prefixed format is not available.
+        The chat() method will try each candidate in order until one succeeds,
+        matching the behavior of summarize_with_llm().
         """
         from core.llm_client import get_llamastack_model_id_candidates
 
-        # Get candidate model IDs and return the first (highest priority) one
         candidates = get_llamastack_model_id_candidates(self.model_name)
-        model_id = candidates[0] if candidates else self.model_name
+        logger.debug(f"LlamaStack model ID candidates: {candidates}")
+        return candidates if candidates else [self.model_name]
 
-        logger.debug(f"Using llama-stack model ID: {model_id}")
-        return model_id
+    def _extract_model_name(self) -> str:
+        """Get the primary (highest priority) model ID candidate.
+
+        Note: This returns only the first candidate for backward compatibility
+        with code that expects a single model ID string. The chat() method
+        uses _get_model_id_candidates() to try all candidates with fallback.
+        """
+        candidates = self._get_model_id_candidates()
+        return candidates[0]
 
     def __init__(
         self,
@@ -248,6 +259,7 @@ class LlamaChatBot(BaseChatBot):
         openai_tools: List[Dict],
         messages: List[Dict],
         progress_callback: Optional[Callable] = None,
+        working_model_id: Optional[str] = None,
     ) -> Optional[str]:
         """Last-resort: directly execute the matched tool and ask the model to summarise.
 
@@ -317,8 +329,11 @@ class LlamaChatBot(BaseChatBot):
             if progress_callback:
                 progress_callback("🤖 Summarising results...")
 
+            # Use the working model ID if available, otherwise try first candidate
+            model_id = working_model_id or self._extract_model_name()
+
             summary_response = self.client.chat.completions.create(
-                model=self._extract_model_name(),
+                model=model_id,
                 messages=messages,
                 tools=openai_tools,
                 tool_choice="none",
@@ -393,8 +408,9 @@ class LlamaChatBot(BaseChatBot):
             # Create system prompt
             system_prompt = self._create_system_prompt(namespace)
 
-            # LlamaStack expects the full model name (override preserves it)
-            model_id = self._extract_model_name()
+            # Get candidate model IDs for llama-stack 0.6.0+ compatibility
+            # Try each candidate in priority order until one succeeds
+            model_candidates = self._get_model_id_candidates()
 
             # Prepare messages - start with system prompt
             messages = [{"role": "system", "content": system_prompt}]
@@ -421,6 +437,10 @@ class LlamaChatBot(BaseChatBot):
             tool_choice = "auto"
             consecutive_tool_tracker = {"name": None, "count": 0}
 
+            # Track which model ID worked (for subsequent calls)
+            working_model_id = None
+            last_model_error = None
+
             while iteration < max_iterations:
                 iteration += 1
                 logger.info(f"🤖 LlamaStack tool calling iteration {iteration}")
@@ -428,15 +448,48 @@ class LlamaChatBot(BaseChatBot):
                 if progress_callback:
                     progress_callback(f"🤖 Thinking... (iteration {iteration})")
 
-                # Call LlamaStack via OpenAI SDK
-                response = self.client.chat.completions.create(
-                    model=model_id,
-                    messages=messages,
-                    tools=openai_tools,
-                    tool_choice=tool_choice,
-                    temperature=0,
-                    timeout=LLM_TIMEOUT_SECONDS,
-                )
+                # Try candidate model IDs until one succeeds (only on first iteration)
+                if working_model_id is None:
+                    response = None
+                    for candidate_id in model_candidates:
+                        try:
+                            logger.debug(f"Trying model ID: {candidate_id}")
+                            response = self.client.chat.completions.create(
+                                model=candidate_id,
+                                messages=messages,
+                                tools=openai_tools,
+                                tool_choice=tool_choice,
+                                temperature=0,
+                                timeout=LLM_TIMEOUT_SECONDS,
+                            )
+                            # Success - remember this model ID for subsequent calls
+                            working_model_id = candidate_id
+                            logger.info(f"✅ Using llama-stack model ID: {working_model_id}")
+                            break
+                        except Exception as e:
+                            error_msg = str(e).lower()
+                            # Only retry on "model not found" errors
+                            if "not found" in error_msg or "404" in error_msg:
+                                logger.debug(f"Model ID '{candidate_id}' not found, trying next candidate")
+                                last_model_error = e
+                                continue
+                            else:
+                                # Other errors - don't retry
+                                raise
+
+                    if response is None:
+                        # All candidates failed
+                        raise last_model_error or Exception("All model ID candidates failed")
+                else:
+                    # Use the working model ID for subsequent iterations
+                    response = self.client.chat.completions.create(
+                        model=working_model_id,
+                        messages=messages,
+                        tools=openai_tools,
+                        tool_choice=tool_choice,
+                        temperature=0,
+                        timeout=LLM_TIMEOUT_SECONDS,
+                    )
 
                 # Reset to auto after each call so forced tool calls don't persist
                 tool_choice = "auto"
@@ -573,7 +626,8 @@ class LlamaChatBot(BaseChatBot):
                     # as last resort, then fall back to graceful message.
                     if not final_response or not final_response.strip():
                         direct_result = self._try_direct_tool_call(
-                            user_question, namespace, openai_tools, messages, progress_callback
+                            user_question, namespace, openai_tools, messages, progress_callback,
+                            working_model_id
                         )
                         if direct_result:
                             return direct_result
