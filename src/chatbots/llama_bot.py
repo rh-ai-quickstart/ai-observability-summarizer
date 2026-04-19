@@ -75,11 +75,21 @@ class LlamaChatBot(BaseChatBot):
         return self._TOOL_ALLOWLIST
 
     def _extract_model_name(self) -> str:
-        """LlamaStack expects the full model name including provider prefix.
+        """LlamaStack expects provider-prefixed model ID for 0.6.0+ compatibility.
 
-        Override the base class method to return the full name.
+        Returns the provider-prefixed model ID (e.g., "llama-3-1-8b-instruct/meta-llama/Llama-3.1-8B-Instruct")
+        as the primary candidate for llama-stack 0.6.0+.
+
+        Falls back to the original model_name if provider-prefixed format is not available.
         """
-        return self.model_name
+        from core.llm_client import get_llamastack_model_id_candidates
+
+        # Get candidate model IDs and return the first (highest priority) one
+        candidates = get_llamastack_model_id_candidates(self.model_name)
+        model_id = candidates[0] if candidates else self.model_name
+
+        logger.debug(f"Using llama-stack model ID: {model_id}")
+        return model_id
 
     def __init__(
         self,

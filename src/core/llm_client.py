@@ -204,6 +204,53 @@ def _clean_llm_summary_string(text: str) -> str:
     return re.sub(r"\s+", " ", cleaned_text).strip()
 
 
+def get_llamastack_model_id_candidates(model_id: str) -> List[str]:
+    """Get candidate model IDs for llama-stack 0.6.0+ compatibility.
+
+    LlamaStack 0.6.0+ returns model IDs in provider-prefixed format:
+    "{provider_id}/{model_id}" (e.g., "llama-3-1-8b-instruct/meta-llama/Llama-3.1-8B-Instruct")
+
+    This function returns a prioritized list of candidate model IDs to try:
+    1. provider-prefixed (llama-stack 0.6.0+ format)
+    2. serviceName (LlamaStack backend name)
+    3. modelName (alternate ID)
+    4. original model_id (user-facing key)
+
+    Args:
+        model_id: Model identifier from MODEL_CONFIG or user input
+                  (e.g., "meta-llama/Llama-3.1-8B-Instruct")
+
+    Returns:
+        List of candidate model IDs to try in priority order
+
+    Examples:
+        >>> get_llamastack_model_id_candidates("meta-llama/Llama-3.1-8B-Instruct")
+        ['llama-3-1-8b-instruct/meta-llama/Llama-3.1-8B-Instruct',
+         'llama-3-1-8b-instruct',
+         'meta-llama/Llama-3.1-8B-Instruct']
+    """
+    from .model_config_manager import get_model_config
+
+    runtime_config = get_model_config()
+    model_info = runtime_config.get(model_id, {})
+
+    candidate_ids = []
+
+    # Build provider-prefixed ID if we have both serviceName and a model ID
+    service_name = model_info.get("serviceName")
+    if service_name and model_id:
+        provider_prefixed_id = f"{service_name}/{model_id}"
+        candidate_ids.append(provider_prefixed_id)
+
+    # Add other candidates
+    for candidate in [service_name, model_info.get("modelName"), model_id]:
+        if candidate and candidate not in candidate_ids:
+            candidate_ids.append(candidate)
+
+    logger.debug(f"LlamaStack model ID candidates for '{model_id}': {candidate_ids}")
+    return candidate_ids
+
+
 def summarize_with_llm(
     prompt: str,
     summarize_model_id: str,
@@ -400,23 +447,9 @@ def summarize_with_llm(
             chat_messages.extend(messages)
         # Add the current prompt as a user message
         chat_messages.append({"role": "user", "content": prompt})
-        # Try multiple possible model identifiers to maximize compatibility
-        # LlamaStack may expect different model IDs than MODEL_CONFIG keys
-        # Priority:
-        # 1. provider-prefixed (llama-stack 0.6.0+ format: "{provider_id}/{model_id}")
-        # 2. serviceName (LlamaStack backend name)
-        # 3. modelName (alternate ID)
-        # 4. summarize_model_id (user-facing key from MODEL_CONFIG)
-        candidate_ids = []
-        # Build provider-prefixed ID if we have both serviceName and a model ID
-        service_name = model_info.get("serviceName")
-        if service_name and summarize_model_id:
-            provider_prefixed_id = f"{service_name}/{summarize_model_id}"
-            candidate_ids.append(provider_prefixed_id)
-        # Add other candidates
-        for candidate in [service_name, model_info.get("modelName"), summarize_model_id]:
-            if candidate and candidate not in candidate_ids:
-                candidate_ids.append(candidate)
+
+        # Get candidate model IDs for llama-stack 0.6.0+ compatibility
+        candidate_ids = get_llamastack_model_id_candidates(summarize_model_id)
 
         last_err: Optional[Exception] = None
         response_json = None
