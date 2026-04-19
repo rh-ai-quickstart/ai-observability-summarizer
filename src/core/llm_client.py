@@ -229,8 +229,6 @@ def get_llamastack_model_id_candidates(model_id: str) -> List[str]:
          'llama-3-1-8b-instruct',
          'meta-llama/Llama-3.1-8B-Instruct']
     """
-    from .model_config_manager import get_model_config
-
     runtime_config = get_model_config()
     model_info = runtime_config.get(model_id, {})
 

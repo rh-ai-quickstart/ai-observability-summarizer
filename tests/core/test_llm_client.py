@@ -22,7 +22,7 @@ class TestLlamaStackModelIDCandidates:
             }
         }
 
-        with patch('src.core.model_config_manager.get_model_config', return_value=mock_config):
+        with patch('src.core.llm_client.get_model_config', return_value=mock_config):
             candidates = get_llamastack_model_id_candidates("meta-llama/Llama-3.1-8B-Instruct")
 
             # Should have provider-prefixed as first candidate
@@ -41,7 +41,7 @@ class TestLlamaStackModelIDCandidates:
             }
         }
 
-        with patch('src.core.model_config_manager.get_model_config', return_value=mock_config):
+        with patch('src.core.llm_client.get_model_config', return_value=mock_config):
             candidates = get_llamastack_model_id_candidates("meta-llama/Llama-3.1-8B-Instruct")
 
             assert "llama-8b" in candidates
@@ -54,7 +54,7 @@ class TestLlamaStackModelIDCandidates:
             }
         }
 
-        with patch('src.core.model_config_manager.get_model_config', return_value=mock_config):
+        with patch('src.core.llm_client.get_model_config', return_value=mock_config):
             candidates = get_llamastack_model_id_candidates("meta-llama/Llama-3.1-8B-Instruct")
 
             # Should only have original model_id (no provider-prefixed)
@@ -64,7 +64,7 @@ class TestLlamaStackModelIDCandidates:
         """Should return model_id only when model is not in config"""
         mock_config = {}
 
-        with patch('src.core.model_config_manager.get_model_config', return_value=mock_config):
+        with patch('src.core.llm_client.get_model_config', return_value=mock_config):
             candidates = get_llamastack_model_id_candidates("unknown-model")
 
             assert candidates == ["unknown-model"]
@@ -78,7 +78,7 @@ class TestLlamaStackModelIDCandidates:
             }
         }
 
-        with patch('src.core.model_config_manager.get_model_config', return_value=mock_config):
+        with patch('src.core.llm_client.get_model_config', return_value=mock_config):
             candidates = get_llamastack_model_id_candidates("test-model")
 
             # Should have provider-prefixed and original, but no duplicates
@@ -96,7 +96,7 @@ class TestLlamaStackModelIDCandidates:
             }
         }
 
-        with patch('src.core.model_config_manager.get_model_config', return_value=mock_config):
+        with patch('src.core.llm_client.get_model_config', return_value=mock_config):
             candidates = get_llamastack_model_id_candidates("meta-llama/Llama-3.1-8B-Instruct")
 
             # Priority order: provider-prefixed, serviceName, modelName, original
@@ -115,7 +115,7 @@ class TestLlamaStackModelIDCandidates:
             }
         }
 
-        with patch('src.core.model_config_manager.get_model_config', return_value=mock_config):
+        with patch('src.core.llm_client.get_model_config', return_value=mock_config):
             candidates = get_llamastack_model_id_candidates("anthropic/claude-sonnet-4")
 
             # External models don't have serviceName, so no provider-prefixed ID
