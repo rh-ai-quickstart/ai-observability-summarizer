@@ -23,7 +23,7 @@ service:
 
 env:
   - name: RUN_CONFIG_PATH
-    value: /app-config/config.yaml
+    value: /etc/llama-stack/config.yaml
   - name: VLLM_MAX_TOKENS
     value: "4096"
   - name: VLLM_API_TOKEN
@@ -85,28 +85,30 @@ models:
 # By default uses SQLite (single replica only)
 # For multi-replica deployments, override in parent values.yaml to use PostgreSQL
 metadataStore:
-  type: sqlite
-  db_path: ${env.SQLITE_STORE_DIR:=~/.llama/distributions/starter}/registry.db
+  backend: sqlite
+  namespace: null
 
 # Vector IO provider kvstore configuration
 # By default uses SQLite (single replica only)
 # For multi-replica deployments, override in parent values.yaml to use PostgreSQL
 vectorIOKvstore:
-  type: sqlite
-  db_path: ${env.SQLITE_STORE_DIR:=~/.llama/distributions/starter}/pgvector_registry.db
+  backend: kv_default
+  namespace: vector_io::pgvector
 
 providers:
   agents:
     - provider_id: meta-reference
       provider_type: inline::meta-reference
       config:
-        persistence_store:
-          type: sqlite
-          namespace: null
-          db_path: ${env.SQLITE_STORE_DIR:=~/.llama/distributions/starter}/agents_store.db
-        responses_store:
-          type: sqlite
-          db_path: ${env.SQLITE_STORE_DIR:=~/.llama/distributions/starter}/responses_store.db
+        persistence:
+          agent_state:
+            backend: kv_default
+            namespace: agents
+          responses:
+            backend: sql_default
+            max_write_queue_size: 10000
+            num_writers: 4
+            table_name: responses
 
 secrets: {}
 mcp-servers: {}
