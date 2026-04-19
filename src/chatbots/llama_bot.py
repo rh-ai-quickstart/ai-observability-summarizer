@@ -77,6 +77,10 @@ class LlamaChatBot(BaseChatBot):
     def _get_model_id_candidates(self) -> List[str]:
         """Get ordered list of candidate model IDs for llama-stack 0.6.0+ compatibility.
 
+        This is a thin wrapper around core.llm_client.get_llamastack_model_id_candidates()
+        to provide a cleaner interface for the chat bot. All logic is centralized in
+        llm_client.py - this method just adapts it for use in the chat context.
+
         Returns prioritized candidates to try:
         1. provider-prefixed: "llama-3-1-8b-instruct/meta-llama/Llama-3.1-8B-Instruct"
         2. serviceName: "llama-3-1-8b-instruct"
