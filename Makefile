@@ -119,10 +119,12 @@ DEFAULT_LLM_PORT_AND_PATH := :8080/v1
 
 OPERATOR_MANAGER_SCRIPT := scripts/operator-manager.sh
 
-# Auto-detect RHOAI version from the cluster when not explicitly set on the command line.
+# Auto-detect RHOAI version from the cluster when not already set.
 # RHOAI_VERSION is NOT declared with ?= to avoid corruption by the version-bump workflow.
-# $(origin RHOAI_VERSION) is "undefined" when not set, "command line" when explicit.
-ifneq ($(origin RHOAI_VERSION),command line)
+# $(origin RHOAI_VERSION) is "undefined" when not set, "command line" when explicit,
+# "environment" when inherited from parent make via export.
+# Only auto-detect if undefined to avoid re-detection in recursive make calls.
+ifeq ($(origin RHOAI_VERSION),undefined)
   _RHOAI_CSV := $(shell oc get csv -n redhat-ods-operator -l operators.coreos.com/rhods-operator.redhat-ods-operator \
     -o jsonpath='{.items[0].spec.version}' 2>/dev/null)
   ifneq ($(findstring 3.,$(_RHOAI_CSV)),)
