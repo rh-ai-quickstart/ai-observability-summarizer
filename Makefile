@@ -161,11 +161,10 @@ export USE_LLAMA_STACK_OPERATOR
 export RHOAI_VERSION
 
 # LlamaStack deployment mode: Helm chart (default) vs Operator
+# When USE_LLAMA_STACK_OPERATOR=true, the chart deploys via LlamaStackDistribution CRD
 ifeq ($(USE_LLAMA_STACK_OPERATOR),true)
-  LLAMA_STACK_CHART_PREFIX := llama-stack-instance
   LLAMA_STACK_SVC_NAME := llamastack-service
 else
-  LLAMA_STACK_CHART_PREFIX := llama-stack
   LLAMA_STACK_SVC_NAME := llamastack
 endif
 
@@ -246,9 +245,9 @@ helm_llama_stack_args = \
     $(if $(SAFETY_URL),--set global.models.$(SAFETY).url='$(SAFETY_URL)',) \
     $(if $(LLM_API_TOKEN),--set global.models.$(LLM).apiToken='$(LLM_API_TOKEN)',) \
     $(if $(SAFETY_API_TOKEN),--set global.models.$(SAFETY).apiToken='$(SAFETY_API_TOKEN)',) \
-    $(if $(LLAMA_STACK_ENV),--set-json $(LLAMA_STACK_CHART_PREFIX).secrets='$(LLAMA_STACK_ENV)',) \
-    $(if $(RAW_DEPLOYMENT),--set $(LLAMA_STACK_CHART_PREFIX).rawDeploymentMode=$(RAW_DEPLOYMENT),) \
-    $(if $(filter true,$(USE_LLAMA_STACK_OPERATOR)),--set llama-stack.enabled=false --set llama-stack-instance.enabled=true,)
+    $(if $(LLAMA_STACK_ENV),--set-json llama-stack.secrets='$(LLAMA_STACK_ENV)',) \
+    $(if $(RAW_DEPLOYMENT),--set llama-stack.rawDeploymentMode=$(RAW_DEPLOYMENT),) \
+    $(if $(filter true,$(USE_LLAMA_STACK_OPERATOR)),--set llama-stack.managedByOperator=true,)
 
 helm_pgvector_args = \
     --set pgvector.secret.user=$(POSTGRES_USER) \
@@ -409,6 +408,9 @@ help:
 	@echo "  GPU_PREFIX_NVIDIA  - Extra NVIDIA metric prefixes (comma-separated, additive to defaults)"
 	@echo "  GPU_PREFIX_INTEL   - Extra Intel metric prefixes (comma-separated, additive to defaults)"
 	@echo "  GPU_PREFIX_AMD     - Extra AMD metric prefixes (comma-separated, additive to defaults)"
+	@echo "  FORK_CHARTS_DIR    - Path to ai-architecture-charts fork for llama-stack (default: ../ai-architecture-charts-fork)"
+	@echo "  FORK_REPO_URL      - Git URL for ai-architecture-charts fork (default: https://github.com/jianrongzhang89/ai-architecture-charts)"
+	@echo "  FORK_BRANCH        - Git branch for ai-architecture-charts fork (default: operator)"
 	@echo ""
 
 .PHONY: build
@@ -504,10 +506,37 @@ namespace:
 	@echo "Setting [$(NAMESPACE)] as default namespace..."
 	@oc project $(NAMESPACE) > /dev/null
 
+# Location for the ai-architecture-charts fork (operator branch)
+FORK_CHARTS_DIR ?= ../ai-architecture-charts-fork
+FORK_REPO_URL ?= https://github.com/jianrongzhang89/ai-architecture-charts
+FORK_BRANCH ?= operator
+
+.PHONY: setup-llama-stack-fork
+setup-llama-stack-fork:
+	@echo "→ Setting up llama-stack chart from fork (operator branch)..."
+	@if [ ! -d "$(FORK_CHARTS_DIR)" ]; then \
+		echo "  → Cloning fork from $(FORK_REPO_URL) (branch: $(FORK_BRANCH))..."; \
+		git clone -b $(FORK_BRANCH) $(FORK_REPO_URL) $(FORK_CHARTS_DIR); \
+	else \
+		echo "  → Fork already exists, updating..."; \
+		cd $(FORK_CHARTS_DIR) && git fetch origin && git checkout $(FORK_BRANCH) && git pull origin $(FORK_BRANCH); \
+	fi
+	@echo "  → Packaging llama-stack chart from fork..."
+	@mkdir -p deploy/helm/$(RAG_CHART)/llama-stack-fork
+	@helm package $(FORK_CHARTS_DIR)/llama-stack/helm -d deploy/helm/$(RAG_CHART)/llama-stack-fork
+	@helm repo index deploy/helm/$(RAG_CHART)/llama-stack-fork
+	@echo "  ✅ llama-stack chart from fork is ready"
+
 .PHONY: depend
 depend:
+	@echo "→ Preparing llama-stack chart from fork (supports both operator and non-operator modes)"
+	@$(MAKE) setup-llama-stack-fork
+
 	@echo "Updating Helm dependencies (for $(RAG_CHART))..."
 	@rm -rf deploy/helm/$(RAG_CHART)/charts
+	@mkdir -p deploy/helm/$(RAG_CHART)/charts
+	@echo "→ Extracting llama-stack chart from fork..."
+	@tar -xzf deploy/helm/$(RAG_CHART)/llama-stack-fork/llama-stack-0.7.3.tgz -C deploy/helm/$(RAG_CHART)/charts
 	@cd deploy/helm && helm dependency update $(RAG_CHART) || exit 1
 
 	@echo "Updating Helm dependencies (for $(MINIO_CHART))..."

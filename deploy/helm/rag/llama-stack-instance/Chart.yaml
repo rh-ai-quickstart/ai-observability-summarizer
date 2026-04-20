@@ -1,6 +1,0 @@
-apiVersion: v2
-name: llama-stack-instance
-description: LlamaStack instance deployed via LlamaStackDistribution CR (RHOAI operator)
-type: application
-version: 1.0.0
-appVersion: "0.6.0"

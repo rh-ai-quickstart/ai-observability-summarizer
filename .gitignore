@@ -195,3 +195,4 @@ deploy/operator/bundle_tmp*/
 deploy/operator/index.Dockerfile*
 deploy/operator/bin/
 deploy/operator/helm-charts/
+deploy/helm/rag/llama-stack-fork/
