@@ -1,3 +1,7 @@
+# Global values (can be overridden by umbrella chart)
+global:
+  lokiNamespace: "openshift-logging"
+
 replicaCount: 1
 
 deployment:
@@ -90,6 +94,15 @@ rbac:
   createGrafanaRole: true
   # Bind to openshift-cluster-monitoring-view if it exists (some clusters may not have it)
   bindOpenshiftClusterMonitoringView: false
+  # Loki release name for ClusterRole binding
+  # The Loki ClusterRole name format: {{ loki-namespace }}-{{ loki-release-name }}-tenant-logs
+  #
+  # Standalone deployment (make install): "loki-stack"  (default)
+  #   → openshift-logging-loki-stack-tenant-logs
+  #
+  # Umbrella chart deployment (operator): "" (empty, auto-uses .Release.Name)
+  #   → openshift-logging-{{ .Release.Name }}-tenant-logs
+  lokiReleaseName: "loki-stack"
 
 
 resources:

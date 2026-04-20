@@ -26,6 +26,9 @@ mcpServer:
     tag: 6.1.0
     pullPolicy: Always
   # NOTE: DEV_MODE env var is automatically set from global.devMode by mcp-server chart
+  rbac:
+    # Empty string means auto-use parent release name (for umbrella chart deployments)
+    lokiReleaseName: ""
 
 # OpenShift Console Plugin - Native console integration
 consolePlugin:
