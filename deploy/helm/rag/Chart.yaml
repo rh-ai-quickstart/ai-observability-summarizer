@@ -9,13 +9,10 @@ dependencies:
   - name: llm-service
     version: 0.5.8
     repository: https://rh-ai-quickstart.github.io/ai-architecture-charts
-  # llama-stack dependency is handled by make depend
-  # It's manually extracted from the fork to charts/llama-stack/
-  # Commented out to avoid helm dependency update trying to fetch it
-  # - name: llama-stack
-  #   version: 0.7.3
-  #   repository: "file://llama-stack-fork"
-  #   condition: llama-stack.enabled
+  - name: llama-stack
+    version: 0.7.4
+    repository: https://rh-ai-quickstart.github.io/ai-architecture-charts
+    condition: llama-stack.enabled
   - name: pgvector
     version: 0.5.0
     repository: https://rh-ai-quickstart.github.io/ai-architecture-charts
