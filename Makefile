@@ -410,9 +410,6 @@ help:
 	@echo "  GPU_PREFIX_NVIDIA  - Extra NVIDIA metric prefixes (comma-separated, additive to defaults)"
 	@echo "  GPU_PREFIX_INTEL   - Extra Intel metric prefixes (comma-separated, additive to defaults)"
 	@echo "  GPU_PREFIX_AMD     - Extra AMD metric prefixes (comma-separated, additive to defaults)"
-	@echo "  FORK_CHARTS_DIR    - Path to ai-architecture-charts fork for llama-stack (default: ../ai-architecture-charts-fork)"
-	@echo "  FORK_REPO_URL      - Git URL for ai-architecture-charts fork (default: https://github.com/jianrongzhang89/ai-architecture-charts)"
-	@echo "  FORK_BRANCH        - Git branch for ai-architecture-charts fork (default: operator)"
 	@echo ""
 
 .PHONY: build
@@ -508,37 +505,10 @@ namespace:
 	@echo "Setting [$(NAMESPACE)] as default namespace..."
 	@oc project $(NAMESPACE) > /dev/null
 
-# Location for the ai-architecture-charts fork (operator branch)
-FORK_CHARTS_DIR ?= ../ai-architecture-charts-fork
-FORK_REPO_URL ?= https://github.com/jianrongzhang89/ai-architecture-charts
-FORK_BRANCH ?= operator
-
-.PHONY: setup-llama-stack-fork
-setup-llama-stack-fork:
-	@echo "→ Setting up llama-stack chart from fork (operator branch)..."
-	@if [ ! -d "$(FORK_CHARTS_DIR)" ]; then \
-		echo "  → Cloning fork from $(FORK_REPO_URL) (branch: $(FORK_BRANCH))..."; \
-		git clone -b $(FORK_BRANCH) $(FORK_REPO_URL) $(FORK_CHARTS_DIR); \
-	else \
-		echo "  → Fork already exists, updating..."; \
-		cd $(FORK_CHARTS_DIR) && git fetch origin && git checkout $(FORK_BRANCH) && git pull origin $(FORK_BRANCH); \
-	fi
-	@echo "  → Packaging llama-stack chart from fork..."
-	@mkdir -p deploy/helm/$(RAG_CHART)/llama-stack-fork
-	@helm package $(FORK_CHARTS_DIR)/llama-stack/helm -d deploy/helm/$(RAG_CHART)/llama-stack-fork
-	@helm repo index deploy/helm/$(RAG_CHART)/llama-stack-fork
-	@echo "  ✅ llama-stack chart from fork is ready"
-
 .PHONY: depend
 depend:
-	@echo "→ Preparing llama-stack chart from fork (supports both operator and non-operator modes)"
-	@$(MAKE) setup-llama-stack-fork
-
 	@echo "Updating Helm dependencies (for $(RAG_CHART))..."
 	@rm -rf deploy/helm/$(RAG_CHART)/charts
-	@mkdir -p deploy/helm/$(RAG_CHART)/charts
-	@echo "→ Extracting llama-stack chart from fork..."
-	@tar -xzf deploy/helm/$(RAG_CHART)/llama-stack-fork/llama-stack-0.7.3.tgz -C deploy/helm/$(RAG_CHART)/charts
 	@cd deploy/helm && helm dependency update $(RAG_CHART) || exit 1
 
 	@echo "Updating Helm dependencies (for $(MINIO_CHART))..."
