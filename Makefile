@@ -3,7 +3,7 @@
 
 # NAMESPACE validation for deployment targets
 ifeq ($(NAMESPACE),)
-ifeq (,$(filter install-local depend install-ingestion-pipeline list-models% generate-model-config help build build-alerting build-mcp-server build-console-plugin build-react-ui push push-alerting push-mcp-server push-console-plugin push-react-ui clean config test test-python test-react test-scripts check-observability-drift install-operators uninstall-operators check-operators verify-operators-ready check-llamastack-operator enable-llamastack-operator pre-install-checks cleanup-loki-clusterroles install-cluster-observability-operator install-opentelemetry-operator install-tempo-operator install-logging-operator install-loki-operator uninstall-cluster-observability-operator uninstall-opentelemetry-operator uninstall-tempo-operator uninstall-logging-operator uninstall-loki-operator enable-tracing-ui disable-tracing-ui enable-logging-ui disable-logging-ui install-loki uninstall-loki upgrade-observability install-korrel8r uninstall-korrel8r install-minio uninstall-minio operator-build operator-push operator-bundle-build operator-bundle-push operator-catalog-build operator-catalog-push operator-build-all operator-push-all operator-deploy operator-config,$(MAKECMDGOALS)))
+ifeq (,$(filter install-local depend install-ingestion-pipeline list-models% generate-model-config help build build-alerting build-mcp-server build-console-plugin build-react-ui push push-alerting push-mcp-server push-console-plugin push-react-ui clean config test test-python test-react test-scripts check-observability-drift install-operators uninstall-operators check-operators verify-operators-ready check-llamastack-operator enable-llamastack-operator pre-install-checks cleanup-loki-clusterroles purge-loki-helm-secrets install-cluster-observability-operator install-opentelemetry-operator install-tempo-operator install-logging-operator install-loki-operator uninstall-cluster-observability-operator uninstall-opentelemetry-operator uninstall-tempo-operator uninstall-logging-operator uninstall-loki-operator enable-tracing-ui disable-tracing-ui enable-logging-ui disable-logging-ui install-loki uninstall-loki upgrade-observability install-korrel8r uninstall-korrel8r install-minio uninstall-minio operator-build operator-push operator-bundle-build operator-bundle-push operator-catalog-build operator-catalog-push operator-build-all operator-push-all operator-deploy operator-config,$(MAKECMDGOALS)))
 $(error NAMESPACE is not set)
 endif
 endif
@@ -113,6 +113,15 @@ OBSERVABILITY_NAMESPACE ?= observability-hub # currently hard-coded in instrumen
 INSTRUMENTATION_PATH ?= observability/otel-collector/scripts/instrumentation.yaml
 MINIO_NAMESPACE ?= observability-hub
 LOKI_NAMESPACE ?= openshift-logging
+# Loki Helm chart / CR names (must match deploy/helm/observability/loki/values.yaml defaults)
+LOKI_HELM_RELEASE ?= loki-stack
+LOKI_STACK_NAME ?= logging-loki
+LOKI_CLUSTER_LOG_FORWARDER ?= logging-loki-forwarder
+LOKI_UI_PLUGIN_NAME ?= logging
+# ClusterRole/ClusterRoleBinding prefix from chart helper loki-stack.clusterResourceName (namespace-release)
+LOKI_CLUSTER_RBAC_PREFIX ?= $(LOKI_NAMESPACE)-$(LOKI_HELM_RELEASE)
+# Set UNINSTALL_LOKI=true on `make uninstall` to remove loki-stack without UNINSTALL_OBSERVABILITY (shared cluster: use with care)
+UNINSTALL_LOKI ?= false
 
 # LLM URL processing constants
 DEFAULT_LLM_PORT_AND_PATH := :8080/v1
@@ -405,6 +414,7 @@ help:
 	@echo "  MINIO_PASSWORD     - MinIO password for observability storage (default: minio123)"
 	@echo "  MINIO_BUCKETS      - Comma-separated list of MinIO buckets to create (default: tempo,loki)"
 	@echo "  UNINSTALL_OBSERVABILITY - Set to 'true' to uninstall observability stack during uninstall"
+	@echo "  UNINSTALL_LOKI          - Set to 'true' to remove loki-stack only during uninstall (shared Loki: use with care)"
 	@echo "  UNINSTALL_OPERATORS     - Set to 'true' to uninstall operators during uninstall"
 	@echo "  GPU_PREFIX_NVIDIA  - Extra NVIDIA metric prefixes (comma-separated, additive to defaults)"
 	@echo "  GPU_PREFIX_INTEL   - Extra Intel metric prefixes (comma-separated, additive to defaults)"
@@ -810,6 +820,12 @@ uninstall:
 	@echo "Uninstalling UI components (both Console Plugin and React UI if they exist)"
 	@$(MAKE) uninstall-console-plugin NAMESPACE=$(NAMESPACE) || true
 	@$(MAKE) uninstall-react-ui NAMESPACE=$(NAMESPACE) || true
+
+	@if [ "$(UNINSTALL_LOKI)" = "true" ]; then \
+		echo ""; \
+		echo "→ UNINSTALL_LOKI=true: Removing $(LOKI_HELM_RELEASE) from $(LOKI_NAMESPACE) (Loki is often shared—confirm before use)..."; \
+		$(MAKE) uninstall-loki || true; \
+	fi
 
 	@echo ""
 	@echo "Checking if observability stack should be uninstalled..."
@@ -1220,15 +1236,8 @@ uninstall-observability:
 	@echo "Removing TempoStack PVCs from $(OBSERVABILITY_NAMESPACE)"
 	- @oc delete pvc -n $(OBSERVABILITY_NAMESPACE) -l app.kubernetes.io/name=tempo --timeout=30s ||:
 
-	@echo "Uninstalling LokiStack in namespace $(LOKI_NAMESPACE)"
-	@helm uninstall loki-stack -n $(LOKI_NAMESPACE) --ignore-not-found
-
-	@echo "Removing LokiStack PVCs from $(LOKI_NAMESPACE)"
-	- @oc delete pvc -n $(LOKI_NAMESPACE) -l app.kubernetes.io/name=loki --timeout=30s ||:
-
-	@echo "Cleaning up Loki ClusterRoles and ClusterRoleBindings..."
-	@$(MAKE) cleanup-loki-clusterroles
-	@echo "  → ClusterRole cleanup complete"
+	@echo "Uninstalling Loki stack (Helm + CRs + RBAC) in $(LOKI_NAMESPACE)"
+	@$(MAKE) uninstall-loki
 
 .PHONY: uninstall-observability-stack
 uninstall-observability-stack:
@@ -1237,7 +1246,8 @@ uninstall-observability-stack:
 		echo ""; \
 		echo "⚠️  WARNING: This will remove the following components:"; \
 		echo "  → Auto-instrumentation for tracing in namespace $(NAMESPACE)"; \
-		echo "  → TempoStack, LokiStack, and OTEL Collector in namespace $(OBSERVABILITY_NAMESPACE)"; \
+		echo "  → TempoStack and OTEL Collector in namespace $(OBSERVABILITY_NAMESPACE)"; \
+		echo "  → Loki ($(LOKI_HELM_RELEASE) Helm release, LokiStack CR, forwarder, UIPlugin, chart RBAC) in $(LOKI_NAMESPACE)"; \
 		echo "  → Korrel8r in namespace $(KORREL8R_NAMESPACE)"; \
 		echo "  → MinIO observability storage in namespace $(MINIO_NAMESPACE)"; \
 		echo "  → Distributed Tracing Console Plugin (Observe → Traces menu)"; \
@@ -1282,7 +1292,7 @@ upgrade-observability:
 		--set global.namespace=$(OBSERVABILITY_NAMESPACE)
 	@$(MAKE) cleanup-loki-clusterroles
 	@COLLECTOR_CREATE=$$($(check_collector_sa_and_get_flag)); \
-	cd deploy/helm && helm upgrade --install loki-stack ./observability/loki \
+	cd deploy/helm && helm upgrade --install $(LOKI_HELM_RELEASE) ./observability/loki \
 		--namespace $(LOKI_NAMESPACE) \
 		--create-namespace \
 		--atomic --wait --timeout 15m \
@@ -1441,6 +1451,15 @@ uninstall-minio:
 	@echo "Removing minio PVCs from $(MINIO_NAMESPACE)"
 	- @oc delete pvc -n $(MINIO_NAMESPACE) -l app.kubernetes.io/name=$(MINIO_CHART) --timeout=30s ||:
 
+# Remove stuck Helm metadata so a fresh `helm install` / `helm upgrade --install` can proceed
+.PHONY: purge-loki-helm-secrets
+purge-loki-helm-secrets:
+	@echo "  → Removing Helm release secrets for $(LOKI_HELM_RELEASE) in $(LOKI_NAMESPACE) (if any)..."
+	@for s in $$(oc get secrets -n $(LOKI_NAMESPACE) -o name 2>/dev/null | grep 'secret/sh\.helm\.release\.v1\.$(LOKI_HELM_RELEASE)' || true); do \
+		echo "  → Deleting $$s"; \
+		oc delete $$s -n $(LOKI_NAMESPACE) --ignore-not-found 2>/dev/null ||:; \
+	done
+
 # Cleanup Loki RBAC resources created by our Helm installation
 # NOTE: ClusterRoles are owned by cluster-logging operator - we never delete them
 # We only clean up ClusterRoleBindings and ServiceAccount created by our loki-stack release
@@ -1451,11 +1470,11 @@ cleanup-loki-clusterroles:
 	@for crb in logging-collector-logs-writer collect-application-logs collect-audit-logs collect-infrastructure-logs; do \
 		if oc get clusterrolebinding $$crb >/dev/null 2>&1; then \
 			OWNER=$$(oc get clusterrolebinding $$crb -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-name}' 2>/dev/null); \
-			if [ "$$OWNER" = "loki-stack" ]; then \
-				echo "  → Deleting ClusterRoleBinding $$crb (created by make install - release: loki-stack)"; \
+			if [ "$$OWNER" = "$(LOKI_HELM_RELEASE)" ]; then \
+				echo "  → Deleting ClusterRoleBinding $$crb (created by make install - release: $(LOKI_HELM_RELEASE))"; \
 				oc delete clusterrolebinding $$crb --ignore-not-found 2>/dev/null ||:; \
 			elif [ -n "$$OWNER" ]; then \
-				echo "  → Skipping ClusterRoleBinding $$crb (owned by '$$OWNER', not loki-stack)"; \
+				echo "  → Skipping ClusterRoleBinding $$crb (owned by '$$OWNER', not $(LOKI_HELM_RELEASE))"; \
 			else \
 				echo "  → Skipping ClusterRoleBinding $$crb (no Helm ownership - likely cluster-logging operator)"; \
 			fi; \
@@ -1464,22 +1483,56 @@ cleanup-loki-clusterroles:
 	@echo "  → Checking Loki collector ServiceAccount ownership before cleanup..."
 	@if oc get serviceaccount collector -n $(LOKI_NAMESPACE) >/dev/null 2>&1; then \
 		OWNER=$$(oc get serviceaccount collector -n $(LOKI_NAMESPACE) -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-name}' 2>/dev/null); \
-		if [ "$$OWNER" = "loki-stack" ]; then \
-			echo "  → Deleting ServiceAccount collector (created by make install - release: loki-stack)"; \
+		if [ "$$OWNER" = "$(LOKI_HELM_RELEASE)" ]; then \
+			echo "  → Deleting ServiceAccount collector (created by make install - release: $(LOKI_HELM_RELEASE))"; \
 			oc delete serviceaccount collector -n $(LOKI_NAMESPACE) --ignore-not-found 2>/dev/null ||:; \
 		elif [ -n "$$OWNER" ]; then \
-			echo "  → Skipping ServiceAccount collector (owned by '$$OWNER', not loki-stack)"; \
+			echo "  → Skipping ServiceAccount collector (owned by '$$OWNER', not $(LOKI_HELM_RELEASE))"; \
 		else \
 			echo "  → Skipping ServiceAccount collector (no Helm ownership - likely cluster-logging operator)"; \
+		fi; \
+	fi
+	@echo "  → Checking loki-log-forwarder ServiceAccount ownership before cleanup..."
+	@if oc get serviceaccount loki-log-forwarder -n $(LOKI_NAMESPACE) >/dev/null 2>&1; then \
+		OWNER=$$(oc get serviceaccount loki-log-forwarder -n $(LOKI_NAMESPACE) -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-name}' 2>/dev/null); \
+		if [ "$$OWNER" = "$(LOKI_HELM_RELEASE)" ]; then \
+			echo "  → Deleting ServiceAccount loki-log-forwarder (created by $(LOKI_HELM_RELEASE) release)"; \
+			oc delete serviceaccount loki-log-forwarder -n $(LOKI_NAMESPACE) --ignore-not-found 2>/dev/null ||:; \
+		elif [ -n "$$OWNER" ]; then \
+			echo "  → Skipping ServiceAccount loki-log-forwarder (owned by '$$OWNER', not $(LOKI_HELM_RELEASE))"; \
+		else \
+			echo "  → Skipping ServiceAccount loki-log-forwarder (no Helm ownership)"; \
+		fi; \
+	fi
+	@echo "  → Checking tenant ClusterRole / ClusterRoleBinding ($(LOKI_CLUSTER_RBAC_PREFIX)-tenant-logs)..."
+	@TENANT="$(LOKI_CLUSTER_RBAC_PREFIX)-tenant-logs"; \
+	if oc get clusterrolebinding $$TENANT >/dev/null 2>&1; then \
+		OWNER=$$(oc get clusterrolebinding $$TENANT -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-name}' 2>/dev/null); \
+		if [ "$$OWNER" = "$(LOKI_HELM_RELEASE)" ]; then \
+			echo "  → Deleting ClusterRoleBinding $$TENANT"; \
+			oc delete clusterrolebinding $$TENANT --ignore-not-found 2>/dev/null ||:; \
+		else \
+			echo "  → Skipping ClusterRoleBinding $$TENANT (Helm owner: '$$OWNER')"; \
+		fi; \
+	fi; \
+	if oc get clusterrole $$TENANT >/dev/null 2>&1; then \
+		OWNER=$$(oc get clusterrole $$TENANT -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-name}' 2>/dev/null); \
+		if [ "$$OWNER" = "$(LOKI_HELM_RELEASE)" ]; then \
+			echo "  → Deleting ClusterRole $$TENANT"; \
+			oc delete clusterrole $$TENANT --ignore-not-found 2>/dev/null ||:; \
+		else \
+			echo "  → Skipping ClusterRole $$TENANT (Helm owner: '$$OWNER')"; \
 		fi; \
 	fi
 	@echo "  → Loki RBAC cleanup complete (ClusterRoles left intact - owned by cluster-logging operator)"
 
 .PHONY: install-loki
 install-loki:
-	@echo "→ Checking if loki-stack already exists in namespace $(LOKI_NAMESPACE)"
-	@if helm list -n $(LOKI_NAMESPACE) 2>/dev/null | grep -q "^loki-stack\s"; then \
-		echo "  → loki-stack already installed, skipping..."; \
+	@echo "→ Checking if $(LOKI_HELM_RELEASE) is already healthy in $(LOKI_NAMESPACE)"
+	@if helm status $(LOKI_HELM_RELEASE) -n $(LOKI_NAMESPACE) >/dev/null 2>&1 \
+		&& [ "$$(helm status $(LOKI_HELM_RELEASE) -n $(LOKI_NAMESPACE) -o jsonpath='{.info.status}' 2>/dev/null)" = "deployed" ] \
+		&& oc get lokistack $(LOKI_STACK_NAME) -n $(LOKI_NAMESPACE) >/dev/null 2>&1; then \
+		echo "  → $(LOKI_HELM_RELEASE) is deployed and LokiStack $(LOKI_STACK_NAME) exists; skipping..."; \
 	else \
 		echo "→ Verifying Logging and Loki Operators are ready..."; \
 		if ! oc get subscription cluster-logging -n openshift-logging >/dev/null 2>&1; then \
@@ -1516,7 +1569,7 @@ install-loki:
 		echo "→ Cleaning up any pre-existing Helm-owned ClusterRoleBindings/ServiceAccount..."; \
 		$(MAKE) cleanup-loki-clusterroles; \
 		echo "  ✅ Cleanup complete"; \
-		echo "→ Installing loki-stack helm chart"; \
+		echo "→ Installing $(LOKI_HELM_RELEASE) helm chart"; \
 		COLLECTOR_CREATE=$$($(check_collector_sa_and_get_flag)); \
 		DEFAULT_SC=$$(oc get sc -o jsonpath='{.items[?(@.metadata.annotations.storageclass\.kubernetes\.io/is-default-class=="true")].metadata.name}' 2>/dev/null); \
 		if [ -z "$$DEFAULT_SC" ]; then \
@@ -1528,7 +1581,7 @@ install-loki:
 		else \
 			echo "  → Detected default StorageClass: $$DEFAULT_SC"; \
 		fi; \
-		cd deploy/helm && helm upgrade --install loki-stack observability/loki \
+		cd deploy/helm && helm upgrade --install $(LOKI_HELM_RELEASE) observability/loki \
 			--namespace $(LOKI_NAMESPACE) \
 			--create-namespace \
 			--atomic --timeout 15m \
@@ -1536,21 +1589,29 @@ install-loki:
 			--set rbac.collector.create=$$COLLECTOR_CREATE \
 			--set lokiStack.storageClassName=$$DEFAULT_SC \
 			$(helm_loki_args) && \
-		echo "✅ loki-stack installed successfully"; \
+		echo "✅ $(LOKI_HELM_RELEASE) installed successfully"; \
 	fi
 	@$(MAKE) enable-logging-ui
 
 .PHONY: uninstall-loki
 uninstall-loki:
-	@echo "Uninstalling loki-stack in namespace $(LOKI_NAMESPACE)"
-	@helm -n $(LOKI_NAMESPACE) uninstall loki-stack --ignore-not-found
+	@echo "Uninstalling $(LOKI_HELM_RELEASE) and chart-owned Loki resources in $(LOKI_NAMESPACE)"
+	@echo "  → Helm uninstall (wait up to 5m; then force-remove release if still stuck)..."
+	-@helm -n $(LOKI_NAMESPACE) uninstall $(LOKI_HELM_RELEASE) --wait --timeout 5m 2>/dev/null || true
+	-@helm -n $(LOKI_NAMESPACE) uninstall $(LOKI_HELM_RELEASE) --ignore-not-found 2>/dev/null || true
+	@$(MAKE) purge-loki-helm-secrets
+	@echo "  → Deleting LokiStack / ClusterLogForwarder / UIPlugin CRs (best-effort)..."
+	-@oc delete lokistack/$(LOKI_STACK_NAME) -n $(LOKI_NAMESPACE) --ignore-not-found --wait=false 2>/dev/null || true
+	-@oc delete clusterlogforwarder/$(LOKI_CLUSTER_LOG_FORWARDER) -n $(LOKI_NAMESPACE) --ignore-not-found --wait=false 2>/dev/null || true
+	-@oc delete uiplugin/$(LOKI_UI_PLUGIN_NAME) -n $(LOKI_NAMESPACE) --ignore-not-found --wait=false 2>/dev/null || true
 
-	@echo "Removing LokiStack PVCs from $(LOKI_NAMESPACE)"
-	- @oc delete pvc -n $(LOKI_NAMESPACE) -l app.kubernetes.io/name=loki --timeout=30s ||:
+	@echo "Removing Loki PVCs from $(LOKI_NAMESPACE)"
+	-@oc delete pvc -n $(LOKI_NAMESPACE) -l app.kubernetes.io/instance=$(LOKI_HELM_RELEASE) --timeout=60s 2>/dev/null || true
+	-@oc delete pvc -n $(LOKI_NAMESPACE) -l app.kubernetes.io/name=loki --timeout=60s 2>/dev/null || true
 
-	@echo "Cleaning up Loki ClusterRoles and ClusterRoleBindings..."
+	@echo "Cleaning up Loki ClusterRoleBindings / ClusterRoles / ServiceAccounts from this chart..."
 	@$(MAKE) cleanup-loki-clusterroles
-	@echo "  → ClusterRole cleanup complete"
+	@echo "  → Loki RBAC cleanup complete"
 
 	@$(MAKE) disable-logging-ui
 
