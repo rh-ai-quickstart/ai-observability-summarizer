@@ -81,7 +81,7 @@ def detect_environment() -> str:
 def _check_rag_available() -> bool:
     """Check if RAG (local model) infrastructure is available via HTTP probe."""
     # Auto-detect based on LLAMA_STACK_URL availability
-    llama_stack_url = os.getenv("LLAMA_STACK_URL", "http://localhost:8321/v1/openai/v1")
+    llama_stack_url = os.getenv("LLAMA_STACK_URL", "http://localhost:8321/v1")
     try:
         import requests
         # Try to reach the llama stack models endpoint with a quick timeout
@@ -142,7 +142,7 @@ def get_tempo_url() -> str:
 # Main configuration settings
 PROMETHEUS_URL = get_prometheus_url()
 TEMPO_URL = get_tempo_url()
-LLAMA_STACK_URL = os.getenv("LLAMA_STACK_URL", "http://localhost:8321/v1/openai/v1")
+LLAMA_STACK_URL = os.getenv("LLAMA_STACK_URL", "http://localhost:8321/v1")
 LLM_API_TOKEN = os.getenv("LLM_API_TOKEN", "")
 
 # Tempo-specific configuration

@@ -125,7 +125,7 @@ def generate_claude_config(mcp_stdio_path: str) -> Dict[str, Any]:
                 "args": args,
                 "env": {
                     "PROMETHEUS_URL": "http://localhost:9090",
-                    "LLAMA_STACK_URL": "http://localhost:8321/v1/openai/v1",
+                    "LLAMA_STACK_URL": "http://localhost:8321/v1",
                     "MODEL_CONFIG": MODEL_CONFIG_DEFAULT,
                     "THANOS_TOKEN": os.getenv("THANOS_TOKEN", "")
                 },
@@ -174,7 +174,7 @@ def generate_cursor_config(mcp_stdio_path: str) -> Dict[str, Any]:
                 "command": mcp_stdio_path,
                 "env": {
                     "PROMETHEUS_URL": "http://localhost:9090",
-                    "LLAMA_STACK_URL": "http://localhost:8321/v1/openai/v1",
+                    "LLAMA_STACK_URL": "http://localhost:8321/v1",
                     "MODEL_CONFIG": MODEL_CONFIG_DEFAULT
                 },
                 "disabled": False
