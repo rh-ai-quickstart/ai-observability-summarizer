@@ -154,6 +154,10 @@ collector:
             - memory_limiter
           exporters:
             - debug
+      # Required by OpenTelemetryCollector CRD (v1beta1): service.telemetry must be an object, not null.
+      telemetry:
+        logs:
+          level: info
 
 # Auto-instrumentation configuration
 # Creates an Instrumentation CR for automatic tracing of Python applications
