@@ -147,11 +147,11 @@ ifeq ($(origin USE_LLAMA_STACK_OPERATOR),file)
 ifneq ($(USE_LLAMA_STACK_OPERATOR),true)
   _LLAMA_OP_STATE := $(shell oc get datasciencecluster -o jsonpath='{.items[0].spec.components.llamastackoperator.managementState}' 2>/dev/null)
   ifeq ($(_LLAMA_OP_STATE),Managed)
-    $(info ℹ️  Auto-detected LlamaStack operator (Managed) in DataScienceCluster — switching to operator mode (USE_LLAMA_STACK_OPERATOR=true))
-    $(info    To use architectural charts instead, pass USE_LLAMA_STACK_OPERATOR=false explicitly.)
+    $(info ℹ️  Auto-detected LlamaStack operator (Managed) in DataScienceCluster — switching to LlamaStack operator mode (USE_LLAMA_STACK_OPERATOR=true))
+    $(info    To use LlamaStack helm charts deployment mode instead, pass USE_LLAMA_STACK_OPERATOR=false explicitly.)
     USE_LLAMA_STACK_OPERATOR := true
   else
-    $(info ℹ️  LlamaStack operator not enabled — using architectural Helm charts for LlamaStack.)
+    $(info ℹ️  LlamaStack operator not enabled — using LlamaStack Helm charts deployment mode.)
     $(info    To enable the operator, run: make enable-llamastack-operator)
   endif
 endif
