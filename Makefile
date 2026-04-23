@@ -1517,6 +1517,23 @@ install-loki:
 		echo "→ Cleaning up any pre-existing Helm-owned ClusterRoleBindings/ServiceAccount..."; \
 		$(MAKE) cleanup-loki-clusterroles; \
 		echo "  ✅ Cleanup complete"; \
+		if helm list --all -n $(LOKI_NAMESPACE) 2>/dev/null | grep -q "^loki-stack[[:space:]]"; then \
+			LOKI_STATUS=$$(helm list --all -n $(LOKI_NAMESPACE) 2>/dev/null | awk '/^loki-stack[[:space:]]/{print $$8}'); \
+			echo "  → Found stale loki-stack release (status: $$LOKI_STATUS), removing before reinstall..."; \
+			helm uninstall loki-stack -n $(LOKI_NAMESPACE) 2>/dev/null || true; \
+			echo "  → Waiting for loki-stack release to be fully removed..."; \
+			for i in $$(seq 1 36); do \
+				if ! helm list --all -n $(LOKI_NAMESPACE) 2>/dev/null | grep -q "^loki-stack[[:space:]]"; then \
+					echo "  → loki-stack release removed"; \
+					break; \
+				fi; \
+				if [ $$i -eq 36 ]; then \
+					echo "  ⚠️  Release stuck in '$$LOKI_STATUS' state, force-deleting Helm secret..."; \
+					oc delete secret -n $(LOKI_NAMESPACE) -l "owner=helm,name=loki-stack" 2>/dev/null || true; \
+				fi; \
+				sleep 5; \
+			done; \
+		fi; \
 		echo "→ Installing loki-stack helm chart"; \
 		COLLECTOR_CREATE=$$($(check_collector_sa_and_get_flag)); \
 		DEFAULT_SC=$$(oc get sc -o jsonpath='{.items[?(@.metadata.annotations.storageclass\.kubernetes\.io/is-default-class=="true")].metadata.name}' 2>/dev/null); \
