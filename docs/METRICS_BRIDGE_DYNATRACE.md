@@ -46,20 +46,23 @@ For (1) you must set **`metricsBridge.dynatrace.otlpHttpEndpoint`** and **`apiTo
 
 When **`metricsBridge.dynatrace.otlpHttpEndpoint`** and **`apiTokenSecretName`** are set **and** at least one of **`metricsBridge.enabled`**, **`forwardOtelTraces`**, or **`forwardOtelMetrics`** is true, the chart renders:
 
-- Exporter **`otlphttp/dynatrace`** with header `Authorization: Api-Token ${env:DT_API_TOKEN}`.
+- Exporter **`otlp_http/dynatrace`** with header `Authorization: Api-Token ${env:DT_API_TOKEN}`.
 - Pod env **`DT_API_TOKEN`** from that Secret.
 
 Additionally:
 
-- **`metricsBridge.enabled`** and a **non-empty** `prometheus.scrapeConfigs`: receiver **`prometheus/bridge`** and pipeline **`metrics/bridge`** (`prometheus/bridge` → `batch` / `memory_limiter` → `otlphttp/dynatrace`).
-- **`forwardOtelTraces`**: appends **`otlphttp/dynatrace`** to the existing **`traces`** pipeline exporters (Tempo / `debug` unchanged).
-- **`forwardOtelMetrics`**: appends **`otlphttp/dynatrace`** to the existing **`metrics`** pipeline exporters.
+- **`metricsBridge.enabled`** and a **non-empty** `prometheus.scrapeConfigs`: receiver **`prometheus/bridge`** and pipeline **`metrics/bridge`** (`prometheus/bridge` → `batch` / `memory_limiter` → `otlp_http/dynatrace`).
+- **`forwardOtelTraces`**: appends **`otlp_http/dynatrace`** to the existing **`traces`** pipeline exporters (Tempo / `debug` unchanged).
+- **`forwardOtelMetrics`**: appends **`otlp_http/dynatrace`** to the existing **`metrics`** pipeline exporters.
 
 ### OTLP-only example (no Prometheus scrape)
 
 See `deploy/helm/observability/otel-collector/values-dynatrace-otel-forward.example.yaml`.
 
 ## Operations notes
+
+- **Dynatrace “Partial success” on metrics:** Dynatrace may accept most OTLP metric data points but **reject a subset** (for example OpenTelemetry SDK internal series such as `otel.sdk.metric_reader.collection.duration` as cumulative histogram, or `otel.sdk.span.started` as monotonic cumulative sum). That shows as a **warning** in collector logs, not a full failure. Application metrics and traces can still ingest. To reduce noise: turn off **`forwardOtelMetrics`** if you only care about traces and Prometheus-scraped metrics, or tune Python instrumentation so it emits fewer SDK self-metrics.
+- **Deprecation `otlphttp` → `otlp_http`:** This chart uses exporter IDs **`otlp_http/dev`** and **`otlp_http/dynatrace`** (Collector ≥ 0.144).
 
 - **Cardinality and cost:** Prefer tight federation `match[]` or short scrape intervals only after you understand volume in Dynatrace.
 - **RBAC:** Scraping in-cluster Prometheus federation often requires a **token** with access to that Prometheus instance; mount or reference credentials as required by your scrape config (for example `authorization.credentials_file` on the scrape job).

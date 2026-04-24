@@ -104,9 +104,9 @@ collector:
     exporters:
       debug:
         verbosity: basic
-      otlphttp/dev:
+      otlp_http/dev:
         # Tempo distributor endpoint for trace ingestion
-        # Note: The otlphttp exporter automatically appends /v1/traces to the endpoint
+        # Note: The otlp_http exporter appends /v1/traces to the endpoint
         # Using distributor directly with mTLS (service-to-service)
         endpoint: "https://tempo-tempostack-distributor.{{ .Values.global.namespace }}.svc.cluster.local:4318"
         tls:
@@ -145,7 +145,7 @@ collector:
             - memory_limiter
           exporters:
             - debug
-            - otlphttp/dev
+            - otlp_http/dev
         metrics:
           receivers:
             - otlp

@@ -62,7 +62,7 @@ spec:
         {{- with .Values.collector.config.exporters.debug }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
-      otlphttp/dev:
+      otlp_http/dev:
         endpoint: {{ include "otel-collector.tempoGatewayEndpoint" . }}
         headers:
           X-Scope-OrgID: {{ .Values.tempo.auth.orgID }}
@@ -74,7 +74,7 @@ spec:
           authenticator: bearertokenauth
         {{- end }}
       {{- if $wantDt }}
-      otlphttp/dynatrace:
+      otlp_http/dynatrace:
         endpoint: {{ $dt.otlpHttpEndpoint | quote }}
         tls:
           insecure: false
@@ -109,16 +109,16 @@ spec:
         {{- if and $wantDt .Values.metricsBridge.forwardOtelTraces (hasKey $p "traces") }}
         {{- $t := deepCopy (index $p "traces") }}
         {{- $ex := default (list) $t.exporters }}
-        {{- if not (has "otlphttp/dynatrace" $ex) }}
-        {{- $_ := set $t "exporters" (append $ex "otlphttp/dynatrace") }}
+        {{- if not (has "otlp_http/dynatrace" $ex) }}
+        {{- $_ := set $t "exporters" (append $ex "otlp_http/dynatrace") }}
         {{- end }}
         {{- $_ := set $p "traces" $t }}
         {{- end }}
         {{- if and $wantDt .Values.metricsBridge.forwardOtelMetrics (hasKey $p "metrics") }}
         {{- $m := deepCopy (index $p "metrics") }}
         {{- $exm := default (list) $m.exporters }}
-        {{- if not (has "otlphttp/dynatrace" $exm) }}
-        {{- $_ := set $m "exporters" (append $exm "otlphttp/dynatrace") }}
+        {{- if not (has "otlp_http/dynatrace" $exm) }}
+        {{- $_ := set $m "exporters" (append $exm "otlp_http/dynatrace") }}
         {{- end }}
         {{- $_ := set $p "metrics" $m }}
         {{- end }}
@@ -131,7 +131,7 @@ spec:
             - batch
             - memory_limiter
           exporters:
-            - otlphttp/dynatrace
+            - otlp_http/dynatrace
         {{- end }}
       telemetry:
         {{- with .Values.collector.config.service.telemetry }}
