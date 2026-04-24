@@ -18,6 +18,14 @@ spec:
   {{- if eq .Values.collector.mode "deployment" }}
   replicas: {{ .Values.collector.replicas }}
   {{- end }}
+  {{- if and .Values.metricsBridge.enabled .Values.metricsBridge.dynatrace.apiTokenSecretName }}
+  env:
+    - name: DT_API_TOKEN
+      valueFrom:
+        secretKeyRef:
+          name: {{ .Values.metricsBridge.dynatrace.apiTokenSecretName | quote }}
+          key: {{ .Values.metricsBridge.dynatrace.apiTokenSecretKey | quote }}
+  {{- end }}
   ipFamilyPolicy: {{ .Values.collector.ipFamilyPolicy }}
   {{- with .Values.collector.resources }}
   resources:
@@ -63,12 +71,26 @@ spec:
         auth:
           authenticator: bearertokenauth
         {{- end }}
+      {{- if .Values.metricsBridge.enabled }}
+      otlphttp/dynatrace:
+        endpoint: {{ .Values.metricsBridge.dynatrace.otlpHttpEndpoint | quote }}
+        tls:
+          insecure: false
+        headers:
+          Authorization: "Api-Token ${env:DT_API_TOKEN}"
+      {{- end }}
 
     receivers:
       otlp:
         {{- with .Values.collector.config.receivers.otlp }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
+      {{- if .Values.metricsBridge.enabled }}
+      prometheus/bridge:
+        config:
+          scrape_configs:
+            {{- toYaml .Values.metricsBridge.prometheus.scrapeConfigs | nindent 12 }}
+      {{- end }}
 
     processors:
       {{- with .Values.collector.config.processors }}
@@ -83,6 +105,16 @@ spec:
       pipelines:
         {{- with .Values.collector.config.service.pipelines }}
         {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- if .Values.metricsBridge.enabled }}
+        metrics/bridge:
+          receivers:
+            - prometheus/bridge
+          processors:
+            - batch
+            - memory_limiter
+          exporters:
+            - otlphttp/dynatrace
         {{- end }}
       telemetry:
         {{- with .Values.collector.config.service.telemetry }}

@@ -1,0 +1,36 @@
+# Example overlay: enable Dynatrace metrics bridge (copy and customize; do not commit secrets).
+# See: ../../../../docs/METRICS_BRIDGE_DYNATRACE.md
+
+metricsBridge:
+  enabled: true
+  dynatrace:
+    otlpHttpEndpoint: "https://YOUR_ENV_ID.live.dynatrace.com/api/v2/otlp"
+    apiTokenSecretName: "dynatrace-otel-api"
+    apiTokenSecretKey: "apiToken"
+  prometheus:
+    scrapeConfigs:
+      # Example A: static scrape of a metrics endpoint (replace host/port/path).
+      # - job_name: limitador
+      #   scrape_interval: 30s
+      #   static_configs:
+      #     - targets: ["limitador.kuadrant-system.svc.cluster.local:8080"]
+      #   metrics_path: /metrics
+
+      # Example B: Prometheus federation (replace URL, token path, and match[] for your cluster).
+      # - job_name: uwm-federate
+      #   scrape_interval: 60s
+      #   honor_labels: true
+      #   metrics_path: /federate
+      #   params:
+      #     match[]:
+      #       - '{__name__=~"limitador_.*"}'
+      #   scheme: https
+      #   static_configs:
+      #     - targets: ["prometheus-user-workload.openshift-user-workload-monitoring.svc:9092"]
+      #   authorization:
+      #     credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+      - job_name: placeholder
+        scrape_interval: 60s
+        static_configs:
+          - targets: ["127.0.0.1:9999"]
+        metrics_path: /metrics

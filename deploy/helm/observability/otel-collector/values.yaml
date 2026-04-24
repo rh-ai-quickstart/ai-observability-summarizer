@@ -191,3 +191,17 @@ tempo:
   auth:
     orgID: "dev"
     useServiceAccountToken: true
+
+# Optional bridge: scrape Prometheus-format metrics (federation or /metrics targets) and
+# export to Dynatrace SaaS via OTLP/HTTP. Disabled by default; see docs/METRICS_BRIDGE_DYNATRACE.md.
+metricsBridge:
+  enabled: false
+  dynatrace:
+    # Dynatrace OTLP/HTTP base URL (no trailing slash), e.g. https://<env-id>.live.dynatrace.com/api/v2/otlp
+    otlpHttpEndpoint: ""
+    # Secret in the collector namespace holding the Dynatrace API token (plaintext key).
+    apiTokenSecretName: ""
+    apiTokenSecretKey: "apiToken"
+  prometheus:
+    # prometheus receiver scrape_configs; required when metricsBridge.enabled is true.
+    scrapeConfigs: []
