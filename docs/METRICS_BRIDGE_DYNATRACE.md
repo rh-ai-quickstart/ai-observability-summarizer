@@ -87,11 +87,21 @@ This is **independent** of Python OTLP auto-instrumentation. Your app OTLP path 
    Widening to “everything” (`{__name__=~".+"}`) can **overload** Prometheus, the collector, and Dynatrace cost.
 
 5. **RBAC for federation (required on OpenShift):**  
-   The collector pod uses its **ServiceAccount token** at `/var/run/secrets/kubernetes.io/serviceaccount/token` when you set `authorization.credentials_file` in `scrape_configs`. That token must be allowed to **GET** the federate endpoint on user-workload Prometheus.  
-   If federation returns **403 Forbidden**, bind a suitable **ClusterRole** to the collector **ServiceAccount** (for example a read-only monitoring role your platform team approves), **or** store a dedicated **long-lived token** in a **Secret** mounted into the collector and reference that file in `authorization.credentials_file`.  
-   Exact role names vary by OpenShift version and policy—coordinate with cluster admins.
+   The scrape config uses **`bearer_token_file`**: `/var/run/secrets/kubernetes.io/serviceaccount/token` (the collector pod’s ServiceAccount). That identity must be allowed to call **user-workload Prometheus** `/federate`.  
+   If logs show **`Failed to scrape Prometheus endpoint`** for `job=uwm-federate-*` (often with **`up`** and no series), check for **403** in collector logs at **debug** level, or test from a debug pod with the same token.  
+   Typical fix (cluster-admin): bind **`cluster-monitoring-view`** to the collector ServiceAccount:
 
-6. **Merge values and upgrade Helm:**  
+   ```bash
+   oc create clusterrolebinding otel-collector-monitoring-view \
+     --clusterrole=cluster-monitoring-view \
+     --serviceaccount=observability-hub:otel-collector
+   ```
+
+   Adjust namespace if the collector runs elsewhere. Your org may prefer a **narrower custom ClusterRole** instead of `cluster-monitoring-view`—use what your platform team approves.
+
+6. **If scrape still fails:** confirm **service and port** (`oc get svc -n openshift-user-workload-monitoring`), try full DNS **`.svc.cluster.local`**, and confirm **`scheme: https`** matches the service (some setups use **http** on the internal port—rare).
+
+7. **Merge values and upgrade Helm:**  
    Use `deploy/helm/observability/otel-collector/values-dynatrace-maas-prometheus.example.yaml` as a starting point (copy it out of git, edit hosts and `match[]`), then:
 
    ```bash
@@ -102,7 +112,7 @@ This is **independent** of Python OTLP auto-instrumentation. Your app OTLP path 
      -f /path/to/your-private-overlay.yaml
    ```
 
-7. **Verify:**  
+8. **Verify:**  
    - Collector logs: no repeated **403** on scrape; occasional Dynatrace **partial success** on OTLP **metrics** may still appear for SDK metrics if `forwardOtelMetrics` is true.  
    - Dynatrace **Data explorer**: search for `vllm_` after traffic; series should be **selectable** (not gray) once points exist.
 

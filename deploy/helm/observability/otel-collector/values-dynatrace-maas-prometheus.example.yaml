@@ -43,9 +43,11 @@ metricsBridge:
               # User-workload Prometheus (OpenShift monitoring); verify with:
               #   oc get route prometheus-k8s -n openshift-monitoring -o jsonpath='{.spec.host}'   # platform
               #   oc get svc -n openshift-user-workload-monitoring | grep prometheus
+              # Prefer full in-cluster DNS if short form fails:
+              # prometheus-user-workload.openshift-user-workload-monitoring.svc.cluster.local:9092
               - prometheus-user-workload.openshift-user-workload-monitoring.svc:9092
-        authorization:
-          credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        # Bearer token for Prometheus (same as kubectl uses in-cluster).
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
 
       # --- Job 2 (optional): direct scrape of a component in maas / kuadrant namespace ---
       # Find host:port and path:
@@ -72,5 +74,4 @@ metricsBridge:
       #       - '{__name__=~".+"}'
       #   static_configs:
       #     - targets: ["prometheus-user-workload.openshift-user-workload-monitoring.svc:9092"]
-      #   authorization:
-      #     credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+      #   bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
