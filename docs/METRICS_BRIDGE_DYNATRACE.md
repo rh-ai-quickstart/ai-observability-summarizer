@@ -126,6 +126,85 @@ The [ODH Models-as-a-Service observability](https://opendatahub-io.github.io/mod
 
 **Dynatrace metric names:** After OTLP export, Dynatrace may **normalize** names; search Data explorer by **substring** (`vllm`, `limitador`, `ratelimit`) and by **labels** (`namespace`, `pod`), not only exact Prometheus strings.
 
+## Runbook: vLLM + Limitador → Dynatrace (step-by-step)
+
+Use these in order. Replace namespaces if yours differ (`OBS_NS` = collector namespace, usually `observability-hub`).
+
+### 1) User Workload Monitoring
+
+Per [ODH MaaS observability](https://opendatahub-io.github.io/models-as-a-service/latest/advanced-administration/observability/), UWM must be enabled (`enableUserWorkload: true` in `cluster-monitoring-config`). Confirm with your cluster admin if Grafana already shows user-workload metrics for `maas` / predictors.
+
+### 2) Dynatrace Secret (collector namespace)
+
+```bash
+OBS_NS=observability-hub
+oc create secret generic dynatrace-otel-api -n "$OBS_NS" \
+  --from-literal=apiToken='REPLACE_WITH_DYNATRACE_TOKEN' \
+  --dry-run=client -o yaml | oc apply -f -
+```
+
+### 3) RBAC so the collector can call `/federate` (cluster admin)
+
+```bash
+OBS_NS=observability-hub
+oc create clusterrolebinding otel-collector-monitoring-view \
+  --clusterrole=cluster-monitoring-view \
+  --serviceaccount="${OBS_NS}:otel-collector" \
+  --dry-run=client -o yaml | oc apply -f -
+```
+
+If this binding already exists under another name, skip. If your org forbids `cluster-monitoring-view`, ask for a **narrower** role that still allows **GET** on user-workload Prometheus.
+
+### 4) Prove federation returns data (same identity as the collector)
+
+```bash
+OBS_NS=observability-hub
+TOKEN=$(oc create token otel-collector -n "$OBS_NS" --duration=15m)
+curl -skG -H "Authorization: Bearer ${TOKEN}" \
+  --data-urlencode 'match[]={__name__=~"vllm_.*"}' \
+  --data-urlencode 'match[]={__name__=~"limitador_.*"}' \
+  "https://prometheus-user-workload.openshift-user-workload-monitoring.svc:9092/federate" | head -50
+```
+
+You should see **Prometheus text** (`# TYPE ...`, metric lines). If you see **403** or HTML, fix RBAC or URL/port (`oc get svc -n openshift-user-workload-monitoring`).
+
+### 5) Deploy / upgrade the collector
+
+From the repo:
+
+```bash
+cd deploy/helm
+helm upgrade --install otel-collector ./observability/otel-collector \
+  -n observability-hub \
+  --set global.namespace=observability-hub \
+  -f ./observability/otel-collector/values-dynatrace-maas-prometheus.example.yaml
+```
+
+Use a **private copy** of that file if you change `forwardOtelMetrics`, endpoints, or add `vllm:.*` `match[]`.
+
+### 6) Watch the collector
+
+```bash
+oc logs -n observability-hub -l app.kubernetes.io/name=otel-collector -f --tail=100
+```
+
+- **No** repeating `Failed to scrape Prometheus endpoint` for `uwm-federate-vllm-limitador` → scrape path OK.
+- **`otlp_http/dynatrace`** + `Partial success` on metrics can still appear if **`forwardOtelMetrics: true`** (SDK metrics); federation metrics use the **`metrics/bridge`** pipeline.
+
+### 7) Dynatrace
+
+Wait **2–5 minutes** after successful scrapes. In **Data explorer / Metrics**, search `vllm`, `limitador`, `ratelimit`, and filter time range **Last 30 minutes**.
+
+### 8) Optional: direct Limitador scrape
+
+If federation has no `limitador_*` yet but Limitador runs:
+
+```bash
+oc get svc -n kuadrant-system -l app=limitador -o wide
+```
+
+Uncomment **Job 2** in `values-dynatrace-maas-prometheus.example.yaml`, set the correct `targets: ["host:port"]` and `metrics_path`, then `helm upgrade` again.
+
 ## Operations notes
 
 - **Dynatrace “Partial success” on metrics:** Dynatrace may accept most OTLP metric data points but **reject a subset** (for example OpenTelemetry SDK internal series such as `otel.sdk.metric_reader.collection.duration` as cumulative histogram, or `otel.sdk.span.started` as monotonic cumulative sum). That shows as a **warning** in collector logs, not a full failure. Application metrics and traces can still ingest. To reduce noise: turn off **`forwardOtelMetrics`** if you only care about traces and Prometheus-scraped metrics, or tune Python instrumentation so it emits fewer SDK self-metrics.
