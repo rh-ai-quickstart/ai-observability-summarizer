@@ -121,6 +121,11 @@ This is **independent** of Python OTLP auto-instrumentation. Your app OTLP path 
 - `values-dynatrace-maas-prometheus.example.yaml` — federation + optional direct scrape + commented “all metrics” job.  
 - `values-dynatrace-otel-forward.example.yaml` — OTLP duplicate export only (no Prometheus).
 
+**MaaS / ODH Limitador + vLLM (aligned with upstream doc):**  
+The [ODH Models-as-a-Service observability](https://opendatahub-io.github.io/models-as-a-service/latest/advanced-administration/observability/) page lists **Limitador** Prometheus series (`limitador_ratelimit_*`, tiers, cache, etc.) and expects **User Workload Monitoring** plus **ServiceMonitor** scraping. Those series appear in **user-workload Prometheus** once UWM and scrapes are working. The example file’s federation `match[]` uses `{__name__=~"vllm_.*"}` and `{__name__=~"limitador_.*"}` so **vLLM + all Limitador-style names** in that doc are included. If your cluster exposes **colon-style** recording names (`vllm:...`), add a third `match[]` line as noted in the YAML comments.
+
+**Dynatrace metric names:** After OTLP export, Dynatrace may **normalize** names; search Data explorer by **substring** (`vllm`, `limitador`, `ratelimit`) and by **labels** (`namespace`, `pod`), not only exact Prometheus strings.
+
 ## Operations notes
 
 - **Dynatrace “Partial success” on metrics:** Dynatrace may accept most OTLP metric data points but **reject a subset** (for example OpenTelemetry SDK internal series such as `otel.sdk.metric_reader.collection.duration` as cumulative histogram, or `otel.sdk.span.started` as monotonic cumulative sum). That shows as a **warning** in collector logs, not a full failure. Application metrics and traces can still ingest. To reduce noise: turn off **`forwardOtelMetrics`** if you only care about traces and Prometheus-scraped metrics, or tune Python instrumentation so it emits fewer SDK self-metrics.

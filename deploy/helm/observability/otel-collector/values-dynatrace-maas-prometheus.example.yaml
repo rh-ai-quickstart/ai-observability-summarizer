@@ -23,9 +23,19 @@ metricsBridge:
     apiTokenSecretKey: "apiToken"
   prometheus:
     scrapeConfigs:
-      # --- Job 1: User-workload Prometheus federation (vLLM / MaaS-related metric names) ---
-      # Tune match[]: start narrow, widen only if Dynatrace + Prometheus cope with volume.
-      # Common vLLM prefix: vllm_* ; Limitador: limitador_*
+      # --- Job 1: User-workload Prometheus federation ---
+      # Targets vLLM model-serving metrics plus MaaS / Limitador metrics described in:
+      # https://opendatahub-io.github.io/models-as-a-service/latest/advanced-administration/observability/
+      # Requires User Workload Monitoring (enableUserWorkload on cluster-monitoring-config).
+      #
+      # vLLM: names typically match vllm_* (e.g. vllm_num_requests_total, vllm_e2e_request_latency_seconds_*).
+      # Limitador (ODH doc): limitador_ratelimit_requests_total, limitador_ratelimit_allowed_total,
+      #   limitador_ratelimit_denied_total, limitador_ratelimit_errors_total, limitador_ratelimit_duration_seconds,
+      #   limitador_ratelimit_active_connections, limitador_ratelimit_cache_* , limitador_ratelimit_tier_* , etc.
+      # Regex limitador_.* covers all of the above.
+      #
+      # If your Prometheus uses recording-rule style names with a colon (e.g. vllm:foo), add:
+      #   - '{__name__=~"vllm:.*"}'
       - job_name: uwm-federate-vllm-limitador
         scrape_interval: 60s
         scrape_timeout: 55s
@@ -49,16 +59,16 @@ metricsBridge:
         # Bearer token for Prometheus (same as kubectl uses in-cluster).
         bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
 
-      # --- Job 2 (optional): direct scrape of a component in maas / kuadrant namespace ---
-      # Find host:port and path:
-      #   oc get svc -n maas
-      #   oc get svc -n kuadrant-system
-      # Uncomment and fix targets + metrics_path when you know the metrics port.
+      # --- Job 2 (optional): direct scrape Limitador /metrics (ODH ServiceMonitor pattern) ---
+      # Use if Limitador metrics are not in user-workload Prometheus yet, or as a backup.
+      # Doc: same observability page — ServiceMonitor selects app: limitador, port name often "metrics".
+      #   oc get svc -n kuadrant-system -l app=limitador -o wide
+      #   oc get endpoints -n kuadrant-system limitador
       # - job_name: limitador-direct
       #   scrape_interval: 30s
+      #   metrics_path: /metrics
       #   static_configs:
       #     - targets: ["limitador.kuadrant-system.svc.cluster.local:8080"]
-      #   metrics_path: /metrics
 
       # --- "Everything" (NOT recommended): very high cardinality and cost ---
       # Uncomment only in lab, with short retention and Dynatrace agreement:
