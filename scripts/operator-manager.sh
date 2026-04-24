@@ -518,8 +518,8 @@ approve_install_plan_if_manual() {
         echo -e "${BLUE}  📋 Manual approval required; target CSV: ${target_csv}${NC}"
     fi
 
-    # If the target CSV is already installed and Succeeded, OLM will not create an
-    # InstallPlan — it simply links the existing CSV to the subscription. Skip the wait.
+    # If the target CSV (or any newer version of the same package) is already Succeeded,
+    # OLM will not create an InstallPlan. Skip the wait.
     # Retry a few times to handle brief OLM reconciliation delays after subscription creation.
     if [ -n "$target_csv" ] && [ "$target_csv" != "null" ]; then
         local existing_phase=""
@@ -527,6 +527,16 @@ approve_install_plan_if_manual() {
             existing_phase=$(oc get "$OLM_CSV_RESOURCE" "$target_csv" -n "$namespace" \
                 -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
             if [ "$existing_phase" = "Succeeded" ]; then
+                break
+            fi
+            # Also check if a newer version of the same package is already Succeeded.
+            local csv_package="${target_csv%%.*}"
+            local newer_csv
+            newer_csv=$(oc get "$OLM_CSV_RESOURCE" -n "$namespace" --no-headers 2>/dev/null | \
+                awk -v pkg="$csv_package" '$1 ~ "^"pkg"\\." && $NF == "Succeeded" {print $1}' | head -1)
+            if [ -n "$newer_csv" ]; then
+                existing_phase="Succeeded"
+                target_csv="$newer_csv"
                 break
             fi
             sleep 5
@@ -612,14 +622,25 @@ install_operator() {
     export CHANNEL="${CHANNEL:-stable}"
     export STARTING_CSV="${STARTING_CSV:-}"
 
-    # If the target CSV is already Succeeded in this namespace (e.g. installed via an
-    # AllNamespaces subscription elsewhere), skip creating a duplicate subscription.
+    # If the target CSV (or any newer version of the same package) is already Succeeded
+    # in this namespace (e.g. installed via an AllNamespaces subscription elsewhere),
+    # skip creating a duplicate subscription.
     if [ -n "$STARTING_CSV" ]; then
         local csv_phase
         csv_phase=$(oc get "$OLM_CSV_RESOURCE" "$STARTING_CSV" -n "$namespace" \
             -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
         if [ "$csv_phase" = "Succeeded" ]; then
             echo -e "${GREEN}✅ $operator_name already installed${NC}"
+            return 0
+        fi
+        # The exact startingCSV may not be present if a newer version was installed.
+        # Check if any Succeeded CSV for the same package exists in the namespace.
+        local csv_package="${STARTING_CSV%%.*}"
+        local newer_csv
+        newer_csv=$(oc get "$OLM_CSV_RESOURCE" -n "$namespace" --no-headers 2>/dev/null | \
+            awk -v pkg="$csv_package" '$1 ~ "^"pkg"\\." && $NF == "Succeeded" {print $1}' | head -1)
+        if [ -n "$newer_csv" ]; then
+            echo -e "${GREEN}✅ $operator_name already installed ($newer_csv)${NC}"
             return 0
         fi
     fi
