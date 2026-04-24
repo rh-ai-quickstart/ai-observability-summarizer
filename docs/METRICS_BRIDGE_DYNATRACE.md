@@ -59,6 +59,58 @@ Additionally:
 
 See `deploy/helm/observability/otel-collector/values-dynatrace-otel-forward.example.yaml`.
 
+### MaaS / vLLM / Prometheus metrics → Dynatrace (via this collector)
+
+**Goal:** Get **Prometheus text metrics** (for example `vllm_*` from model serving, `limitador_*` from MaaS rate limiting) into Dynatrace **through the same OpenTelemetry Collector**, using the **`prometheus` receiver** and the existing **`otlp_http/dynatrace`** exporter.
+
+**Flow:**
+
+```text
+Prometheus /federate OR Pod/Service :metrics  --HTTP scrape-->  Collector (prometheus/bridge)  --OTLP/HTTP-->  Dynatrace
+```
+
+This is **independent** of Python OTLP auto-instrumentation. Your app OTLP path does **not** pull `vllm_*` out of Prometheus for you.
+
+**Recommended steps:**
+
+1. **Keep** (or create) the Dynatrace **Secret** in `observability-hub` as in [Enable](#enable) above.
+
+2. **Discover where MaaS / vLLM metrics live today** (usually already in **user-workload Prometheus** if you use `ServiceMonitor` / UWM):
+   - In OpenShift: **Observe → Metrics** (user workload) or Grafana, confirm series like `vllm_num_requests_total` exist and which **labels** (`namespace`, `pod`, etc.) you care about.
+
+3. **Choose ingest strategy:**
+   - **Federation (typical for “many series already in Prometheus”):** one scrape job hits `https://prometheus-user-workload.openshift-user-workload-monitoring.svc:9092/federate` with one or more `match[]` selectors.
+   - **Direct scrape:** add a second job that hits a **Service DNS** `:port/metrics` (for example Limitador) if those metrics are **not** in Prometheus or you want a smaller slice.
+
+4. **Start with narrow `match[]`, not “all metrics”:**  
+   Example selectors: `{__name__=~"vllm_.*"}`, `{__name__=~"limitador_.*"}`  
+   Widening to “everything” (`{__name__=~".+"}`) can **overload** Prometheus, the collector, and Dynatrace cost.
+
+5. **RBAC for federation (required on OpenShift):**  
+   The collector pod uses its **ServiceAccount token** at `/var/run/secrets/kubernetes.io/serviceaccount/token` when you set `authorization.credentials_file` in `scrape_configs`. That token must be allowed to **GET** the federate endpoint on user-workload Prometheus.  
+   If federation returns **403 Forbidden**, bind a suitable **ClusterRole** to the collector **ServiceAccount** (for example a read-only monitoring role your platform team approves), **or** store a dedicated **long-lived token** in a **Secret** mounted into the collector and reference that file in `authorization.credentials_file`.  
+   Exact role names vary by OpenShift version and policy—coordinate with cluster admins.
+
+6. **Merge values and upgrade Helm:**  
+   Use `deploy/helm/observability/otel-collector/values-dynatrace-maas-prometheus.example.yaml` as a starting point (copy it out of git, edit hosts and `match[]`), then:
+
+   ```bash
+   cd deploy/helm
+   helm upgrade --install otel-collector ./observability/otel-collector \
+     -n observability-hub \
+     --set global.namespace=observability-hub \
+     -f /path/to/your-private-overlay.yaml
+   ```
+
+7. **Verify:**  
+   - Collector logs: no repeated **403** on scrape; occasional Dynatrace **partial success** on OTLP **metrics** may still appear for SDK metrics if `forwardOtelMetrics` is true.  
+   - Dynatrace **Data explorer**: search for `vllm_` after traffic; series should be **selectable** (not gray) once points exist.
+
+**Files:**
+
+- `values-dynatrace-maas-prometheus.example.yaml` — federation + optional direct scrape + commented “all metrics” job.  
+- `values-dynatrace-otel-forward.example.yaml` — OTLP duplicate export only (no Prometheus).
+
 ## Operations notes
 
 - **Dynatrace “Partial success” on metrics:** Dynatrace may accept most OTLP metric data points but **reject a subset** (for example OpenTelemetry SDK internal series such as `otel.sdk.metric_reader.collection.duration` as cumulative histogram, or `otel.sdk.span.started` as monotonic cumulative sum). That shows as a **warning** in collector logs, not a full failure. Application metrics and traces can still ingest. To reduce noise: turn off **`forwardOtelMetrics`** if you only care about traces and Prometheus-scraped metrics, or tune Python instrumentation so it emits fewer SDK self-metrics.

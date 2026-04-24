@@ -1,0 +1,76 @@
+# Example: OTLP (optional) + Prometheus scrape/federation -> Dynatrace
+# Copy to a private file, edit scrape targets and match[], then:
+#
+#   cd deploy/helm
+#   helm upgrade --install otel-collector ./observability/otel-collector \
+#     -n observability-hub \
+#     --set global.namespace=observability-hub \
+#     -f ./observability/otel-collector/values-dynatrace-maas-prometheus.example.yaml
+#
+# Prerequisites:
+# - Secret dynatrace-otel-api (apiToken key) in observability-hub (see METRICS_BRIDGE_DYNATRACE.md).
+# - Collector ServiceAccount can authenticate to federation targets (RBAC; see doc section "RBAC for federation").
+# - Replace FEDERATE_HOST / ports / namespaces with values from YOUR cluster (`oc get svc -n openshift-user-workload-monitoring`).
+
+metricsBridge:
+  enabled: true
+  # App OTLP: keep traces to Dynatrace; set metrics false if Dynatrace "partial success" noise bothers you.
+  forwardOtelTraces: true
+  forwardOtelMetrics: false
+  dynatrace:
+    otlpHttpEndpoint: "https://kgs37200.live.dynatrace.com/api/v2/otlp"
+    apiTokenSecretName: "dynatrace-otel-api"
+    apiTokenSecretKey: "apiToken"
+  prometheus:
+    scrapeConfigs:
+      # --- Job 1: User-workload Prometheus federation (vLLM / MaaS-related metric names) ---
+      # Tune match[]: start narrow, widen only if Dynatrace + Prometheus cope with volume.
+      # Common vLLM prefix: vllm_* ; Limitador: limitador_*
+      - job_name: uwm-federate-vllm-limitador
+        scrape_interval: 60s
+        scrape_timeout: 55s
+        honor_labels: true
+        metrics_path: /federate
+        scheme: https
+        tls_config:
+          insecure_skip_verify: true
+        params:
+          match[]:
+            - '{__name__=~"vllm_.*"}'
+            - '{__name__=~"limitador_.*"}'
+        static_configs:
+          - targets:
+              # User-workload Prometheus (OpenShift monitoring); verify with:
+              #   oc get route prometheus-k8s -n openshift-monitoring -o jsonpath='{.spec.host}'   # platform
+              #   oc get svc -n openshift-user-workload-monitoring | grep prometheus
+              - prometheus-user-workload.openshift-user-workload-monitoring.svc:9092
+        authorization:
+          credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+
+      # --- Job 2 (optional): direct scrape of a component in maas / kuadrant namespace ---
+      # Find host:port and path:
+      #   oc get svc -n maas
+      #   oc get svc -n kuadrant-system
+      # Uncomment and fix targets + metrics_path when you know the metrics port.
+      # - job_name: limitador-direct
+      #   scrape_interval: 30s
+      #   static_configs:
+      #     - targets: ["limitador.kuadrant-system.svc.cluster.local:8080"]
+      #   metrics_path: /metrics
+
+      # --- "Everything" (NOT recommended): very high cardinality and cost ---
+      # Uncomment only in lab, with short retention and Dynatrace agreement:
+      # - job_name: uwm-federate-all-names
+      #   scrape_interval: 120s
+      #   honor_labels: true
+      #   metrics_path: /federate
+      #   scheme: https
+      #   tls_config:
+      #     insecure_skip_verify: true
+      #   params:
+      #     match[]:
+      #       - '{__name__=~".+"}'
+      #   static_configs:
+      #     - targets: ["prometheus-user-workload.openshift-user-workload-monitoring.svc:9092"]
+      #   authorization:
+      #     credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token

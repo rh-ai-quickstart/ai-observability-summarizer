@@ -106,6 +106,7 @@ To send **Prometheus-scraped metrics** and/or a **duplicate** of OTLP traces/met
 
 - `values-metrics-bridge.example.yaml` — scrape → Dynatrace  
 - `values-dynatrace-otel-forward.example.yaml` — OTLP traces/metrics → Dynatrace only  
+- `values-dynatrace-maas-prometheus.example.yaml` — federation / MaaS-related Prometheus → Dynatrace (see `docs/METRICS_BRIDGE_DYNATRACE.md`)  
 
 ### Configuring Applications to Send Traces
 
