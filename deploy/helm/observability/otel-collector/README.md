@@ -100,6 +100,13 @@ rbac:
 
 ## Usage
 
+### Dynatrace (optional)
+
+To send **Prometheus-scraped metrics** and/or a **duplicate** of OTLP traces/metrics to **Dynatrace**, configure `metricsBridge` and Dynatrace credentials in `values.yaml` or use the example overlays. Full instructions: **`docs/METRICS_BRIDGE_DYNATRACE.md`** (repo root). Example files:
+
+- `values-metrics-bridge.example.yaml` — scrape → Dynatrace  
+- `values-dynatrace-otel-forward.example.yaml` — OTLP traces/metrics → Dynatrace only  
+
 ### Configuring Applications to Send Traces
 
 The OpenTelemetry Collector exposes OTLP endpoints that your applications can send traces to:

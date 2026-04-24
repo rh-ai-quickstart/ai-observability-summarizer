@@ -18,13 +18,15 @@ spec:
   {{- if eq .Values.collector.mode "deployment" }}
   replicas: {{ .Values.collector.replicas }}
   {{- end }}
-  {{- if and .Values.metricsBridge.enabled .Values.metricsBridge.dynatrace.apiTokenSecretName }}
+  {{- $dt := .Values.metricsBridge.dynatrace }}
+  {{- $wantDt := and $dt.otlpHttpEndpoint $dt.apiTokenSecretName (or .Values.metricsBridge.enabled .Values.metricsBridge.forwardOtelTraces .Values.metricsBridge.forwardOtelMetrics) }}
+  {{- if $wantDt }}
   env:
     - name: DT_API_TOKEN
       valueFrom:
         secretKeyRef:
-          name: {{ .Values.metricsBridge.dynatrace.apiTokenSecretName | quote }}
-          key: {{ .Values.metricsBridge.dynatrace.apiTokenSecretKey | quote }}
+          name: {{ $dt.apiTokenSecretName | quote }}
+          key: {{ $dt.apiTokenSecretKey | quote }}
   {{- end }}
   ipFamilyPolicy: {{ .Values.collector.ipFamilyPolicy }}
   {{- with .Values.collector.resources }}
@@ -71,9 +73,9 @@ spec:
         auth:
           authenticator: bearertokenauth
         {{- end }}
-      {{- if .Values.metricsBridge.enabled }}
+      {{- if $wantDt }}
       otlphttp/dynatrace:
-        endpoint: {{ .Values.metricsBridge.dynatrace.otlpHttpEndpoint | quote }}
+        endpoint: {{ $dt.otlpHttpEndpoint | quote }}
         tls:
           insecure: false
         headers:
@@ -85,7 +87,7 @@ spec:
         {{- with .Values.collector.config.receivers.otlp }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
-      {{- if .Values.metricsBridge.enabled }}
+      {{- if and $wantDt .Values.metricsBridge.enabled (gt (len .Values.metricsBridge.prometheus.scrapeConfigs) 0) }}
       prometheus/bridge:
         config:
           scrape_configs:
@@ -103,10 +105,25 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
       pipelines:
-        {{- with .Values.collector.config.service.pipelines }}
-        {{- toYaml . | nindent 8 }}
+        {{- $p := deepCopy .Values.collector.config.service.pipelines }}
+        {{- if and $wantDt .Values.metricsBridge.forwardOtelTraces (hasKey $p "traces") }}
+        {{- $t := deepCopy (index $p "traces") }}
+        {{- $ex := default (list) $t.exporters }}
+        {{- if not (has "otlphttp/dynatrace" $ex) }}
+        {{- $_ := set $t "exporters" (append $ex "otlphttp/dynatrace") }}
         {{- end }}
-        {{- if .Values.metricsBridge.enabled }}
+        {{- $_ := set $p "traces" $t }}
+        {{- end }}
+        {{- if and $wantDt .Values.metricsBridge.forwardOtelMetrics (hasKey $p "metrics") }}
+        {{- $m := deepCopy (index $p "metrics") }}
+        {{- $exm := default (list) $m.exporters }}
+        {{- if not (has "otlphttp/dynatrace" $exm) }}
+        {{- $_ := set $m "exporters" (append $exm "otlphttp/dynatrace") }}
+        {{- end }}
+        {{- $_ := set $p "metrics" $m }}
+        {{- end }}
+        {{- toYaml $p | nindent 8 }}
+        {{- if and $wantDt .Values.metricsBridge.enabled (gt (len .Values.metricsBridge.prometheus.scrapeConfigs) 0) }}
         metrics/bridge:
           receivers:
             - prometheus/bridge

@@ -1,8 +1,10 @@
-# Example overlay: enable Dynatrace metrics bridge (copy and customize; do not commit secrets).
-# See: ../../../../docs/METRICS_BRIDGE_DYNATRACE.md
+# Example overlay: Prometheus scrape -> Dynatrace (copy and customize; do not commit secrets).
+# Requires dynatrace.otlpHttpEndpoint + apiTokenSecretName. See docs/METRICS_BRIDGE_DYNATRACE.md
 
 metricsBridge:
   enabled: true
+  forwardOtelTraces: false
+  forwardOtelMetrics: false
   dynatrace:
     otlpHttpEndpoint: "https://YOUR_ENV_ID.live.dynatrace.com/api/v2/otlp"
     apiTokenSecretName: "dynatrace-otel-api"

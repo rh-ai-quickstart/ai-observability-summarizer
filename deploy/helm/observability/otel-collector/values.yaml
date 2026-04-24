@@ -192,10 +192,14 @@ tempo:
     orgID: "dev"
     useServiceAccountToken: true
 
-# Optional bridge: scrape Prometheus-format metrics (federation or /metrics targets) and
-# export to Dynatrace SaaS via OTLP/HTTP. Disabled by default; see docs/METRICS_BRIDGE_DYNATRACE.md.
+# Optional Dynatrace export via OTLP/HTTP. Disabled by default; see docs/METRICS_BRIDGE_DYNATRACE.md.
 metricsBridge:
+  # When true, run prometheus/bridge -> Dynatrace (requires non-empty prometheus.scrapeConfigs).
   enabled: false
+  # Also send app OTLP traces (existing traces pipeline) to Dynatrace in addition to Tempo/debug.
+  forwardOtelTraces: false
+  # Also send app OTLP metrics (existing metrics pipeline) to Dynatrace in addition to debug.
+  forwardOtelMetrics: false
   dynatrace:
     # Dynatrace OTLP/HTTP base URL (no trailing slash), e.g. https://<env-id>.live.dynatrace.com/api/v2/otlp
     otlpHttpEndpoint: ""
@@ -203,5 +207,5 @@ metricsBridge:
     apiTokenSecretName: ""
     apiTokenSecretKey: "apiToken"
   prometheus:
-    # prometheus receiver scrape_configs; required when metricsBridge.enabled is true.
+    # prometheus receiver scrape_configs; used when metricsBridge.enabled is true.
     scrapeConfigs: []

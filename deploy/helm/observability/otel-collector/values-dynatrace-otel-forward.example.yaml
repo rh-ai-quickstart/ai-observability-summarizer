@@ -1,0 +1,18 @@
+# Example: send existing OTLP traces and/or metrics (apps → this collector) to Dynatrace
+# in addition to Tempo / debug. No Prometheus scrape jobs required.
+#
+#   helm upgrade --install otel-collector ./observability/otel-collector -n observability-hub \
+#     -f values-dynatrace-otel-forward.example.yaml
+#
+# Create the Secret first (see docs/METRICS_BRIDGE_DYNATRACE.md).
+
+metricsBridge:
+  enabled: false
+  forwardOtelTraces: true
+  forwardOtelMetrics: true
+  dynatrace:
+    otlpHttpEndpoint: "https://YOUR_ENV_ID.live.dynatrace.com/api/v2/otlp"
+    apiTokenSecretName: "dynatrace-otel-api"
+    apiTokenSecretKey: "apiToken"
+  prometheus:
+    scrapeConfigs: []

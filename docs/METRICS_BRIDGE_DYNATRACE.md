@@ -1,11 +1,14 @@
-# Dynatrace metrics bridge (OpenTelemetry Collector)
+# Dynatrace export (OpenTelemetry Collector)
 
-This repository’s **OpenTelemetry Collector** Helm chart (`deploy/helm/observability/otel-collector`) can run an optional pipeline that:
+This repository’s **OpenTelemetry Collector** Helm chart (`deploy/helm/observability/otel-collector`) can send telemetry to **Dynatrace SaaS** over **OTLP/HTTP** with an **API token**. All options are **off by default**.
 
-1. **Scrapes** Prometheus text exposition (via the `prometheus` receiver), for example from **Prometheus federation** or from a component’s **`/metrics`** endpoint.
-2. **Exports** those series to **Dynatrace SaaS** using **OTLP/HTTP** and an **API token**.
+You can use **one or more** of the following:
 
-The default install leaves this **disabled** so existing trace-only behavior is unchanged.
+1. **Prometheus scrape bridge** — `prometheus` receiver scrapes federation or `/metrics` targets, then **`metrics/bridge`** → Dynatrace (`metricsBridge.enabled` + `prometheus.scrapeConfigs`).
+2. **Duplicate OTLP traces** — same **OTLP** traces the apps already send to this collector also go to Dynatrace (`metricsBridge.forwardOtelTraces`).
+3. **Duplicate OTLP metrics** — same **OTLP** metrics pipeline also exports to Dynatrace (`metricsBridge.forwardOtelMetrics`).
+
+For (1) you must set **`metricsBridge.dynatrace.otlpHttpEndpoint`** and **`apiTokenSecretName`**. The same credentials are used for (2) and (3).
 
 ## Enable
 
@@ -41,14 +44,20 @@ The default install leaves this **disabled** so existing trace-only behavior is 
 
 ## Collector configuration
 
-When `metricsBridge.enabled` is `true`, the chart renders:
+When **`metricsBridge.dynatrace.otlpHttpEndpoint`** and **`apiTokenSecretName`** are set **and** at least one of **`metricsBridge.enabled`**, **`forwardOtelTraces`**, or **`forwardOtelMetrics`** is true, the chart renders:
 
-- Receiver **`prometheus/bridge`** using your `scrapeConfigs`.
-- Exporter **`otlphttp/dynatrace`** targeting `metricsBridge.dynatrace.otlpHttpEndpoint` with header `Authorization: Api-Token ${env:DT_API_TOKEN}`.
-- Pipeline **`metrics/bridge`**: `prometheus/bridge` → `batch` / `memory_limiter` → `otlphttp/dynatrace`.
-- Pod env **`DT_API_TOKEN`** from the configured Secret.
+- Exporter **`otlphttp/dynatrace`** with header `Authorization: Api-Token ${env:DT_API_TOKEN}`.
+- Pod env **`DT_API_TOKEN`** from that Secret.
 
-The existing **`metrics`** pipeline (OTLP in → `debug`) is unchanged.
+Additionally:
+
+- **`metricsBridge.enabled`** and a **non-empty** `prometheus.scrapeConfigs`: receiver **`prometheus/bridge`** and pipeline **`metrics/bridge`** (`prometheus/bridge` → `batch` / `memory_limiter` → `otlphttp/dynatrace`).
+- **`forwardOtelTraces`**: appends **`otlphttp/dynatrace`** to the existing **`traces`** pipeline exporters (Tempo / `debug` unchanged).
+- **`forwardOtelMetrics`**: appends **`otlphttp/dynatrace`** to the existing **`metrics`** pipeline exporters.
+
+### OTLP-only example (no Prometheus scrape)
+
+See `deploy/helm/observability/otel-collector/values-dynatrace-otel-forward.example.yaml`.
 
 ## Operations notes
 
