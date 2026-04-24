@@ -1,8 +1,7 @@
-# Job to add the MCP Server service account to the Loki tenant ClusterRoleBinding
-# and to add both Korrel8r and MCP Server to the logging-collector-logs-writer CRB.
+# Job to add Korrel8r and MCP Server service accounts to the logging-collector-logs-writer CRB.
 #
-# Note: Korrel8r Loki tenant access is now handled by the korrel8r chart's own
-# ClusterRoleBinding (korrel8r-summarizer-loki-tenant-logs) and is no longer
+# Note: Loki tenant access for both Korrel8r and MCP Server is now handled by
+# dedicated ClusterRoleBindings in their respective Helm charts and is no longer
 # patched here.
 # NOTE: Always runs - these are required application components
 apiVersion: batch/v1
@@ -42,41 +41,7 @@ spec:
         - |
           set -euo pipefail
 
-          echo "Waiting for Loki tenant ClusterRoleBinding to be created..."
-          LOKI_CRB="openshift-logging-{{ .Release.Name }}-loki-tenant-logs"
-          TIMEOUT=120
-          ELAPSED=0
-          while ! oc get clusterrolebinding $LOKI_CRB 2>/dev/null; do
-            if [ $ELAPSED -ge $TIMEOUT ]; then
-              echo "ERROR: Timeout waiting for ClusterRoleBinding $LOKI_CRB"
-              exit 1
-            fi
-            echo "  Still waiting... ($ELAPSED/$TIMEOUT seconds)"
-            sleep 5
-            ELAPSED=$((ELAPSED + 5))
-          done
-
-          echo "Checking if MCP Server is already in the ClusterRoleBinding..."
-          if oc get clusterrolebinding $LOKI_CRB -o json | \
-             jq -e '.subjects // [] | any(.kind == "ServiceAccount" and .name == "mcp-analyzer" and .namespace == "{{ .Release.Namespace }}")' > /dev/null 2>&1; then
-            echo "  → MCP Server already in $LOKI_CRB"
-          else
-            echo "Adding MCP Server to Loki tenant ClusterRoleBinding..."
-            oc patch clusterrolebinding $LOKI_CRB --type=json -p='[
-              {
-                "op": "add",
-                "path": "/subjects/-",
-                "value": {
-                  "kind": "ServiceAccount",
-                  "name": "mcp-analyzer",
-                  "namespace": "{{ .Release.Namespace }}"
-                }
-              }
-            ]'
-            echo "  ✓ Added MCP Server to $LOKI_CRB"
-          fi
-
-          # Also add Korrel8r and MCP Server to logging-collector-logs-writer ClusterRoleBinding
+          # Add Korrel8r and MCP Server to logging-collector-logs-writer ClusterRoleBinding
           COLLECTOR_CRB="logging-collector-logs-writer"
           echo "Adding service accounts to $COLLECTOR_CRB ClusterRoleBinding..."
           if ! oc get clusterrolebinding $COLLECTOR_CRB 2>/dev/null; then
