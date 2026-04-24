@@ -22,7 +22,7 @@ For (1) you must set **`metricsBridge.dynatrace.otlpHttpEndpoint`** and **`apiTo
 
 2. Set your Dynatrace **OTLP/HTTP base** URL. For many SaaS tenants this matches the form documented by Dynatrace for OTLP ingest, for example:
 
-   `https://<environment-id>.live.dynatrace.com/api/v2/otlp`
+   `https://<environment-id>.live.dynatrace.com/api/v2/otlp` (for example `https://kgs37200.live.dynatrace.com/api/v2/otlp` when the UI host is `kgs37200.apps.dynatrace.com`)
 
    Confirm the exact URL and TLS requirements in [Dynatrace OpenTelemetry ingest](https://docs.dynatrace.com/docs/extend-dynatrace/opentelemetry/getting-started/otel-collector-ingest) for your deployment type.
 
