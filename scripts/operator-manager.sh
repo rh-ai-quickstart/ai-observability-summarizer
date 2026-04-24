@@ -520,9 +520,17 @@ approve_install_plan_if_manual() {
 
     # If the target CSV is already installed and Succeeded, OLM will not create an
     # InstallPlan — it simply links the existing CSV to the subscription. Skip the wait.
+    # Retry a few times to handle brief OLM reconciliation delays after subscription creation.
     if [ -n "$target_csv" ] && [ "$target_csv" != "null" ]; then
-        local existing_phase
-        existing_phase=$(oc get "$OLM_CSV_RESOURCE" "$target_csv" -n "$namespace" -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
+        local existing_phase=""
+        for _i in 1 2 3; do
+            existing_phase=$(oc get "$OLM_CSV_RESOURCE" "$target_csv" -n "$namespace" \
+                -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
+            if [ "$existing_phase" = "Succeeded" ]; then
+                break
+            fi
+            sleep 5
+        done
         if [ "$existing_phase" = "Succeeded" ]; then
             echo -e "${GREEN}  ✅ CSV $target_csv already installed and Succeeded; no InstallPlan needed${NC}"
             return 0
@@ -603,6 +611,18 @@ install_operator() {
     export NAMESPACE="$namespace"
     export CHANNEL="${CHANNEL:-stable}"
     export STARTING_CSV="${STARTING_CSV:-}"
+
+    # If the target CSV is already Succeeded in this namespace (e.g. installed via an
+    # AllNamespaces subscription elsewhere), skip creating a duplicate subscription.
+    if [ -n "$STARTING_CSV" ]; then
+        local csv_phase
+        csv_phase=$(oc get "$OLM_CSV_RESOURCE" "$STARTING_CSV" -n "$namespace" \
+            -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
+        if [ "$csv_phase" = "Succeeded" ]; then
+            echo -e "${GREEN}✅ $operator_name already installed${NC}"
+            return 0
+        fi
+    fi
 
     # Check if an OperatorGroup already exists in the target namespace. Multiple
     # OperatorGroups cause OLM to deadlock (no InstallPlans created). This can happen
