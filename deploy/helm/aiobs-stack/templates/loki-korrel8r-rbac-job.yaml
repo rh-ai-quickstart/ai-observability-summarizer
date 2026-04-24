@@ -1,8 +1,9 @@
-# Job to add service accounts to Loki tenant ClusterRoleBinding
-# This allows Korrel8r and MCP Server to query logs from LokiStack
-# Service accounts added:
-#   - korrel8r-summarizer (for log correlation)
-#   - mcp-analyzer (for AI observability queries)
+# Job to add the MCP Server service account to the Loki tenant ClusterRoleBinding
+# and to add both Korrel8r and MCP Server to the logging-collector-logs-writer CRB.
+#
+# Note: Korrel8r Loki tenant access is now handled by the korrel8r chart's own
+# ClusterRoleBinding (korrel8r-summarizer-loki-tenant-logs) and is no longer
+# patched here.
 # NOTE: Always runs - these are required application components
 apiVersion: batch/v1
 kind: Job
@@ -54,41 +55,6 @@ spec:
             sleep 5
             ELAPSED=$((ELAPSED + 5))
           done
-
-          echo "Checking if Korrel8r service account exists..."
-          if ! oc get sa korrel8r-summarizer -n {{ .Values.global.korrel8rNamespace }} 2>/dev/null; then
-            echo "WARNING: Korrel8r service account not found in {{ .Values.global.korrel8rNamespace }}"
-            echo "Waiting up to 60 seconds for Korrel8r to be deployed..."
-            ELAPSED=0
-            while ! oc get sa korrel8r-summarizer -n {{ .Values.global.korrel8rNamespace }} 2>/dev/null; do
-              if [ $ELAPSED -ge 60 ]; then
-                echo "ERROR: Korrel8r service account still not found. Cannot configure RBAC."
-                exit 1
-              fi
-              sleep 5
-              ELAPSED=$((ELAPSED + 5))
-            done
-          fi
-
-          echo "Checking if Korrel8r is already in the ClusterRoleBinding..."
-          if oc get clusterrolebinding $LOKI_CRB -o json | \
-             jq -e '.subjects // [] | any(.kind == "ServiceAccount" and .name == "korrel8r-summarizer" and .namespace == "{{ .Values.global.korrel8rNamespace }}")' > /dev/null 2>&1; then
-            echo "  → Korrel8r already in $LOKI_CRB"
-          else
-            echo "Adding Korrel8r to Loki tenant ClusterRoleBinding..."
-            oc patch clusterrolebinding $LOKI_CRB --type=json -p='[
-              {
-                "op": "add",
-                "path": "/subjects/-",
-                "value": {
-                  "kind": "ServiceAccount",
-                  "name": "korrel8r-summarizer",
-                  "namespace": "{{ .Values.global.korrel8rNamespace }}"
-                }
-              }
-            ]'
-            echo "  ✓ Added Korrel8r to $LOKI_CRB"
-          fi
 
           echo "Checking if MCP Server is already in the ClusterRoleBinding..."
           if oc get clusterrolebinding $LOKI_CRB -o json | \
