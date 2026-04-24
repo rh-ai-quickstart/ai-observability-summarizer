@@ -518,6 +518,17 @@ approve_install_plan_if_manual() {
         echo -e "${BLUE}  📋 Manual approval required; target CSV: ${target_csv}${NC}"
     fi
 
+    # If the target CSV is already installed and Succeeded, OLM will not create an
+    # InstallPlan — it simply links the existing CSV to the subscription. Skip the wait.
+    if [ -n "$target_csv" ] && [ "$target_csv" != "null" ]; then
+        local existing_phase
+        existing_phase=$(oc get "$OLM_CSV_RESOURCE" "$target_csv" -n "$namespace" -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
+        if [ "$existing_phase" = "Succeeded" ]; then
+            echo -e "${GREEN}  ✅ CSV $target_csv already installed and Succeeded; no InstallPlan needed${NC}"
+            return 0
+        fi
+    fi
+
     # Wait for the InstallPlan to be created and referenced by the Subscription
     attempts=0
     local installplan_name=""
@@ -652,6 +663,19 @@ for doc in docs:
     attempt=0
     max_attempts=60  # 10 minutes
 
+    # Short-circuit: if the startingCSV is already Succeeded, OLM may not populate
+    # status.installedCSV immediately — check the CSV directly first.
+    local starting_csv
+    starting_csv=$(oc get "$OLM_SUBSCRIPTION_RESOURCE" "$subscription_name" -n "$namespace" -o jsonpath='{.spec.startingCSV}' 2>/dev/null || echo "")
+    if [ -n "$starting_csv" ] && [ "$starting_csv" != "null" ]; then
+        local starting_phase
+        starting_phase=$(oc get "$OLM_CSV_RESOURCE" "$starting_csv" -n "$namespace" -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
+        if [ "$starting_phase" = "Succeeded" ]; then
+            echo -e "${GREEN}  ✅ CSV $starting_csv is in Succeeded phase${NC}"
+            attempt=$max_attempts  # skip the loop
+        fi
+    fi
+
     while [ $attempt -lt $max_attempts ]; do
         local csv_phase=$(oc get "$OLM_SUBSCRIPTION_RESOURCE" "$subscription_name" -n "$namespace" -o jsonpath='{.status.installedCSV}' 2>/dev/null)
         if [ -n "$csv_phase" ] && [ "$csv_phase" != "null" ]; then
@@ -671,7 +695,7 @@ for doc in docs:
         fi
     done
 
-    if [ $attempt -eq $max_attempts ]; then
+    if [ $attempt -eq $max_attempts ] && [ "$starting_phase" != "Succeeded" ]; then
         echo -e "${RED}  ❌ CSV did not reach Succeeded phase after 10 minutes${NC}"
         exit 1
     fi
