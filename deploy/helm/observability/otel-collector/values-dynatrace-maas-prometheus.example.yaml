@@ -14,9 +14,9 @@
 
 metricsBridge:
   enabled: true
-  # App OTLP: keep traces to Dynatrace; set metrics false if Dynatrace "partial success" noise bothers you.
+  # App OTLP: traces + metrics to Dynatrace (set metrics false if "partial success" noise bothers you).
   forwardOtelTraces: true
-  forwardOtelMetrics: false
+  forwardOtelMetrics: true
   dynatrace:
     otlpHttpEndpoint: "https://kgs37200.live.dynatrace.com/api/v2/otlp"
     apiTokenSecretName: "dynatrace-otel-api"
@@ -28,14 +28,9 @@ metricsBridge:
       # https://opendatahub-io.github.io/models-as-a-service/latest/advanced-administration/observability/
       # Requires User Workload Monitoring (enableUserWorkload on cluster-monitoring-config).
       #
-      # vLLM: names typically match vllm_* (e.g. vllm_num_requests_total, vllm_e2e_request_latency_seconds_*).
-      # Limitador (ODH doc): limitador_ratelimit_requests_total, limitador_ratelimit_allowed_total,
-      #   limitador_ratelimit_denied_total, limitador_ratelimit_errors_total, limitador_ratelimit_duration_seconds,
-      #   limitador_ratelimit_active_connections, limitador_ratelimit_cache_* , limitador_ratelimit_tier_* , etc.
-      # Regex limitador_.* covers all of the above.
-      #
-      # If your Prometheus uses recording-rule style names with a colon (e.g. vllm:foo), add:
-      #   - '{__name__=~"vllm:.*"}'
+      # vLLM: clusters vary — underscore (vllm_*) or colon (vllm:e2e_request_latency_seconds_* / Thanos UI).
+      # One selector vllm.* matches both; do not use only vllm_.* if your series use vllm:.
+      # Limitador (ODH doc): limitador_ratelimit_* etc.; regex limitador_.* covers those names.
       - job_name: uwm-federate-vllm-limitador
         scrape_interval: 60s
         scrape_timeout: 55s
@@ -46,7 +41,7 @@ metricsBridge:
           insecure_skip_verify: true
         params:
           match[]:
-            - '{__name__=~"vllm_.*"}'
+            - '{__name__=~"vllm.*"}'
             - '{__name__=~"limitador_.*"}'
         static_configs:
           - targets:
@@ -70,18 +65,9 @@ metricsBridge:
       #   static_configs:
       #     - targets: ["limitador.kuadrant-system.svc.cluster.local:8080"]
 
-      # --- "Everything" (NOT recommended): very high cardinality and cost ---
-      # Uncomment only in lab, with short retention and Dynatrace agreement:
-      # - job_name: uwm-federate-all-names
-      #   scrape_interval: 120s
-      #   honor_labels: true
-      #   metrics_path: /federate
-      #   scheme: https
-      #   tls_config:
-      #     insecure_skip_verify: true
-      #   params:
-      #     match[]:
-      #       - '{__name__=~".+"}'
-      #   static_configs:
-      #     - targets: ["prometheus-user-workload.openshift-user-workload-monitoring.svc:9092"]
-      #   bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+      # --- Federate ALL user-workload metric names (same as Thanos/Prometheus catalog for UWM) ---
+      # Do NOT uncomment here if Job 1 is enabled — you would scrape twice. Instead use the
+      # dedicated overlay file (wider intervals, top-of-file warnings):
+      #   values-dynatrace-federate-user-workload-all.example.yaml
+      # Or replace Job 1's `params.match[]` with only:
+      #   - '{__name__=~".+"}'

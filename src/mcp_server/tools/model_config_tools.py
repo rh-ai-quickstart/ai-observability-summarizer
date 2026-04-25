@@ -91,6 +91,26 @@ def _provider_api_url(provider: str) -> str:
     return ""
 
 
+def _normalize_maas_openai_chat_completions_url(api_url: str) -> str:
+    """
+    Full OpenAI-compatible chat URL for MaaS (LiteLLM, vLLM/KServe, etc.).
+
+    - Base ending in /v1 (e.g. LiteLLM): append /chat/completions only.
+    - Per-model base (e.g. LLMInferenceService status URL without /v1): append /v1/chat/completions.
+    - Legacy .../chat/completions (missing /v1): rewrite to .../v1/chat/completions.
+    """
+    u = (api_url or "").rstrip("/")
+    if not u:
+        return u
+    if u.endswith("/v1/chat/completions"):
+        return u
+    if u.endswith("/v1"):
+        return f"{u}/chat/completions"
+    if u.endswith("/chat/completions") and not u.endswith("/v1/chat/completions"):
+        return u[: -len("/chat/completions")] + "/v1/chat/completions"
+    return f"{u}/v1/chat/completions"
+
+
 def _is_gpt5_model(model_id: str) -> bool:
     """Check if a model is GPT-5 or later (uses /v1/responses endpoint)."""
     if not model_id:
@@ -107,6 +127,11 @@ def _get_curated_maas_models() -> List[Dict[str, Any]]:
 
     Since MAAS requires per-model API keys, we cannot query a generic
     /models endpoint. Users must configure each model individually.
+
+    IDs align with common deployments:
+    - qwen3-14b: Red Hat workshops / shared MaaS examples
+    - llama-*: served-model-name style used by the maas-code-assistant quickstart
+      (see https://github.com/rh-ai-quickstart/maas-code-assistant charts/maas-code-assistant/values.yaml)
     """
     return [
         {
@@ -114,6 +139,18 @@ def _get_curated_maas_models() -> List[Dict[str, Any]]:
             "name": "Qwen 3 14B",
             "description": "Alibaba Qwen 14B parameter model for general-purpose tasks",
             "context_length": 32768,
+        },
+        {
+            "id": "llama-3-1-8b-instruct-fp8",
+            "name": "Llama 3.1 8B Instruct (FP8)",
+            "description": "Typical default model from maas-code-assistant (vLLM --served-model-name)",
+            "context_length": 131072,
+        },
+        {
+            "id": "llama-3-3-70b-instruct-int4",
+            "name": "Llama 3.3 70B Instruct (INT4)",
+            "description": "Large instruct model from maas-code-assistant (vLLM --served-model-name)",
+            "context_length": 131072,
         },
     ]
 
@@ -547,13 +584,8 @@ def add_model_to_config(
 
         # Build model config object
         if provider_lower == "maas":
-            # MAAS uses custom api_url provided by user
-            # Normalize endpoint: only append /chat/completions if not already present
-            normalized_url = api_url.rstrip('/')
-            if not normalized_url.endswith('/chat/completions'):
-                final_api_url = f"{normalized_url}/chat/completions"
-            else:
-                final_api_url = normalized_url
+            # MAAS uses custom api_url provided by user (vLLM expects .../v1/chat/completions)
+            final_api_url = _normalize_maas_openai_chat_completions_url(api_url)
             secret_field = model_id.replace("maas/", "").strip()
             model_config = {
                 "external": True,
@@ -743,12 +775,7 @@ def update_maas_model_api_key(
                     error_code=MCPErrorCode.INTERNAL_ERROR,
                 )
 
-            # Normalize endpoint URL
-            normalized_url = api_url.rstrip('/')
-            if not normalized_url.endswith('/chat/completions'):
-                final_api_url = f"{normalized_url}/chat/completions"
-            else:
-                final_api_url = normalized_url
+            final_api_url = _normalize_maas_openai_chat_completions_url(api_url)
 
             # Update model config
             model_config = current_config[model_key]

@@ -68,6 +68,8 @@ export const PROVIDER_TEMPLATES: Record<Provider, ProviderTemplate> = {
     color: '#ee0000',
     commonModels: [
       'qwen3-14b',
+      'llama-3-1-8b-instruct-fp8',
+      'llama-3-3-70b-instruct-int4',
     ],
     documentationUrl: 'https://docs.redhat.com/maas',
   },

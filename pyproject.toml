@@ -28,6 +28,7 @@ dependencies = [
     "openai==2.24.0",
     "google-generativeai==0.8.6",
     "itsdangerous==2.2.0",
+    "traceloop-sdk>=0.30.0",
 ]
 
 [dependency-groups]

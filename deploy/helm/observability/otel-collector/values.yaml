@@ -124,6 +124,15 @@ collector:
     
     # Processors configuration
     processors:
+      # Dynatrace OTLP rejects some OTel SDK self-metrics (e.g. cumulative hist / mono sum).
+      # Drop them here so Dynatrace stops returning partial_success for names like otel.sdk.*.
+      filter/drop_otel_sdk_internal:
+        error_mode: ignore
+        metrics:
+          metric:
+            - 'IsMatch(name, "^otel\\.sdk\\.")'
+      # Dynatrace OTLP expects delta-style histograms / sums for many metric types; Python OTLP is often cumulative.
+      cumulativetodelta: {}
       batch:
         send_batch_size: 100
         timeout: 1s
@@ -150,6 +159,8 @@ collector:
           receivers:
             - otlp
           processors:
+            - filter/drop_otel_sdk_internal
+            - cumulativetodelta
             - batch
             - memory_limiter
           exporters:

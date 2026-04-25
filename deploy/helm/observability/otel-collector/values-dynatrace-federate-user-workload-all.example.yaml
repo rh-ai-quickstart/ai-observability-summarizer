@@ -1,0 +1,44 @@
+# Example: federate ALL metric names from OpenShift user-workload Prometheus → Dynatrace
+#
+# WARNING — read before use:
+# - `match[]: '{__name__=~".+"}'` asks Prometheus federation for every series name in user-workload
+#   Prometheus. Payloads can be very large; scrapes can time out; user-workload Prometheus, the
+#   collector, and Dynatrace (cost / DDU) can all be stressed.
+# - Prefer `values-dynatrace-maas-prometheus.example.yaml` with tight `match[]` in production.
+# - Start in a lab: raise `scrape_interval` / `scrape_timeout`, watch UWM Prometheus and collector CPU/memory.
+#
+#   cd deploy/helm
+#   helm upgrade --install otel-collector ./observability/otel-collector \
+#     -n observability-hub \
+#     --set global.namespace=observability-hub \
+#     -f ./observability/otel-collector/values-dynatrace-federate-user-workload-all.example.yaml
+#
+# Prerequisites: same as `values-dynatrace-maas-prometheus.example.yaml` (Secret, RBAC, UWM). See
+# `docs/METRICS_BRIDGE_DYNATRACE.md`.
+
+metricsBridge:
+  enabled: true
+  forwardOtelTraces: true
+  # Optional: set false if you only want Prometheus→Dynatrace and no app OTLP metrics duplicate.
+  forwardOtelMetrics: true
+  dynatrace:
+    otlpHttpEndpoint: "https://kgs37200.live.dynatrace.com/api/v2/otlp"
+    apiTokenSecretName: "dynatrace-otel-api"
+    apiTokenSecretKey: "apiToken"
+  prometheus:
+    scrapeConfigs:
+      - job_name: uwm-federate-all-names
+        scrape_interval: 180s
+        scrape_timeout: 170s
+        honor_labels: true
+        metrics_path: /federate
+        scheme: https
+        tls_config:
+          insecure_skip_verify: true
+        params:
+          match[]:
+            - '{__name__=~".+"}'
+        static_configs:
+          - targets:
+              - prometheus-user-workload.openshift-user-workload-monitoring.svc:9092
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token

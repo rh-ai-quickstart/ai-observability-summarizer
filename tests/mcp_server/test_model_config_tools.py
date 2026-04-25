@@ -17,6 +17,7 @@ from src.mcp_server.tools.model_config_tools import (
     add_model_to_config,
     update_maas_model_api_key,
     _save_maas_model_api_key,
+    _normalize_maas_openai_chat_completions_url,
 )
 
 
@@ -47,6 +48,28 @@ def _parse_mcp_response(response):
     return response
 
 
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ("https://gw.example.com/v1", "https://gw.example.com/v1/chat/completions"),
+        (
+            "https://gw.example.com/v1/chat/completions",
+            "https://gw.example.com/v1/chat/completions",
+        ),
+        (
+            "http://maas.apps.cluster/maas/llama-3-1-8b-instruct-fp8",
+            "http://maas.apps.cluster/maas/llama-3-1-8b-instruct-fp8/v1/chat/completions",
+        ),
+        (
+            "http://maas.apps.cluster/maas/llama-3-1-8b-instruct-fp8/chat/completions",
+            "http://maas.apps.cluster/maas/llama-3-1-8b-instruct-fp8/v1/chat/completions",
+        ),
+    ],
+)
+def test_normalize_maas_openai_chat_completions_url(raw, expected):
+    assert _normalize_maas_openai_chat_completions_url(raw) == expected
+
+
 class TestListProviderModels:
     """Test list_provider_models function"""
 
@@ -57,8 +80,11 @@ class TestListProviderModels:
 
         assert data["provider"] == "maas"
         assert "models" in data
-        assert len(data["models"]) > 0
+        assert len(data["models"]) >= 3
         assert data["models"][0]["id"] == "qwen3-14b"
+        ids = {m["id"] for m in data["models"]}
+        assert "llama-3-1-8b-instruct-fp8" in ids
+        assert "llama-3-3-70b-instruct-int4" in ids
 
     @patch("src.mcp_server.tools.model_config_tools.requests.get")
     def test_list_openai_models_success(self, mock_get):
@@ -379,6 +405,46 @@ class TestUpdateMaasModelApiKey:
         # Should have /chat/completions appended
         assert config["maas/qwen3-14b"]["apiUrl"] == "https://new-url.com/v1/chat/completions"
 
+    @patch("core.model_config_manager.reload_model_config")
+    @patch("src.mcp_server.tools.model_config_tools._get_k8s_headers")
+    @patch("os.path.exists")
+    @patch("src.mcp_server.tools.model_config_tools.requests.patch")
+    @patch("src.mcp_server.tools.model_config_tools._save_maas_model_api_key")
+    @patch("core.model_config_manager.get_model_config")
+    @patch("os.getenv")
+    def test_update_maas_rewrites_legacy_chat_completions_missing_v1(
+        self, mock_getenv, mock_get_config, mock_save_key, mock_patch,
+        mock_exists, mock_headers, mock_reload
+    ):
+        """Old normalization used .../chat/completions; rewrite to .../v1/chat/completions."""
+        mock_getenv.return_value = "test-namespace"
+        mock_exists.return_value = True
+        mock_headers.return_value = {"Authorization": "Bearer test-token"}
+        mock_get_config.return_value = {
+            "maas/qwen3-14b": {
+                "provider": "maas",
+                "modelName": "qwen3-14b",
+                "apiUrl": "https://old.example/maas/qwen/chat/completions",
+                "_metadata": {},
+            }
+        }
+        mock_save_key.return_value = {"success": True, "message": "API key saved"}
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_patch.return_value = mock_response
+
+        update_maas_model_api_key(
+            model_id="qwen3-14b",
+            api_key="new-test-key",
+            api_url="http://maas.apps.example/maas/qwen3-14b/chat/completions",
+        )
+        patch_payload = mock_patch.call_args.kwargs["json"]
+        config = json.loads(patch_payload["data"]["model-config.json"])
+        assert (
+            config["maas/qwen3-14b"]["apiUrl"]
+            == "http://maas.apps.example/maas/qwen3-14b/v1/chat/completions"
+        )
+
 
 class TestSaveMaasModelApiKey:
     """Test _save_maas_model_api_key helper function"""
@@ -535,6 +601,44 @@ class TestAddModelToConfig:
         mock_save_key.assert_called_once()
         mock_patch.assert_called_once()
         mock_reload.assert_called_once()
+        patch_payload = mock_patch.call_args.kwargs["json"]
+        config = json.loads(patch_payload["data"]["model-config.json"])
+        assert config["maas/qwen3-14b"]["apiUrl"] == "https://maas.example.com/v1/chat/completions"
+
+    @patch("core.model_config_manager.reload_model_config")
+    @patch("src.mcp_server.tools.model_config_tools._get_k8s_headers")
+    @patch("os.path.exists")
+    @patch("src.mcp_server.tools.model_config_tools.requests.patch")
+    @patch("src.mcp_server.tools.model_config_tools._save_maas_model_api_key")
+    @patch("core.model_config_manager.get_model_config")
+    @patch("os.getenv")
+    def test_add_maas_model_per_model_status_url_gets_v1_chat_completions(
+        self, mock_getenv, mock_get_config, mock_save_key, mock_patch,
+        mock_exists, mock_headers, mock_reload
+    ):
+        """LLMInferenceService-style URL without /v1 must map to .../v1/chat/completions (vLLM)."""
+        mock_getenv.return_value = "test-namespace"
+        mock_exists.return_value = True
+        mock_headers.return_value = {"Authorization": "Bearer test-token"}
+        mock_get_config.return_value = {}
+        mock_save_key.return_value = {"success": True, "message": "API key saved"}
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_patch.return_value = mock_response
+
+        base = "http://maas.apps.example/maas/llama-3-1-8b-instruct-fp8"
+        add_model_to_config(
+            provider="maas",
+            model_id="llama-3-1-8b-instruct-fp8",
+            api_key="test-key",
+            api_url=base,
+        )
+        patch_payload = mock_patch.call_args.kwargs["json"]
+        config = json.loads(patch_payload["data"]["model-config.json"])
+        assert (
+            config["maas/llama-3-1-8b-instruct-fp8"]["apiUrl"]
+            == f"{base}/v1/chat/completions"
+        )
 
     @patch("os.getenv")
     def test_add_maas_model_missing_api_key(self, mock_getenv):

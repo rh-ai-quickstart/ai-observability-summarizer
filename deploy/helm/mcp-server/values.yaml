@@ -62,6 +62,8 @@ env:
   GPU_METRICS_PREFIX_INTEL: ""
   GPU_METRICS_PREFIX_AMD: ""
   # MAAS (Model as a Service) API endpoint - can be overridden for different environments
+  # Default: Red Hat workshops. For self-hosted MaaS from the maas-code-assistant quickstart on the same cluster,
+  # set this to your OpenAI-compatible base (often the external HTTPS URL of the KServe/MaaS route + /v1).
   MAAS_API_URL: "https://litellm-prod.apps.maas.redhatworkshops.io/v1"
 
 # Name of the LLM used

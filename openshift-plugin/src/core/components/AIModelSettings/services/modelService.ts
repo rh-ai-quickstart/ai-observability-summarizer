@@ -6,6 +6,27 @@ import { saveDevModel, getDevModels, DevModelConfig } from '../../../services/de
 import { isDevMode } from '../../../services/runtimeConfig';
 
 /**
+ * Align with backend MaaS URL normalization: vLLM/KServe use .../v1/chat/completions;
+ * LiteLLM-style bases end with /v1 and only need /chat/completions appended.
+ */
+function normalizeMaasOpenAiChatCompletionsUrl(apiUrl: string): string {
+  const u = (apiUrl || '').replace(/\/+$/, '');
+  if (!u) {
+    return u;
+  }
+  if (u.endsWith('/v1/chat/completions')) {
+    return u;
+  }
+  if (u.endsWith('/v1')) {
+    return `${u}/chat/completions`;
+  }
+  if (u.endsWith('/chat/completions')) {
+    return `${u.slice(0, -'/chat/completions'.length)}/v1/chat/completions`;
+  }
+  return `${u}/v1/chat/completions`;
+}
+
+/**
  * Get the appropriate storage mechanism based on dev mode
  * - sessionStorage in dev mode (cleared on tab close)
  * - localStorage in production mode (persists across sessions)
@@ -403,12 +424,13 @@ class ModelService {
         // Normalize endpoint URL to match backend behavior
         let normalizedEndpoint = formData.endpoint;
         if (normalizedEndpoint) {
-          // For MAAS, append /chat/completions if not already present
-          if (formData.provider === 'maas' && !normalizedEndpoint.includes('/chat/completions')) {
-            normalizedEndpoint = `${normalizedEndpoint.replace(/\/$/, '')}/chat/completions`;
-          }
-          // For other OpenAI-compatible providers, ensure /chat/completions path
-          else if (['openai', 'meta', 'other'].includes(formData.provider) && !normalizedEndpoint.includes('/chat/completions') && !normalizedEndpoint.includes('/responses')) {
+          if (formData.provider === 'maas') {
+            normalizedEndpoint = normalizeMaasOpenAiChatCompletionsUrl(normalizedEndpoint);
+          } else if (
+            ['openai', 'meta', 'other'].includes(formData.provider) &&
+            !normalizedEndpoint.includes('/chat/completions') &&
+            !normalizedEndpoint.includes('/responses')
+          ) {
             normalizedEndpoint = `${normalizedEndpoint.replace(/\/$/, '')}/chat/completions`;
           }
           // For Google, keep as-is (uses different format)
@@ -517,10 +539,9 @@ class ModelService {
           throw new Error(`Model ${modelKey} not found in dev storage`);
         }
 
-        // Update the model config
         let normalizedEndpoint = formData.endpoint;
-        if (normalizedEndpoint && !normalizedEndpoint.includes('/chat/completions')) {
-          normalizedEndpoint = `${normalizedEndpoint.replace(/\/$/, '')}/chat/completions`;
+        if (normalizedEndpoint) {
+          normalizedEndpoint = normalizeMaasOpenAiChatCompletionsUrl(normalizedEndpoint);
         }
 
         const updatedConfig: DevModelConfig = {
