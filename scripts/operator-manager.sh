@@ -603,6 +603,82 @@ approve_install_plan_if_manual() {
     done
 }
 
+# Clean up stale OLM-managed dependency subscriptions for a package.
+# When the aiobs operator is installed via OLM, it creates auto-dependency subscriptions
+# (olm.managed=true) in openshift-operators. When the operator is uninstalled, OLM does
+# NOT clean these up. If `make install` then tries to install the same package in a
+# different namespace, OLM fails with "intersecting operatorgroups provide the same APIs".
+# This function detects and removes those stale subscriptions before install.
+cleanup_stale_operator_subscriptions() {
+    local package_name="$1"
+    local target_namespace="$2"
+
+    [[ "$DEBUG" == "true" ]] && echo -e "${BLUE}  📋 Checking for stale subscriptions for package '$package_name' outside '$target_namespace'...${NC}"
+
+    # Find subscriptions for the same package in other namespaces
+    local stale_subs
+    stale_subs=$(oc get "$OLM_SUBSCRIPTION_RESOURCE" -A -o json 2>/dev/null | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+for item in data.get('items', []):
+    ns = item['metadata']['namespace']
+    name = item['metadata']['name']
+    pkg = item.get('spec', {}).get('name', '')
+    managed = item.get('metadata', {}).get('labels', {}).get('olm.managed', '')
+    if pkg == '$package_name' and ns != '$target_namespace':
+        print(f'{ns}/{name}/{managed}')
+" 2>/dev/null)
+
+    if [ -z "$stale_subs" ]; then
+        [[ "$DEBUG" == "true" ]] && echo -e "${BLUE}  📋 No stale subscriptions found${NC}"
+        return 0
+    fi
+
+    echo -e "${YELLOW}  ⚠️  Found stale subscription(s) for '$package_name' in other namespace(s):${NC}"
+    while IFS='/' read -r sub_ns sub_name olm_managed; do
+        echo -e "${BLUE}     → $sub_ns/$sub_name (olm.managed=$olm_managed)${NC}"
+
+        # Get the installed CSV before deleting the subscription
+        local stale_csv
+        stale_csv=$(oc get "$OLM_SUBSCRIPTION_RESOURCE" "$sub_name" -n "$sub_ns" -o jsonpath='{.status.installedCSV}' 2>/dev/null)
+
+        # Delete the stale subscription
+        echo -e "${BLUE}     → Deleting stale Subscription: $sub_name in $sub_ns${NC}"
+        oc delete "$OLM_SUBSCRIPTION_RESOURCE" "$sub_name" -n "$sub_ns" --ignore-not-found=true 2>/dev/null || true
+
+        # Delete the associated CSV (in the stale namespace only)
+        if [ -n "$stale_csv" ] && [ "$stale_csv" != "null" ]; then
+            echo -e "${BLUE}     → Deleting stale CSV: $stale_csv in $sub_ns${NC}"
+            oc delete "$OLM_CSV_RESOURCE" "$stale_csv" -n "$sub_ns" --ignore-not-found=true 2>/dev/null || true
+        fi
+
+        # Wait briefly for OLM to reconcile and remove Copied CSVs from other namespaces
+        sleep 5
+    done <<< "$stale_subs"
+
+    # Also clean up any Copied CSVs for this package that linger in the target namespace
+    # (OLM copies CSVs to all namespaces with matching OperatorGroups)
+    local copied_csvs
+    copied_csvs=$(oc get "$OLM_CSV_RESOURCE" -n "$target_namespace" -o json 2>/dev/null | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+for item in data.get('items', []):
+    name = item['metadata']['name']
+    reason = item.get('status', {}).get('reason', '')
+    if reason == 'Copied' and name.startswith('$package_name'):
+        print(name)
+" 2>/dev/null)
+
+    if [ -n "$copied_csvs" ]; then
+        while IFS= read -r csv_name; do
+            echo -e "${BLUE}     → Deleting Copied CSV in target namespace: $csv_name${NC}"
+            oc delete "$OLM_CSV_RESOURCE" "$csv_name" -n "$target_namespace" --ignore-not-found=true 2>/dev/null || true
+        done <<< "$copied_csvs"
+    fi
+
+    echo -e "${GREEN}  ✅ Stale subscriptions cleaned up for '$package_name'${NC}"
+}
+
 # Function to install an operator
 install_operator() {
     local operator_name="$1"
@@ -611,6 +687,38 @@ install_operator() {
     echo -e "${BLUE}📦 → Installing $operator_name...${NC}"
 
     local yaml_path=$(get_yaml_path "$yaml_file")
+
+    # Clean up stale OLM-managed subscriptions for the same package in other namespaces.
+    # This handles the operator-to-make transition: aiobs operator creates auto-dependency
+    # subscriptions that OLM doesn't clean up on uninstall.
+    local package_name
+    package_name=$(grep -A5 "kind: Subscription" "$yaml_path" | grep "^  name:" | head -1 | awk '{print $2}')
+    if [ -n "$package_name" ]; then
+        cleanup_stale_operator_subscriptions "$package_name" "$namespace"
+    fi
+
+    # Clean up a previous failed install attempt in the target namespace.
+    # If a prior `make install` failed (e.g., due to stale OLM subscriptions), the
+    # subscription and failed CSV may still exist. Delete them so `oc create` succeeds.
+    local subscription_name_from_yaml
+    subscription_name_from_yaml=$(grep -A2 "kind: Subscription" "$yaml_path" | grep "name:" | awk '{print $2}')
+    if [ -n "$subscription_name_from_yaml" ] && oc get "$OLM_SUBSCRIPTION_RESOURCE" "$subscription_name_from_yaml" -n "$namespace" >/dev/null 2>&1; then
+        local existing_csv
+        existing_csv=$(oc get "$OLM_SUBSCRIPTION_RESOURCE" "$subscription_name_from_yaml" -n "$namespace" -o jsonpath='{.status.installedCSV}' 2>/dev/null)
+        local existing_phase=""
+        if [ -n "$existing_csv" ] && [ "$existing_csv" != "null" ]; then
+            existing_phase=$(oc get "$OLM_CSV_RESOURCE" "$existing_csv" -n "$namespace" -o jsonpath='{.status.phase}' 2>/dev/null)
+        fi
+        if [ "$existing_phase" = "Failed" ] || [ "$existing_phase" = "" ]; then
+            local cleanup_reason="phase: ${existing_phase:-no CSV}"
+            echo -e "${YELLOW}  ⚠️  Found previous failed install ($cleanup_reason). Cleaning up...${NC}"
+            oc delete "$OLM_SUBSCRIPTION_RESOURCE" "$subscription_name_from_yaml" -n "$namespace" --ignore-not-found=true 2>/dev/null || true
+            if [ -n "$existing_csv" ] && [ "$existing_csv" != "null" ]; then
+                oc delete "$OLM_CSV_RESOURCE" "$existing_csv" -n "$namespace" --ignore-not-found=true 2>/dev/null || true
+            fi
+            echo -e "${GREEN}  ✅ Previous failed install cleaned up${NC}"
+        fi
+    fi
 
     # Namespace creation is handled by validate_namespace function
 

@@ -60,7 +60,7 @@ metadata:
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: {{ .Values.loki.tenantClusterRoleName }}
+  name: {{ .Values.global.lokiNamespace | default "openshift-logging" }}-{{- if eq .Values.loki.releaseName "" }}{{ .Release.Name }}-loki-stack{{- else }}{{ .Values.loki.releaseName }}{{- end }}-tenant-logs
 subjects:
 - kind: ServiceAccount
   name: {{ include "korrel8r.serviceAccountName" . }}

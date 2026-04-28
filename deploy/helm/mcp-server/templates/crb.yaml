@@ -103,7 +103,7 @@ subjects:
   namespace: {{ .Release.Namespace }}
 roleRef:
   kind: ClusterRole
-  name: {{ .Values.global.lokiNamespace | default "openshift-logging" }}-{{- if eq .Values.rbac.lokiReleaseName "" }}{{ .Release.Name }}-loki{{- else }}{{ .Values.rbac.lokiReleaseName }}{{- end }}-tenant-logs
+  name: {{ .Values.global.lokiNamespace | default "openshift-logging" }}-{{- if eq .Values.rbac.lokiReleaseName "" }}{{ .Release.Name }}-loki-stack{{- else }}{{ .Values.rbac.lokiReleaseName }}{{- end }}-tenant-logs
   apiGroup: rbac.authorization.k8s.io
 ---
 # ClusterRole for discovering InferenceServices (runtime model discovery)

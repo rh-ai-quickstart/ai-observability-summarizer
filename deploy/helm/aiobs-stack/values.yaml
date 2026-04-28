@@ -88,7 +88,10 @@ loki:
 otelCollector: {}
 
 # Korrel8r - Signal correlation engine (openshift-cluster-observability-operator)
-korrel8r: {}
+korrel8r:
+  loki:
+    # Empty triggers dynamic name: {{ .Release.Name }}-loki-stack (matches loki chart's clusterResourceName)
+    releaseName: ""
 
 # MinIO - S3-compatible object storage (observability-hub)
 minio: {}
