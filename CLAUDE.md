@@ -30,31 +30,36 @@ make install NAMESPACE=<namespace>
 ```
 
 This command executes the following steps in order:
-1. **Pre-install checks**: Validates cluster prerequisites
-2. **Enable user workload monitoring**: Configures Prometheus for custom metrics
-3. **Install dependency operators** (via OLM):
+1. **Create/validate namespace**: Ensures target namespace exists
+2. **Pre-install checks**: Validates cluster prerequisites
+3. **Enable user workload monitoring**: Configures Prometheus for custom metrics
+4. **Helm dependency update** (`depend`): Updates Helm chart dependencies
+5. **Validate LLM configuration** (`validate-llm`): Checks model config and tokens
+6. **Install dependency operators** (`install-operators`, via OLM):
    - Cluster Observability Operator
    - OpenTelemetry Operator
    - Tempo Operator
    - Cluster Logging Operator
    - Loki Operator
-4. **Install observability stack** (in sequence):
+7. **Install observability stack** (`install-observability-stack`, in sequence):
    - MinIO (object storage for traces/logs)
    - TempoStack (distributed tracing)
    - LokiStack (log aggregation)
-   - OTEL Collector (OpenTelemetry collection)
+   - OTEL Collector (OpenTelemetry collection + auto-instrumentation)
    - Korrel8r (signal correlation)
    - Enables Tracing UI in Console
-5. **Install MCP Server**: Model Context Protocol server with generated model config
-6. **Install UI** (based on DEV_MODE):
-   - `DEV_MODE=false` (default): OpenShift Console Plugin (2 replicas)
-   - `DEV_MODE=true`: Standalone React UI
-7. **Install RAG Stack** (if `RAG_ENABLED != false`):
-   - LlamaStack or LlamaStack operator instance (based on RHOAI version)
-   - vLLM InferenceService (KServe) with HuggingFace model
-   - PGVector database
-8. **Install Alerting** (if `ALERTING_ENABLED=true`):
-   - Alert analysis CronJob with optional Slack integration
+   - Runs drift check to validate deployed components
+8. **Install MCP Server** (`install-mcp-server`): Model Context Protocol server with generated model config
+9. **Delete stale jobs** (`delete-jobs`): Cleanup from previous installations
+10. **Install UI** (based on DEV_MODE):
+    - `DEV_MODE=false` (default): OpenShift Console Plugin (2 replicas)
+    - `DEV_MODE=true`: Standalone React UI
+11. **Install RAG Stack** (if `RAG_ENABLED != false`):
+    - LlamaStack or LlamaStack operator instance (based on RHOAI version)
+    - vLLM InferenceService (KServe) with HuggingFace model
+    - PGVector database
+12. **Install Alerting** (if `ALERTING_ENABLED=true`):
+    - Alert analysis CronJob with optional Slack integration
 
 **Common variations:**
 ```bash
@@ -136,12 +141,14 @@ make uninstall NAMESPACE=<namespace>
 - LokiStack - `openshift-logging` - Always
 - Korrel8r - `openshift-cluster-observability-operator` - Always
 
-**Dependency Operators** (auto-installed by OLM):
-- Cluster Observability Operator (v1.0.0+)
-- OpenTelemetry Operator (v0.140.0+)
-- Tempo Operator (v0.20.x)
-- Cluster Logging Operator (v6.3.x-6.4.x)
-- Loki Operator (v6.3.x-6.4.x)
+**Dependency Operators** (auto-installed by OLM, versions auto-detected from cluster catalog):
+- Cluster Observability Operator
+- OpenTelemetry Operator
+- Tempo Operator
+- Cluster Logging Operator
+- Loki Operator
+
+Note: Specific operator versions are automatically detected from the cluster's redhat-operators catalog at install time. The Makefile queries the catalog for default channels and starting CSVs.
 
 **Automatic cluster configuration:**
 - Enables User Workload Monitoring
@@ -200,8 +207,9 @@ uv sync
 ./scripts/local-dev.sh -n <namespace>
 
 # Run MCP server locally (after port-forwarding)
-obs-mcp-stdio  # stdio transport
-obs-mcp-http   # HTTP/SSE transport
+obs-mcp-stdio           # stdio transport (for Claude Desktop, Cursor)
+obs-mcp-server serve    # HTTP/SSE transport (default port 8085)
+uv run obs-mcp-server serve  # Alternative using uv
 ```
 
 ### Testing
@@ -210,19 +218,18 @@ obs-mcp-http   # HTTP/SSE transport
 # Run all tests (Python + React + scripts)
 make test
 
-# Run Python tests only
-make test-python
-pytest                           # all tests
-pytest tests/core/              # specific directory
-pytest tests/core/test_llm_client.py  # specific file
-pytest -k "test_name"           # specific test
-pytest --coverage               # with coverage report
+# Run Python tests (prefer make targets - they handle dependencies)
+make test-python                # Uses pytest --cov=src, handles setup
+pytest --cov=src                # Raw pytest (if dependencies already installed)
+pytest tests/core/              # Specific directory
+pytest tests/core/test_llm_client.py  # Specific file
+pytest -k "test_name"           # Specific test
 
-# Run React tests only
-make test-react
-cd openshift-plugin && yarn test          # all tests
-cd openshift-plugin && yarn test:watch    # watch mode
-cd openshift-plugin && yarn test:coverage # with coverage
+# Run React tests (prefer make targets - they handle yarn install + validation)
+make test-react                 # Runs yarn test with proper setup
+cd openshift-plugin && yarn test          # Raw yarn test
+cd openshift-plugin && yarn test:watch    # Watch mode
+cd openshift-plugin && yarn test:coverage # With coverage
 
 # Run script tests
 make test-scripts
@@ -276,17 +283,22 @@ The MCP server (`src/mcp_server/`) exposes observability capabilities as MCP too
 - `gpu_metrics_discovery.py`: Dynamic DCGM metric detection for NVIDIA/AMD/Intel GPUs
 
 **MCP tools** (`src/mcp_server/tools/`):
-- `prometheus_tools.py`: Execute PromQL queries, analyze metrics, generate reports
+- `prometheus_tools.py`: Execute PromQL queries (`execute_promql`), analyze metrics
 - `chat_tool.py`: Natural language chat with Prometheus (query generation + execution)
 - `tempo_tools.py`: Trace analysis, error trace detection, trace correlation
 - `korrel8r_tools.py`: Cross-signal correlation (metrics ↔ traces ↔ logs)
 - `observability_openshift_tools.py`: OpenShift-specific metric analysis
 - `observability_vllm_tools.py`: vLLM model serving metric analysis
-- `model_config_tools.py`: Dynamic model configuration (add/list/remove models)
-- `credentials_tools.py`: API key management (set/get/remove provider keys)
+- `model_config_tools.py`: Dynamic model configuration (`add_model_to_config`, `list_provider_models`, `update_maas_model_api_key`)
+- `credentials_tools.py`: API key management (set/get provider keys)
+
+**REST API endpoints** (`src/mcp_server/api.py`, not MCP tools):
+- `POST /generate_report`: Generate observability reports (HTML/PDF/Markdown)
+- `GET /download_report/{report_id}`: Download generated reports
 
 **Integrations** (`src/mcp_server/integrations/`):
-- Claude Desktop, Cursor IDE support
+- Claude Desktop config template: `claude-desktop-config.json`
+- Integration guide: `CLAUDE_INTEGRATION.md`
 
 ### Frontend Architecture
 
@@ -303,6 +315,30 @@ The MCP server (`src/mcp_server/`) exposes observability capabilities as MCP too
 **Shared components** (`openshift-plugin/src/shared/`):
 - API clients, hooks, utilities
 - PatternFly React components for consistent OpenShift UX
+
+### Chatbot Architecture (`src/chatbots/`)
+
+Multi-provider LLM framework with factory pattern and deterministic fallback:
+
+**Core design:**
+- Provider-agnostic interface for LLM interactions
+- Factory pattern for instantiating provider-specific clients
+- Deterministic fallback when LLM unavailable (metric summaries without AI analysis)
+- Standardized message format across providers
+
+**Supported providers** (`src/chatbots/providers/`):
+- `anthropic_provider.py`: Anthropic Claude models
+- `openai_provider.py`: OpenAI GPT models
+- `google_provider.py`: Google Gemini models
+- `llama_provider.py`: Local Llama via LlamaStack
+- `deterministic_provider.py`: Fallback provider (no AI, structured metric summaries)
+
+**Provider selection:**
+- Configured via model config (ConfigMap or sessionStorage)
+- Falls back to deterministic provider on connection failures
+- Each provider handles its own auth (API keys, tokens)
+
+This architecture is separate from the MCP server's `llm_client.py` (which handles direct LLM API calls). The chatbot framework is used by the UI for conversational interactions.
 
 ### Deployment Modes
 
@@ -348,9 +384,11 @@ The Makefile auto-detects Red Hat OpenShift AI version:
      - Returns correlated signals as unified response
 
 3. **MCP Server → LLM**:
-   - **Local LLM** (RAG Stack): `http://llamastack:8321` (Helm) or `http://llamastack-service:8321` (Operator)
+   - **Local LLM** (RAG Stack):
+     - Helm mode: `http://llamastack.<namespace>.svc.cluster.local:8321/v1/openai/v1`
+     - Operator mode: `http://llamastack-service.<namespace>.svc.cluster.local:8321/v1/openai/v1`
      - Protocol: OpenAI-compatible API
-     - Path: `/v1/openai/v1/chat/completions`
+     - Chat completions path: `/chat/completions`
    - **External LLMs**: Direct HTTPS to provider APIs (OpenAI, Anthropic, Google, etc.)
      - API keys from ConfigMap (production) or sessionStorage (dev mode)
 
@@ -399,11 +437,21 @@ The Makefile auto-detects Red Hat OpenShift AI version:
 
 ### Adding a New MCP Tool
 
-1. Create tool in `src/mcp_server/tools/<tool_name>.py`
-2. Implement tool logic using `@mcp_server.tool()` decorator
-3. Import and register in `src/mcp_server/observability_mcp.py`
-4. Add tests in `tests/mcp_server/test_<tool_name>.py`
-5. Update MCP server README if tool exposes new functionality
+1. Create tool function in `src/mcp_server/tools/<tool_name>.py`
+2. Implement tool logic (plain Python function with type hints and docstring)
+3. Import function in `src/mcp_server/observability_mcp.py`
+4. Register in `_register_mcp_tools()` method: `self.mcp.tool()(your_tool_function)`
+5. Add tests in `tests/mcp_server/test_<tool_name>.py`
+6. Update MCP server README if tool exposes new functionality
+
+**Example registration pattern:**
+```python
+from mcp_server.tools.your_tool import your_new_tool
+
+def _register_mcp_tools(self) -> None:
+    # Register existing tools...
+    self.mcp.tool()(your_new_tool)  # Not @decorator pattern
+```
 
 ### Adding Support for a New LLM Provider
 
@@ -417,9 +465,9 @@ The Makefile auto-detects Red Hat OpenShift AI version:
 
 ### Modifying Metrics Catalog
 
-The metrics catalog (`src/mcp_server/data/metrics_catalog.json`) is the source of truth for available metrics:
+The metrics catalog (`src/mcp_server/data/openshift-metrics-base.json`) is the source of truth for available metrics:
 
-1. Edit `src/mcp_server/data/metrics_catalog.json`
+1. Edit `src/mcp_server/data/openshift-metrics-base.json`
 2. Run catalog validator: `pytest tests/core/test_catalog_validator.py`
 3. Test metric discovery: `pytest tests/core/test_metrics_catalog.py`
 4. GPU metrics are dynamically discovered at runtime (see `gpu_metrics_discovery.py`)
@@ -454,12 +502,17 @@ result = query_prometheus(query="up", start_time="now-1h", end_time="now")
 **Testing HTTP transport:**
 ```bash
 # Start MCP server in HTTP mode
-obs-mcp-http
+obs-mcp-server serve
+# or
+uv run obs-mcp-server serve
 
-# Test with curl
-curl -X POST http://localhost:8085/mcp/tools/query_prometheus \
+# Test health endpoint
+curl http://localhost:8085/health
+
+# Test MCP tools via FastAPI endpoints (see API docs for exact paths)
+curl -X POST http://localhost:8085/<tool-endpoint> \
   -H "Content-Type: application/json" \
-  -d '{"query": "up", "start_time": "now-1h", "end_time": "now"}'
+  -d '{"query": "up", "time_range": "1h"}'
 ```
 
 ### Customizing Helm Chart Values
@@ -529,7 +582,7 @@ helm upgrade mcp-server deploy/helm/mcp-server \
 **Runtime variables (MCP Server):**
 - `MCP_HOST`: Server bind address (default: `0.0.0.0`)
 - `MCP_PORT`: Server port (default: `8085`)
-- `MCP_TRANSPORT_PROTOCOL`: `http` or `stdio`
+- `MCP_TRANSPORT_PROTOCOL`: `http`, `sse`, or `streamable-http` (default: `http`)
 - `PYTHON_LOG_LEVEL`: Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`)
 - `DEV_MODE`: `true` (sessionStorage) or `false` (ConfigMap/Secrets)
 - `PROMETHEUS_URL`: Prometheus/Thanos endpoint (default: cluster Thanos querier)
@@ -538,15 +591,15 @@ helm upgrade mcp-server deploy/helm/mcp-server \
 - `KORREL8R_URL`: Korrel8r service endpoint
 - `MAAS_API_URL`: Model as a Service API endpoint (for MAAS provider)
 - `MAX_TIME_RANGE_DAYS`: Maximum time range for queries (default: `90`)
-- `DEFAULT_TIME_RANGE_DAYS`: Default time range (default: `7`)
+- `DEFAULT_TIME_RANGE_DAYS`: Default time range (Helm: `7`, code default: `90` if env var unset)
 - `MAX_NUM_LOG_ROWS`: Maximum log rows returned by Korrel8r (default: `10`)
 - `MAX_NUM_TRACE_SPANS`: Maximum trace spans analyzed (default: `10`)
 - `TRACE_FETCH_SAFETY_FACTOR`: Trace fetching multiplier (default: `2`, see tuning below)
 - `KORREL8R_TIMEOUT_SECONDS`: Korrel8r query timeout (default: `8`)
 - `LLM_TIMEOUT_SECONDS`: LLM request timeout (default: `180`)
-- `GPU_METRICS_PREFIX_NVIDIA`: Custom NVIDIA GPU metric prefixes (comma-separated, additive)
-- `GPU_METRICS_PREFIX_INTEL`: Custom Intel GPU metric prefixes (comma-separated, additive)
-- `GPU_METRICS_PREFIX_AMD`: Custom AMD GPU metric prefixes (comma-separated, additive)
+- `GPU_METRICS_PREFIX_NVIDIA`: Custom NVIDIA GPU metric prefixes (comma-separated, additive) - Makefile: `GPU_PREFIX_NVIDIA`
+- `GPU_METRICS_PREFIX_INTEL`: Custom Intel GPU metric prefixes (comma-separated, additive) - Makefile: `GPU_PREFIX_INTEL`
+- `GPU_METRICS_PREFIX_AMD`: Custom AMD GPU metric prefixes (comma-separated, additive) - Makefile: `GPU_PREFIX_AMD`
 
 **Trace analysis tuning:**
 `TRACE_FETCH_SAFETY_FACTOR` controls how many traces to fetch from Tempo. The analyzer fetches `(MAX_NUM_TRACE_SPANS × TRACE_FETCH_SAFETY_FACTOR)` traces, then filters for error traces.
@@ -587,16 +640,18 @@ The MCP server uses a structured exception hierarchy (`src/mcp_server/exceptions
 - `PrometheusError`: Prometheus/Thanos query failures (includes query + status code)
 - `LLMServiceError`: LLM service failures (includes model ID + status code)
 - `ConfigurationError`: Invalid or missing configuration
-- `TempoError`: Tempo trace query failures
-- `KorrelatorError`: Korrel8r correlation failures
 
-**Error codes** (MCPErrorCode enum):
+**Error codes** (`MCPErrorCode` enum in `exceptions.py`):
 - `INVALID_INPUT`: Input validation failed
 - `MISSING_PARAMETER`: Required parameter not provided
-- `SERVICE_UNAVAILABLE`: External service (Prometheus, Tempo, etc.) unavailable
-- `TIMEOUT`: Operation timed out
-- `AUTHENTICATION_ERROR`: API key or credential issues
-- `RATE_LIMIT_EXCEEDED`: External API rate limit hit
+- `INVALID_TIME_RANGE`, `INVALID_MODEL_NAME`, `INVALID_NAMESPACE`: Specific validation errors
+- `PROMETHEUS_ERROR`, `THANOS_ERROR`, `LLM_SERVICE_ERROR`, `KUBERNETES_API_ERROR`: Service errors
+- `CONNECTION_ERROR`, `TIMEOUT_ERROR`: Network/connectivity errors
+- `RESOURCE_NOT_FOUND`, `RESOURCE_UNAVAILABLE`: Resource errors
+- `AUTHENTICATION_ERROR`, `AUTHORIZATION_ERROR`, `TOKEN_EXPIRED`: Auth errors
+- `CONFIGURATION_ERROR`, `DATA_PROCESSING_ERROR`, `INTERNAL_ERROR`: Internal errors
+
+**Note:** `src/core/error_handling.py` defines a separate `ErrorType` enum with `SERVICE_UNAVAILABLE`, `TIMEOUT`, `RATE_LIMITED` values used by core services (not MCP layer).
 
 All exceptions include context (query, model ID, etc.) for better debugging.
 
@@ -628,9 +683,10 @@ All exceptions include context (query, model ID, etc.) for better debugging.
 - **Prometheus query timeout**: Reduce time range or narrow down query scope
 
 ### Version Management
-- Version defined in Makefile: `VERSION ?= 6.1.1`
+- Version defined in Makefile: `VERSION ?= <current>` (check `Makefile` for current value)
 - Semantic versioning enforced by CI/CD
 - Script `scripts/verify-version-locks.sh` validates version consistency across Helm charts and operator manifests
+- Never hardcode version numbers in documentation - reference `Makefile VERSION` variable
 
 ### Debugging & Logging
 
@@ -671,9 +727,10 @@ oc logs -n openshift-logging -l app.kubernetes.io/name=loki-operator -f
 - Network tab shows MCP server API calls
 
 **MCP Server debugging:**
-- Local testing: `obs-mcp-stdio` with MCP Inspector
-- HTTP mode: `obs-mcp-http` then test at `http://localhost:8085`
-- Use `--log-level debug` flag for verbose output
+- Stdio mode: `obs-mcp-stdio` (for Claude Desktop/Cursor, logging disabled)
+- HTTP mode: `obs-mcp-server serve` or `uv run obs-mcp-server serve` (default port 8085)
+- Set log level via `PYTHON_LOG_LEVEL` environment variable (not command-line flag)
+- Test HTTP mode: `curl http://localhost:8085/health`
 
 ## Prerequisites & Requirements
 
@@ -706,7 +763,7 @@ Default images are hosted on Quay.io. Override with Makefile variables:
 REGISTRY=quay.io           # Container registry
 ORG=ecosystem-appeng       # Organization/namespace
 IMAGE_PREFIX=aiobs         # Image name prefix
-VERSION=6.1.1              # Version tag
+VERSION=<from Makefile>    # Version tag (check Makefile for current value)
 PLATFORM=linux/amd64       # Target platform
 
 # Example: Use custom registry
@@ -715,12 +772,14 @@ make build REGISTRY=docker.io ORG=myorg VERSION=1.0.0
 
 ## Helper Scripts
 
-The `scripts/` directory contains several utility scripts:
+The `scripts/` directory contains utility scripts, Python CLI tools, and subdirectories for development and operations:
 
+**Main shell scripts:**
 - **`local-dev.sh`**: Port-forward cluster dependencies for local development
   - Forwards: Prometheus (9090), Tempo (8082), Loki (3100), Korrel8r (9443), LlamaStack (8321)
-  - Starts local React UI (3000) and Console Plugin (9001) dev servers
-  - Usage: `./scripts/local-dev.sh -n <namespace>`
+  - Starts local React UI (3000) with `-r` flag, Console Plugin (9001) with `-p` flag
+  - Health monitoring and auto-restart of failed port-forwards
+  - Usage: `./scripts/local-dev.sh -n <namespace> [-r] [-p]`
 
 - **`operator-manager.sh`**: Unified script for operator installation/uninstall
   - Manages Cluster Observability, OpenTelemetry, Tempo, Logging, Loki operators
@@ -745,15 +804,31 @@ The `scripts/` directory contains several utility scripts:
 - **`portforward-mcp-server.sh`**: Port-forward MCP server for local testing
   - Forwards MCP server to localhost:8085
 
+- **`ocp-setup.sh`**: OpenShift cluster setup utilities
+
+- **`common.sh`**: Shared shell functions and utilities
+
+**Python CLI tools:**
+- **`chatbot_mcp_cli_example.py`**: Example CLI for testing chatbot MCP integration
+
+**Subdirectories:**
+- **`metrics/`**: Metrics-related utilities
+- **`ocp_config/`**: OpenShift configuration files
+- **`operators/`**: Operator-specific configuration and templates
+
 ## CI/CD & Release Process
 
-### GitHub Actions Workflows
+### GitHub Actions Workflows (11 workflows in `.github/workflows/`)
 - **`build-and-push.yml`**: Automated image builds on push to main/dev
+- **`build-images.yml`**: Build component images
 - **`build-operator-images.yml`**: Operator image builds
 - **`create-release.yml`**: Automated release creation
 - **`prepare-release.yml`**: Release preparation (version bumps, changelogs)
 - **`update-versions.yml`**: Automated version updates across manifests
+- **`deploy.yml`**: Deployment automation
+- **`undeploy.yml`**: Undeployment automation
 - **`run_tests.yml`**: Run test suite on PRs
+- **`rebase-check.yml`**: PR rebase validation
 - **`cleanup-old-images.yml`**: Automated cleanup of old container images
 
 See `docs/GITHUB_ACTIONS.md` for detailed workflow documentation.
@@ -832,13 +907,13 @@ All PRs require approval from the code owner (@tsisodia10) before merging.
 
 ### MCP Server Integration
 This project implements a Model Context Protocol server that can be used with:
-- **Claude Desktop** (stdio transport) - Configuration in `.cursor/mcp.json`
-- **Cursor IDE** (stdio transport) - Same configuration as Claude Desktop
-- **HTTP clients** (SSE transport on port 8000) - For web-based integrations
+- **Claude Desktop** (stdio transport) - Config at `~/Library/Application Support/Claude/claude_desktop_config.json` (Mac)
+- **Cursor IDE** (stdio transport) - Config at `.cursor/mcp.json` (project-level)
+- **HTTP clients** (HTTP/SSE transport on port 8085, not 8000) - For web-based integrations
 
-The MCP server exposes observability tools (query metrics, analyze traces, generate reports) as standardized MCP tools that AI assistants can invoke.
+The MCP server exposes observability tools (execute PromQL queries, analyze traces, etc.) as standardized MCP tools that AI assistants can invoke.
 
-**Local development setup example** (`.cursor/mcp.json`):
+**Cursor IDE setup example** (`.cursor/mcp.json`):
 ```json
 {
   "mcpServers": {
@@ -849,6 +924,18 @@ The MCP server exposes observability tools (query metrics, analyze traces, gener
         "LLAMA_STACK_URL": "http://localhost:8321/v1/openai/v1",
         "MODEL_CONFIG": "{...model config JSON...}"
       }
+    }
+  }
+}
+```
+
+**Claude Desktop setup template** (see `src/mcp_server/integrations/claude-desktop-config.json` for full example):
+```json
+{
+  "mcpServers": {
+    "ai-observability": {
+      "command": "/path/to/.venv/bin/obs-mcp-stdio",
+      "env": { ... }
     }
   }
 }
@@ -879,13 +966,13 @@ See `docs/MODEL-CONFIGURATION.md` for detailed provider setup.
 ### Report Generation
 Reports combine metric data, time-series charts, and AI analysis:
 - **Formats**: HTML, PDF (via WeasyPrint), Markdown
-- **Templates**: `src/core/report_assets/` (Jinja2 templates)
+- **Templates**: `src/core/report_assets/` - Python code (`report_renderer.py`, `report_config.py`) + CSS (`report.css`), not Jinja2
 - **Charts**: Rendered server-side using matplotlib
 - **Content**: Time-series data, metric summaries, AI-generated insights
-- **Export**: Available via UI or MCP tool (`generate_report`)
+- **Export**: Available via REST API (`POST /generate_report`), not MCP tool
 
 ### Metrics Catalog
-The metrics catalog (`src/mcp_server/data/metrics_catalog.json`) is a curated, validated catalog of OpenShift and GPU metrics:
+The metrics catalog (`src/mcp_server/data/openshift-metrics-base.json`) is a curated, validated catalog of OpenShift and GPU metrics:
 - **Static metrics**: Pre-defined OpenShift metrics (CPU, memory, network, storage)
 - **Dynamic metrics**: GPU metrics discovered at runtime via `gpu_metrics_discovery.py`
 - **Validation**: Catalog validator ensures schema compliance
