@@ -68,11 +68,12 @@ llama-stack:
   userConfig: {}
   network:
     exposeRoute: false
-    # Allow access from pods in the same namespace (set by Makefile at install time)
-    # This enables MCP server and other services to connect to llama-stack
-    # allowedFrom:
-    #   namespaces:
-    #     - "namespace-name"  # Set via --set llama-stack.network.allowedFrom.namespaces[0]=$(NAMESPACE)
+    # Allow pods in the deployment namespace to reach llamastack (e.g. MCP server).
+    # Defaults to the operator-enforced namespace; overridden by Makefile via
+    # --set llama-stack.network.allowedFrom.namespaces[0]=$(NAMESPACE) for non-operator installs.
+    allowedFrom:
+      namespaces:
+        - "ai-observability"
 
 
 ingestion-pipeline:

@@ -26,6 +26,18 @@ spec:
           ports:
             - containerPort: {{ .Values.service.port }}
               protocol: TCP
+          envFrom:
+            # Default URL (llamastack.*): created by this chart for standalone deployments.
+            # Listed first so the umbrella-chart ConfigMap below can override it.
+            - configMapRef:
+                name: {{ .Release.Name }}-llamastack-config-default
+                optional: true
+            # Umbrella-chart (aiobs-stack) ConfigMap: computes the correct service name
+            # (llamastack vs llamastack-service) from rag.llama-stack.managedByOperator.
+            # Listed last so it wins over the default when both exist.
+            - configMapRef:
+                name: {{ .Release.Name }}-llamastack-config
+                optional: true
           env:
             - name: MCP_HOST
               value: "{{ .Values.env.MCP_HOST }}"
@@ -83,9 +95,6 @@ spec:
             {{- if .Values.llm.url }}
             - name: LLAMA_STACK_URL
               value: "{{ .Values.llm.url }}"
-            {{- else }}
-            - name: LLAMA_STACK_URL
-              value: "http://llamastack.{{ .Release.Namespace }}.svc.cluster.local:8321/v1"
             {{- end }}
             {{- if .Values.env.GPU_METRICS_PREFIX_NVIDIA }}
             - name: GPU_METRICS_PREFIX_NVIDIA
