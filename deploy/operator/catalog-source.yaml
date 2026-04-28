@@ -5,7 +5,7 @@ metadata:
   namespace: openshift-marketplace
 spec:
   sourceType: grpc
-  image: quay.io/ecosystem-appeng/aiobs-operator-catalog:v6.1.2
+  image: quay.io/ecosystem-appeng/aiobs-operator-catalog:v6.1.3
   displayName: AI Observability Operator
   publisher: RH AI Quickstart
   # Lower priority than redhat-operators (-100) so OLM resolves dependencies from there
