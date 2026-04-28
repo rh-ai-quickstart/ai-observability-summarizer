@@ -730,29 +730,6 @@ install_operator() {
     export CHANNEL="${CHANNEL:-stable}"
     export STARTING_CSV="${STARTING_CSV:-}"
 
-    # If the target CSV (or any newer version of the same package) is already Succeeded
-    # in this namespace (e.g. installed via an AllNamespaces subscription elsewhere),
-    # skip creating a duplicate subscription.
-    if [ -n "$STARTING_CSV" ]; then
-        local csv_phase
-        csv_phase=$(oc get "$OLM_CSV_RESOURCE" "$STARTING_CSV" -n "$namespace" \
-            -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
-        if [ "$csv_phase" = "Succeeded" ]; then
-            echo -e "${GREEN}✅ $operator_name already installed${NC}"
-            return 0
-        fi
-        # The exact startingCSV may not be present if a newer version was installed.
-        # Check if any Succeeded CSV for the same package exists in the namespace.
-        local csv_package="${STARTING_CSV%%.*}"
-        local newer_csv
-        newer_csv=$(oc get "$OLM_CSV_RESOURCE" -n "$namespace" --no-headers 2>/dev/null | \
-            awk -v pkg="$csv_package" '$1 ~ "^"pkg"\\." && $NF == "Succeeded" {print $1}' | head -1)
-        if [ -n "$newer_csv" ]; then
-            echo -e "${GREEN}✅ $operator_name already installed ($newer_csv)${NC}"
-            return 0
-        fi
-    fi
-
     # Check if an OperatorGroup already exists in the target namespace. Multiple
     # OperatorGroups cause OLM to deadlock (no InstallPlans created). This can happen
     # when reinstalling after an uninstall that preserved the namespace, because the
@@ -812,8 +789,9 @@ for doc in docs:
     attempt=0
     max_attempts=60  # 10 minutes
 
-    # Short-circuit: if the startingCSV is already Succeeded, OLM may not populate
-    # status.installedCSV immediately — check the CSV directly first.
+    # Short-circuit: if the startingCSV (or a newer version of the same package) is
+    # already Succeeded, OLM may not populate status.installedCSV immediately when no
+    # new InstallPlan is needed — check the CSV directly to avoid a 10-minute hang.
     local starting_csv
     starting_csv=$(oc get "$OLM_SUBSCRIPTION_RESOURCE" "$subscription_name" -n "$namespace" -o jsonpath='{.spec.startingCSV}' 2>/dev/null || echo "")
     if [ -n "$starting_csv" ] && [ "$starting_csv" != "null" ]; then
@@ -822,6 +800,18 @@ for doc in docs:
         if [ "$starting_phase" = "Succeeded" ]; then
             echo -e "${GREEN}  ✅ CSV $starting_csv is in Succeeded phase${NC}"
             attempt=$max_attempts  # skip the loop
+        else
+            # startingCSV may be outdated — check if a newer version of the same package
+            # is already Succeeded (e.g. v0.144.0-2 installed when startingCSV is v0.144.0-1).
+            local csv_package="${starting_csv%%.*}"
+            local newer_csv
+            newer_csv=$(oc get "$OLM_CSV_RESOURCE" -n "$namespace" --no-headers 2>/dev/null | \
+                awk -v pkg="$csv_package" '$1 ~ "^"pkg"\\." && $NF == "Succeeded" {print $1}' | head -1)
+            if [ -n "$newer_csv" ]; then
+                echo -e "${GREEN}  ✅ CSV $newer_csv is in Succeeded phase (newer than startingCSV $starting_csv)${NC}"
+                starting_phase="Succeeded"
+                attempt=$max_attempts  # skip the loop
+            fi
         fi
     fi
 
