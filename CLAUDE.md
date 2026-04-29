@@ -49,8 +49,13 @@ make build-mcp-server   # Build specific component
 
 **Operator builds:**
 ```bash
-make operator-config    # Show current operator configuration
-make operator-deploy    # Build and push all operator images (manager + bundle + catalog)
+make operator-config           # Show current operator configuration
+make operator-build            # Build operator manager image
+make operator-push             # Push operator manager image
+make operator-bundle-build     # Build operator bundle image
+make operator-bundle-push      # Push operator bundle image
+make operator-catalog-build    # Build operator catalog image
+make operator-catalog-push     # Push operator catalog image
 ```
 
 **Local development:**
@@ -94,7 +99,7 @@ cd openshift-plugin && yarn test  # Raw React tests
 - `gpu_metrics_discovery.py`: Dynamic DCGM metric detection (NVIDIA/AMD/Intel)
 
 **MCP tools** (`src/mcp_server/tools/`):
-- `prometheus_tools.py`: `execute_promql` - Execute PromQL queries, analyze metrics
+- `prometheus_tools.py`: 13 metric tools including `execute_promql`, `search_metrics`, `suggest_queries`, `get_metric_metadata`, and 9 more
 - `chat_tool.py`: Natural language chat with Prometheus
 - `tempo_tools.py`: Trace analysis, error trace detection
 - `korrel8r_tools.py`: Cross-signal correlation
@@ -122,8 +127,9 @@ self.mcp.tool()(your_tool_function)  # NOT @decorator pattern
 ### Chatbot Architecture (`src/chatbots/`)
 
 Multi-provider LLM framework with factory pattern and deterministic fallback:
-- **Providers**: `anthropic_provider.py`, `openai_provider.py`, `google_provider.py`, `llama_provider.py`, `deterministic_provider.py` (fallback)
-- **Design**: Provider-agnostic interface, standardized message format, deterministic fallback when LLM unavailable
+- **Bot implementations**: `anthropic_bot.py`, `openai_bot.py`, `google_bot.py`, `llama_bot.py`, `deterministic_bot.py` (fallback)
+- **Core modules**: `base.py` (base class), `factory.py` (factory pattern), `tool_executor.py` (tool execution)
+- **Design**: Provider-agnostic interface via base class, standardized message format, deterministic fallback when LLM unavailable
 - **Usage**: UI conversational interactions (separate from MCP server's `llm_client.py`)
 
 ### Component Communication
