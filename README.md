@@ -361,13 +361,27 @@ If enabled in your cluster, use:
 
 #### Uninstall (Helm)
 
-Uninstall the deployment from the namespace:
+**Quick Uninstall** (application components only):
 
 ```bash
 make uninstall NAMESPACE=your-namespace
 ```
 
-This removes all deployed components including the console plugin, MCP server, and observability stack.
+This removes the console plugin, MCP server, and RAG stack from your namespace.
+
+**Full Uninstall** (including observability stack):
+
+```bash
+make uninstall NAMESPACE=your-namespace UNINSTALL_OBSERVABILITY=true
+```
+
+This removes everything including:
+- Application components (MCP, Console Plugin, RAG)
+- Observability infrastructure (Tempo, Loki, OTEL, Korrel8r, MinIO)
+- Distributed Tracing Console Plugin (Observe → Traces menu)
+- Logging Console Plugin (Observe → Logs menu)
+
+> **⚠️ Warning:** The observability stack may be shared by other applications. Only use `UNINSTALL_OBSERVABILITY=true` if you're certain no other workloads depend on it.
 
 ---
 
