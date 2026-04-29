@@ -15,6 +15,8 @@ Create an interactive dashboard to analyze AI model performance and OpenShift cl
    - [Minimum software requirements](#minimum-software-requirements)
    - [Required user permissions](#required-user-permissions)
 3. [Deploy](#deploy)
+   - [Option 1: Install via Helm](#option-1-install-via-helm-recommended)
+   - [Option 2: Install via Operator](#option-2-install-via-operator-optional)
    - [Quick Start - OpenShift Deployment](#quick-start---openshift-deployment)
    - [Quick Start - Local Development](#quick-start---local-development)
    - [Usage](#usage)
@@ -22,7 +24,6 @@ Create an interactive dashboard to analyze AI model performance and OpenShift cl
      - [Model as a Service (MaaS) Setup](#model-as-a-service-maas-setup)
      - [DEV Mode Workflow](#dev-mode-workflow)
      - [Per-Model API Key Configuration](#per-model-api-key-configuration)
-   - [Delete](#delete)
 4. [References](#references)
 5. [Tags](#tags)
 
@@ -358,6 +359,16 @@ If enabled in your cluster, use:
 - **Observe → Traces** to view traces
 - **Observe → Logs** to query logs
 
+#### Uninstall (Helm)
+
+Uninstall the deployment from the namespace:
+
+```bash
+make uninstall NAMESPACE=your-namespace
+```
+
+This removes all deployed components including the console plugin, MCP server, and observability stack.
+
 ---
 
 ### Option 2: Install via Operator (Optional)
@@ -423,15 +434,35 @@ make operator-catalog-push    # 6. Push catalog image
 
 > **Note:** The operator and Helm installation methods are mutually exclusive. Choose one approach for your cluster.
 
+#### Uninstall (Operator)
+
+**Quick Uninstall:**
+
+1. **Delete the CR:**
+   ```bash
+   oc delete aiobservabilitysummarizer cluster-ai-observability -n ai-observability
+   ```
+
+2. **Uninstall Operator:**
+   ```bash
+   oc delete subscription aiobs-operator -n openshift-operators
+   oc delete csv -l operators.coreos.com/aiobs-operator.openshift-operators -n openshift-operators
+   ```
+
+3. **Delete CatalogSource:**
+   ```bash
+   oc delete catalogsource aiobs-operator-catalog -n openshift-marketplace
+   ```
+
+4. **Optional - Uninstall dependency operators** (if no longer needed):
+   ```bash
+   # Check if other apps use these operators before removing
+   oc get csv -n openshift-operators | grep -E "cluster-observability|tempo|loki|logging|opentelemetry"
+   ```
+
+**📚 Complete Uninstall Guide:** See [docs/OPERATOR.md](docs/OPERATOR.md#uninstallation) for detailed cleanup verification steps.
+
 ---
-
-## Delete
-
-Uninstall the deployment from the namespace:
-
-```bash
-make uninstall NAMESPACE=your-namespace
-```
 
 ## References
 
