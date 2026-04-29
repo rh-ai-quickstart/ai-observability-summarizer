@@ -249,8 +249,12 @@ All hook jobs are configured with:
 
 ## Prerequisites
 
-- OpenShift 4.12+
+- OpenShift 4.18+
 - Cluster admin access
+- **OpenShift AI (RHOAI) Operator**: Required only if enabling RAG with local LLM deployment
+  - Provides KServe/InferenceService support for model serving
+  - Install from OperatorHub before installing this operator if using RAG
+  - See [OpenShift AI documentation](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed) for installation
 - GPU node (optional, only if RAG Stack is enabled)
 - HuggingFace API token (optional, only if RAG Stack is enabled): https://huggingface.co/settings/tokens
 
@@ -292,8 +296,8 @@ These operators are declared as OLM dependencies and will be **automatically ins
 ```bash
 oc apply -f deploy/operator/catalog-source.yaml
 
-# Wait for catalog to be ready
-oc get catalogsource aiobs-operator-catalog -n openshift-marketplace -w
+# Verify CatalogSource is ready before proceeding
+oc wait --for=condition=READY catalogsource/aiobs-operator-catalog -n openshift-marketplace --timeout=300s
 ```
 
 **Option B - Via OpenShift Console:**
@@ -306,7 +310,20 @@ oc get catalogsource aiobs-operator-catalog -n openshift-marketplace -w
 
   ![CatalogSource YAML](../../docs/images/operator-install-catalogsource-yaml.png)
 
-### Step 2: Install Operator via OpenShift Console
+### Step 2: Create ai-observability Namespace
+
+**Option A - Via CLI:**
+```bash
+oc new-project ai-observability
+```
+
+**Option B - Via OpenShift Console:**
+- Navigate to **Administration → Namespaces**
+- Click **Create Namespace**
+- Name: `ai-observability`
+- Click **Create**
+
+### Step 3: Install Operator via OpenShift Console
 
 1. Open **OpenShift Console**
 2. Navigate to **Operators → OperatorHub**
@@ -314,18 +331,37 @@ oc get catalogsource aiobs-operator-catalog -n openshift-marketplace -w
 4. Click **Install**
 5. Configure installation:
    - **Update channel:** alpha
-   - **Installation mode:** A specific namespace on the cluster
-   - **Installed Namespace:** Select or create **ai-observability** (namespace will be created automatically if it doesn't exist)
+   - **Installation mode:** All namespaces on the cluster
+   - **Installed Namespace:** **openshift-operators** (recommended)
+     - Alternative: `openshift-operators-redhat` for Loki operator compatibility
    - **Update approval:** Automatic
 6. Click **Install**
 
-> **Note:** OLM will automatically create the `ai-observability` namespace during installation if it doesn't exist.
+> **Note:** The operator installs in `openshift-operators` and watches all namespaces. All dependency operators (Loki, Tempo, OTEL, Logging, Observability) will also install in the same namespace.
 
-### Step 3: Create AIObservabilitySummarizer
+**Verify Installation:**
 
-1. Navigate to **Operators → Installed Operators → AI Observability Summarizer**
-2. Click **Create AIObservabilitySummarizer**
-3. Fill in the form:
+Wait for the operator and all dependency operators to be ready before creating the CR:
+
+```bash
+# Verify AI Observability Operator is running
+oc get csv -n openshift-operators | grep aiobs-operator
+
+# Verify operator pod is running
+oc get pods -n openshift-operators -l control-plane=controller-manager
+
+# Verify all dependency operators are installed
+oc get csv -n openshift-operators | grep -E "cluster-observability|tempo|loki|logging|opentelemetry"
+```
+
+All CSVs should show `Succeeded` status before proceeding to create the CR.
+
+### Step 4: Create AIObservabilitySummarizer
+
+1. **Important**: In the namespace dropdown at the top of the console, select **ai-observability**
+2. Navigate to **Operators → Installed Operators → AI Observability Summarizer**
+3. Click **Create AIObservabilitySummarizer**
+4. Fill in the form:
    - **Enable RAG Stack** (Optional): Enabled by default, disable if you don't need LLM deployment
    - **HuggingFace Token** (required if RAG enabled): Your HF token for model download from https://huggingface.co/settings/tokens
    - **Device Type**: `gpu` (recommended), `hpu`, `gpu-amd`, or `cpu`
@@ -336,7 +372,7 @@ oc get catalogsource aiobs-operator-catalog -n openshift-marketplace -w
      - Llama Guard models - For content moderation/safety
    - **Enable Alert Analysis** (Optional): Toggle for automated alert summarization via CronJob (Slack webhook optional)
    - **Development Mode** (Advanced): Enable browser-cached API keys for testing (DO NOT use in production)
-4. Click **Create**
+5. Click **Create**
 
 > **Note**: Infrastructure components (Tempo, Loki, OTEL, MinIO, Korrel8r) are **always deployed** automatically to fixed namespaces. You only configure application components (RAG, Alerting, Dev Mode) and LLM settings.
 
@@ -375,23 +411,107 @@ Or via CLI:
 # Delete CR
 oc delete aiobservabilitysummarizer --all -n ai-observability
 
-# Delete operator subscription and CSV
-oc delete subscription aiobs-operator -n ai-observability
-oc delete csv -l operators.coreos.com/aiobs-operator.ai-observability -n ai-observability
+# Delete operator subscription and CSV (from openshift-operators)
+oc delete subscription aiobs-operator -n openshift-operators
+oc delete csv -l operators.coreos.com/aiobs-operator.openshift-operators -n openshift-operators
 
 # Uninstall dependency operators (optional - if no longer needed)
 # List all installed operators to find dependency operators
-oc get csv -n ai-observability
+oc get csv -n openshift-operators
 
 # Delete each dependency operator (example for Tempo)
-oc delete subscription tempo-operator -n ai-observability
-oc delete csv tempo-operator.v0.20.0 -n ai-observability
+oc delete subscription tempo-operator -n openshift-operators
+oc delete csv tempo-operator.v0.20.0 -n openshift-operators
 
 # Repeat for: cluster-observability-operator, opentelemetry-operator,
 # cluster-logging, loki-operator
 
 # Delete catalog source
 oc delete catalogsource aiobs-operator-catalog -n openshift-marketplace
+```
+
+### Cleanup Verification
+
+After uninstalling, verify all resources are removed:
+
+**1. Verify CR deletion:**
+```bash
+# Should return "No resources found"
+oc get aiobservabilitysummarizer -n ai-observability
+```
+
+**2. Verify infrastructure CRs are deleted:**
+```bash
+# TempoStack
+oc get tempostack -n observability-hub
+
+# LokiStack
+oc get lokistack -n openshift-logging
+
+# OTEL Collector
+oc get opentelemetrycollector -n observability-hub
+
+# Korrel8r
+oc get deployment korrel8r-summarizer -n openshift-cluster-observability-operator
+```
+
+**3. Check for PVCs that need manual cleanup:**
+```bash
+# MinIO PVCs
+oc get pvc -n observability-hub | grep minio
+
+# Loki PVCs
+oc get pvc -n openshift-logging | grep loki
+
+# Tempo PVCs
+oc get pvc -n observability-hub | grep tempo
+
+# PGVector PVCs (if RAG was enabled)
+oc get pvc -n ai-observability | grep pgvector
+```
+
+Delete PVCs if no longer needed (data will be lost):
+```bash
+# Example: Delete MinIO PVCs
+oc delete pvc -n observability-hub -l app.kubernetes.io/name=minio
+
+# Example: Delete Loki PVCs
+oc delete pvc -n openshift-logging -l app.kubernetes.io/name=loki
+```
+
+**4. Verify operator is removed:**
+```bash
+# Should return nothing
+oc get csv -n openshift-operators | grep aiobs-operator
+oc get pods -n openshift-operators -l control-plane=controller-manager
+```
+
+**5. Clean up namespaces (optional):**
+```bash
+# Delete ai-observability namespace if no longer needed
+oc delete project ai-observability
+
+# Verify other namespaces still in use before deleting:
+# - observability-hub: Check if other observability workloads exist
+# - openshift-logging: System namespace, do NOT delete
+# - openshift-cluster-observability-operator: System namespace, do NOT delete
+```
+
+**6. Verify dependency operators before uninstalling:**
+
+Before removing dependency operators, check if they're used by other applications:
+
+```bash
+# Check for other TempoStacks
+oc get tempostack -A
+
+# Check for other LokiStacks
+oc get lokistack -A
+
+# Check for other OTEL Collectors
+oc get opentelemetrycollector -A
+
+# Only uninstall dependency operators if no other resources depend on them
 ```
 
 ## Configuration Reference

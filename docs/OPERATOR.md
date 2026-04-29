@@ -8,16 +8,23 @@ A Helm-based Kubernetes Operator for deploying the complete AI Observability sta
 
 - OpenShift 4.18+
 - Cluster admin access
+- **OpenShift AI (RHOAI) Operator**: Required only if enabling RAG with local LLM deployment
+  - Provides KServe/InferenceService support for model serving
+  - Install from OperatorHub before installing this operator if using RAG
+  - See [OpenShift AI documentation](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed) for installation
 - GPU node (optional, only if RAG Stack is enabled)
 - HuggingFace API token (optional, only if RAG Stack is enabled): https://huggingface.co/settings/tokens
 
-### Installation (3 Steps)
+### Installation (4 Steps)
 
 **1. Install CatalogSource**
 
 Option A - Via CLI:
 ```bash
 oc apply -f deploy/operator/catalog-source.yaml
+
+# Verify CatalogSource is ready before proceeding
+oc wait --for=condition=READY catalogsource/aiobs-operator-catalog -n openshift-marketplace --timeout=300s
 ```
 
 Option B - Via OpenShift Console:
@@ -30,7 +37,20 @@ Option B - Via OpenShift Console:
 
   ![CatalogSource YAML](images/operator-install-catalogsource-yaml.png)
 
-**2. Install Operator via OpenShift Console**
+**2. Create ai-observability Namespace**
+
+Option A - Via CLI:
+```bash
+oc new-project ai-observability
+```
+
+Option B - Via OpenShift Console:
+- Navigate to **Administration → Namespaces**
+- Click **Create Namespace**
+- Name: `ai-observability`
+- Click **Create**
+
+**3. Install Operator via OpenShift Console**
 - Navigate to **Operators → OperatorHub**
 - Search for **"AI Observability"**
 - Click **Install**
@@ -40,9 +60,28 @@ Option B - Via OpenShift Console:
   - All dependency operators (Loki, Tempo, etc.) will install in the same namespace
 - Click **Install**
 
-**3. Create AIObservabilitySummarizer CR**
+> **Note:** The operator installs in `openshift-operators` but watches all namespaces. The CR will be created in `ai-observability` in the next step.
+
+**Verify Installation:**
+
+Wait for the operator and all dependency operators to be ready before creating the CR:
+
+```bash
+# Verify AI Observability Operator is running
+oc get csv -n openshift-operators | grep aiobs-operator
+
+# Verify operator pod is running
+oc get pods -n openshift-operators -l control-plane=controller-manager
+
+# Verify all dependency operators are installed
+oc get csv -n openshift-operators | grep -E "cluster-observability|tempo|loki|logging|opentelemetry"
+```
+
+All CSVs should show `Succeeded` status before proceeding to create the CR.
+
+**4. Create AIObservabilitySummarizer CR**
+- **Important:** In the namespace dropdown at the top of the console, select **ai-observability**
 - Go to **Installed Operators → AI Observability Summarizer**
-- In the namespace dropdown, select/create **ai-observability** namespace
 - Click **Create AIObservabilitySummarizer**
 - **Enable RAG Stack** (default: enabled)
   - If enabled, enter your **HuggingFace Token** (required)
@@ -307,6 +346,90 @@ oc delete csv tempo-operator.v0.20.0 -n openshift-operators
 
 # Delete catalog source (optional)
 oc delete catalogsource aiobs-operator-catalog -n openshift-marketplace
+```
+
+### Cleanup Verification
+
+After uninstalling, verify all resources are removed:
+
+**1. Verify CR deletion:**
+```bash
+# Should return "No resources found"
+oc get aiobservabilitysummarizer -n ai-observability
+```
+
+**2. Verify infrastructure CRs are deleted:**
+```bash
+# TempoStack
+oc get tempostack -n observability-hub
+
+# LokiStack
+oc get lokistack -n openshift-logging
+
+# OTEL Collector
+oc get opentelemetrycollector -n observability-hub
+
+# Korrel8r
+oc get deployment korrel8r-summarizer -n openshift-cluster-observability-operator
+```
+
+**3. Check for PVCs that need manual cleanup:**
+```bash
+# MinIO PVCs
+oc get pvc -n observability-hub | grep minio
+
+# Loki PVCs
+oc get pvc -n openshift-logging | grep loki
+
+# Tempo PVCs
+oc get pvc -n observability-hub | grep tempo
+
+# PGVector PVCs (if RAG was enabled)
+oc get pvc -n ai-observability | grep pgvector
+```
+
+Delete PVCs if no longer needed (data will be lost):
+```bash
+# Example: Delete MinIO PVCs
+oc delete pvc -n observability-hub -l app.kubernetes.io/name=minio
+
+# Example: Delete Loki PVCs
+oc delete pvc -n openshift-logging -l app.kubernetes.io/name=loki
+```
+
+**4. Verify operator is removed:**
+```bash
+# Should return nothing
+oc get csv -n openshift-operators | grep aiobs-operator
+oc get pods -n openshift-operators -l control-plane=controller-manager
+```
+
+**5. Clean up namespaces (optional):**
+```bash
+# Delete ai-observability namespace if no longer needed
+oc delete project ai-observability
+
+# Verify other namespaces still in use before deleting:
+# - observability-hub: Check if other observability workloads exist
+# - openshift-logging: System namespace, do NOT delete
+# - openshift-cluster-observability-operator: System namespace, do NOT delete
+```
+
+**6. Verify dependency operators before uninstalling:**
+
+Before removing dependency operators, check if they're used by other applications:
+
+```bash
+# Check for other TempoStacks
+oc get tempostack -A
+
+# Check for other LokiStacks
+oc get lokistack -A
+
+# Check for other OTEL Collectors
+oc get opentelemetrycollector -A
+
+# Only uninstall dependency operators if no other resources depend on them
 ```
 
 ---

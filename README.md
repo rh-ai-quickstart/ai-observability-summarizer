@@ -371,9 +371,28 @@ For production environments requiring OLM-managed lifecycle and automatic depend
 - Cluster-wide singleton deployment pattern required
 
 **Quick Install:**
-1. **Install CatalogSource:** `oc apply -f deploy/operator/catalog-source.yaml`
-2. **Install Operator:** OperatorHub → Search "AI Observability" → Install
-3. **Create CR:** Configure and create AIObservabilitySummarizer custom resource
+1. **Install CatalogSource:** 
+   ```bash
+   oc apply -f deploy/operator/catalog-source.yaml
+   # Verify ready: oc wait --for=condition=READY catalogsource/aiobs-operator-catalog -n openshift-marketplace --timeout=300s
+   ```
+
+2. **Create ai-observability namespace:**
+   ```bash
+   oc new-project ai-observability
+   ```
+
+3. **Install Operator:**
+   - OperatorHub → Search "AI Observability" → Install
+   - Installed Namespace: `openshift-operators`
+   - Installation mode: All namespaces on the cluster
+   - Click Install
+
+4. **Create AIObservabilitySummarizer CR:**
+   - Switch to `ai-observability` namespace (namespace dropdown)
+   - Installed Operators → AI Observability Summarizer
+   - Create AIObservabilitySummarizer
+   - Configure and click Create
 
 **What the Operator Provides:**
 - **Automatic dependency management**: OLM installs Cluster Observability, OpenTelemetry, Tempo, Logging, and Loki operators
@@ -387,8 +406,19 @@ For production environments requiring OLM-managed lifecycle and automatic depend
 
 **Development:**
 ```bash
-make operator-config  # Show current operator configuration
-make operator-deploy  # Build and push all operator images
+# Show current operator configuration
+make operator-config
+
+# Build and push all operator images (runs 6 steps in order):
+make operator-deploy
+
+# Or run individual steps:
+make operator-build           # 1. Build operator image
+make operator-push            # 2. Push operator image
+make operator-bundle-build    # 3. Build OLM bundle image
+make operator-bundle-push     # 4. Push OLM bundle image
+make operator-catalog-build   # 5. Build catalog image
+make operator-catalog-push    # 6. Push catalog image
 ```
 
 > **Note:** The operator and Helm installation methods are mutually exclusive. Choose one approach for your cluster.
