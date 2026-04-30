@@ -12,7 +12,7 @@ MAKEFLAGS += --no-print-directory
 
 # Default values
 REGISTRY ?= quay.io
-ORG ?= ecosystem-appeng
+ORG ?= tsisodia10
 IMAGE_PREFIX ?= aiobs
 VERSION ?= 6.1.1
 PLATFORM ?= linux/amd64

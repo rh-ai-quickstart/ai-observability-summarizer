@@ -276,9 +276,11 @@ class BaseChatBot(ABC):
         Returns:
             Tool execution result as string
         """
+        from opentelemetry import trace as otel_trace
+        from core.otel_tracer import tracer
+
         logger.info(f"🔧 Routing tool call: {tool_name} with arguments: {arguments}")
 
-        # Normalize Korrel8r query inputs when needed before executing
         if tool_name == "korrel8r_get_correlated":
             try:
                 q = arguments.get("query") if isinstance(arguments, dict) else None
@@ -289,21 +291,25 @@ class BaseChatBot(ABC):
                         arguments = dict(arguments)
                         arguments["query"] = normalized_q
             except Exception:
-                # Best-effort normalization; continue with original arguments on error
                 pass
 
-        try:
-            logger.info(f"⚙️ Executing tool '{tool_name}' via tool executor")
+        with tracer.start_as_current_span("mcp.tool.invoke", attributes={
+            "tool.name": tool_name,
+        }) as tool_span:
+            try:
+                logger.info(f"⚙️ Executing tool '{tool_name}' via tool executor")
+                result = self.tool_executor.call_tool(tool_name, arguments)
 
-            # Execute tool via tool executor (handles both server and client scenarios)
-            result = self.tool_executor.call_tool(tool_name, arguments)
+                tool_span.set_attribute("tool.result_length", len(result) if result else 0)
+                tool_span.set_status(otel_trace.StatusCode.OK)
+                logger.info(f"✅ Tool {tool_name} returned result (length: {len(result) if result else 0})")
+                return result
 
-            logger.info(f"✅ Tool {tool_name} returned result (length: {len(result) if result else 0})")
-            return result
-
-        except Exception as e:
-            logger.error(f"❌ Error calling tool {tool_name}: {e}")
-            return f"Error executing {tool_name}: {str(e)}"
+            except Exception as e:
+                logger.error(f"❌ Error calling tool {tool_name}: {e}")
+                tool_span.set_status(otel_trace.StatusCode.ERROR, str(e))
+                tool_span.record_exception(e)
+                return f"Error executing {tool_name}: {str(e)}"
 
     def _get_max_tool_result_length(self) -> int:
         """Get maximum length for tool results before truncation.

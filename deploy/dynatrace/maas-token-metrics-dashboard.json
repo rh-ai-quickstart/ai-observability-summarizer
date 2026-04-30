@@ -1,0 +1,22 @@
+{
+  "dashboardMetadata": {
+    "name": "🚀 MaaS Token Metrics Dashboard (with User/Model Filters) (Grafana → Dynatrace reference)",
+    "owner": "tsisodia@redhat.com",
+    "shared": true
+  },
+  "tiles": [
+    {
+      "name": "Grafana panel mapping",
+      "tileType": "MARKDOWN",
+      "configured": true,
+      "bounds": {
+        "top": 0,
+        "left": 0,
+        "width": 1216,
+        "height": 800
+      },
+      "tileFilter": {},
+      "markdown": "## 🚀 MaaS Token Metrics Dashboard (with User/Model Filters)\n\n**Source:** Grafana export → **Dynatrace cannot use the same JSON.**\nThis board is a **reference**: recreate charts in Data explorer using **metric keys** that exist in your tenant (OTLP + federation names may differ from Prometheus `authorized_hits`).\n\n### Discover metric keys in Dynatrace\n- Metrics API: `GET /api/v2/metrics?fields=displayName,unit&metricSelector=prefix(\"limitador\")` (and `vllm`, `authorized`, etc.)\n- UI: **Observe → Metrics** / **Data explorer** search.\n\n### Grafana panels → PromQL (rebuild in Dynatrace)\n\n#### 1. 🎯 Total Authorized Hits\n- **Grafana type:** `stat`\n```text\nsum(authorized_hits{user=~\"$user\",model=~\"$model\"})\n```\n\n#### 2. 📈 Authorized Hits Rate by Tier\n- **Grafana type:** `timeseries`\n```text\nsum by (tier) (rate(authorized_hits{user=~\"$user\",model=~\"$model\"}[$__rate_interval]))\n```\n\n#### 3. 👥 Authorized Hits by User & Tier\n- **Grafana type:** `timeseries`\n```text\nauthorized_hits{user=~\"$user\",model=~\"$model\"}\n```\n\n#### 4. 🏆 Top 10 Users by Hits\n- **Grafana type:** `bargauge`\n```text\ntopk(10, sum by (user) (authorized_hits{user=~\"$user\",model=~\"$model\"}))\n```\n\n#### 5. ⏰ Hourly Authorized Hits by User\n- **Grafana type:** `timeseries`\n```text\nsum by (user) (rate(authorized_hits{user=~\"$user\",model=~\"$model\"}[1h]) * 3600)\n```\n\n#### 6. 📊 Total Authorized Hits by Tier (Time Range)\n- **Grafana type:** `timeseries`\n```text\nsum by (tier) (increase(authorized_hits{user=~\"$user\",model=~\"$model\"}[$__range]))\n```\n\n#### 7. 💰 Total Revenue (current)\n- **Grafana type:** `stat`\n```text\n(sum(authorized_hits{tier=\"free\",user=~\"$user\",model=~\"$model\"}) * 0.005) + (sum(authorized_hits{tier=\"premium\",user=~\"$user\",model=~\"$model\"}) * 0.008)\n```\n\n#### 8. 👥 Active Users\n- **Grafana type:** `stat`\n```text\ncount(count by (user) (authorized_hits{user=~\"$user\",model=~\"$model\"}))\n```\n\n#### 9. 💰 Top 5 Users by Cost (Free: $0.005, Premium: $0.008 per hit)\n- **Grafana type:** `bargauge`\n```text\ntopk(5, sum by (user, tier) (authorized_hits{tier=\"free\",user=~\"$user\",model=~\"$model\"}) * 0.005 or sum by (user, tier) (authorized_hits{tier=\"premium\",user=~\"$user\",model=~\"$model\"}) * 0.008)\n```\n\n#### 10. 🧾 Detailed Billing Report\n- **Grafana type:** `table`\n```text\nsum by (user, tier) (authorized_hits{user=~\"$user\",model=~\"$model\"})\n\nsum by (user, tier) ((authorized_hits{tier=\"free\",user=~\"$user\",model=~\"$model\"} * 0.005) or (authorized_hits{tier=\"premium\",user=~\"$user\",model=~\"$model\"} * 0.008))\n\nsum by (user, tier) ((authorized_hits{tier=\"free\",user=~\"$user\",model=~\"$model\"} * 0) + 0.5) or (sum by (user, tier) ((authorized_hits{tier=\"premium\",user=~\"$user\",model=~\"$model\"} * 0) + 0.8))\n```\n\n#### 11. 📊 Authorized Hits by Tier\n- **Grafana type:** `stat`\n```text\nsum by (tier) (authorized_hits{user=~\"$user\",model=~\"$model\"})\n```\n\n#### 12. 📋 Detailed Metrics Table\n- **Grafana type:** `table`\n```text\nsum by (user, tier, limitador_namespace) (authorized_hits{user=~\"$user\",model=~\"$model\"})\n```\n\n---\n**Import:** (1) **Dashboards app → Upload** — `maas-token-metrics-dashboard.document.json` (**markdown-only** tiles by default; add `--document-data-tiles` for DQL charts). (2) **Classic API** — `POST /api/config/v1/dashboards` with `maas-token-metrics-dashboard.json` (see `docs/DYNATRACE_IMPORT_MAAS_DASHBOARD.md`)."
+    }
+  ]
+}

@@ -12,13 +12,14 @@ from .config import CHAT_SCOPE_FLEET_WIDE
 from datetime import datetime, timedelta, timezone, time
 from dateparser.search import search_dates
 
+from opentelemetry import trace as otel_trace
 from .config import LLM_API_TOKEN, LLAMA_STACK_URL, VERIFY_SSL, LLM_TIMEOUT_SECONDS
 from .model_config_manager import get_model_config
+from .otel_tracer import tracer
 
 import logging
 from common.pylogger import get_python_logger
 
-# Initialize structured logger once - other modules should use logging.getLogger(__name__)
 get_python_logger()
 
 logger = logging.getLogger(__name__)
@@ -231,9 +232,26 @@ def summarize_with_llm(
         LLM-generated summary text (cleaned if validation enabled)
     """
     headers = {"Content-Type": "application/json"}
-    # Get model configuration from runtime config
     runtime_config = get_model_config()
     model_info = runtime_config.get(summarize_model_id, {})
+    _provider = model_info.get("provider", "local")
+    _model_name = model_info.get("modelName", summarize_model_id.split('/')[-1] if '/' in summarize_model_id else summarize_model_id)
+
+    llm_span = tracer.start_span("llm.completion", attributes={
+        "gen_ai.system": _provider,
+        "gen_ai.request.model": _model_name,
+        "gen_ai.request.max_tokens": max_tokens,
+        "gen_ai.prompt_length": len(prompt),
+    })
+
+    def _finish_llm_span(response_text: str = "", error: Exception = None):
+        if error:
+            llm_span.set_status(otel_trace.StatusCode.ERROR, str(error))
+            llm_span.record_exception(error)
+        else:
+            llm_span.set_attribute("gen_ai.response_length", len(response_text))
+            llm_span.set_status(otel_trace.StatusCode.OK)
+        llm_span.end()
 
     # In DEV mode, model might not be in ConfigMap, so check if we have override parameters
     # If api_url is provided (from DEV mode browser storage), treat as external model
@@ -320,21 +338,28 @@ def summarize_with_llm(
                     if content_block.type == "text":
                         text_content.append(content_block.text)
 
-                return "".join(text_content).strip()
+                result_text = "".join(text_content).strip()
+                _finish_llm_span(result_text)
+                return result_text
 
-            except ImportError:
+            except ImportError as e:
+                _finish_llm_span(error=e)
                 raise ValueError("Anthropic client not available. Please install anthropic package.")
             except anthropic.APITimeoutError as e:
                 logger.error(f"Anthropic API timed out: {e}")
+                _finish_llm_span(error=e)
                 raise TimeoutError(f"Anthropic API request timed out after {LLM_TIMEOUT_SECONDS} seconds. The AI model may be overloaded. Try again or use a different model.")
             except anthropic.APIConnectionError as e:
                 logger.error(f"Anthropic API connection error: {e}")
+                _finish_llm_span(error=e)
                 raise ConnectionError(f"Failed to connect to Anthropic API: {e}")
             except anthropic.APIError as e:
                 logger.error(f"Anthropic API error: {e}")
+                _finish_llm_span(error=e)
                 raise ValueError(f"Anthropic API error: {str(e)}")
             except Exception as e:
                 logger.error(f"Unexpected Anthropic error: {e}")
+                _finish_llm_span(error=e)
                 raise ValueError(f"Anthropic API error: {str(e)}")
         else:
             # OpenAI and compatible APIs
@@ -377,7 +402,7 @@ def summarize_with_llm(
                 response_json, is_external=True, provider=provider
             )
 
-            # For external models, no need to do response validation and cleanup
+            _finish_llm_span(raw_response)
             return raw_response
 
     else:
@@ -469,13 +494,13 @@ def summarize_with_llm(
             response_json, is_external=False, provider="LLM"
         )
 
-        # Apply response validation and cleanup if enabled
         if enable_validation:
-            
             validation_result = ResponseValidator.clean_response(raw_response, response_type, prompt)
-            
-            return validation_result['cleaned_response']
+            result_text = validation_result['cleaned_response']
+            _finish_llm_span(result_text)
+            return result_text
         else:
+            _finish_llm_span(raw_response)
             return raw_response
 
 

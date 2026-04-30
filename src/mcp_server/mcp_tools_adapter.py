@@ -11,6 +11,8 @@ from typing import Dict, Any, List, Optional
 import sys
 from pathlib import Path
 
+from opentelemetry import context as otel_context
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from chatbots.tool_executor import ToolExecutor, MCPTool
@@ -59,17 +61,15 @@ class MCPServerAdapter(ToolExecutor):
                 loop = None
 
             if loop is not None:
-                # We're already in an async context, use run_coroutine_threadsafe
-                # or directly call the tool function
                 import concurrent.futures
                 import threading
 
-                # Run in a new thread with its own event loop
                 result_future = concurrent.futures.Future()
+                parent_ctx = otel_context.get_current()
 
                 def run_in_thread():
+                    otel_context.attach(parent_ctx)
                     try:
-                        # Create a new event loop for this thread
                         new_loop = asyncio.new_event_loop()
                         asyncio.set_event_loop(new_loop)
                         try:

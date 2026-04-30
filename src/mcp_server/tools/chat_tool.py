@@ -9,7 +9,9 @@ import logging
 from datetime import datetime
 from typing import Optional, List, Dict
 
+from opentelemetry import trace
 from core.api_key_manager import resolve_api_key
+from core.otel_tracer import tracer
 
 logger = logging.getLogger(__name__)
 
@@ -83,75 +85,74 @@ def chat(
         })
         logger.info(f"📝 Progress: {status_msg}")
 
-    try:
-        # Get the MCP server instance (injected by FastMCP context)
-        # We need to access the ObservabilityMCPServer instance
-        # For now, we'll use a global reference that will be set during server initialization
-        from mcp_server.observability_mcp import _server_instance
+    with tracer.start_as_current_span("agent.turn", attributes={
+        "agent.model": model_name,
+        "agent.question_length": len(message),
+        "agent.namespace": namespace or "",
+        "agent.scope": scope or "",
+    }) as agent_span:
+        logger.info(f"OTEL_DIAG: agent.turn span created, span_id={agent_span.get_span_context().span_id:016x}, trace_id={agent_span.get_span_context().trace_id:032x}, is_recording={agent_span.is_recording()}")
+        try:
+            from mcp_server.observability_mcp import _server_instance
 
-        # Create MCP tools adapter for this server
-        tool_executor = MCPServerAdapter(_server_instance)
+            tool_executor = MCPServerAdapter(_server_instance)
+            resolved_api_key = resolve_api_key(api_key=api_key, model_id=model_name)
 
-        # Resolve API key with fallback logic (same as analyze_openshift)
-        # Priority: 1) Provided api_key (from UI), 2) Kubernetes secret
-        resolved_api_key = resolve_api_key(api_key=api_key, model_id=model_name)
+            if not namespace:
+                from core.question_classification import extract_namespace_from_question
+                detected = extract_namespace_from_question(message)
+                if detected:
+                    namespace = detected
+                    logger.info(f"📌 Auto-detected namespace from question: '{namespace}'")
+                    capture_progress(f"📌 Detected namespace: {namespace}")
 
-        # Auto-detect namespace from question if not provided by UI
-        if not namespace:
-            from core.question_classification import extract_namespace_from_question
-            detected = extract_namespace_from_question(message)
-            if detected:
-                namespace = detected
-                logger.info(f"📌 Auto-detected namespace from question: '{namespace}'")
-                capture_progress(f"📌 Detected namespace: {namespace}")
+            chatbot = create_chatbot(
+                model_name=model_name,
+                api_key=resolved_api_key if resolved_api_key else None,
+                api_url=api_url,
+                tool_executor=tool_executor
+            )
 
-        # Create chatbot with tool executor
-        chatbot = create_chatbot(
-            model_name=model_name,
-            api_key=resolved_api_key if resolved_api_key else None,
-            api_url=api_url,
-            tool_executor=tool_executor
-        )
+            logger.info(f"✅ Created {chatbot.__class__.__name__}")
+            capture_progress(f"🤖 Starting chat with {model_name}")
 
-        logger.info(f"✅ Created {chatbot.__class__.__name__}")
+            if conversation_history:
+                logger.info(f"📜 Conversation history provided: {len(conversation_history)} messages")
 
-        # Execute chat with progress callback
-        capture_progress(f"🤖 Starting chat with {model_name}")
+            response = chatbot.chat(
+                user_question=message,
+                namespace=namespace,
+                progress_callback=capture_progress,
+                conversation_history=conversation_history
+            )
 
-        # Note: scope parameter is not yet supported by chatbots, only namespace
-        # Log conversation history if provided
-        if conversation_history:
-            logger.info(f"📜 Conversation history provided: {len(conversation_history)} messages")
+            capture_progress("✅ Chat completed")
 
-        response = chatbot.chat(
-            user_question=message,
-            namespace=namespace,
-            progress_callback=capture_progress,
-            conversation_history=conversation_history
-        )
+            agent_span.set_attribute("agent.iterations", iteration_count)
+            agent_span.set_attribute("agent.progress_steps", len(progress_log))
+            agent_span.set_attribute("agent.response_length", len(response) if response else 0)
+            agent_span.set_status(trace.StatusCode.OK)
 
-        capture_progress("✅ Chat completed")
+            result = {
+                "response": response,
+                "progress_log": progress_log,
+                "model": model_name,
+                "iterations": iteration_count,
+                "timestamp": datetime.now().isoformat()
+            }
 
-        # Return structured response
-        result = {
-            "response": response,
-            "progress_log": progress_log,
-            "model": model_name,
-            "iterations": iteration_count,
-            "timestamp": datetime.now().isoformat()
-        }
+            logger.info(f"✅ Chat completed: {len(progress_log)} updates, {iteration_count} iterations")
+            return json.dumps(result, indent=2)
 
-        logger.info(f"✅ Chat completed: {len(progress_log)} updates, {iteration_count} iterations")
+        except Exception as e:
+            error_msg = f"Error in chat tool: {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            agent_span.set_status(trace.StatusCode.ERROR, str(e))
+            agent_span.record_exception(e)
 
-        return json.dumps(result, indent=2)
-
-    except Exception as e:
-        error_msg = f"Error in chat tool: {str(e)}"
-        logger.error(error_msg, exc_info=True)
-
-        return json.dumps({
-            "error": error_msg,
-            "progress_log": progress_log,
-            "model": model_name,
-            "timestamp": datetime.now().isoformat()
-        })
+            return json.dumps({
+                "error": error_msg,
+                "progress_log": progress_log,
+                "model": model_name,
+                "timestamp": datetime.now().isoformat()
+            })

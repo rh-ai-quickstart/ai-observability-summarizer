@@ -1,0 +1,142 @@
+{
+  "name": "MaaS Token Metrics Dashboard (with User/Model Filters) (Grafana import)",
+  "type": "dashboard",
+  "content": {
+    "version": 21,
+    "variables": [],
+    "tiles": {
+      "0": {
+        "type": "markdown",
+        "content": "# MaaS token metrics (from Grafana)\n\nThis upload uses **markdown tiles only** so the dashboard **always shows content** (PromQL + optional suggested DQL). Dynatrace **data** tiles were off by default because invalid or missing metrics/Grail often breaks the whole canvas.\n\nWhen `authorized_hits` exists in your tenant, add **Data** tiles in the UI or regenerate with **`--document-data-tiles`**."
+      },
+      "1": {
+        "type": "markdown",
+        "content": "### 🎯 Total Authorized Hits\n\n**Grafana type:** `stat`\n\n**PromQL:**\n```text\nsum(authorized_hits{user=~\"$user\",model=~\"$model\"})\n```\n\n**Suggested DQL** (verify metric `authorized_hits` in **Data explorer** before use):\n```text\ntimeseries total=sum(authorized_hits) | fieldsAdd value=arrayLast(total)\n```"
+      },
+      "2": {
+        "type": "markdown",
+        "content": "### 📈 Authorized Hits Rate by Tier\n\n**Grafana type:** `timeseries`\n\n**PromQL:**\n```text\nsum by (tier) (rate(authorized_hits{user=~\"$user\",model=~\"$model\"}[$__rate_interval]))\n```\n\n**Suggested DQL** (verify metric `authorized_hits` in **Data explorer** before use):\n```text\ntimeseries v=rate(authorized_hits), by:{tier} | limit 100\n```"
+      },
+      "3": {
+        "type": "markdown",
+        "content": "### 👥 Authorized Hits by User & Tier\n\n**Grafana type:** `timeseries`\n\n**PromQL:**\n```text\nauthorized_hits{user=~\"$user\",model=~\"$model\"}\n```\n\n**Suggested DQL** (verify metric `authorized_hits` in **Data explorer** before use):\n```text\ntimeseries v=avg(authorized_hits), by:{user, tier} | limit 100\n```"
+      },
+      "4": {
+        "type": "markdown",
+        "content": "### 🏆 Top 10 Users by Hits\n\n**Grafana type:** `bargauge`\n\n**PromQL:**\n```text\ntopk(10, sum by (user) (authorized_hits{user=~\"$user\",model=~\"$model\"}))\n```\n\n**Suggested DQL** (verify metric `authorized_hits` in **Data explorer** before use):\n```text\ntimeseries s=sum(authorized_hits), by:{user} | limit 100\n```"
+      },
+      "5": {
+        "type": "markdown",
+        "content": "### ⏰ Hourly Authorized Hits by User\n\n**Grafana type:** `timeseries`\n\n**PromQL:**\n```text\nsum by (user) (rate(authorized_hits{user=~\"$user\",model=~\"$model\"}[1h]) * 3600)\n```\n\n**Suggested DQL** (verify metric `authorized_hits` in **Data explorer** before use):\n```text\ntimeseries v=rate(authorized_hits), by:{user} | limit 100\n```"
+      },
+      "6": {
+        "type": "markdown",
+        "content": "### 📊 Total Authorized Hits by Tier (Time Range)\n\n**Grafana type:** `timeseries`\n\n**PromQL:**\n```text\nsum by (tier) (increase(authorized_hits{user=~\"$user\",model=~\"$model\"}[$__range]))\n```\n\n**Suggested DQL** (verify metric `authorized_hits` in **Data explorer** before use):\n```text\ntimeseries v=sum(authorized_hits), by:{tier} | limit 100\n```"
+      },
+      "7": {
+        "type": "markdown",
+        "content": "### 💰 Total Revenue (current)\n\n**Grafana type:** `stat`\n\n```text\n(sum(authorized_hits{tier=\"free\",user=~\"$user\",model=~\"$model\"}) * 0.005) + (sum(authorized_hits{tier=\"premium\",user=~\"$user\",model=~\"$model\"}) * 0.008)\n```\n\n*Auto-DQL skipped — edit this tile or replace `--metric-id` and regenerate.*"
+      },
+      "8": {
+        "type": "markdown",
+        "content": "### 👥 Active Users\n\n**Grafana type:** `stat`\n\n```text\ncount(count by (user) (authorized_hits{user=~\"$user\",model=~\"$model\"}))\n```\n\n*Auto-DQL skipped — edit this tile or replace `--metric-id` and regenerate.*"
+      },
+      "9": {
+        "type": "markdown",
+        "content": "### 💰 Top 5 Users by Cost (Free: $0.005, Premium: $0.008 per hit)\n\n**Grafana type:** `bargauge`\n\n```text\ntopk(5, sum by (user, tier) (authorized_hits{tier=\"free\",user=~\"$user\",model=~\"$model\"}) * 0.005 or sum by (user, tier) (authorized_hits{tier=\"premium\",user=~\"$user\",model=~\"$model\"}) * 0.008)\n```\n\n*Auto-DQL skipped — edit this tile or replace `--metric-id` and regenerate.*"
+      },
+      "10": {
+        "type": "markdown",
+        "content": "### 🧾 Detailed Billing Report\n\n**Grafana type:** `table`\n\n```text\nsum by (user, tier) (authorized_hits{user=~\"$user\",model=~\"$model\"})\n\nsum by (user, tier) ((authorized_hits{tier=\"free\",user=~\"$user\",model=~\"$model\"} * 0.005) or (authorized_hits{tier=\"premium\",user=~\"$user\",model=~\"$model\"} * 0.008))\n\nsum by (user, tier) ((authorized_hits{tier=\"free\",user=~\"$user\",model=~\"$model\"} * 0) + 0.5) or (sum by (user, tier) ((authorized_hits{tier=\"premium\",user=~\"$user\",model=~\"$model\"} * 0) + 0.8))\n```\n\n*Auto-DQL skipped — edit this tile or replace `--metric-id` and regenerate.*"
+      },
+      "11": {
+        "type": "markdown",
+        "content": "### 📊 Authorized Hits by Tier\n\n**Grafana type:** `stat`\n\n**PromQL:**\n```text\nsum by (tier) (authorized_hits{user=~\"$user\",model=~\"$model\"})\n```\n\n**Suggested DQL** (verify metric `authorized_hits` in **Data explorer** before use):\n```text\ntimeseries s=sum(authorized_hits), by:{tier} | limit 100\n```"
+      },
+      "12": {
+        "type": "markdown",
+        "content": "### 📋 Detailed Metrics Table\n\n**Grafana type:** `table`\n\n**PromQL:**\n```text\nsum by (user, tier, limitador_namespace) (authorized_hits{user=~\"$user\",model=~\"$model\"})\n```\n\n**Suggested DQL** (verify metric `authorized_hits` in **Data explorer** before use):\n```text\ntimeseries s=sum(authorized_hits), by:{user, tier} | limit 200\n```"
+      }
+    },
+    "layouts": {
+      "0": {
+        "x": 0,
+        "y": 0,
+        "w": 20,
+        "h": 2
+      },
+      "1": {
+        "x": 0,
+        "y": 2,
+        "w": 20,
+        "h": 8
+      },
+      "2": {
+        "x": 0,
+        "y": 10,
+        "w": 20,
+        "h": 8
+      },
+      "3": {
+        "x": 0,
+        "y": 18,
+        "w": 20,
+        "h": 10
+      },
+      "4": {
+        "x": 0,
+        "y": 28,
+        "w": 20,
+        "h": 6
+      },
+      "5": {
+        "x": 0,
+        "y": 34,
+        "w": 20,
+        "h": 7
+      },
+      "6": {
+        "x": 0,
+        "y": 41,
+        "w": 20,
+        "h": 11
+      },
+      "7": {
+        "x": 0,
+        "y": 52,
+        "w": 20,
+        "h": 6
+      },
+      "8": {
+        "x": 0,
+        "y": 57,
+        "w": 20,
+        "h": 6
+      },
+      "9": {
+        "x": 0,
+        "y": 62,
+        "w": 20,
+        "h": 6
+      },
+      "10": {
+        "x": 0,
+        "y": 67,
+        "w": 20,
+        "h": 8
+      },
+      "11": {
+        "x": 0,
+        "y": 75,
+        "w": 20,
+        "h": 11
+      },
+      "12": {
+        "x": 0,
+        "y": 86,
+        "w": 20,
+        "h": 11
+      }
+    }
+  }
+}
