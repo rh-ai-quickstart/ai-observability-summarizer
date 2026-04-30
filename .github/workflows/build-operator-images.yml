@@ -21,6 +21,11 @@ on:
         required: false
         default: true
         type: boolean
+      target_branch:
+        description: 'Branch to commit and push operator manifest changes to'
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: write
@@ -32,6 +37,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.target_branch != '' && inputs.target_branch || github.ref_name }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -93,8 +100,8 @@ jobs:
       - name: Commit and push operator manifest changes
         if: ${{ inputs.push_changes }}
         run: |
-          # Add all files updated by make bundle and catalog image update
-          # Use git add -A to catch any files created by bundle generation
+          PUSH_BRANCH="${{ inputs.target_branch != '' && inputs.target_branch || github.ref_name }}"
+
           git add deploy/operator/catalog-source.yaml
           git add deploy/operator/bundle/
           git add deploy/operator/config/manager/kustomization.yaml
@@ -113,39 +120,25 @@ jobs:
           EOF
           )"
 
-            # Stash any remaining unstaged changes before pulling
-            if ! git diff --quiet || ! git diff --cached --quiet; then
-              echo "Stashing unstaged changes..."
-              git stash push -u -m "temp stash before pull"
-              STASHED=true
-            else
-              STASHED=false
-            fi
-
-            # Pull latest changes before pushing (handles race conditions)
-            echo "Pulling latest changes..."
-            git pull --rebase origin ${GITHUB_REF#refs/heads/}
-
-            # Pop stash if we stashed
-            if [ "$STASHED" = "true" ]; then
-              echo "Restoring stashed changes..."
-              git stash pop || true
-            fi
-
-            # Push with retry logic
+            # Push with retry logic; stash/pop unstaged changes around each pull
             echo "Pushing changes..."
             max_retries=3
             retry_count=0
             while [ $retry_count -lt $max_retries ]; do
-              if git push origin ${GITHUB_REF#refs/heads/}; then
+              if git push origin "$PUSH_BRANCH"; then
                 echo "✅ Successfully pushed changes"
                 break
               else
                 retry_count=$((retry_count + 1))
                 if [ $retry_count -lt $max_retries ]; then
                   echo "Push failed, retrying ($retry_count/$max_retries)..."
-                  git pull --rebase origin ${GITHUB_REF#refs/heads/}
-                  sleep 2
+                  if ! git diff --quiet || ! git diff --cached --quiet; then
+                    git stash push -u -m "temp stash before pull"
+                    git pull --rebase origin "$PUSH_BRANCH"
+                    git stash pop || true
+                  else
+                    git pull --rebase origin "$PUSH_BRANCH"
+                  fi
                 else
                   echo "❌ Failed to push after $max_retries attempts"
                   exit 1
