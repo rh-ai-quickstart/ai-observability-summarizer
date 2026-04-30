@@ -15,7 +15,12 @@ spec:
   # ==========================================================================
   rag:
     enabled: true
-    
+
+    # LlamaStack deployment mode
+    llama-stack:
+      # Set to true to deploy via LlamaStackDistribution CRD (requires RHOAI 3.x)
+      managedByOperator: false
+
     # Model selection - Enable only ONE model
     global:
       models:

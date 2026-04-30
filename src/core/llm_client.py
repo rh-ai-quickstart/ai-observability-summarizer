@@ -204,6 +204,51 @@ def _clean_llm_summary_string(text: str) -> str:
     return re.sub(r"\s+", " ", cleaned_text).strip()
 
 
+def get_llamastack_model_id_candidates(model_id: str) -> List[str]:
+    """Get candidate model IDs for llama-stack 0.6.0+ compatibility.
+
+    LlamaStack 0.6.0+ returns model IDs in provider-prefixed format:
+    "{provider_id}/{model_id}" (e.g., "llama-3-1-8b-instruct/meta-llama/Llama-3.1-8B-Instruct")
+
+    This function returns a prioritized list of candidate model IDs to try:
+    1. provider-prefixed (llama-stack 0.6.0+ format)
+    2. serviceName (LlamaStack backend name)
+    3. modelName (alternate ID)
+    4. original model_id (user-facing key)
+
+    Args:
+        model_id: Model identifier from MODEL_CONFIG or user input
+                  (e.g., "meta-llama/Llama-3.1-8B-Instruct")
+
+    Returns:
+        List of candidate model IDs to try in priority order
+
+    Examples:
+        >>> get_llamastack_model_id_candidates("meta-llama/Llama-3.1-8B-Instruct")
+        ['llama-3-1-8b-instruct/meta-llama/Llama-3.1-8B-Instruct',
+         'llama-3-1-8b-instruct',
+         'meta-llama/Llama-3.1-8B-Instruct']
+    """
+    runtime_config = get_model_config()
+    model_info = runtime_config.get(model_id, {})
+
+    candidate_ids = []
+
+    # Build provider-prefixed ID if we have both serviceName and a model ID
+    service_name = model_info.get("serviceName")
+    if service_name and model_id:
+        provider_prefixed_id = f"{service_name}/{model_id}"
+        candidate_ids.append(provider_prefixed_id)
+
+    # Add other candidates
+    for candidate in [service_name, model_info.get("modelName"), model_id]:
+        if candidate and candidate not in candidate_ids:
+            candidate_ids.append(candidate)
+
+    logger.debug(f"LlamaStack model ID candidates for '{model_id}': {candidate_ids}")
+    return candidate_ids
+
+
 def summarize_with_llm(
     prompt: str,
     summarize_model_id: str,
@@ -385,28 +430,15 @@ def summarize_with_llm(
         if LLM_API_TOKEN:
             headers["Authorization"] = f"Bearer {LLM_API_TOKEN}"
 
-        # Determine correct local model identifier: prefer serviceName if present
-        # summarize_model_id may be a human/registry id (e.g., "meta-llama/..."), while
-        # LlamaStack typically expects the backend service name (e.g., "llama-3-1-8b-instruct").
-        model_id_to_use = (
-            model_info.get("serviceName")
-            or model_info.get("modelName")
-            or summarize_model_id
-        )
-
         # Build messages array for chat completions API
         chat_messages = []
         if messages:
             chat_messages.extend(messages)
         # Add the current prompt as a user message
         chat_messages.append({"role": "user", "content": prompt})
-        # Try multiple possible model identifiers to maximize compatibility
-        # LlamaStack may expect different model IDs than MODEL_CONFIG keys
-        # Priority: serviceName (LlamaStack backend) -> modelName (alt ID) -> summarize_model_id (user key)
-        candidate_ids = []
-        for candidate in [model_info.get("serviceName"), model_info.get("modelName"), summarize_model_id]:
-            if candidate and candidate not in candidate_ids:
-                candidate_ids.append(candidate)
+
+        # Get candidate model IDs for llama-stack 0.6.0+ compatibility
+        candidate_ids = get_llamastack_model_id_candidates(summarize_model_id)
 
         last_err: Optional[Exception] = None
         response_json = None

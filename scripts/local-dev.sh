@@ -679,7 +679,7 @@ start_local_services() {
     export TEMPO_TOKEN="$TOKEN"
     export LOKI_URL="https://localhost:$LOKI_PORT_LOCALHOST"
     export LOKI_TOKEN="$TOKEN"
-    export LLAMA_STACK_URL="http://localhost:$LLAMASTACK_PORT_LOCALHOST/v1/openai/v1"
+    export LLAMA_STACK_URL="http://localhost:$LLAMASTACK_PORT_LOCALHOST/v1"
     export THANOS_TOKEN="$TOKEN"
     export MCP_URL="http://localhost:$MCP_PORT_LOCALHOST"
     export PROM_URL="$PROMETHEUS_URL"

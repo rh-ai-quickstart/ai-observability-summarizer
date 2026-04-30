@@ -50,7 +50,13 @@ alerting:
 # RAG - LLM Stack (llama-stack, llm-service, pgvector)
 rag:
   enabled: true  # Always enabled
-  
+
+  # LlamaStack deployment mode
+  llama-stack:
+    # Set to true to deploy LlamaStack via LlamaStackDistribution CRD (requires RHOAI 3.x
+    # with LlamaStack operator enabled). When false, deploys as a regular Helm Deployment.
+    managedByOperator: false
+
   # Model selection - Enable ONE model via OLM UI toggle
   global:
     models:

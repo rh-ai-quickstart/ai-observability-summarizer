@@ -478,11 +478,11 @@ When running as HTTP server:
 
 ```bash
 # Basic deployment (recommended)
-make install-mcp-server NAMESPACE=<namespace> LLM= LLAMA_STACK_URL=http://llamastack.<namespace>.svc.cluster.local:8321/v1/openai/v1
+make install-mcp-server NAMESPACE=<namespace> LLM= LLAMA_STACK_URL=http://llamastack.<namespace>.svc.cluster.local:8321/v1
 
 # Examples for different namespaces:
-make install-mcp-server NAMESPACE=test1 LLM= LLAMA_STACK_URL=http://llamastack.test1.svc.cluster.local:8321/v1/openai/v1
-make install-mcp-server NAMESPACE=main LLM= LLAMA_STACK_URL=http://llamastack.main.svc.cluster.local:8321/v1/openai/v1
+make install-mcp-server NAMESPACE=test1 LLM= LLAMA_STACK_URL=http://llamastack.test1.svc.cluster.local:8321/v1
+make install-mcp-server NAMESPACE=main LLM= LLAMA_STACK_URL=http://llamastack.main.svc.cluster.local:8321/v1
 ```
 
 **Required Parameters:**
@@ -501,7 +501,7 @@ helm upgrade --install mcp-server deploy/helm/mcp-server -n <namespace> \
   --set image.repository=quay.io/<org>/<repo>/mcp-server \
   --set image.tag=0.1.2 \
   --set env.PROMETHEUS_URL=https://thanos-querier.openshift-monitoring.svc.cluster.local:9091 \
-  --set llm.url=http://llamastack.<namespace>.svc.cluster.local:8321/v1/openai/v1 \
+  --set llm.url=http://llamastack.<namespace>.svc.cluster.local:8321/v1 \
   --set-json modelConfig='{"meta-llama/Llama-3.2-3B-Instruct":{"external":false,"serviceName":"llama-3-1-8b-instruct"}}'
 ```
 
@@ -541,7 +541,7 @@ npx @modelcontextprotocol/inspector sse https://<route>/sse
   ```
 - **Missing LLAMA_STACK_URL**: The `analyze` tool requires LlamaStack connection. Ensure it's set:
   ```bash
-  make install-mcp-server NAMESPACE=test1 LLM= LLAMA_STACK_URL=http://llamastack.test1.svc.cluster.local:8321/v1/openai/v1
+  make install-mcp-server NAMESPACE=test1 LLM= LLAMA_STACK_URL=http://llamastack.test1.svc.cluster.local:8321/v1
   ```
 
 #### Connection Issues  

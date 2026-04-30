@@ -45,6 +45,9 @@ metadata:
                   }
                 }
               },
+              "llama-stack": {
+                "managedByOperator": false
+              },
               "llm-service": {
                 "device": "gpu",
                 "secret": {
@@ -58,7 +61,7 @@ metadata:
     capabilities: Basic Install
     categories: AI/Machine Learning, Monitoring
     containerImage: quay.io/ecosystem-appeng/aiobs-operator:v1.2.5-operator
-    createdAt: "2026-04-28T13:13:32Z"
+    createdAt: "2026-04-29T18:40:26Z"
     description: Deploy AI-powered observability summarization for OpenShift
     operators.operatorframework.io/builder: operator-sdk-v1.37.0
     operators.operatorframework.io/project_layout: helm.sdk.operatorframework.io/v1
@@ -89,6 +92,14 @@ spec:
         x-descriptors:
         - urn:alm:descriptor:com.tectonic.ui:fieldGroup:LLM Configuration
         - urn:alm:descriptor:com.tectonic.ui:password
+      - description: Deploy LlamaStack via the LlamaStack operator (LlamaStackDistribution
+          CRD) instead of a Helm Deployment. Requires RHOAI 3.x with the LlamaStack
+          operator enabled.
+        displayName: Managed By LlamaStack Operator
+        path: rag.llama-stack.managedByOperator
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:fieldGroup:LLM Configuration
+        - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
       - description: Hardware type for LLM deployment
         displayName: Device Type
         path: rag.llm-service.device
@@ -338,6 +349,12 @@ spec:
           - console.openshift.io
           resources:
           - consoleplugins
+          verbs:
+          - '*'
+        - apiGroups:
+          - llamastack.io
+          resources:
+          - llamastackdistributions
           verbs:
           - '*'
         - apiGroups:
