@@ -181,18 +181,20 @@ spec:
   description: "## AI Observability Summarizer Operator\n\nThe AI Observability Summarizer
     Operator provides an easy way to deploy an AI-powered \nobservability stack on
     OpenShift. It leverages LLMs to analyze and summarize metrics, \nlogs, and traces
-    from your cluster.\n\n### Recommended Namespace\n\nInstall this operator and create
-    the CR in the **`ai-observability`** namespace.\n\n### Always Installed\n\n- **MCP
-    Server**: Model Context Protocol server for AI-driven observability queries\n-
-    **OpenShift Console Plugin**: Native integration with OpenShift Console\n\n###
+    from your cluster.\n\n### Installation Namespaces\n\nInstall this operator in
+    the **`openshift-operators`** namespace (watches all namespaces). \nCreate the
+    AIObservabilitySummarizer CR in the **`ai-observability`** namespace.\n\n### Always
+    Installed\n\n- **MCP Server**: Model Context Protocol server for AI-driven observability
+    queries\n- **OpenShift Console Plugin**: Native integration with OpenShift Console\n\n###
     Optional Features\n\n- **Alerting**: Enable automated alert analysis and summarization\n-
     **RAG Stack**: Deploy LLM infrastructure (requires GPU resources)\n- **Shared
     Infrastructure**: Deploy Tempo, OTEL Collector, Korrel8r, MinIO (disable if already
     installed)\n\n### Quick Start\n\n1. Create namespace: `oc new-project ai-observability`\n2.
-    Install the operator from OperatorHub into `ai-observability`\n3. Go to **Installed
-    Operators** → **AI Observability Summarizer**\n4. Click **Create AIObservabilitySummarizer**\n5.
-    Toggle optional features as needed\n6. Click **Create**\n\n### Prerequisites\n\n-
-    OpenShift 4.12+\n- Cluster admin access\n- For RAG: GPU nodes available\n"
+    Install the operator from OperatorHub into **`openshift-operators`** namespace\n3.
+    Switch to **`ai-observability`** namespace in the console\n4. Go to **Installed
+    Operators** → **AI Observability Summarizer**\n5. Click **Create AIObservabilitySummarizer**\n6.
+    Configure and click **Create**\n\n### Prerequisites\n\n- OpenShift 4.18+\n-
+    Cluster admin access\n- For RAG: GPU nodes available\n"
   displayName: AI Observability Summarizer
   icon:
   - base64data: iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAACXBIWXMAAAsTAAALEwEAmpwYAAAF8WlUWHRYTUw6Y29tLmFkb2JlLnhtcAAAAAAAPD94cGFja2V0IGJlZ2luPSLvu78iIGlkPSJXNU0wTXBDZWhpSHpyZVN6TlRjemtjOWQiPz4gPHg6eG1wbWV0YSB4bWxuczp4PSJhZG9iZTpuczptZXRhLyIgeDp4bXB0az0iQWRvYmUgWE1QIENvcmUgNy4yLWMwMDAgNzkuMWI2NWE3OWI0LCAyMDIyLzA2LzEzLTIyOjAxOjAxICAgICAgICAiPiA8cmRmOlJERiB4bWxuczpyZGY9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkvMDIvMjItcmRmLXN5bnRheC1ucyMiPiA8cmRmOkRlc2NyaXB0aW9uIHJkZjphYm91dD0iIiB4bWxuczp4bXA9Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC8iIHhtbG5zOmRjPSJodHRwOi8vcHVybC5vcmcvZGMvZWxlbWVudHMvMS4xLyIgeG1sbnM6cGhvdG9zaG9wPSJodHRwOi8vbnMuYWRvYmUuY29tL3Bob3Rvc2hvcC8xLjAvIiB4bWxuczp4bXBNTT0iaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wL21tLyIgeG1sbnM6c3RFdnQ9Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC9zVHlwZS9SZXNvdXJjZUV2ZW50IyIgeG1wOkNyZWF0b3JUb29sPSJBZG9iZSBQaG90b3Nob3AgMjQuMCAoTWFjaW50b3NoKSIgeG1wOkNyZWF0ZURhdGU9IjIwMjQtMTItMDhUMTI6MDA6MDAtMDU6MDAiIHhtcDpNb2RpZnlEYXRlPSIyMDI0LTEyLTA4VDEyOjAwOjAwLTA1OjAwIiB4bXA6TWV0YWRhdGFEYXRlPSIyMDI0LTEyLTA4VDEyOjAwOjAwLTA1OjAwIiBkYzpmb3JtYXQ9ImltYWdlL3BuZyIgcGhvdG9zaG9wOkNvbG9yTW9kZT0iMyIgeG1wTU06SW5zdGFuY2VJRD0ieG1wLmlpZDo4YzBiYjBkZC0wNmM0LTQ2NzgtOTIxZS0zMzQ5YjM5YTQzYWMiIHhtcE1NOkRvY3VtZW50SUQ9ImFkb2JlOmRvY2lkOnBob3Rvc2hvcDo3NzU1ZjQyMC02YjBkLTExZWQtYjNlNC1kNTEyZTMyMjU4ZmQiIHhtcE1NOk9yaWdpbmFsRG9jdW1lbnRJRD0ieG1wLmRpZDo4YzBiYjBkZC0wNmM0LTQ2NzgtOTIxZS0zMzQ5YjM5YTQzYWMiPiA8L3JkZjpEZXNjcmlwdGlvbj4gPC9yZGY6UkRGPiA8L3g6eG1wbWV0YT4gPD94cGFja2V0IGVuZD0iciI/PgAAAA1JREFUeJztwTEBAAAAwiD7p7bGDlgAAHgNCWgAAQ==

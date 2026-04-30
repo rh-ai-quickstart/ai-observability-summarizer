@@ -15,14 +15,14 @@ Create an interactive dashboard to analyze AI model performance and OpenShift cl
    - [Minimum software requirements](#minimum-software-requirements)
    - [Required user permissions](#required-user-permissions)
 3. [Deploy](#deploy)
-   - [Quick Start - OpenShift Deployment](#quick-start---openshift-deployment)
+   - [Option 1: Install via Helm](#option-1-install-via-helm-recommended)
+   - [Option 2: Install via Operator](#option-2-install-via-operator-optional)
    - [Quick Start - Local Development](#quick-start---local-development)
    - [Usage](#usage)
    - [Configuration](#configuration)
      - [Model as a Service (MaaS) Setup](#model-as-a-service-maas-setup)
      - [DEV Mode Workflow](#dev-mode-workflow)
      - [Per-Model API Key Configuration](#per-model-api-key-configuration)
-   - [Delete](#delete)
 4. [References](#references)
 5. [Tags](#tags)
 
@@ -358,6 +358,30 @@ If enabled in your cluster, use:
 - **Observe → Traces** to view traces
 - **Observe → Logs** to query logs
 
+#### Uninstall (Helm)
+
+**Quick Uninstall** (application components only):
+
+```bash
+make uninstall NAMESPACE=your-namespace
+```
+
+This removes the console plugin, MCP server, and RAG stack from your namespace.
+
+**Full Uninstall** (including observability stack):
+
+```bash
+make uninstall NAMESPACE=your-namespace UNINSTALL_OBSERVABILITY=true
+```
+
+This removes everything including:
+- Application components (MCP, Console Plugin, RAG)
+- Observability infrastructure (Tempo, Loki, OTEL, Korrel8r, MinIO)
+- Distributed Tracing Console Plugin (Observe → Traces menu)
+- Logging Console Plugin (Observe → Logs menu)
+
+> **⚠️ Warning:** The observability stack may be shared by other applications. Only use `UNINSTALL_OBSERVABILITY=true` if you're certain no other workloads depend on it.
+
 ---
 
 ### Option 2: Install via Operator (Optional)
@@ -371,9 +395,28 @@ For production environments requiring OLM-managed lifecycle and automatic depend
 - Cluster-wide singleton deployment pattern required
 
 **Quick Install:**
-1. **Install CatalogSource:** `oc apply -f deploy/operator/catalog-source.yaml`
-2. **Install Operator:** OperatorHub → Search "AI Observability" → Install
-3. **Create CR:** Configure and create AIObservabilitySummarizer custom resource
+1. **Install CatalogSource:** 
+   ```bash
+   oc apply -f deploy/operator/catalog-source.yaml
+   # Verify ready: oc wait --for=condition=READY catalogsource/aiobs-operator-catalog -n openshift-marketplace --timeout=300s
+   ```
+
+2. **Create ai-observability namespace:**
+   ```bash
+   oc new-project ai-observability
+   ```
+
+3. **Install Operator:**
+   - OperatorHub → Search "AI Observability" → Install
+   - Installed Namespace: `openshift-operators`
+   - Installation mode: All namespaces on the cluster
+   - Click Install
+
+4. **Create AIObservabilitySummarizer CR:**
+   - Switch to `ai-observability` namespace (namespace dropdown)
+   - Installed Operators → AI Observability Summarizer
+   - Create AIObservabilitySummarizer
+   - Configure and click Create
 
 **What the Operator Provides:**
 - **Automatic dependency management**: OLM installs Cluster Observability, OpenTelemetry, Tempo, Logging, and Loki operators
@@ -387,21 +430,52 @@ For production environments requiring OLM-managed lifecycle and automatic depend
 
 **Development:**
 ```bash
-make operator-config  # Show current operator configuration
-make operator-deploy  # Build and push all operator images
+# Show current operator configuration
+make operator-config
+
+# Build and push all operator images (runs 6 steps in order):
+make operator-deploy
+
+# Or run individual steps:
+make operator-build           # 1. Build operator image
+make operator-push            # 2. Push operator image
+make operator-bundle-build    # 3. Build OLM bundle image
+make operator-bundle-push     # 4. Push OLM bundle image
+make operator-catalog-build   # 5. Build catalog image
+make operator-catalog-push    # 6. Push catalog image
 ```
 
 > **Note:** The operator and Helm installation methods are mutually exclusive. Choose one approach for your cluster.
 
+#### Uninstall (Operator)
+
+**Quick Uninstall:**
+
+1. **Delete the CR:**
+   ```bash
+   oc delete aiobservabilitysummarizer cluster-ai-observability -n ai-observability
+   ```
+
+2. **Uninstall Operator:**
+   ```bash
+   oc delete subscription aiobs-operator -n openshift-operators
+   oc delete csv -l operators.coreos.com/aiobs-operator.openshift-operators -n openshift-operators
+   ```
+
+3. **Delete CatalogSource:**
+   ```bash
+   oc delete catalogsource aiobs-operator-catalog -n openshift-marketplace
+   ```
+
+4. **Optional - Uninstall dependency operators** (if no longer needed):
+   ```bash
+   # Check if other apps use these operators before removing
+   oc get csv -n openshift-operators | grep -E "cluster-observability|tempo|loki|logging|opentelemetry"
+   ```
+
+**📚 Complete Uninstall Guide:** See [docs/OPERATOR.md](docs/OPERATOR.md#uninstallation) for detailed cleanup verification steps.
+
 ---
-
-## Delete
-
-Uninstall the deployment from the namespace:
-
-```bash
-make uninstall NAMESPACE=your-namespace
-```
 
 ## References
 
