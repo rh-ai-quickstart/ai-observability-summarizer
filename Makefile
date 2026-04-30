@@ -14,7 +14,7 @@ MAKEFLAGS += --no-print-directory
 REGISTRY ?= quay.io
 ORG ?= ecosystem-appeng
 IMAGE_PREFIX ?= aiobs
-VERSION ?= 6.1.1
+VERSION ?= 6.2.1
 PLATFORM ?= linux/amd64
 DEV_MODE ?= false
 USE_LLAMA_STACK_OPERATOR ?= false
@@ -119,10 +119,12 @@ DEFAULT_LLM_PORT_AND_PATH := :8080/v1
 
 OPERATOR_MANAGER_SCRIPT := scripts/operator-manager.sh
 
-# Auto-detect RHOAI version from the cluster when not explicitly set on the command line.
+# Auto-detect RHOAI version from the cluster when not already set.
 # RHOAI_VERSION is NOT declared with ?= to avoid corruption by the version-bump workflow.
-# $(origin RHOAI_VERSION) is "undefined" when not set, "command line" when explicit.
-ifneq ($(origin RHOAI_VERSION),command line)
+# $(origin RHOAI_VERSION) is "undefined" when not set, "command line" when explicit,
+# "environment" when inherited from parent make via export.
+# Only auto-detect if undefined to avoid re-detection in recursive make calls.
+ifeq ($(origin RHOAI_VERSION),undefined)
   _RHOAI_CSV := $(shell oc get csv -n redhat-ods-operator -l operators.coreos.com/rhods-operator.redhat-ods-operator \
     -o jsonpath='{.items[0].spec.version}' 2>/dev/null)
   ifneq ($(findstring 3.,$(_RHOAI_CSV)),)
@@ -145,11 +147,11 @@ ifeq ($(origin USE_LLAMA_STACK_OPERATOR),file)
 ifneq ($(USE_LLAMA_STACK_OPERATOR),true)
   _LLAMA_OP_STATE := $(shell oc get datasciencecluster -o jsonpath='{.items[0].spec.components.llamastackoperator.managementState}' 2>/dev/null)
   ifeq ($(_LLAMA_OP_STATE),Managed)
-    $(info ℹ️  Auto-detected LlamaStack operator (Managed) in DataScienceCluster — switching to operator mode (USE_LLAMA_STACK_OPERATOR=true))
-    $(info    To use architectural charts instead, pass USE_LLAMA_STACK_OPERATOR=false explicitly.)
+    $(info ℹ️  Auto-detected LlamaStack operator (Managed) in DataScienceCluster — switching to LlamaStack operator mode (USE_LLAMA_STACK_OPERATOR=true))
+    $(info    To use LlamaStack helm charts deployment mode instead, pass USE_LLAMA_STACK_OPERATOR=false explicitly.)
     USE_LLAMA_STACK_OPERATOR := true
   else
-    $(info ℹ️  LlamaStack operator not enabled — using architectural Helm charts for LlamaStack.)
+    $(info ℹ️  LlamaStack operator not enabled — using LlamaStack Helm charts deployment mode.)
     $(info    To enable the operator, run: make enable-llamastack-operator)
   endif
 endif
@@ -161,11 +163,10 @@ export USE_LLAMA_STACK_OPERATOR
 export RHOAI_VERSION
 
 # LlamaStack deployment mode: Helm chart (default) vs Operator
+# When USE_LLAMA_STACK_OPERATOR=true, the chart deploys via LlamaStackDistribution CRD
 ifeq ($(USE_LLAMA_STACK_OPERATOR),true)
-  LLAMA_STACK_CHART_PREFIX := llama-stack-instance
   LLAMA_STACK_SVC_NAME := llamastack-service
 else
-  LLAMA_STACK_CHART_PREFIX := llama-stack
   LLAMA_STACK_SVC_NAME := llamastack
 endif
 
@@ -246,9 +247,9 @@ helm_llama_stack_args = \
     $(if $(SAFETY_URL),--set global.models.$(SAFETY).url='$(SAFETY_URL)',) \
     $(if $(LLM_API_TOKEN),--set global.models.$(LLM).apiToken='$(LLM_API_TOKEN)',) \
     $(if $(SAFETY_API_TOKEN),--set global.models.$(SAFETY).apiToken='$(SAFETY_API_TOKEN)',) \
-    $(if $(LLAMA_STACK_ENV),--set-json $(LLAMA_STACK_CHART_PREFIX).secrets='$(LLAMA_STACK_ENV)',) \
-    $(if $(RAW_DEPLOYMENT),--set $(LLAMA_STACK_CHART_PREFIX).rawDeploymentMode=$(RAW_DEPLOYMENT),) \
-    $(if $(filter true,$(USE_LLAMA_STACK_OPERATOR)),--set llama-stack.enabled=false --set llama-stack-instance.enabled=true,)
+    $(if $(LLAMA_STACK_ENV),--set-json llama-stack.secrets='$(LLAMA_STACK_ENV)',) \
+    $(if $(RAW_DEPLOYMENT),--set llama-stack.rawDeploymentMode=$(RAW_DEPLOYMENT),) \
+    $(if $(filter true,$(USE_LLAMA_STACK_OPERATOR)),--set llama-stack.managedByOperator=true --set 'llama-stack.network.allowedFrom.namespaces[0]=$(NAMESPACE)',)
 
 helm_pgvector_args = \
     --set pgvector.secret.user=$(POSTGRES_USER) \
@@ -453,7 +454,7 @@ build-react-ui:
 	@echo "  → Installing yarn dependencies..."
 	@cd openshift-plugin && yarn install --frozen-lockfile
 	@echo "  → Building React UI assets..."
-	@cd openshift-plugin && yarn build:react-ui
+	@cd openshift-plugin && NODE_OPTIONS="--max-old-space-size=4096" yarn build:react-ui
 	@echo "  → Building container image..."
 	@$(BUILD_TOOL) buildx build --platform $(PLATFORM) \
 		-f openshift-plugin/Dockerfile.react-ui \
@@ -533,7 +534,7 @@ install-mcp-server: namespace
 			--set LLM_PREDICTOR=$(LLM)-predictor \
 			--set env.DEV_MODE=$(DEV_MODE) \
 			$(if $(MCP_SERVER_ROUTE_HOST),--set route.host='$(MCP_SERVER_ROUTE_HOST)',) \
-			$(if $(LLAMA_STACK_URL),--set llm.url='$(LLAMA_STACK_URL)',$(if $(filter true,$(USE_LLAMA_STACK_OPERATOR)),--set llm.url='http://$(LLAMA_STACK_SVC_NAME).$(NAMESPACE).svc.cluster.local:8321/v1/openai/v1',)) \
+			$(if $(LLAMA_STACK_URL),--set llm.url='$(LLAMA_STACK_URL)',$(if $(filter true,$(USE_LLAMA_STACK_OPERATOR)),--set llm.url='http://$(LLAMA_STACK_SVC_NAME).$(NAMESPACE).svc.cluster.local:8321/v1',)) \
 			$(if $(GPU_PREFIX_NVIDIA),--set env.GPU_METRICS_PREFIX_NVIDIA='$(GPU_PREFIX_NVIDIA)',) \
 			$(if $(GPU_PREFIX_INTEL),--set env.GPU_METRICS_PREFIX_INTEL='$(GPU_PREFIX_INTEL)',) \
 			$(if $(GPU_PREFIX_AMD),--set env.GPU_METRICS_PREFIX_AMD='$(GPU_PREFIX_AMD)',) \
@@ -547,7 +548,7 @@ install-mcp-server: namespace
 			--set LLM_PREDICTOR=$(LLM)-predictor \
 			--set env.DEV_MODE=$(DEV_MODE) \
 			$(if $(MCP_SERVER_ROUTE_HOST),--set route.host='$(MCP_SERVER_ROUTE_HOST)',) \
-			$(if $(LLAMA_STACK_URL),--set llm.url='$(LLAMA_STACK_URL)',$(if $(filter true,$(USE_LLAMA_STACK_OPERATOR)),--set llm.url='http://$(LLAMA_STACK_SVC_NAME).$(NAMESPACE).svc.cluster.local:8321/v1/openai/v1',)) \
+			$(if $(LLAMA_STACK_URL),--set llm.url='$(LLAMA_STACK_URL)',$(if $(filter true,$(USE_LLAMA_STACK_OPERATOR)),--set llm.url='http://$(LLAMA_STACK_SVC_NAME).$(NAMESPACE).svc.cluster.local:8321/v1',)) \
 			$(if $(GPU_PREFIX_NVIDIA),--set env.GPU_METRICS_PREFIX_NVIDIA='$(GPU_PREFIX_NVIDIA)',) \
 			$(if $(GPU_PREFIX_INTEL),--set env.GPU_METRICS_PREFIX_INTEL='$(GPU_PREFIX_INTEL)',) \
 			$(if $(GPU_PREFIX_AMD),--set env.GPU_METRICS_PREFIX_AMD='$(GPU_PREFIX_AMD)',) \
@@ -1516,6 +1517,23 @@ install-loki:
 		echo "→ Cleaning up any pre-existing Helm-owned ClusterRoleBindings/ServiceAccount..."; \
 		$(MAKE) cleanup-loki-clusterroles; \
 		echo "  ✅ Cleanup complete"; \
+		if helm list --all -n $(LOKI_NAMESPACE) 2>/dev/null | grep -q "^loki-stack[[:space:]]"; then \
+			LOKI_STATUS=$$(helm list --all -n $(LOKI_NAMESPACE) 2>/dev/null | awk '/^loki-stack[[:space:]]/{print $$8}'); \
+			echo "  → Found stale loki-stack release (status: $$LOKI_STATUS), removing before reinstall..."; \
+			helm uninstall loki-stack -n $(LOKI_NAMESPACE) 2>/dev/null || true; \
+			echo "  → Waiting for loki-stack release to be fully removed..."; \
+			for i in $$(seq 1 36); do \
+				if ! helm list --all -n $(LOKI_NAMESPACE) 2>/dev/null | grep -q "^loki-stack[[:space:]]"; then \
+					echo "  → loki-stack release removed"; \
+					break; \
+				fi; \
+				if [ $$i -eq 36 ]; then \
+					echo "  ⚠️  Release stuck in '$$LOKI_STATUS' state, force-deleting Helm secret..."; \
+					oc delete secret -n $(LOKI_NAMESPACE) -l "owner=helm,name=loki-stack" 2>/dev/null || true; \
+				fi; \
+				sleep 5; \
+			done; \
+		fi; \
 		echo "→ Installing loki-stack helm chart"; \
 		COLLECTOR_CREATE=$$($(check_collector_sa_and_get_flag)); \
 		DEFAULT_SC=$$(oc get sc -o jsonpath='{.items[?(@.metadata.annotations.storageclass\.kubernetes\.io/is-default-class=="true")].metadata.name}' 2>/dev/null); \

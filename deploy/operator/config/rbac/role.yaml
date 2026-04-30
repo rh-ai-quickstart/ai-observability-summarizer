@@ -206,4 +206,14 @@ rules:
   verbs:
   - "*"
 
+##
+## LlamaStack Operator CRDs (for managedByOperator=true deployments)
+##
+- apiGroups:
+  - llamastack.io
+  resources:
+  - llamastackdistributions
+  verbs:
+  - "*"
+
 #+kubebuilder:scaffold:rules

@@ -42,6 +42,14 @@ route:
   tls:
     termination: reencrypt
 
+# Loki integration
+loki:
+  # Loki chart release name, used to construct the tenant-logs ClusterRole name.
+  # Format: {{ lokiNamespace }}-{{ releaseName }}-tenant-logs
+  # Standalone (make install): loki release name is "loki-stack" → openshift-logging-loki-stack-tenant-logs
+  # Operator (umbrella chart): set to "" to use .Release.Name → openshift-logging-<release>-loki-stack-tenant-logs
+  releaseName: "loki-stack"
+
 # Additional labels and annotations
 commonLabels: {}
 commonAnnotations: {}

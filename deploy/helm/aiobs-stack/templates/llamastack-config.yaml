@@ -1,0 +1,9 @@
+{{- $ragValues := .Values.rag | default dict -}}
+{{- $llamaStackValues := index $ragValues "llama-stack" | default dict -}}
+{{- $managedByOp := $llamaStackValues.managedByOperator | default false -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-llamastack-config
+data:
+  LLAMA_STACK_URL: "http://{{ ternary "llamastack-service" "llamastack" $managedByOp }}.{{ .Release.Namespace }}.svc.cluster.local:8321/v1"
