@@ -17,7 +17,6 @@ Create an interactive dashboard to analyze AI model performance and OpenShift cl
 3. [Deploy](#deploy)
    - [Option 1: Install via Helm](#option-1-install-via-helm-recommended)
    - [Option 2: Install via Operator](#option-2-install-via-operator-optional)
-   - [Quick Start - OpenShift Deployment](#quick-start---openshift-deployment)
    - [Quick Start - Local Development](#quick-start---local-development)
    - [Usage](#usage)
    - [Configuration](#configuration)
