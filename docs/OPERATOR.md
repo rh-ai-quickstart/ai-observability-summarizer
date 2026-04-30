@@ -9,6 +9,8 @@ A Helm-based Kubernetes Operator for deploying the complete AI Observability sta
 - OpenShift 4.18+
 - Cluster admin access
 - **OpenShift AI (RHOAI) Operator**: Required only if enabling RAG with local LLM deployment
+  - **RHOAI 3.x**: Required for LlamaStack operator mode (`managedByOperator`)
+  - **RHOAI 2.x**: Sufficient for Helm chart deployment mode
   - Provides KServe/InferenceService support for model serving
   - Install from OperatorHub before installing this operator if using RAG
   - See [OpenShift AI documentation](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed) for installation
