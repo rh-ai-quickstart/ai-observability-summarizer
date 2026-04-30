@@ -23,7 +23,7 @@ mcpServer:
   enabled: true  # Always deployed
   image:
     repository: quay.io/ecosystem-appeng/aiobs-mcp-server
-    tag: 6.1.3
+    tag: 6.2.0
     pullPolicy: Always
   # NOTE: DEV_MODE env var is automatically set from global.devMode by mcp-server chart
   rbac:
@@ -38,7 +38,7 @@ consolePlugin:
     description: "AI Observability Plugin"
     image:
       repository: quay.io/ecosystem-appeng/aiobs-console-plugin
-      tag: 6.1.3
+      tag: 6.2.0
     imagePullPolicy: Always
     replicas: 2
     port: 9443
