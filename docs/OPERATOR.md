@@ -391,10 +391,10 @@ oc get pvc -n ai-observability | grep pgvector
 Delete PVCs if no longer needed (data will be lost):
 ```bash
 # Example: Delete MinIO PVCs
-oc delete pvc -n observability-hub -l app.kubernetes.io/name=minio
+oc delete pvc -n observability-hub -l app.kubernetes.io/name=minio-observability-storage
 
 # Example: Delete Loki PVCs
-oc delete pvc -n openshift-logging -l app.kubernetes.io/name=loki
+oc delete pvc -n openshift-logging -l app.kubernetes.io/name=loki-stack
 ```
 
 **4. Verify operator is removed:**
