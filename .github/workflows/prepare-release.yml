@@ -194,6 +194,7 @@ jobs:
       registry: quay.io
       org: ecosystem-appeng
       push_changes: true
+      target_branch: ${{ inputs.target_branch }}
     secrets: inherit
 
   create-pr:
