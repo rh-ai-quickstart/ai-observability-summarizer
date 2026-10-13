@@ -17,12 +17,12 @@ Components deployed:
 - RAG Stack: {{ .Values.rag.enabled }}
 - Alerting: {{ .Values.alerting.enabled }}
 
-Infrastructure components (always installed):
+Infrastructure components (enabled by default):
 - TempoStack
 - LokiStack
 - OpenTelemetry Collector
 - Korrel8r
-- MinIO
+- aws-compatible-storage (S4)
 
 To view the AIObservabilitySummarizer resource:
   oc get aiobservabilitysummarizer -n {{ .Release.Namespace }}

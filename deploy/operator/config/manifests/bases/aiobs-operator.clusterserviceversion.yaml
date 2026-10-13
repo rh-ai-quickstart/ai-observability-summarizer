@@ -185,8 +185,8 @@ spec:
     **OpenShift Console Plugin**: Native integration with OpenShift Console\n\n###
     Optional Features\n\n- **Alerting**: Enable automated alert analysis and summarization\n-
     **RAG Stack**: Deploy LLM infrastructure (requires GPU resources)\n- **Shared
-    Infrastructure**: Deploy Tempo, OTEL Collector, Korrel8r, MinIO (disable if already
-    installed)\n\n### Quick Start\n\n1. Create namespace: `oc new-project ai-observability`\n2.
+    Infrastructure**: Deploy Tempo, Loki, OTEL Collector, Korrel8r, and S4 in the
+    configured namespaces\n\n### Quick Start\n\n1. Create namespace: `oc new-project ai-observability`\n2.
     Install the operator from OperatorHub into `ai-observability`\n3. Go to **Installed
     Operators** → **AI Observability Summarizer**\n4. Click **Create AIObservabilitySummarizer**\n5.
     Toggle optional features as needed\n6. Click **Create**\n\n### Prerequisites\n\n-

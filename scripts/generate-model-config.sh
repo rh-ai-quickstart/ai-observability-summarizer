@@ -60,36 +60,44 @@ generate_model_config() {
       echo -e "${YELLOW}⚠️  Warning: Failed to update Helm dependencies, attempting to continue...${NC}"
   fi
 
-  echo -e "${BLUE}   → Running list-models to find available models...${NC}"
-  # Run helm template to get available models
-  (cd "$DEPLOY_HELM_DIR" && helm template dummy-release "$RAG_CHART" --set llm-service._debugListModels=true 2>/dev/null | grep "^model:" > "${GEN_MODEL_CONFIG_PREFIX}-list_models_output.txt")
+  if [ -n "${LLM_URL:-}" ] && [ -n "${LLM_ID:-}" ]; then
+      # External OpenAI-compatible endpoints can expose models that are not in
+      # the local llm-service catalog. Use the supplied model ID directly.
+      MODEL_NAME="$LLM"
+      MODEL_ID="$LLM_ID"
+      echo -e "${BLUE}   → Using external model ID supplied through LLM_ID${NC}"
+  else
+      echo -e "${BLUE}   → Running list-models to find available models...${NC}"
+      # Run helm template to get available models
+      (cd "$DEPLOY_HELM_DIR" && helm template dummy-release "$RAG_CHART" --set llm-service._debugListModels=true 2>/dev/null | grep "^model:" > "${GEN_MODEL_CONFIG_PREFIX}-list_models_output.txt")
 
-  if [ ! -s "${GEN_MODEL_CONFIG_PREFIX}-list_models_output.txt" ]; then
-      echo -e "${RED}❌ Failed to get list of available models${NC}"
-      return 1
+      if [ ! -s "${GEN_MODEL_CONFIG_PREFIX}-list_models_output.txt" ]; then
+          echo -e "${RED}❌ Failed to get list of available models${NC}"
+          return 1
+      fi
+
+      echo -e "${BLUE}     → list-models output saved to ${GEN_MODEL_CONFIG_PREFIX}-list_models_output.txt${NC}"
+
+      # Find the model line matching the LLM
+      echo -e "${BLUE}     → Searching for model: $LLM${NC}"
+      MODEL_LINE=$(grep "model: $LLM (" "${GEN_MODEL_CONFIG_PREFIX}-list_models_output.txt" || echo "")
+
+      if [ -z "$MODEL_LINE" ]; then
+          echo -e "${RED}❌ Error: Model '$LLM' not found in available models${NC}"
+          echo -e "${YELLOW}→ Available models:${NC}"
+          cat "${GEN_MODEL_CONFIG_PREFIX}-list_models_output.txt"
+          return 1
+      fi
+
+      echo -e "${BLUE}     → Found MODEL_LINE: $MODEL_LINE${NC}"
+
+      # Extract MODEL_NAME and MODEL_ID
+      echo -e "${BLUE}   → Extracting MODEL_NAME and MODEL_ID from MODEL_LINE${NC}"
+      MODEL_NAME=$(echo "$MODEL_LINE" | sed 's/model: \([^(]*\)(.*)/\1/' | tr -d '[:space:]')
+      MODEL_ID=$(echo "$MODEL_LINE" | sed 's/model: [^(]*(\([^)]*\))/\1/' | tr -d '[:space:]')
+
+      echo -e "${BLUE}     → Extracted MODEL_NAME: $MODEL_NAME, MODEL_ID: $MODEL_ID${NC}"
   fi
-
-  echo -e "${BLUE}     → list-models output saved to ${GEN_MODEL_CONFIG_PREFIX}-list_models_output.txt${NC}"
-
-  # Find the model line matching the LLM
-  echo -e "${BLUE}     → Searching for model: $LLM${NC}"
-  MODEL_LINE=$(grep "model: $LLM (" "${GEN_MODEL_CONFIG_PREFIX}-list_models_output.txt" || echo "")
-
-  if [ -z "$MODEL_LINE" ]; then
-      echo -e "${RED}❌ Error: Model '$LLM' not found in available models${NC}"
-      echo -e "${YELLOW}→ Available models:${NC}"
-      cat "${GEN_MODEL_CONFIG_PREFIX}-list_models_output.txt"
-      return 1
-  fi
-
-  echo -e "${BLUE}     → Found MODEL_LINE: $MODEL_LINE${NC}"
-
-  # Extract MODEL_NAME and MODEL_ID
-  echo -e "${BLUE}   → Extracting MODEL_NAME and MODEL_ID from MODEL_LINE${NC}"
-  MODEL_NAME=$(echo "$MODEL_LINE" | sed 's/model: \([^(]*\)(.*)/\1/' | tr -d '[:space:]')
-  MODEL_ID=$(echo "$MODEL_LINE" | sed 's/model: [^(]*(\([^)]*\))/\1/' | tr -d '[:space:]')
-
-  echo -e "${BLUE}     → Extracted MODEL_NAME: $MODEL_NAME, MODEL_ID: $MODEL_ID${NC}"
 
   # Generate new model config from template
   echo -e "${BLUE}   → Generating JSON configuration from template...${NC}"

@@ -31,6 +31,23 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end }}
 
+{{/* Parent-chart S4 helpers; fullnameOverride is fixed to "s4" in values.yaml. */}}
+{{- define "s4.fullname" -}}
+s4
+{{- end }}
+
+{{- define "s4.secretName" -}}
+{{- printf "%s-credentials" (include "s4.fullname" .) }}
+{{- end }}
+
+{{- define "s4.apiPort" -}}
+{{- index .Values "aws-compatible-storage" "service" "s3Port" | default 7480 -}}
+{{- end }}
+
+{{- define "s4.uiPort" -}}
+{{- index .Values "aws-compatible-storage" "service" "port" | default 5000 -}}
+{{- end }}
+
 {{/*
 Validation helpers
 */}}

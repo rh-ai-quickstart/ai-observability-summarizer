@@ -31,35 +31,9 @@ This document provides solutions to common issues encountered in the OpenShift A
 
 ---
 
-### 2. MinIO Storage Crisis (99% Full)
+### 2. Historical MinIO storage incident
 
-**Symptoms**:
-- MinIO storage at 99% capacity
-- `XMinioStorageFull` errors
-- Ingester failures
-
-**Root Cause**: High-volume log streams (especially audit logs) consuming excessive storage.
-
-**Immediate Actions**:
-```bash
-# 1. Disable audit log collection
-oc edit clusterlogforwarder -n openshift-logging
-# Set audit.enabled: false
-
-# 2. Check storage usage
-oc exec -n observability-hub minio-observability-storage-0 -- df -h /data
-
-# 3. Manually clean up audit logs if necessary
-oc exec -n observability-hub minio-observability-storage-0 -- rm -rf /data/loki/audit
-```
-
-**Long-term Solutions**:
-- Reduce retention policies for high-volume tenants
-- Implement log filtering for infrastructure logs
-- Monitor storage usage proactively
-- Set up alerts for storage capacity
-
-**Example Result**: Storage usage can drop from 99% to 5% after cleanup.
+Earlier deployments used MinIO and could exhaust storage when high-volume audit logs were retained. Current deployments use S4 in `ai-observability`. Check its PVC capacity and Loki retention settings; do not use MinIO pod or filesystem cleanup commands against S4.
 
 ---
 
@@ -177,6 +151,14 @@ oc patch console.operator.openshift.io cluster --type=json \
 ---
 
 ## Observability Stack Issues
+
+### S4 HTTP 500 or `Too many open files` during S3 writes
+
+The pinned S4 0.3.2 image starts RGW under Supervisor. Its stock config leaves the soft file-descriptor limit at 1024, which can cause Tempo PUTs to fail even when S4's UI and bucket listings are healthy. This quickstart mounts `s4-supervisord-config` with `minfds=65536`, and the bucket Job verifies temporary write/read/delete operations in both observability buckets.
+
+For a standalone Helm install, rerun `make install-s4` with the same current `S4_ACCESS_KEY_ID`, `S4_SECRET_ACCESS_KEY`, and UI credentials; the Makefile applies the ConfigMap before the S4 upgrade. For an operator install, upgrade the umbrella chart so it creates the ConfigMap and rolls the S4 Deployment. Check the new RGW process limit and bucket Job result after the pod restarts. The ConfigMap mount uses `subPath`, so editing it later requires another S4 pod rollout.
+
+---
 
 ### 1. No Traces Appearing
 
@@ -330,11 +312,11 @@ oc get secret collector-token -n openshift-logging -o yaml
 ### Storage Check
 
 ```bash
-# MinIO storage usage
-oc exec -n observability-hub minio-observability-storage-0 -- df -h /data
+# S4 storage claim and capacity
+oc get pvc s4-data -n ai-observability
 
-# MinIO bucket contents
-oc exec -n observability-hub minio-observability-storage-0 -- ls -la /data/loki/
+# S4 pod status
+oc get pods -n ai-observability -l app=s4
 
 # Ingester WAL size
 oc exec -n openshift-logging logging-loki-ingester-0 -- du -sh /tmp/wal

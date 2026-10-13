@@ -251,8 +251,8 @@ oc port-forward svc/mcp-server 8085:8085 -n <DEFAULT_NAMESPACE>
 ### Observability Stack
 - `make install-observability-stack` - Install complete observability stack
 - `make uninstall-observability-stack` - Uninstall complete observability stack
-- `make install-minio` - Install MinIO storage only
-- `make uninstall-minio` - Uninstall MinIO storage only
+- `make install-s4` - Install S4 storage in `ai-observability`
+- `make uninstall-s4` - Uninstall S4 and its PVC (stored data is deleted)
 - `make install-observability` - Install TempoStack + OTEL only
 - `make uninstall-observability` - Uninstall TempoStack + OTEL only
 - `make setup-tracing` - Enable auto-instrumentation
