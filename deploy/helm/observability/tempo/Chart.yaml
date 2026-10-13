@@ -1,6 +1,6 @@
 apiVersion: v2
 name: tempo-stack
-description: A Helm chart for TempoStack with MinIO storage on OpenShift
+description: A Helm chart for TempoStack with S4-backed S3 storage on OpenShift
 type: application
 version: 1.0.0
 appVersion: "latest"
@@ -9,7 +9,7 @@ keywords:
   - tracing
   - observability
   - opentelemetry
-  - minio
+  - s3
   - storage
 home: https://grafana.com/oss/tempo/
 sources:

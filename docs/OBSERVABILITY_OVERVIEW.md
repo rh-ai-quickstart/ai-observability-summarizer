@@ -9,45 +9,27 @@ This document provides a complete overview of the observability components, thei
 
 ## Architecture
 
+```mermaid
+flowchart LR
+  Apps["Instrumented applications"] -->|OTLP :4318| OTEL
+  subgraph hub["observability-hub"]
+    OTEL["OpenTelemetry Collector"] --> Tempo["TempoStack"]
+  end
+  subgraph logging["openshift-logging"]
+    Loki["LokiStack"]
+  end
+  subgraph storage["ai-observability"]
+    S4["aws-compatible-storage (S4)<br/>S3 :7480"]
+  end
+  Tempo -->|tempo bucket| S4
+  Loki -->|loki bucket| S4
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        Observability Stack                      │
-├─────────────────────────────────────────────────────────────────┤
-│  Application Namespace (e.g., test)                             │
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐  │
-│  │   Python Apps   │  │   Python Apps   │  │   Python Apps   │  │
-│  │      (ui)       │  │  (mcp-server)   │  │   (alerting)    │  │
-│  │                 │  │                 │  │                 │  │
-│  │  ┌───────────┐  │  │  ┌───────────┐  │  │  ┌───────────┐  │  │
-│  │  │OTEL Init  │  │  │  │OTEL Init  │  │  │  │OTEL Init  │  │  │
-│  │  │Container  │  │  │  │Container  │  │  │  │Container  │  │  │
-│  └──┴───────────┴──┴──┴──┴───────────┴──┴──┴──┴───────────┴──┴──┘
-│           │                    │                    │           │
-│           └────────────────────┼────────────────────┘           │
-│                                │                                │
-│                                ▼                                │
-│  ┌─────────────────────────────────────────────────────────────┐│
-│  │              OpenTelemetry Collector                        ││
-│  │  (otel-collector-collector.observability-hub.svc)           ││
-│  └─────────────────────────────────────────────────────────────┘│
-│                                │                                │
-│                                ▼                                │
-│  ┌─────────────────────────────────────────────────────────────┐│
-│  │                    TempoStack                               ││
-│  │  (tempo-tempostack-gateway.observability-hub.svc)           ││
-│  └─────────────────────────────────────────────────────────────┘│
-│                                │                                │
-│                                ▼                                │
-│  ┌─────────────────────────────────────────────────────────────┐│
-│  │                      MinIO                                  ││
-│  │  (minio-observability-storage.observability-hub.svc)        ││
-│  └─────────────────────────────────────────────────────────────┘│
-└─────────────────────────────────────────────────────────────────┘
-```
+
+Tempo and Loki use in-cluster S3 endpoints and namespace-local credential Secrets. The S4 Web UI Route is enabled; its S3 API Route is disabled.
 
 ## Components
 
-- **MinIO**: Object storage for traces/logs.
+- **aws-compatible-storage (S4)**: S3-compatible object storage for traces/logs, hosted in `ai-observability`.
 - **TempoStack**: Trace storage and query backend.
 - **OpenTelemetry Collector**: Trace ingestion and processing.
 - **Auto-instrumentation**: Injects tracing libraries into app pods.
@@ -75,7 +57,7 @@ This document provides a complete overview of the observability components, thei
 4. **Trace Storage**:
 
    - Tempo gateway receives traces and distributes them
-   - Tempo ingester stores traces in MinIO object storage
+   - Tempo ingester stores traces in the S4 `tempo` bucket over port 7480
    - Tempo compactor optimizes storage and removes old traces
 
 5. **Trace Querying**:
@@ -97,8 +79,8 @@ make install-observability-stack NAMESPACE=your-namespace
 Or install individual components:
 
 ```bash
-# Install MinIO storage
-make install-minio
+# Install S4 storage in ai-observability and create the tempo/loki buckets
+make install-s4
 
 # Install TempoStack and OpenTelemetry Collector
 make install-observability
@@ -141,8 +123,8 @@ oc logs -n observability-hub deployment/otel-collector-collector --tail=20
 # Check Tempo gateway logs
 oc logs -n observability-hub deployment/tempo-tempostack-gateway --tail=20
 
-# Check MinIO storage usage
-oc exec -n observability-hub minio-observability-storage-0 -- df -h /data
+# Check S4 pod and PVC status
+oc get pods,pvc -n ai-observability | grep s4
 
 # Restart instrumented application
 oc rollout restart deployment/<deployment-name> -n your-namespace

@@ -1,6 +1,5 @@
 # Default values for loki-stack
-# This configuration reflects the production-tested setup that resolved:
-# - MinIO storage crisis (99% -> 69% usage)
+# This configuration reflects the tested setup that resolved:
 # - Ingester ring issues (2 replicas for HA)
 # - Namespace filtering for sustainable log volume
 # - Optimized retention policies
@@ -65,22 +64,15 @@ lokiStack:
     compactor:
       replicas: 1
 
-# MinIO storage configuration (reuses existing shared MinIO)
-minio:
-  # Reference to existing shared MinIO service
-  shared:
-    serviceName: minio-observability-storage
-    namespace: observability-hub
-    ports:
-      api: 9000
-      console: 9001
-
-  # S3 configuration for Loki (matches existing Tempo credentials)
+s4:
+  # S4 is in ai-observability; Loki is in openshift-logging.
+  secret:
+    create: true # Umbrella chart creates this mirror from its S4 values instead.
   s3:
-    accessKeyId: "admin"
-    accessKeySecret: "minio123"
+    accessKeyId: "s4admin"
+    secretAccessKey: "s4secret"
     bucket: loki
-    endpoint: http://minio-observability-storage.observability-hub.svc.cluster.local:9000
+    endpoint: http://s4.ai-observability.svc.cluster.local:7480
 
 # UI Plugin configuration for OpenShift Console integration
 uiPlugin:

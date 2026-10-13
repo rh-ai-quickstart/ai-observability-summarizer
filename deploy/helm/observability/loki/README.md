@@ -1,19 +1,17 @@
-# Loki Deployment Guide - Production Tested Configuration
+# Loki Deployment Guide
 
 ## Overview
 
-This Helm chart contains the **production-tested configuration** that successfully resolved multiple critical issues encountered during deployment in October 2025. This guide ensures you can replicate the exact working setup.
-
-**✅ NEW in v2.1**: The Helm chart is now **complete and self-contained**, automatically creating all necessary components including LokiStack deployment, RBAC, and log forwarding configuration. No manual setup steps required!
+This Helm chart creates the LokiStack, log forwarding configuration, and required RBAC. Loki stores objects in aws-compatible-storage (S4), which runs in `ai-observability`; Loki reaches it through the S3 service endpoint on port `7480`.
 
 ## ✅ Current Working Configuration
 
 ### LokiStack Configuration
 
-- **Size**: `1x.small`
-- **Ingester Replicas**: `2` (CRITICAL - prevents ring coordination issues)
-- **Storage**: Shared MinIO instance in `observability-hub` namespace (cross-namespace access from `openshift-logging`)
-- **Schema Version**: `v13` (updated from v12)
+- **Size**: `1x.demo` by default (adjust for production load)
+- **Ingester Replicas**: `1` by default (use at least 2 for high availability)
+- **Storage**: S4 `loki` bucket at `http://s4.ai-observability.svc.cluster.local:7480`
+- **Schema Version**: managed by the Loki Operator; check its status after installation
 
 ### Authentication & Security
 
@@ -53,8 +51,8 @@ All prerequisites are automatically installed by the `make install` command:
 
 1. **OpenShift Logging Operator** - Provides log collection infrastructure (auto-installed)
 2. **Loki Operator** - Provides LokiStack CRD (auto-installed)
-3. **Shared MinIO instance** - Object storage backend (auto-installed)
-4. **Sufficient storage** - recommend 100GB+ for MinIO
+3. **S4 storage** - Installed in `ai-observability` by the parent chart or `make install-s4`
+4. **Sufficient storage** - S4 is configured with a 10Gi PVC by default; size it for expected log volume and retention
 
 **Note**: Collector service account and RBAC are intelligently managed by the Makefile and Helm chart.
 
@@ -78,7 +76,7 @@ All prerequisites are automatically installed by the `make install` command:
 - ✅ Works correctly on both fresh installs and reinstalls
 - ✅ No manual ServiceAccount deletion required
 - ✅ ClusterRoles always match the current operator version requirements
-- ✅ Zero downtime during upgrades
+- ✅ Existing Helm releases are reconciled on repeat installs without uninstalling Loki
 
 **No manual intervention required** - the installation handles all scenarios automatically!
 
@@ -87,12 +85,12 @@ All prerequisites are automatically installed by the `make install` command:
 The easiest way to install Loki is using the integrated Makefile:
 
 ```bash
-# Install complete observability stack (including Loki)
-make install NAMESPACE=your-namespace
+# Install complete observability stack (including S4 and Loki)
+make install-observability-stack NAMESPACE=your-namespace
 
 # This automatically installs:
 # - All required operators (Logging + Loki + Tempo + OpenTelemetry + Cluster Observability)
-# - MinIO storage backend with loki bucket
+# - S4 storage backend with the loki bucket
 # - TempoStack for traces
 # - LokiStack for logs
 # - OpenTelemetry Collector
@@ -111,17 +109,17 @@ If you need to install Loki separately:
 make install-logging-operator
 make install-loki-operator
 
-# 2. Install MinIO (if not already installed)
-make install-minio
+# 2. Install S4 (if not already installed)
+make install-s4
 
 # 3. Install LokiStack
 make install-loki
 
 # The Helm chart automatically creates:
-# - LokiStack instance with MinIO storage
+# - LokiStack instance configured for S4 storage
 # - Collector service account and RBAC in openshift-logging namespace
 # - ClusterLogForwarder for log collection
-# - MinIO credentials secret
+# - Loki S3 credentials secret
 
 # Wait for LokiStack to be ready
 kubectl wait --for=condition=Ready lokistack/logging-loki -n openshift-logging --timeout=600s
@@ -146,8 +144,8 @@ kubectl get pods -n openshift-logging | grep forwarder
 ### Monitor Storage Usage
 
 ```bash
-# Check MinIO storage usage (should be < 80%)
-kubectl exec -n observability-hub minio-observability-storage-0 -- df -h | grep "/data"
+# Check S4 storage PVC
+oc get pvc s4-data -n ai-observability
 
 # Monitor ingester status
 kubectl get pods -n openshift-logging | grep ingester
@@ -252,7 +250,7 @@ volumeMounts:
 
 ### Key Metrics to Monitor
 
-1. **Storage Usage**: Keep MinIO below 80% capacity
+1. **Storage Usage**: Monitor S4 PVC usage against its requested capacity
 2. **Ingester Health**: Both ingesters should be `1/1 Running`
 3. **Log Ingestion Rate**: Monitor per-tenant rates
 4. **ClusterLogForwarder Status**: Should be `Ready: True`
@@ -261,7 +259,7 @@ volumeMounts:
 
 ```bash
 # Weekly storage check
-kubectl exec -n observability-hub minio-observability-storage-0 -- df -h
+oc get pvc s4-data -n ai-observability
 
 # Check for failed pods
 kubectl get pods -n openshift-logging | grep -v Running
@@ -272,28 +270,9 @@ kubectl get clusterlogforwarder -n openshift-logging -o yaml | grep -A 5 "condit
 
 ## 🚨 Critical Issues Encountered & Solutions
 
-### Issue 1: Storage Crisis - MinIO 99% Full
+### Historical note: former MinIO storage incident
 
-**Problem**: MinIO storage reached 99% capacity, causing all ingesters to fail with `XMinioStorageFull` errors.
-
-**Root Cause**: Audit logs consumed 93GB in 2 days (96% of total storage).
-
-**Solution**:
-
-1. **Immediate**: Manually deleted audit log directory from MinIO
-2. **Temporary**: Disabled audit log collection
-3. **Long-term**: Reduced retention policies across all tenants
-4. **Result**: Storage usage dropped from 99% to 5%, then stabilized at ~18%
-
-**Prevention**:
-
-```bash
-# Monitor storage regularly
-kubectl exec -n observability-hub minio-observability-storage-0 -- df -h | grep "/data"
-
-# Keep audit logs disabled unless absolutely necessary
-# If enabled, use very short retention (1 day max)
-```
+An earlier deployment stored Loki data on MinIO and exhausted its storage with high-volume audit logs. New deployments use S4 in `ai-observability`; do not use the old MinIO pod or filesystem commands against S4.
 
 ### Issue 2: Ingester Ring Coordination Failures
 
@@ -320,32 +299,37 @@ lokiStack:
       replicas: 2 # CRITICAL - never use 1 replica
 ```
 
-### Issue 3: Ingester Stuck on WAL Recovery
+### Issue 3: Full WAL or Slow Ingester Recovery
 
-**Problem**: After storage crisis, ingester-1 was stuck "recovering from checkpoint" with 87GB of WAL data.
-
-**Symptoms**:
-
-- Ingester showing `0/1 Running` for hours
-- Logs: "recovering from checkpoint"
-- Readiness probe failing
-
-**Solution**:
-
-1. **Deleted the problematic ingester pod**
-2. **Deleted the WAL PVC** to clear checkpoint data
-3. **Allowed fresh PVC creation** on pod restart
-4. **Result**: Ingester started cleanly in seconds
-
-**Prevention**:
+The ingester WAL uses a separate PVC from S4. A full WAL can make Vector receive
+HTTP 500 while the ingester still reports Ready. Loki may log checkpoint writes
+failing with `no space left on device` and reject pushes with the misleading
+`Ingester is shutting down` message. Check the WAL filesystem before changing
+the S4 bucket or credentials.
 
 ```bash
-# If ingester stuck on recovery, check WAL size
-kubectl exec logging-loki-ingester-X -n openshift-logging -- du -sh /tmp/wal
-
-# If > 10GB, consider clearing WAL PVC
-kubectl delete pvc wal-logging-loki-ingester-X -n openshift-logging
+oc -n openshift-logging get pvc wal-logging-loki-ingester-0
+oc -n openshift-logging exec logging-loki-ingester-0 -- df -h /tmp/wal
+oc -n openshift-logging logs logging-loki-ingester-0 --tail=100
 ```
+
+For a StorageClass that permits expansion, increase the WAL PVC to a capacity
+appropriate for the log rate, then wait for its reported capacity to grow. The
+`1x.demo` profile can create a 10Gi WAL PVC; 30Gi restored headroom in one
+deployment, but size this for your cluster.
+
+```bash
+oc -n openshift-logging patch pvc wal-logging-loki-ingester-0 \
+  --type merge -p '{"spec":{"resources":{"requests":{"storage":"30Gi"}}}}'
+oc -n openshift-logging get pvc wal-logging-loki-ingester-0 -w
+# Only if the PVC reports FileSystemResizePending:
+oc -n openshift-logging rollout restart statefulset/logging-loki-ingester
+```
+
+Allow WAL replay to finish, then verify fresh log ingestion and queries. Do not
+delete the WAL PVC to speed recovery: it holds buffered log data. See the
+[Loki WAL guide](https://grafana.com/docs/loki/latest/operations/storage/wal/)
+for sizing and recovery behavior.
 
 ### Issue 4: Namespace Filtering Complexity
 
@@ -413,11 +397,8 @@ kubectl delete pod logging-loki-compactor-0 -n openshift-logging
 ### Storage Issues
 
 ```bash
-# Check MinIO usage
-kubectl exec -n observability-hub minio-observability-storage-0 -- df -h
-
-# If > 80%, check log sizes
-kubectl exec -n observability-hub minio-observability-storage-0 -- du -sh /data/loki/*
+# Check S4 PVC capacity
+oc get pvc s4-data -n ai-observability
 
 # Emergency: disable audit logs
 kubectl patch clusterlogforwarder logging-loki-forwarder -n openshift-logging --type='merge' -p='{"spec":{"pipelines":[{"name":"application-logs","inputRefs":["application-all-namespaces"],"outputRefs":["loki-application"]},{"name":"infrastructure-logs","inputRefs":["infrastructure-minimal"],"outputRefs":["loki-infrastructure"]}]}}'
@@ -429,11 +410,9 @@ kubectl patch clusterlogforwarder logging-loki-forwarder -n openshift-logging --
 # Check ingester readiness
 kubectl exec logging-loki-ingester-X -n openshift-logging -- curl -k -s https://localhost:3101/ready
 
-# If stuck on recovery, check WAL size
-kubectl exec logging-loki-ingester-X -n openshift-logging -- du -sh /tmp/wal
-
-# Force restart if needed
-kubectl delete pod logging-loki-ingester-X -n openshift-logging
+# If recovery is slow, inspect WAL capacity and ingester logs as described above
+oc -n openshift-logging get pvc wal-logging-loki-ingester-0
+oc -n openshift-logging logs logging-loki-ingester-0 --tail=100
 ```
 
 ### Log Collection Issues
@@ -512,7 +491,7 @@ oc get clusterlogforwarder logging-loki-forwarder -n openshift-logging \
 ### Resource Usage
 
 - **LokiStack Size**: 1x.small handles current load comfortably
-- **MinIO Storage**: 100GB sufficient for 2+ weeks retention
+- **S4 Storage**: 10Gi requested by default; set capacity based on ingestion and retention needs
 - **Memory**: Ingesters use ~2GB each under normal load
 - **CPU**: Low usage except during compaction cycles
 
@@ -535,7 +514,7 @@ The complete Loki stack now includes these templates:
 - **`Chart.yaml`** - Helm chart metadata and dependencies
 - **`templates/_helpers.tpl`** - Template helper functions for consistent labeling
 - **`templates/lokistack.yaml`** - LokiStack CRD deployment with multitenant configuration
-- **`templates/minio-secrets.yaml`** - MinIO S3 credentials for storage backend
+- **`templates/s4-secrets.yaml`** - S3 credentials for S4 storage
 - **`templates/clusterlogforwarder.yaml`** - Log forwarding configuration
 - **`templates/rbac.yaml`** - Core RBAC for log collection service accounts
 - **`templates/collector-rbac.yaml`** - Collector service account and permissions
@@ -580,24 +559,27 @@ helm list -n openshift-logging | grep loki
 ### Uninstallation
 
 ```bash
-# Uninstall only LokiStack (preserves operators and MinIO data)
+# Uninstall only LokiStack (preserves operators and S4)
 make uninstall-loki
 
 # Uninstall LokiStack + operators (requires confirmation flag)
 make uninstall NAMESPACE=your-namespace UNINSTALL_OPERATORS=true
 
-# Uninstall everything including MinIO (requires confirmation flag)
+# Uninstall the complete observability stack including S4 (deletes S4 PVC data)
 make uninstall NAMESPACE=your-namespace UNINSTALL_OBSERVABILITY=true UNINSTALL_OPERATORS=true
 ```
 
 ### Configuration
 
 ```bash
-# Customize MinIO credentials (before install)
-make install NAMESPACE=your-namespace MINIO_USER=custom-user MINIO_PASSWORD=custom-pass
+# Customize S4 credentials (before install)
+make install-s4 S4_ACCESS_KEY_ID=custom-user S4_SECRET_ACCESS_KEY=custom-secret
+# Pass the same values to Make targets that install Tempo or Loki.
+make install-observability S4_ACCESS_KEY_ID=custom-user S4_SECRET_ACCESS_KEY=custom-secret
+make install-loki S4_ACCESS_KEY_ID=custom-user S4_SECRET_ACCESS_KEY=custom-secret
 
-# Customize MinIO buckets
-make install NAMESPACE=your-namespace MINIO_BUCKETS=tempo,loki,custom
+# Customize the buckets created by the regular boto3 Job
+make install-s4 S4_BUCKETS=tempo,loki,custom
 ```
 
 ### Edge Cases

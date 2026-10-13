@@ -186,6 +186,15 @@ src/mcp_log.txt
 
 # helm charts dir
 charts/
+# Keep the pinned published charts required to build the umbrella offline.
+!deploy/helm/rag/charts/
+deploy/helm/rag/charts/*
+!deploy/helm/rag/charts/llm-service-0.5.9.tgz
+!deploy/helm/rag/charts/llama-stack-0.8.6.tgz
+!deploy/helm/rag/charts/pgvector-0.5.5.tgz
+!deploy/helm/aiobs-stack/charts/
+deploy/helm/aiobs-stack/charts/*
+!deploy/helm/aiobs-stack/charts/aws-compatible-storage-0.1.0.tgz
 
 # TMP directory (if any)
 TMP/

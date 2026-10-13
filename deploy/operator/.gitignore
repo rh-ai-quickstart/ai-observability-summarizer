@@ -18,7 +18,6 @@ bin
 helm-charts/aiobs-stack/
 helm-charts/alerting/
 helm-charts/mcp-server/
-helm-charts/minio/
 helm-charts/observability/
 helm-charts/openshift-console-plugin/
 helm-charts/rag/

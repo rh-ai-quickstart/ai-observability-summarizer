@@ -77,7 +77,7 @@ spec:
           # Create all required namespaces
           create_namespace_if_missing \
             "{{ .Values.global.observabilityNamespace }}" \
-            "AI Observability infrastructure components (Tempo, OTEL, MinIO)"
+            "AI Observability infrastructure components (Tempo, OTEL)"
 
           create_namespace_if_missing \
             "{{ .Values.global.korrel8rNamespace }}" \

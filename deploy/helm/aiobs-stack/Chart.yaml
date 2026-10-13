@@ -7,21 +7,21 @@ appVersion: "1.0.0"
 
 # Single umbrella chart combining all components:
 # - Application: MCP Server, Console Plugin, RAG, Alerting
-# - Infrastructure: Tempo, Loki, OTEL, MinIO, Korrel8r
+# - Infrastructure: S4, Tempo, Loki, OTEL, Korrel8r
 
 dependencies:
   # =============================================================================
   # INFRASTRUCTURE COMPONENTS (deployed to fixed namespaces)
-  # NOTE: All infrastructure components are always installed (no conditions)
+  # Infrastructure components are enabled by default; S4 has an explicit value condition.
   # Install infrastructure first to ensure backends are ready before applications
   # =============================================================================
 
-  # MinIO - S3-compatible object storage (observability-hub)
-  # Must be first - Tempo and Loki depend on it for storage
-  - name: minio-observability-storage
-    version: ">=0.0.0"
-    repository: "file://../minio"
-    alias: minio
+  # S4-backed S3-compatible storage in the operator release namespace.
+  # Tempo and Loki consume it through the s4.ai-observability FQDN.
+  - name: aws-compatible-storage
+    version: "0.1.0"
+    repository: "https://rh-ai-quickstart.github.io/ai-architecture-charts"
+    condition: aws-compatible-storage.enabled
 
   # TempoStack - Distributed tracing backend (observability-hub)
   - name: tempo-stack

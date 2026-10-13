@@ -1,0 +1,13 @@
+{{- if (index .Values "aws-compatible-storage" "enabled") }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: s4-supervisord-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "aiobs-stack.labels" . | nindent 4 }}
+    app.kubernetes.io/component: s4-supervisor
+data:
+  supervisord.conf: |
+{{ .Files.Get "files/s4-supervisord.conf" | indent 4 }}
+{{- end }}

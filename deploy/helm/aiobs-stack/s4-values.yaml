@@ -1,0 +1,31 @@
+# Values for installing the shared aws-compatible-storage chart by itself from
+# the Makefile. Keep in sync with the aws-compatible-storage block in values.yaml.
+fullnameOverride: s4
+image:
+  repository: quay.io/rh-aiservices-bu/s4
+  tag: "0.3.2"
+  pullPolicy: IfNotPresent
+s3:
+  accessKeyId: s4admin # Demo value; override for shared or production clusters.
+  secretAccessKey: s4secret # Demo value; override for shared or production clusters.
+  region: us-east-1
+auth:
+  enabled: true
+  username: admin
+  password: changeme # Demo value; override for shared or production clusters.
+route:
+  enabled: true
+  s3Api:
+    enabled: false
+storage:
+  data:
+    size: 10Gi
+extraVolumes:
+  - name: s4-supervisord-config
+    configMap:
+      name: s4-supervisord-config
+extraVolumeMounts:
+  - name: s4-supervisord-config
+    mountPath: /etc/supervisord.conf
+    subPath: supervisord.conf
+    readOnly: true
