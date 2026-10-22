@@ -128,7 +128,9 @@ aws-compatible-storage:
     username: admin
     password: changeme # Demo value; override for shared or production clusters.
   route:
-    enabled: true # S4 Web UI only
+    # Keep the public S4 UI Route off while the demo auth values are in use.
+    # Change auth.username and auth.password before enabling this Route.
+    enabled: false
     s3Api:
       enabled: false
   storage:

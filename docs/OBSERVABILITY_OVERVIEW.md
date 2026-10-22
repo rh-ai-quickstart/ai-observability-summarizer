@@ -25,7 +25,7 @@ flowchart LR
   Loki -->|loki bucket| S4
 ```
 
-Tempo and Loki use in-cluster S3 endpoints and namespace-local credential Secrets. The S4 Web UI Route is enabled; its S3 API Route is disabled.
+Tempo and Loki use in-cluster S3 endpoints and namespace-local credential Secrets. Both S4 Routes are disabled by default. Change the demo UI credentials before enabling the Web UI Route; keep the S3 API Route disabled.
 
 ## Components
 

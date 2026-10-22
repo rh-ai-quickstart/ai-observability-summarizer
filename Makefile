@@ -58,6 +58,7 @@ S4_ACCESS_KEY_ID ?= s4admin
 S4_SECRET_ACCESS_KEY ?= s4secret
 S4_UI_USERNAME ?= admin
 S4_UI_PASSWORD ?= changeme
+S4_UI_ROUTE_ENABLED ?= false
 S4_BUCKETS ?= tempo,loki
 S4_VALUES_FILE ?= deploy/helm/aiobs-stack/s4-values.yaml
 
@@ -257,7 +258,7 @@ helm_s4_args = \
     --set-string auth.username=$(S4_UI_USERNAME) \
     --set-string auth.password=$(S4_UI_PASSWORD) \
     --set auth.enabled=true \
-    --set route.enabled=true \
+    --set route.enabled=$(S4_UI_ROUTE_ENABLED) \
     --set route.s3Api.enabled=false \
     --set storage.data.size=10Gi
 
@@ -408,6 +409,7 @@ help:
 	@echo "  S4_SECRET_ACCESS_KEY - S3 secret key for S4 (default: s4secret; demo only)"
 	@echo "  S4_UI_USERNAME     - S4 UI account (default: admin; demo only)"
 	@echo "  S4_UI_PASSWORD     - S4 UI password (default: changeme; demo only)"
+	@echo "  S4_UI_ROUTE_ENABLED - Expose S4 UI Route after changing demo UI credentials (default: false)"
 	@echo "  S4_BUCKETS         - Comma-separated bucket names (default: tempo,loki)"
 	@echo "  S4_VALUES_FILE     - Direct chart values file for install-s4"
 	@echo "  UNINSTALL_OBSERVABILITY - Set to 'true' to uninstall observability stack during uninstall"

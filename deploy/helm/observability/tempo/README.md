@@ -50,4 +50,4 @@ oc logs -n observability-hub deployment/tempo-tempostack-gateway --tail=50
 oc get pods,pvc -n ai-observability | grep s4
 ```
 
-If Tempo reports S3 authentication or connection errors, compare `s4-tempo-credentials` with `s4-credentials` and verify that the S4 Service is reachable on port `7480`. The default UI Route serves the S4 console on port `5000`; it does not expose the S3 API.
+If Tempo reports S3 authentication or connection errors, compare `s4-tempo-credentials` with `s4-credentials` and verify that the S4 Service is reachable on port `7480`. The S4 UI Route is disabled by default; enable it only after changing the demo UI credentials. The S3 API Route remains disabled.

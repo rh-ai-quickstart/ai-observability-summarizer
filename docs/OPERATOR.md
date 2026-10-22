@@ -117,12 +117,12 @@ All CSVs should show `Succeeded` status before proceeding to create the CR.
 | **TempoStack** | observability-hub | Distributed tracing backend |
 | **LokiStack** | openshift-logging | Log aggregation |
 | **OTEL Collector** | observability-hub | OpenTelemetry trace collection |
-| **aws-compatible-storage (S4)** | ai-observability | S3-compatible storage (10Gi PVC; regular Job creates `tempo` and `loki`; UI Route on, S3 API Route off) |
+| **aws-compatible-storage (S4)** | ai-observability | S3-compatible storage (10Gi PVC; regular Job creates `tempo` and `loki`; UI and S3 API Routes off by default) |
 | **Korrel8r** | openshift-cluster-observability-operator | Signal correlation engine |
 
 > **Note:** Infrastructure components are **always deployed** to their configured namespaces and shared across the cluster. Only **one CR** is allowed per cluster (singleton pattern enforced by the operator).
 
-The `aws-compatible-storage.s3` values in the operator CR are the single source for S4 access keys. The parent chart mirrors them into `s4-tempo-credentials` in `observability-hub` and `s4-loki-credentials` in `openshift-logging`. For a shared cluster, replace the demo defaults for `spec.aws-compatible-storage.s3.accessKeyId`, `spec.aws-compatible-storage.s3.secretAccessKey`, `spec.aws-compatible-storage.auth.username`, and `spec.aws-compatible-storage.auth.password` using a protected configuration source. The umbrella chart does not support `s3.existingSecret` because it must also create cross-namespace mirrors.
+The `aws-compatible-storage.s3` values in the operator CR are the single source for S4 access keys. The parent chart mirrors them into `s4-tempo-credentials` in `observability-hub` and `s4-loki-credentials` in `openshift-logging`. For a shared cluster, replace the demo defaults for `spec.aws-compatible-storage.s3.accessKeyId`, `spec.aws-compatible-storage.s3.secretAccessKey`, `spec.aws-compatible-storage.auth.username`, and `spec.aws-compatible-storage.auth.password` using a protected configuration source. The Web UI Route stays off until the UI credentials are changed; then set `spec.aws-compatible-storage.route.enabled: true` to expose it. Keep `spec.aws-compatible-storage.route.s3Api.enabled: false`. The umbrella chart does not support `s3.existingSecret` because it must also create cross-namespace mirrors.
 
 The parent chart also mounts `s4-supervisord-config` over `/etc/supervisord.conf` in the pinned S4 0.3.2 image. The only change to that image's Supervisor config is `minfds=65536`, inherited by RGW. When upgrading the S4 image, compare the copied config with the new image before deploying; ConfigMap subPath updates require an S4 pod rollout.
 

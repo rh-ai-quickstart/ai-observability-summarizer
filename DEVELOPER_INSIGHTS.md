@@ -339,7 +339,7 @@ make remove-tracing NAMESPACE=your-namespace                 # Auto-instrumentat
 - **Tracing Only**: `setup-tracing` and `remove-tracing` require NAMESPACE parameter
 
 #### **Observability Features**
-- **S4**: S3-compatible object storage on port 7480 for trace and log data; the UI Route is in `ai-observability`
+- **S4**: S3-compatible object storage on port 7480 for trace and log data; the UI Route requires an explicit opt-in after replacing demo credentials
 - **TempoStack**: Multitenant trace storage and analysis
 - **OpenTelemetry Collector**: Distributed tracing collection
 - **Auto-instrumentation**: Automatic Python application tracing

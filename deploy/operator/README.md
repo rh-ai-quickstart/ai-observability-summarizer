@@ -379,7 +379,7 @@ All CSVs should show `Succeeded` status before proceeding to create the CR.
    - **Development Mode** (Advanced): Enable browser-cached API keys for testing (DO NOT use in production)
 5. Click **Create**
 
-> **Note**: S4, Tempo, Loki, OTEL, and Korrel8r are deployed automatically to their configured namespaces. Configure S4 credentials through the `spec.aws-compatible-storage.s3` and `spec.aws-compatible-storage.auth` fields in the CR when deploying to a shared cluster. The umbrella chart mirrors the S3 values into the Tempo and Loki namespaces; standalone Makefile installs use the same `S4_ACCESS_KEY_ID` and `S4_SECRET_ACCESS_KEY` settings for all three releases.
+> **Note**: S4, Tempo, Loki, OTEL, and Korrel8r are deployed automatically to their configured namespaces. Configure S4 credentials through the `spec.aws-compatible-storage.s3` and `spec.aws-compatible-storage.auth` fields in the CR when deploying to a shared cluster. The S4 Web UI Route is disabled by default; change the demo UI credentials before setting `spec.aws-compatible-storage.route.enabled: true`. Keep the S3 API Route disabled. The umbrella chart mirrors the S3 values into the Tempo and Loki namespaces; standalone Makefile installs use the same `S4_ACCESS_KEY_ID` and `S4_SECRET_ACCESS_KEY` settings for all three releases.
 
 ## Uninstallation
 
