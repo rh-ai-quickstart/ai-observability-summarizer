@@ -3,5 +3,9 @@
   version: v1alpha1
   kind: AIObservabilitySummarizer
   chart: helm-charts/aiobs-stack
+  # Server-side dry run lets chart lookups (e.g. the default StorageClass) resolve during
+  # drift detection; with client-side dry run they render differently and force an upgrade
+  # on every reconcile.
+  dryRunOption: server
 #+kubebuilder:scaffold:watch
 
