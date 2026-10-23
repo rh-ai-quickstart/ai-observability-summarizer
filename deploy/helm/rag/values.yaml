@@ -20,23 +20,6 @@ pgvector:
     host: pgvector
     port: "5432"
 
-minio:
-  secret:
-    user: minio_rag_user
-    password: minio_rag_password
-    host: minio
-    port: "9000"
-  
-    # Upload sample files to the minio bucket 
-  sampleFileUpload:
-    enabled: true
-    bucket: documents
-    urls: 
-    - https://raw.githubusercontent.com/rh-ai-quickstart/RAG/refs/heads/main/notebooks/Zippity_Zoo_Grand_Invention.pdf
-    - https://raw.githubusercontent.com/rh-ai-quickstart/RAG/refs/heads/main/notebooks/Zippity_Zoo_and_the_Town_of_Tumble_Town.pdf
-    - https://raw.githubusercontent.com/rh-ai-quickstart/RAG/refs/heads/main/notebooks/Zippity_Zoo_and_the_Town_of_Whispering_Willows.pdf
-
-
 llama-stack:
   enabled: true
   # managedByOperator: when true, deploys via LlamaStackDistribution CRD (requires RHOAI 3.x)
@@ -74,21 +57,3 @@ llama-stack:
     allowedFrom:
       namespaces:
         - "ai-observability"
-
-
-ingestion-pipeline:
-  # options are [S3, URL]
-  source: S3
-  # embedding model to use for creating embeddings
-  embedding_model: all-MiniLM-L6-v2
-  # name of the vector db with version, pipeline will be created with pipeline_red_hat_openshift
-  name: "zippity-zoo-vector-db"
-  # version of the knowledgebase
-  version: "1.0"
-
-  S3:
-    access_key_id: minio_rag_user
-    secret_access_key: minio_rag_password
-    bucket_name: documents
-    endpoint_url: http://minio:9000
-    region: us-east-1

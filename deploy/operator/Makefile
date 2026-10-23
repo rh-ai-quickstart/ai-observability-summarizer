@@ -120,13 +120,9 @@ prepare-build: ## Copy helm charts from deploy/helm for container build
 	@sed -i.bak '/repository:.*aiobs-react-ui/{n;s|tag: .*|tag: $(VERSION)|;}' ../helm/react-ui-app/values.yaml && rm -f ../helm/react-ui-app/values.yaml.bak
 	@echo "✅ Source charts updated with repositories and tags"
 	@echo ""
-	@echo "Updating RAG chart dependencies first..."
-	@cd ../helm/rag && helm dependency update >/dev/null
-	@echo "✅ RAG chart dependencies updated"
-	@echo ""
-	@echo "Updating dependencies in deploy/helm/aiobs-stack..."
-	@cd ../helm/aiobs-stack && helm dependency update >/dev/null
-	@echo "✅ Source chart dependencies updated"
+	@echo "Packaging pinned Helm dependencies from this checkout..."
+	@../../scripts/package-aiobs-helm-dependencies.sh
+	@echo "✅ Source chart dependencies packaged"
 	@echo ""
 	@echo "Copying helm charts from deploy/helm to operator..."
 	@# Preserve config files
@@ -137,7 +133,6 @@ prepare-build: ## Copy helm charts from deploy/helm for container build
 	@cp -r ../helm/aiobs-stack helm-charts/
 	@cp -r ../helm/alerting helm-charts/
 	@cp -r ../helm/mcp-server helm-charts/
-	@cp -r ../helm/minio helm-charts/
 	@cp -r ../helm/observability helm-charts/
 	@cp -r ../helm/openshift-console-plugin helm-charts/
 	@cp -r ../helm/rag helm-charts/
@@ -145,9 +140,11 @@ prepare-build: ## Copy helm charts from deploy/helm for container build
 	@cp -f /tmp/*.json /tmp/*.template helm-charts/ 2>/dev/null || true
 	@echo "✅ Charts copied from deploy/helm"
 	@echo ""
-	@# Update helm dependencies for operator (regenerate .tgz files with operator-specific values)
-	@echo "Updating operator helm dependencies..."
-	@cd helm-charts/aiobs-stack && helm dependency update >/dev/null
+	@# The source packages already include the operator-specific chart values.
+	@echo "Checking copied operator chart dependencies..."
+	@helm template aiobs-stack helm-charts/aiobs-stack \
+		--namespace ai-observability --set rag.enabled=false \
+		--show-only templates/s4-bucket-bootstrap-job.yaml >/dev/null
 	@echo "✅ Operator charts ready for build!"
 
 .PHONY: clean-charts

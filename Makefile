@@ -3,7 +3,7 @@
 
 # NAMESPACE validation for deployment targets
 ifeq ($(NAMESPACE),)
-ifeq (,$(filter install-local depend install-ingestion-pipeline list-models% generate-model-config help build build-alerting build-mcp-server build-console-plugin build-react-ui push push-alerting push-mcp-server push-console-plugin push-react-ui clean config test test-python test-react test-scripts check-observability-drift install-operators uninstall-operators check-operators verify-operators-ready check-llamastack-operator enable-llamastack-operator pre-install-checks cleanup-loki-clusterroles install-cluster-observability-operator install-opentelemetry-operator install-tempo-operator install-logging-operator install-loki-operator uninstall-cluster-observability-operator uninstall-opentelemetry-operator uninstall-tempo-operator uninstall-logging-operator uninstall-loki-operator enable-tracing-ui disable-tracing-ui enable-logging-ui disable-logging-ui install-loki uninstall-loki upgrade-observability install-korrel8r uninstall-korrel8r install-minio uninstall-minio operator-build operator-push operator-bundle-build operator-bundle-push operator-catalog-build operator-catalog-push operator-build-all operator-push-all operator-deploy operator-config,$(MAKECMDGOALS)))
+ifeq (,$(filter install-local depend install-ingestion-pipeline list-models% generate-model-config help build build-alerting build-mcp-server build-console-plugin build-react-ui push push-alerting push-mcp-server push-console-plugin push-react-ui clean config test test-python test-react test-scripts check-observability-drift install-operators uninstall-operators check-operators verify-operators-ready check-llamastack-operator enable-llamastack-operator pre-install-checks cleanup-loki-clusterroles install-cluster-observability-operator install-opentelemetry-operator install-tempo-operator install-logging-operator install-loki-operator uninstall-cluster-observability-operator uninstall-opentelemetry-operator uninstall-tempo-operator uninstall-logging-operator uninstall-loki-operator enable-tracing-ui disable-tracing-ui enable-logging-ui disable-logging-ui install-loki uninstall-loki upgrade-observability install-korrel8r uninstall-korrel8r install-s4 uninstall-s4 operator-build operator-push operator-bundle-build operator-bundle-push operator-catalog-build operator-catalog-push operator-build-all operator-push-all operator-deploy operator-config,$(MAKECMDGOALS)))
 $(error NAMESPACE is not set)
 endif
 endif
@@ -53,13 +53,14 @@ endif
 POSTGRES_USER ?= postgres
 POSTGRES_PASSWORD ?= rag_password
 POSTGRES_DBNAME ?= rag_blueprint
-# MinIO configuration for observability storage (traces, logs, metrics)
-MINIO_USER ?= admin
-MINIO_PASSWORD ?= minio123
-MINIO_HOST ?= minio
-MINIO_PORT ?= 9000
-# MinIO bucket configuration (comma-separated list)
-MINIO_BUCKETS ?= tempo,loki
+# S4 configuration for observability storage (traces, logs, metrics)
+S4_ACCESS_KEY_ID ?= s4admin
+S4_SECRET_ACCESS_KEY ?= s4secret
+S4_UI_USERNAME ?= admin
+S4_UI_PASSWORD ?= changeme
+S4_UI_ROUTE_ENABLED ?= false
+S4_BUCKETS ?= tempo,loki
+S4_VALUES_FILE ?= deploy/helm/aiobs-stack/s4-values.yaml
 
 # HF_TOKEN is only required if LLM_URL is not set
 HF_TOKEN ?= $(shell \
@@ -71,8 +72,8 @@ HF_TOKEN ?= $(shell \
 )
 
 RAG_CHART := rag
-MINIO_CHART := minio-observability-storage
-MINIO_CHART_PATH := minio
+S4_RELEASE_NAME ?= s4
+S4_CHART_PATH := deploy/helm/aiobs-stack/charts/aws-compatible-storage-0.1.0.tgz
 MCP_SERVER_RELEASE_NAME ?= mcp-server
 MCP_SERVER_CHART_PATH ?= mcp-server
 # Console plugin chart
@@ -111,11 +112,8 @@ ALERTING_RELEASE_NAME ?= alerting
 # Observability configuration
 OBSERVABILITY_NAMESPACE ?= observability-hub # currently hard-coded in instrumentation.yaml
 INSTRUMENTATION_PATH ?= observability/otel-collector/scripts/instrumentation.yaml
-MINIO_NAMESPACE ?= observability-hub
+S4_NAMESPACE ?= ai-observability
 LOKI_NAMESPACE ?= openshift-logging
-
-# LLM URL processing constants
-DEFAULT_LLM_PORT_AND_PATH := :8080/v1
 
 OPERATOR_MANAGER_SCRIPT := scripts/operator-manager.sh
 
@@ -229,25 +227,22 @@ helm_llm_service_args = \
     $(if $(SAFETY_TOLERATION),--set-json global.models.$(SAFETY).tolerations='$(call TOLERATIONS_TEMPLATE,$(SAFETY_TOLERATION))',) \
     $(if $(RAW_DEPLOYMENT),--set llm-service.rawDeploymentMode=$(RAW_DEPLOYMENT),)
 
-# Process LLM_URL to add default port and /v1 if port is missing
-define process_llm_url
-$(if $(LLM_URL),$(shell \
-    if echo "$(LLM_URL)" | grep -q ":[0-9]"; then \
-        echo "$(LLM_URL)"; \
-    else \
-        echo "$(LLM_URL)$(DEFAULT_LLM_PORT_AND_PATH)"; \
-    fi \
-),)
-endef
+# Pass the URL through the environment so shell metacharacters in a URL are not
+# interpolated into the normalization command.
+export LLM_URL
 
+# install-rag evaluates these arguments twice. The quoted env placeholders keep
+# the pinned chart's init-container shell from expanding them before its
+# resolver runs; the token values are rendered only into llama-stack-env.
 helm_llama_stack_args = \
     $(if $(LLM),--set global.models.$(LLM).enabled=true,) \
+    $(if $(LLM_ID),--set global.models.$(LLM).id='$(LLM_ID)',) \
     $(if $(SAFETY),--set global.models.$(SAFETY).enabled=true,) \
-    $(if $(LLM_URL),--set global.models.$(LLM).url='$(call process_llm_url)',) \
+    $(if $(LLM_URL),--set-string global.models.$(LLM).url="$$$$LLM_URL_NORMALIZED",) \
     $(if $(SAFETY_URL),--set global.models.$(SAFETY).url='$(SAFETY_URL)',) \
-    $(if $(LLM_API_TOKEN),--set global.models.$(LLM).apiToken='$(LLM_API_TOKEN)',) \
-    $(if $(SAFETY_API_TOKEN),--set global.models.$(SAFETY).apiToken='$(SAFETY_API_TOKEN)',) \
     $(if $(LLAMA_STACK_ENV),--set-json llama-stack.secrets='$(LLAMA_STACK_ENV)',) \
+    $(if $(LLM_API_TOKEN),--set-string global.models.$(LLM).apiToken="'\$$$${env.LLM_API_TOKEN}'" --set-string llama-stack.secrets.LLM_API_TOKEN='$(LLM_API_TOKEN)',) \
+    $(if $(SAFETY_API_TOKEN),--set-string global.models.$(SAFETY).apiToken="'\$$$${env.SAFETY_API_TOKEN}'" --set-string llama-stack.secrets.SAFETY_API_TOKEN='$(SAFETY_API_TOKEN)',) \
     $(if $(RAW_DEPLOYMENT),--set llama-stack.rawDeploymentMode=$(RAW_DEPLOYMENT),) \
     $(if $(filter true,$(USE_LLAMA_STACK_OPERATOR)),--set llama-stack.managedByOperator=true --set 'llama-stack.network.allowedFrom.namespaces[0]=$(NAMESPACE)',)
 
@@ -256,17 +251,23 @@ helm_pgvector_args = \
     --set pgvector.secret.password=$(POSTGRES_PASSWORD) \
     --set pgvector.secret.dbname=$(POSTGRES_DBNAME)
 
-helm_minio_args = \
-    --set minio.secret.user=$(MINIO_USER) \
-    --set minio.secret.password=$(MINIO_PASSWORD) \
-    --set minio.secret.host=$(MINIO_HOST) \
-    --set-string minio.secret.port=$(MINIO_PORT) \
-    --set-json minio.buckets='[$(shell echo "$(MINIO_BUCKETS)" | sed 's/,/","/g' | sed 's/^/"/' | sed 's/$$/"/')]'
+helm_s4_args = \
+    --set fullnameOverride=s4 \
+    --set-string s3.accessKeyId=$(S4_ACCESS_KEY_ID) \
+    --set-string s3.secretAccessKey=$(S4_SECRET_ACCESS_KEY) \
+    --set-string auth.username=$(S4_UI_USERNAME) \
+    --set-string auth.password=$(S4_UI_PASSWORD) \
+    --set auth.enabled=true \
+    --set route.enabled=$(S4_UI_ROUTE_ENABLED) \
+    --set route.s3Api.enabled=false \
+    --set storage.data.size=10Gi
 
 helm_tempo_args = \
-    --set minio.s3.accessKeyId=$(MINIO_USER) \
-    --set minio.s3.accessKeySecret=$(MINIO_PASSWORD) \
-    --set minio.s3.bucket=tempo
+    --set s4.secret.create=true \
+    --set-string s4.s3.accessKeyId=$(S4_ACCESS_KEY_ID) \
+    --set-string s4.s3.secretAccessKey=$(S4_SECRET_ACCESS_KEY) \
+    --set-string s4.s3.bucket=tempo \
+    --set-string s4.s3.endpoint=http://s4.$(S4_NAMESPACE).svc.cluster.local:7480
 
 # Shell snippet to check if collector SA exists and determine rbac.collector.create value
 # Returns "false" if SA exists, "true" if it doesn't
@@ -281,9 +282,11 @@ check_collector_sa_and_get_flag = \
 	fi
 
 helm_loki_args = \
-    --set minio.s3.accessKeyId=$(MINIO_USER) \
-    --set minio.s3.accessKeySecret=$(MINIO_PASSWORD) \
-    --set minio.s3.bucket=loki
+    --set s4.secret.create=true \
+    --set-string s4.s3.accessKeyId=$(S4_ACCESS_KEY_ID) \
+    --set-string s4.s3.secretAccessKey=$(S4_SECRET_ACCESS_KEY) \
+    --set-string s4.s3.bucket=loki \
+    --set-string s4.s3.endpoint=http://s4.$(S4_NAMESPACE).svc.cluster.local:7480
 
 .PHONY: help
 help:
@@ -324,8 +327,8 @@ help:
 	@echo "  install-korrel8r   - Install Korrel8r via UIPlugin then patch resources"
 	@echo ""
 	@echo "Observability Stack:"
-	@echo "  install-observability-stack - Install complete observability stack (MinIO + TempoStack + LokiStack + OTEL + Korrel8r + tracing + logging + drift check)"
-	@echo "  uninstall-observability-stack - Uninstall complete observability stack (tracing + logging + Korrel8r + TempoStack + LokiStack + OTEL + MinIO)"
+	@echo "  install-observability-stack - Install complete observability stack (S4 + TempoStack + LokiStack + OTEL + Korrel8r + tracing + logging + drift check)"
+	@echo "  uninstall-observability-stack - Uninstall complete observability stack (tracing + logging + Korrel8r + TempoStack + LokiStack + OTEL + S4)"
 	@echo ""
 	@echo "Operators:"
 	@echo "  install-operators - Install all mandatory operators (observability, otel, tempo, logging, loki)"
@@ -355,10 +358,10 @@ help:
 	@echo "  disable-tracing-ui - Disable 'Observe → Traces' menu in OpenShift Console"
 	@echo "  enable-logging-ui - Enable 'Observe → Logs' menu in OpenShift Console"
 	@echo "  disable-logging-ui - Disable 'Observe → Logs' menu in OpenShift Console"
-	@echo "  install-minio - Install MinIO observability storage backend only"
-	@echo "  uninstall-minio - Uninstall MinIO observability storage backend only"
+	@echo "  install-s4 - Install aws-compatible-storage (S4) in ai-observability"
+	@echo "  uninstall-s4 - Uninstall S4 (deletes its PVC and stored data)"
 	@echo "  install-loki - Install LokiStack for centralized log aggregation (idempotent)"
-	@echo "  uninstall-loki - Uninstall LokiStack (preserves MinIO storage and buckets)"
+	@echo "  uninstall-loki - Uninstall LokiStack (preserves S4 storage and buckets)"
 	@echo ""
 	@echo "Korrel8r:"
 	@echo "  install-korrel8r     - Install Korrel8r via UIPlugin then patch resources"
@@ -395,16 +398,20 @@ help:
 	@echo "  HF_TOKEN           - Hugging Face Token (will prompt if not provided and LLM_URL not set)"
 	@echo "  DEVICE             - Deploy models on cpu or gpu (default)"
 	@echo "  LLM                - Model id (eg. llama-3-1-8b-instruct)"
-	@echo "  LLM_URL            - Use existing model URL (auto-adds :8080/v1 if no port specified)"
+	@echo "  LLM_URL            - Existing model URL (HTTPS keeps its port; unported HTTP defaults to :8080/v1)"
 	@echo "  SAFETY             - Safety model id"
 	@echo "  RAG_ENABLED         - Set to 'false' to skip RAG backend services (default: true)"
 	@echo "  RHOAI_VERSION          - Set to '2' for RHOAI 2.x or '3' for RHOAI 3.x (auto-detected from cluster, controls operator channels: stable-6.3 vs stable-6.4) (default: auto-detect, fallback: 2)"
 	@echo "  USE_LLAMA_STACK_OPERATOR - Set to 'true' to deploy LlamaStack via operator instead of Helm chart (requires RHOAI_VERSION=3) (default: false)"
 	@echo "  ALERTING_ENABLED    - Set to 'true' to install alerting (default: false)"
 	@echo "  SLACK_WEBHOOK_URL  - Slack Webhook URL for alerting (will prompt if not provided)"
-	@echo "  MINIO_USER         - MinIO username for observability storage (default: admin)"
-	@echo "  MINIO_PASSWORD     - MinIO password for observability storage (default: minio123)"
-	@echo "  MINIO_BUCKETS      - Comma-separated list of MinIO buckets to create (default: tempo,loki)"
+	@echo "  S4_ACCESS_KEY_ID   - S3 access key for S4 (default: s4admin; demo only)"
+	@echo "  S4_SECRET_ACCESS_KEY - S3 secret key for S4 (default: s4secret; demo only)"
+	@echo "  S4_UI_USERNAME     - S4 UI account (default: admin; demo only)"
+	@echo "  S4_UI_PASSWORD     - S4 UI password (default: changeme; demo only)"
+	@echo "  S4_UI_ROUTE_ENABLED - Expose S4 UI Route after changing demo UI credentials (default: false)"
+	@echo "  S4_BUCKETS         - Comma-separated bucket names (default: tempo,loki)"
+	@echo "  S4_VALUES_FILE     - Direct chart values file for install-s4"
 	@echo "  UNINSTALL_OBSERVABILITY - Set to 'true' to uninstall observability stack during uninstall"
 	@echo "  UNINSTALL_OPERATORS     - Set to 'true' to uninstall operators during uninstall"
 	@echo "  GPU_PREFIX_NVIDIA  - Extra NVIDIA metric prefixes (comma-separated, additive to defaults)"
@@ -507,13 +514,8 @@ namespace:
 
 .PHONY: depend
 depend:
-	@echo "Updating Helm dependencies (for $(RAG_CHART))..."
-	@rm -rf deploy/helm/$(RAG_CHART)/charts
-	@cd deploy/helm && helm dependency update $(RAG_CHART) || exit 1
-
-	@echo "Updating Helm dependencies (for $(MINIO_CHART))..."
-	@rm -rf deploy/helm/$(MINIO_CHART_PATH)/charts
-	@cd deploy/helm && helm dependency update $(MINIO_CHART_PATH) || exit 1
+	@echo "Packaging pinned Helm dependencies for aiobs-stack..."
+	@./scripts/package-aiobs-helm-dependencies.sh
 
 
 # Install observability stack using individual charts
@@ -681,7 +683,8 @@ install-rag: namespace check-llamastack-prerequisites
 	@$(eval PGVECTOR_ARGS := $(call helm_pgvector_args))
 
 	@echo "Installing $(RAG_CHART) helm chart (backend services only)"
-	@cd deploy/helm && helm -n $(NAMESPACE) upgrade --install $(RAG_CHART) $(RAG_CHART) \
+	@LLM_URL_NORMALIZED=$$(./scripts/normalize-llm-url.sh) || exit 1; \
+	cd deploy/helm && helm -n $(NAMESPACE) upgrade --install $(RAG_CHART) $(RAG_CHART) \
 	--atomic --timeout 25m \
 	$(LLM_SERVICE_ARGS) \
 	$(LLAMA_STACK_ARGS) \
@@ -1099,19 +1102,15 @@ enable-user-workload-monitoring:
 
 .PHONY: install-observability
 install-observability:
-	@echo "→ Checking if OpenTelemetry Collector, Tempo, and Loki already exist in namespace $(OBSERVABILITY_NAMESPACE)"
-	@if helm list -n $(OBSERVABILITY_NAMESPACE) 2>/dev/null | grep -q "^tempo\s"; then \
-		echo "  → TempoStack already installed, skipping..."; \
-	else \
-		echo "Installing TempoStack in namespace $(OBSERVABILITY_NAMESPACE)"; \
-		cd deploy/helm && helm upgrade --install tempo ./observability/tempo \
-			--namespace $(OBSERVABILITY_NAMESPACE) \
-			--create-namespace \
-			--wait --timeout 10m \
-			--set global.namespace=$(OBSERVABILITY_NAMESPACE) \
-			$(helm_tempo_args) && \
-		echo "  ✅ TempoStack deployed and ready"; \
-	fi
+	@echo "→ Installing/upgrading TempoStack in namespace $(OBSERVABILITY_NAMESPACE)"
+	@cd deploy/helm && helm upgrade --install tempo ./observability/tempo \
+		--namespace $(OBSERVABILITY_NAMESPACE) \
+		--create-namespace \
+		--reuse-values \
+		--wait --timeout 10m \
+		--set global.namespace=$(OBSERVABILITY_NAMESPACE) \
+		$(helm_tempo_args)
+	@echo "  ✅ TempoStack deployed and ready with S4 storage"
 
 	@if helm list -n $(OBSERVABILITY_NAMESPACE) 2>/dev/null | grep -q "^otel-collector\s"; then \
 		echo "  → OpenTelemetry Collector already installed, skipping..."; \
@@ -1131,7 +1130,7 @@ install-observability:
 .PHONY: install-observability-stack
 install-observability-stack: verify-operators-ready
 	@echo "🚀 Installing observability stack in proper sequence..."
-	@$(MAKE) install-minio
+	@$(MAKE) install-s4
 	@$(MAKE) setup-tracing
 	@$(MAKE) install-observability
 	@$(MAKE) check-observability-drift
@@ -1234,13 +1233,13 @@ uninstall-observability:
 .PHONY: uninstall-observability-stack
 uninstall-observability-stack:
 	@if [ "$(UNINSTALL_OBSERVABILITY)" = "true" ]; then \
-		echo "🗑️  Uninstalling observability stack (includes tracing, logging, Korrel8r, and MinIO)"; \
+		echo "🗑️  Uninstalling observability stack (includes tracing, logging, Korrel8r, and S4)"; \
 		echo ""; \
 		echo "⚠️  WARNING: This will remove the following components:"; \
 		echo "  → Auto-instrumentation for tracing in namespace $(NAMESPACE)"; \
 		echo "  → TempoStack, LokiStack, and OTEL Collector in namespace $(OBSERVABILITY_NAMESPACE)"; \
 		echo "  → Korrel8r in namespace $(KORREL8R_NAMESPACE)"; \
-		echo "  → MinIO observability storage in namespace $(MINIO_NAMESPACE)"; \
+		echo "  → S4 observability storage in namespace $(S4_NAMESPACE)"; \
 		echo "  → Distributed Tracing Console Plugin (Observe → Traces menu)"; \
 		echo "  → Logging Console Plugin (Observe → Logs menu)"; \
 		echo ""; \
@@ -1249,7 +1248,7 @@ uninstall-observability-stack:
 		$(MAKE) remove-tracing NAMESPACE=$(NAMESPACE); \
 		$(MAKE) uninstall-korrel8r; \
 		$(MAKE) uninstall-observability; \
-		$(MAKE) uninstall-minio; \
+		$(MAKE) uninstall-s4; \
 		$(MAKE) disable-tracing-ui; \
 		$(MAKE) disable-logging-ui; \
 		echo ""; \
@@ -1374,28 +1373,46 @@ uninstall-alert-example: namespace
 	@echo "✅ Helm release uninstalled  resources cleaned"
 
 
-.PHONY: install-minio
-install-minio:
-	@$(eval MINIO_ARGS := $(call helm_minio_args))
-
-	@echo "→ Ensuring $(MINIO_NAMESPACE) namespace exists..."
-	@oc create namespace $(MINIO_NAMESPACE) 2>/dev/null || echo "  → Namespace already exists"
-	@echo "→ Checking if $(MINIO_CHART) already exists in namespace $(MINIO_NAMESPACE)"
-	@if helm list -n $(MINIO_NAMESPACE) 2>/dev/null | grep -q "^$(MINIO_CHART)\s"; then \
-		echo "  → $(MINIO_CHART) already installed, skipping..."; \
-	else \
-		echo "Installing $(MINIO_CHART) helm chart"; \
-		echo "→ Cleaning stale subchart artifacts..."; \
-		rm -rf deploy/helm/$(MINIO_CHART_PATH)/charts; \
-		cd deploy/helm && helm -n $(MINIO_NAMESPACE) upgrade --install $(MINIO_CHART) $(MINIO_CHART_PATH) \
-		--create-namespace \
+.PHONY: install-s4
+install-s4: depend
+	@echo "→ Installing aws-compatible-storage (S4) in $(S4_NAMESPACE)..."
+	@oc get namespace $(S4_NAMESPACE) >/dev/null 2>&1 || oc create namespace $(S4_NAMESPACE)
+	@echo "→ Applying the S4 Supervisor config before the storage upgrade..."
+	@configmap_manifest=$$(mktemp); \
+		trap 'rm -f "$$configmap_manifest"' EXIT; \
+		helm_owner=$$(oc get configmap s4-supervisord-config -n $(S4_NAMESPACE) \
+			-o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-name}' 2>/dev/null || true); \
+		if [ -n "$$helm_owner" ]; then \
+			echo "S4 Supervisor config is owned by Helm release $$helm_owner; use the operator/umbrella install path or migrate that release first." >&2; \
+			exit 1; \
+		fi; \
+		helm template aiobs-stack deploy/helm/aiobs-stack \
+			--namespace $(S4_NAMESPACE) \
+			--set rag.enabled=false \
+			-s templates/s4-supervisord-configmap.yaml > "$$configmap_manifest" || exit 1; \
+		oc apply -f "$$configmap_manifest" || exit 1; \
+		oc annotate configmap s4-supervisord-config -n $(S4_NAMESPACE) \
+			aiobs.rh-ai-quickstart.io/install-mode=standalone --overwrite || exit 1
+	@helm upgrade --install $(S4_RELEASE_NAME) $(S4_CHART_PATH) \
+		--namespace $(S4_NAMESPACE) --create-namespace \
 		--atomic --wait --timeout 10m \
-		$(MINIO_ARGS) && \
-		echo "  ✅ $(MINIO_CHART) deployed and ready"; \
-	fi
-	@echo "→ Cleaning up broken upstream routes (pointing to non-existent 'minio' service)"
-	- @oc delete route minio-api minio-webui -n $(MINIO_NAMESPACE) --ignore-not-found ||:
-	@echo "  → Broken upstream routes cleaned up"
+		-f $(S4_VALUES_FILE) $(helm_s4_args)
+	@echo "→ Applying the parent-chart regular bucket bootstrap Job..."
+	@job_manifest=$$(mktemp); \
+		trap 'rm -f "$$job_manifest"' EXIT; \
+		helm template aiobs-stack deploy/helm/aiobs-stack \
+			--namespace $(S4_NAMESPACE) \
+			--set rag.enabled=false \
+			-f deploy/helm/aiobs-stack/values.yaml \
+			--set-string 'aws-compatible-storage.s3.accessKeyId=$(S4_ACCESS_KEY_ID)' \
+			--set-string 'aws-compatible-storage.s3.secretAccessKey=$(S4_SECRET_ACCESS_KEY)' \
+			--set-json 'awsCompatibleStorageBuckets.namesCsv="$(S4_BUCKETS)"' \
+			-s templates/s4-bucket-bootstrap-job.yaml > "$$job_manifest" || exit 1; \
+		oc delete job s4-create-buckets -n $(S4_NAMESPACE) --ignore-not-found || exit 1; \
+		oc apply -f "$$job_manifest" || exit 1; \
+		oc wait --for=condition=complete job/s4-create-buckets \
+			-n $(S4_NAMESPACE) --timeout=15m
+	@echo "✅ S4 is ready with buckets: $(S4_BUCKETS)"
 
 
 # Korrel8r installation via Helm
@@ -1434,13 +1451,19 @@ uninstall-korrel8r:
 	- @oc delete secrets -n $(KORREL8R_NAMESPACE) -l owner=helm,name=$(KORREL8R_RELEASE_NAME) --ignore-not-found
 	@echo "✅ Korrel8r helm-managed resources removed"
 
-.PHONY: uninstall-minio
-uninstall-minio:
-	@echo "Uninstalling $(MINIO_CHART) in namespace $(MINIO_NAMESPACE)"
-	@helm -n $(MINIO_NAMESPACE) uninstall $(MINIO_CHART) --ignore-not-found
-
-	@echo "Removing minio PVCs from $(MINIO_NAMESPACE)"
-	- @oc delete pvc -n $(MINIO_NAMESPACE) -l app.kubernetes.io/name=$(MINIO_CHART) --timeout=30s ||:
+.PHONY: uninstall-s4
+uninstall-s4:
+	@echo "Uninstalling S4 release $(S4_RELEASE_NAME) in namespace $(S4_NAMESPACE)"
+	@helm -n $(S4_NAMESPACE) uninstall $(S4_RELEASE_NAME) --ignore-not-found
+	@configmap_json=$$(oc get configmap s4-supervisord-config -n $(S4_NAMESPACE) -o json 2>/dev/null || true); \
+		if [ -n "$$configmap_json" ]; then \
+			install_mode=$$(printf '%s' "$$configmap_json" | jq -r '.metadata.annotations["aiobs.rh-ai-quickstart.io/install-mode"] // ""'); \
+			helm_owner=$$(printf '%s' "$$configmap_json" | jq -r '.metadata.annotations["meta.helm.sh/release-name"] // ""'); \
+			if [ "$$install_mode" = standalone ] && [ -z "$$helm_owner" ]; then \
+				oc delete configmap s4-supervisord-config -n $(S4_NAMESPACE); \
+			fi; \
+		fi
+	@echo "The S4 Helm chart removes its PVC on uninstall, including stored data."
 
 # Cleanup Loki RBAC resources created by our Helm installation
 # NOTE: ClusterRoles are owned by cluster-logging operator - we never delete them
@@ -1478,9 +1501,15 @@ cleanup-loki-clusterroles:
 
 .PHONY: install-loki
 install-loki:
-	@echo "→ Checking if loki-stack already exists in namespace $(LOKI_NAMESPACE)"
-	@if helm list -n $(LOKI_NAMESPACE) 2>/dev/null | grep -q "^loki-stack\s"; then \
-		echo "  → loki-stack already installed, skipping..."; \
+	@echo "→ Installing/upgrading loki-stack in namespace $(LOKI_NAMESPACE)"
+	@if helm list -n $(LOKI_NAMESPACE) 2>/dev/null | grep -q "^loki-stack[[:space:]]"; then \
+		echo "  → Reconciling existing loki-stack release with S4 storage..."; \
+		cd deploy/helm && helm upgrade loki-stack observability/loki \
+			--namespace $(LOKI_NAMESPACE) \
+			--reuse-values \
+			--atomic --wait --timeout 15m \
+			--set global.namespace=$(LOKI_NAMESPACE) \
+			$(helm_loki_args) || exit 1; \
 	else \
 		echo "→ Verifying Logging and Loki Operators are ready..."; \
 		if ! oc get subscription cluster-logging -n openshift-logging >/dev/null 2>&1; then \

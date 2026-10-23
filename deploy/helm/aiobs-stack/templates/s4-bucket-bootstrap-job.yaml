@@ -1,0 +1,126 @@
+{{- $requiredBuckets := uniq (list .Values.tempo.s4.s3.bucket .Values.loki.s4.s3.bucket) -}}
+{{- $bucketNames := uniq (concat $requiredBuckets .Values.awsCompatibleStorageBuckets.names) -}}
+{{- if .Values.awsCompatibleStorageBuckets.namesCsv -}}
+{{- $bucketNames = uniq (concat $bucketNames (splitList "," .Values.awsCompatibleStorageBuckets.namesCsv)) -}}
+{{- end -}}
+{{- if and (index .Values "aws-compatible-storage" "enabled") .Values.awsCompatibleStorageBuckets.create }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: s4-create-buckets
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "aiobs-stack.labels" . | nindent 4 }}
+    app.kubernetes.io/component: s3-bootstrap
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 900
+  template:
+    metadata:
+      labels:
+        {{- include "aiobs-stack.labels" . | nindent 8 }}
+        app.kubernetes.io/component: s3-bootstrap
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: create-buckets
+          image: {{ .Values.jobImages.python | quote }}
+          imagePullPolicy: IfNotPresent
+          workingDir: /tmp
+          env:
+            - name: HOME
+              value: /tmp
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "s4.secretName" . }}
+                  key: AWS_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "s4.secretName" . }}
+                  key: AWS_SECRET_ACCESS_KEY
+            - name: S3_ENDPOINT_URL
+              value: "http://{{ include "s4.fullname" . }}:{{ include "s4.apiPort" . }}"
+            - name: S4_UI_ENDPOINT_URL
+              value: "http://{{ include "s4.fullname" . }}:{{ include "s4.uiPort" . }}/api"
+            - name: S3_REGION
+              value: {{ (index .Values "aws-compatible-storage" "s3" "region") | default "us-east-1" | quote }}
+            - name: S3_BUCKETS
+              value: {{ join "," $bucketNames | quote }}
+            - name: S3_SMOKE_BUCKETS
+              value: {{ join "," $requiredBuckets | quote }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -eu
+              python -m pip install --no-cache-dir -q boto3
+              python - <<'PY'
+              import os
+              import time
+              import uuid
+              from urllib.request import urlopen
+              from urllib.error import URLError
+
+              import boto3
+              from botocore.config import Config
+
+              for attempt in range(60):
+                  try:
+                      with urlopen(os.environ["S4_UI_ENDPOINT_URL"], timeout=3) as response:
+                          if 200 <= response.status < 300:
+                              break
+                  except (OSError, URLError):
+                      pass
+                  time.sleep(5)
+              else:
+                  raise RuntimeError("S4 UI readiness endpoint did not become healthy")
+
+              client = boto3.client(
+                  "s3",
+                  endpoint_url=os.environ["S3_ENDPOINT_URL"],
+                  region_name=os.environ["S3_REGION"],
+                  config=Config(s3={"addressing_style": "path"}),
+              )
+              for attempt in range(60):
+                  try:
+                      existing = {
+                          bucket["Name"]
+                          for bucket in client.list_buckets().get("Buckets", [])
+                      }
+                      break
+                  except Exception:
+                      if attempt == 59:
+                          raise
+                      time.sleep(5)
+
+              for name in filter(None, os.environ["S3_BUCKETS"].split(",")):
+                  if name not in existing:
+                      client.create_bucket(Bucket=name)
+                      existing.add(name)
+                      print(f"Created bucket {name}")
+                  else:
+                      print(f"Bucket {name} already exists")
+
+              # Listing buckets alone cannot catch RGW write failures. Check
+              # both observability buckets with a temporary object, then remove it.
+              for bucket in filter(None, os.environ["S3_SMOKE_BUCKETS"].split(",")):
+                  key = f"_s4-smoke/{uuid.uuid4().hex}"
+                  payload = b"s4-s3-write-read-smoke"
+                  uploaded = False
+                  try:
+                      client.put_object(Bucket=bucket, Key=key, Body=payload)
+                      uploaded = True
+                      stream = client.get_object(Bucket=bucket, Key=key)["Body"]
+                      try:
+                          if stream.read() != payload:
+                              raise RuntimeError(f"S4 returned unexpected data for {bucket}")
+                      finally:
+                          stream.close()
+                  finally:
+                      if uploaded:
+                          client.delete_object(Bucket=bucket, Key=key)
+                  print(f"S3 write/read/delete smoke passed for {bucket}")
+              PY
+{{- end }}

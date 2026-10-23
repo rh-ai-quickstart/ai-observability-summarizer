@@ -72,12 +72,17 @@ rag:
 
 # =============================================================================
 # INFRASTRUCTURE COMPONENTS (deployed to fixed namespaces)
-# NOTE: All infrastructure components are always installed (no toggles)
+# Core infrastructure is enabled by default; the S4 chart has an explicit condition.
 # Matches 'make install' behavior - single CR per cluster
 # =============================================================================
 
 # TempoStack - Distributed tracing backend (observability-hub)
-tempo: {}
+tempo:
+  s4:
+    secret:
+      create: false # Parent chart mirrors credentials from aws-compatible-storage.s3.
+    s3:
+      bucket: tempo
 
 # LokiStack - Log aggregation (openshift-logging)
 # NOTE: Makefile sets rbac.collector.create dynamically; Operator uses loki-rbac-job.yaml
@@ -89,6 +94,11 @@ loki:
   rbac:
     collector:
       create: false  # Disabled - RBAC created by loki-rbac-job.yaml to avoid Helm ownership conflicts
+  s4:
+    secret:
+      create: false # Parent chart mirrors credentials from aws-compatible-storage.s3.
+    s3:
+      bucket: loki
 
 # OpenTelemetry Collector - Trace/metric collection (observability-hub)
 otelCollector: {}
@@ -99,8 +109,57 @@ korrel8r:
     # Empty triggers dynamic name: {{ .Release.Name }}-loki-stack (matches loki chart's clusterResourceName)
     releaseName: ""
 
-# MinIO - S3-compatible object storage (observability-hub)
-minio: {}
+# aws-compatible-storage (S4) - storage in the operator release namespace.
+# This S3 block is the single credential source for S4, Tempo, and Loki when
+# deploying the umbrella/operator chart. The parent creates namespace mirrors.
+aws-compatible-storage:
+  enabled: true
+  fullnameOverride: s4
+  image:
+    repository: quay.io/rh-aiservices-bu/s4
+    tag: "0.3.2"
+    pullPolicy: IfNotPresent
+  s3:
+    accessKeyId: s4admin # Demo value; override for shared or production clusters.
+    secretAccessKey: s4secret # Demo value; override for shared or production clusters.
+    region: us-east-1
+  auth:
+    enabled: true
+    username: admin
+    password: changeme # Demo value; override for shared or production clusters.
+  route:
+    # Keep the public S4 UI Route off while the demo auth values are in use.
+    # Change auth.username and auth.password before enabling this Route.
+    enabled: false
+    s3Api:
+      enabled: false
+  storage:
+    data:
+      size: 10Gi
+  # S4 0.3.2 runs RGW under Supervisor. Its default 1024 soft FD limit caused
+  # failed Tempo PUTs; the parent chart supplies the image's config with
+  # minfds=65536, which RGW inherits.
+  extraVolumes:
+    - name: s4-supervisord-config
+      configMap:
+        name: s4-supervisord-config
+  extraVolumeMounts:
+    - name: s4-supervisord-config
+      mountPath: /etc/supervisord.conf
+      subPath: supervisord.conf
+      readOnly: true
+
+# The parent chart creates buckets as a regular Job (not a Helm hook).
+awsCompatibleStorageBuckets:
+  create: true
+  names:
+    - tempo
+    - loki
+  namesCsv: "" # Optional comma-separated override for standalone Make installs.
+
+# Python image used by the parent-chart bucket bootstrap Job.
+jobImages:
+  python: registry.redhat.io/ubi9/python-311:latest
 
 # =============================================================================
 # AUTO-INSTRUMENTATION (for automatic tracing of Python applications)

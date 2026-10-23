@@ -23,7 +23,7 @@ This operator provides a single Custom Resource (`AIObservabilitySummarizer`) to
 - **Development Mode**: Enables browser-cached API keys for testing - *disabled by default*
 
 **Infrastructure (Always Installed):**
-- **MinIO**: Object storage for Tempo/Loki
+- **aws-compatible-storage (S4)**: S3-compatible object storage for Tempo/Loki, installed in `ai-observability`
 - **TempoStack**: Distributed tracing backend
 - **OTEL Collector**: OpenTelemetry trace collection
 - **LokiStack**: Log aggregation
@@ -55,13 +55,16 @@ graph TB
                 PG[PGVector<br/>Vector DB]
                 ALERT[Alert CronJob<br/>optional]
             end
+
+            subgraph "Storage"
+                S4[aws-compatible-storage (S4)<br/>10Gi PVC, S3 :7480]
+            end
         end
 
         subgraph "observability-hub namespace"
             subgraph "Infrastructure Components"
                 TEMPO[TempoStack<br/>Distributed Tracing]
                 OTEL[OTEL Collector<br/>Trace Collection]
-                MINIO[MinIO<br/>Object Storage]
             end
         end
 
@@ -113,7 +116,7 @@ graph TB
     OP -->|Deploys via<br/>Helm Charts| ALERT
     OP -->|Deploys via<br/>Helm Charts| TEMPO
     OP -->|Deploys via<br/>Helm Charts| OTEL
-    OP -->|Deploys via<br/>Helm Charts| MINIO
+    OP -->|Deploys via<br/>Helm Charts| S4
     OP -->|Deploys via<br/>Helm Charts| LOKI
     OP -->|Deploys via<br/>Helm Charts| KORREL8R
 
@@ -133,8 +136,8 @@ graph TB
 
     %% Component relationships
     OTEL -->|Sends traces to| TEMPO
-    LOKI -->|Stores logs in| MINIO
-    TEMPO -->|Stores traces in| MINIO
+    LOKI -->|Stores logs in| S4
+    TEMPO -->|Stores traces in| S4
     KORREL8R -->|Correlates signals from| TEMPO
     KORREL8R -->|Correlates signals from| LOKI
 
@@ -159,8 +162,8 @@ graph TB
    - Tested with Tempo operator v0.20.x for stable distributed tracing
 
 2. **Multi-Namespace Deployment**
-   - **ai-observability**: Application components (MCP Server, Console Plugin, RAG stack)
-   - **observability-hub**: Infrastructure (Tempo, OTEL, MinIO)
+   - **ai-observability**: Application components and S4 storage
+   - **observability-hub**: Tempo and OTEL infrastructure
    - **openshift-logging**: LokiStack deployment
    - **openshift-cluster-observability-operator**: Korrel8r deployment
 
@@ -201,7 +204,7 @@ When you create an `AIObservabilitySummarizer` CR, the following happens automat
    │   ├── TempoStack → observability-hub
    │   ├── LokiStack → openshift-logging
    │   ├── OTEL Collector → observability-hub
-   │   ├── MinIO → observability-hub
+   │   ├── aws-compatible-storage (S4) → ai-observability
    │   └── Korrel8r → openshift-cluster-observability-operator
    └── Application charts (to ai-observability)
        ├── MCP Server
@@ -244,7 +247,7 @@ All hook jobs are configured with:
 | **TempoStack** | TempoStack CR | observability-hub | Tempo Operator | Distributed tracing backend |
 | **LokiStack** | LokiStack CR | openshift-logging | Loki Operator | Log aggregation |
 | **OTEL Collector** | OpenTelemetryCollector CR | observability-hub | OpenTelemetry Operator | Trace collection |
-| **MinIO** | StatefulSet | observability-hub | Helm Chart | S3-compatible object storage |
+| **S4** | Deployment | ai-observability | aws-compatible-storage Helm chart | S3-compatible storage; 10Gi PVC; regular parent-chart Job creates `tempo` and `loki` buckets |
 | **Korrel8r** | Deployment | openshift-cluster-observability-operator | Helm Chart | Signal correlation engine |
 
 ## Prerequisites
@@ -376,7 +379,7 @@ All CSVs should show `Succeeded` status before proceeding to create the CR.
    - **Development Mode** (Advanced): Enable browser-cached API keys for testing (DO NOT use in production)
 5. Click **Create**
 
-> **Note**: Infrastructure components (Tempo, Loki, OTEL, MinIO, Korrel8r) are **always deployed** automatically to fixed namespaces. You only configure application components (RAG, Alerting, Dev Mode) and LLM settings.
+> **Note**: S4, Tempo, Loki, OTEL, and Korrel8r are deployed automatically to their configured namespaces. Configure S4 credentials through the `spec.aws-compatible-storage.s3` and `spec.aws-compatible-storage.auth` fields in the CR when deploying to a shared cluster. The S4 Web UI Route is disabled by default; change the demo UI credentials before setting `spec.aws-compatible-storage.route.enabled: true`. Keep the S3 API Route disabled. The umbrella chart mirrors the S3 values into the Tempo and Loki namespaces; standalone Makefile installs use the same `S4_ACCESS_KEY_ID` and `S4_SECRET_ACCESS_KEY` settings for all three releases.
 
 ## Uninstallation
 
@@ -459,8 +462,8 @@ oc get deployment korrel8r-summarizer -n openshift-cluster-observability-operato
 
 **3. Check for PVCs that need manual cleanup:**
 ```bash
-# MinIO PVCs
-oc get pvc -n observability-hub | grep minio
+# S4 PVC
+oc get pvc -n ai-observability | grep s4
 
 # Loki PVCs
 oc get pvc -n openshift-logging | grep loki
@@ -474,9 +477,6 @@ oc get pvc -n ai-observability | grep pgvector
 
 Delete PVCs if no longer needed (data will be lost):
 ```bash
-# Example: Delete MinIO PVCs
-oc delete pvc -n observability-hub -l app.kubernetes.io/name=minio-observability-storage
-
 # Example: Delete Loki PVCs
 oc delete pvc -n openshift-logging -l app.kubernetes.io/name=loki-stack
 ```
@@ -551,7 +551,7 @@ The following infrastructure components are **always deployed** to fixed namespa
 - **TempoStack**: Distributed tracing backend (deployed to `observability-hub`)
 - **LokiStack**: Log aggregation (deployed to `openshift-logging`)
 - **OTEL Collector**: OpenTelemetry trace collection (deployed to `observability-hub`)
-- **MinIO**: Object storage for Tempo/Loki (deployed to `observability-hub`)
+- **S4**: S3-compatible storage for Tempo/Loki (deployed to `ai-observability`; S3 API on `:7480`)
 - **Korrel8r**: Signal correlation engine (deployed to `openshift-cluster-observability-operator`)
 
 > **Note**: Only **one AIObservabilitySummarizer CR** is allowed per cluster (singleton pattern enforced by the operator). All infrastructure components are shared cluster-wide.

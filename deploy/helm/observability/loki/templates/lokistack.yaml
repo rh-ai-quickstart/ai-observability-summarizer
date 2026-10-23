@@ -16,7 +16,7 @@ metadata:
 spec:
   storage:
     secret:
-      name: minio-loki-credentials
+      name: s4-loki-credentials
       type: s3
   storageClassName: {{ include "loki-stack.storageClass" . }}
   size: {{ .Values.lokiStack.size }}

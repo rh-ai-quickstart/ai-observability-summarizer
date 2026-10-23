@@ -53,29 +53,6 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
-MinIO labels
-*/}}
-{{- define "tempo-stack.minioLabels" -}}
-helm.sh/chart: {{ include "tempo-stack.chart" . }}
-app.kubernetes.io/name: minio-tempo
-app.kubernetes.io/instance: {{ .Release.Name }}
-{{- if .Chart.AppVersion }}
-app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
-{{- end }}
-app.kubernetes.io/managed-by: {{ .Release.Service }}
-app.kubernetes.io/component: storage
-app.kubernetes.io/part-of: observability
-{{- end }}
-
-{{/*
-MinIO selector labels
-*/}}
-{{- define "tempo-stack.minioSelectorLabels" -}}
-app.kubernetes.io/name: minio-tempo
-app.kubernetes.io/instance: {{ .Release.Name }}
-{{- end }}
-
-{{/*
 Create the namespace
 */}}
 {{- define "tempo-stack.namespace" -}}

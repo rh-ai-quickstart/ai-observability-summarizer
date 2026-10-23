@@ -72,7 +72,7 @@ spec:
   # Infrastructure Components
   # ==========================================================================
   # NOTE: All infrastructure components (TempoStack, LokiStack, OTEL Collector,
-  # MinIO, Korrel8r) are always installed automatically.
+  # aws-compatible-storage (S4), Korrel8r) are always installed automatically.
   # Only one AIObservabilitySummarizer CR is allowed per cluster.
 
   # Loki - Log aggregation storage configuration

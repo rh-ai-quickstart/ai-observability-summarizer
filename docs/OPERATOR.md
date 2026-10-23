@@ -117,10 +117,14 @@ All CSVs should show `Succeeded` status before proceeding to create the CR.
 | **TempoStack** | observability-hub | Distributed tracing backend |
 | **LokiStack** | openshift-logging | Log aggregation |
 | **OTEL Collector** | observability-hub | OpenTelemetry trace collection |
-| **MinIO** | observability-hub | S3-compatible object storage |
+| **aws-compatible-storage (S4)** | ai-observability | S3-compatible storage (10Gi PVC; regular Job creates `tempo` and `loki`; UI and S3 API Routes off by default) |
 | **Korrel8r** | openshift-cluster-observability-operator | Signal correlation engine |
 
-> **Note:** Infrastructure components are **always deployed** to fixed namespaces and shared across the cluster. Only **one CR** is allowed per cluster (singleton pattern enforced by the operator).
+> **Note:** Infrastructure components are **always deployed** to their configured namespaces and shared across the cluster. Only **one CR** is allowed per cluster (singleton pattern enforced by the operator).
+
+The `aws-compatible-storage.s3` values in the operator CR are the single source for S4 access keys. The parent chart mirrors them into `s4-tempo-credentials` in `observability-hub` and `s4-loki-credentials` in `openshift-logging`. For a shared cluster, replace the demo defaults for `spec.aws-compatible-storage.s3.accessKeyId`, `spec.aws-compatible-storage.s3.secretAccessKey`, `spec.aws-compatible-storage.auth.username`, and `spec.aws-compatible-storage.auth.password` using a protected configuration source. The Web UI Route stays off until the UI credentials are changed; then set `spec.aws-compatible-storage.route.enabled: true` to expose it. Keep `spec.aws-compatible-storage.route.s3Api.enabled: false`. The umbrella chart does not support `s3.existingSecret` because it must also create cross-namespace mirrors.
+
+The parent chart also mounts `s4-supervisord-config` over `/etc/supervisord.conf` in the pinned S4 0.3.2 image. The only change to that image's Supervisor config is `minfds=65536`, inherited by RGW. When upgrading the S4 image, compare the copied config with the new image before deploying; ConfigMap subPath updates require an S4 pod rollout.
 
 ### Dependency Operators (Auto-installed by OLM)
 
@@ -168,7 +172,7 @@ Choose **ONE** model via the OLM UI form:
 | **Alert Analysis** | Disabled | CronJob that analyzes and summarizes alerts using the LLM. Slack webhook URL is optional. |
 | **Development Mode** | Disabled | Enables browser-cached API keys (testing only, NOT for production) |
 
-> **Note:** All infrastructure components (Tempo, Loki, OTEL, MinIO, Korrel8r) automatically use the cluster's default StorageClass for persistent volumes.
+> **Note:** S4, Tempo, Loki, OTEL, and Korrel8r are installed by the operator. S4 uses a 10Gi PVC in `ai-observability`; the other components use their configured namespaces and storage settings. The S4 storage keys above must be changed together with the UI credentials for a shared cluster.
 
 ---
 
@@ -216,8 +220,8 @@ All configuration is **idempotent** - safe to run multiple times.
 │           ↓                                                         │
 │  ┌─────────────────────────────────────────────────────────────┐   │
 │  │ Deployment                                                   │   │
-│  │   ├── ai-observability: App components (MCP, Plugin, RAG)   │   │
-│  │   ├── observability-hub: Infrastructure (Tempo, OTEL, MinIO)│   │
+│  │   ├── ai-observability: App components, S4 storage          │   │
+│  │   ├── observability-hub: Infrastructure (Tempo, OTEL)       │   │
 │  │   ├── openshift-logging: LokiStack                          │   │
 │  │   └── openshift-cluster-observability-operator: Korrel8r   │   │
 │  └─────────────────────────────────────────────────────────────┘   │
@@ -377,8 +381,8 @@ oc get deployment korrel8r-summarizer -n openshift-cluster-observability-operato
 
 **3. Check for PVCs that need manual cleanup:**
 ```bash
-# MinIO PVCs
-oc get pvc -n observability-hub | grep minio
+# S4 PVC (10Gi)
+oc get pvc -n ai-observability | grep s4
 
 # Loki PVCs
 oc get pvc -n openshift-logging | grep loki
@@ -392,9 +396,6 @@ oc get pvc -n ai-observability | grep pgvector
 
 Delete PVCs if no longer needed (data will be lost):
 ```bash
-# Example: Delete MinIO PVCs
-oc delete pvc -n observability-hub -l app.kubernetes.io/name=minio-observability-storage
-
 # Example: Delete Loki PVCs
 oc delete pvc -n openshift-logging -l app.kubernetes.io/name=loki-stack
 ```

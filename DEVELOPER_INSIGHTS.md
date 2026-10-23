@@ -87,7 +87,7 @@ Perfect for AI operations teams, platform engineers, and business stakeholders w
 - Custom alert thresholds and conditions
 
 ### **6. Distributed Tracing Integration**
-- **Complete Observability Stack**: MinIO storage + TempoStack + OpenTelemetry Collector + auto-instrumentation
+- **Complete Observability Stack**: S4 storage + TempoStack + OpenTelemetry Collector + auto-instrumentation
 - **Tracing support** with OpenTelemetry and Tempo to monitor request flows across your AI services
 - **Flexible deployment**: Install complete stack or individual components as needed
 
@@ -216,7 +216,7 @@ One-click installation via OperatorHub with automatic dependency management and 
 
 **What Gets Installed:**
 - Application: MCP Server, Console Plugin, RAG Stack (LlamaStack, LLM Service, PGVector)
-- Infrastructure: TempoStack, LokiStack, OTEL Collector, MinIO, Korrel8r (auto-deployed to multiple namespaces)
+- Infrastructure: aws-compatible-storage (S4), TempoStack, LokiStack, OTEL Collector, Korrel8r (deployed across their configured namespaces)
 - Dependency Operators: Cluster Observability, OpenTelemetry, Tempo, Logging, Loki (auto-installed by OLM)
 - Cluster Config: User Workload Monitoring + Alertmanager (auto-configured)
 
@@ -311,7 +311,7 @@ The project includes a complete observability stack with flexible deployment opt
 
 #### **Complete Stack Installation**
 ```bash
-# Install complete observability stack (MinIO + TempoStack + OTEL + tracing)
+# Install complete observability stack (S4 + TempoStack + OTEL + tracing)
 # Note: NAMESPACE is required for tracing setup
 make install-observability-stack NAMESPACE=your-namespace
 
@@ -323,23 +323,23 @@ make uninstall-observability-stack NAMESPACE=your-namespace
 #### **Individual Component Management**
 ```bash
 # Install individual components
-make install-minio                                           # MinIO storage only (uses observability-hub namespace)
+make install-s4                                              # S4 storage only (uses ai-observability namespace)
 make install-observability                                   # TempoStack + OTEL only (uses observability-hub namespace)
 make setup-tracing NAMESPACE=your-namespace                 # Auto-instrumentation only (requires NAMESPACE)
 
 # Uninstall individual components
-make uninstall-minio                                         # MinIO storage only (uses observability-hub namespace)
+make uninstall-s4                                            # S4 storage only (deletes its PVC/data)
 make uninstall-observability                                 # TempoStack + OTEL only (uses observability-hub namespace)
 make remove-tracing NAMESPACE=your-namespace                 # Auto-instrumentation only (requires NAMESPACE)
 ```
 
 #### **NAMESPACE Requirements**
 - **Complete Stack**: `install-observability-stack` and `uninstall-observability-stack` require NAMESPACE for tracing components
-- **Storage & Core**: `install-minio`, `uninstall-minio`, `install-observability`, `uninstall-observability` use hardcoded `observability-hub` namespace
+- **Storage & Core**: `install-s4` and `uninstall-s4` use `ai-observability`; Tempo and OTEL use `observability-hub`; Loki uses `openshift-logging`
 - **Tracing Only**: `setup-tracing` and `remove-tracing` require NAMESPACE parameter
 
 #### **Observability Features**
-- **MinIO**: S3-compatible object storage for trace data and log data
+- **S4**: S3-compatible object storage on port 7480 for trace and log data; the UI Route requires an explicit opt-in after replacing demo credentials
 - **TempoStack**: Multitenant trace storage and analysis
 - **OpenTelemetry Collector**: Distributed tracing collection
 - **Auto-instrumentation**: Automatic Python application tracing
@@ -354,7 +354,7 @@ The standard installation deploys:
 - **mcp-server** - Model Context Protocol server for metrics analysis, report generation, and AI assistant integration
 - **OpenTelemetry Collector** - Distributed tracing collection
 - **Tempo** - Trace storage and analysis
-- **MinIO** - Object storage for traces
+- **S4** - S3-compatible object storage for traces and logs
 
 **Access Options:**
 - **Console Plugin** (DEV_MODE=false, default): Navigate to **OpenShift Console → OpenShift AI Observability** in the left navigation
@@ -783,7 +783,7 @@ This section describes how to verify that all components of the OpenShift AI Obs
 Before running the E2E test, ensure the following components are deployed:
 
 1. **OpenShift AI Observability Summarizer** - Main application with Console Plugin or React UI
-2. **Observability Stack** - MinIO, Tempo, Loki, OpenTelemetry Collector, Korrel8r
+2. **Observability Stack** - S4, Tempo, Loki, OpenTelemetry Collector, Korrel8r
 3. **User Workload Monitoring** - Enabled in the cluster to fetch user workload metrics and alerts
 4. **Alert Example Application** - Sample app that generates intentional failures
 5. **Anthropic API Key** - For accessing Claude Haiku 4.5 model

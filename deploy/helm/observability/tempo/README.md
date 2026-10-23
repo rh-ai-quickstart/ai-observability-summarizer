@@ -1,158 +1,53 @@
-# Tempo TempoStack Helm Chart
+# TempoStack Helm Chart
 
-This directory contains the Helm chart for deploying a TempoStack instance that uses a shared MinIO storage backend. This chart is designed to work with the Tempo Operator and depends on the shared MinIO instance deployed by the main MinIO chart.
+This chart creates the TempoStack custom resource in `observability-hub`. Tempo stores traces in the S4 `tempo` bucket. The shared aws-compatible-storage (S4) chart runs in `ai-observability`, installed by the parent `aiobs-stack` chart or the standalone Make target.
 
-## Overview
+## Storage configuration
 
-This configuration includes:
-- **TempoStack Instance**: Multitenant Tempo configuration
-- **Shared MinIO Integration**: Uses the shared MinIO instance for trace storage
-- **Storage Secrets**: Credentials and connection details for the shared MinIO
-- **RBAC**: Cluster roles for trace access
+- S3 service: `http://s4.ai-observability.svc.cluster.local:7480`
+- Bucket: `tempo`
+- Credentials: the `s4-tempo-credentials` Secret in `observability-hub`
+- S4 credentials: the umbrella chart mirrors its `aws-compatible-storage.s3` values into the Tempo namespace; a standalone Tempo chart install creates the Secret from `s4.s3`
+- S3 API Route: disabled; clients inside the cluster use the service endpoint
 
-## Prerequisites
+When installing components with Make, `helm_tempo_args` sets the credentials and S4 namespace endpoint. Re-running `make install` upgrades an existing Tempo release to use the S4 Secret; historical objects in MinIO are not copied.
 
-1. **Tempo Operator**: Must be installed first using the tempo-operator Helm chart:
-   ```bash
-   helm install tempo-operator ../tempo-operator/
-   ```
+## Install
 
-2. **Shared MinIO Instance**: The shared MinIO instance must be deployed first:
-   ```bash
-   # Deploy the shared MinIO instance
-   make install-minio
-   # OR
-   helm install minio-observability-storage ../../minio/
-   ```
-
-3. **Namespace**: Ensure the `observability-hub` namespace exists:
-   ```bash
-   kubectl create namespace observability-hub
-   ```
-
-## Deployment
-
-Deploy the TempoStack configuration using Helm:
+Install the complete stack after its operators are ready:
 
 ```bash
-helm install tempo-stack .
+make install-observability-stack NAMESPACE=your-namespace
 ```
 
-This will create:
-- TempoStack instance configured for multitenancy with Gateway access
-- Storage secrets that reference the shared MinIO instance
-- Required RBAC permissions
-- Integration with the existing MinIO deployment
+For individual installs, deploy S4 first, then Tempo and the collector:
 
-⚠️ **Important Configuration Fix**: This chart resolves the gateway/Jaeger ingress conflict by using the recommended Gateway approach. See [`CONFIGURATION_FIX.md`](./CONFIGURATION_FIX.md) for details.
-
-## Configuration Details
-
-### Shared MinIO Storage
-- **Deployment**: Uses the shared `minio-observability-storage` instance
-- **Service**: `minio-observability-storage` ClusterIP service on port 9000
-- **Credentials**: References the shared MinIO credentials
-  - User: `admin` (default MinIO user)
-  - Password: `minio123` (default MinIO password)
-  - Bucket: `tempo` (created automatically via dynamic bucket creation)
-
-### TempoStack Configuration
-- **Name**: `tempostack`
-- **Storage**: Uses shared MinIO storage (no local PVC)
-- **Resources**: 10Gi memory, 5000m CPU limits
-- **Multitenancy**: Enabled with OpenShift mode
-- **Tenant**: `dev` tenant pre-configured
-- **UI Access**: Gateway enabled, accessible via OpenShift Console (Observe -> Traces)
-
-### RBAC
-- **ClusterRole**: `tempostack-traces-reader` for trace access
-- **Binding**: Allows all authenticated users to read traces
-
-## Accessing Tempo
-
-After deployment, access traces via the **OpenShift Console**:
-
-1. Navigate to **Observe -> Traces** in the OpenShift console
-2. Ensure the **COO UIPlugin** is installed (see observability documentation)
-
-Alternative: Check for gateway services:
 ```bash
-oc get services -n observability-hub -l app.kubernetes.io/component=gateway
+make install-s4
+make install-observability
 ```
 
-**Note**: The legacy Jaeger Query UI route has been disabled in favor of the modern Gateway + COO UIPlugin approach.
+`make install-s4` creates the `tempo` and `loki` buckets with the parent chart's regular boto3 Job. The S4 chart requests a 10Gi PVC. Configure non-demo S3 and UI credentials before deploying to a shared cluster.
 
-## Security Considerations
+## Verify
 
-⚠️ **Important**: The default MinIO credentials are for development/testing only. For production deployments:
-
-1. Change the credentials in the shared MinIO chart (`deploy/helm/minio/`)
-2. Update the corresponding values in the Tempo storage secrets
-3. Consider using external S3-compatible storage instead of MinIO
-
-## Customization
-
-### Changing Storage Size
-Edit the shared MinIO chart (`deploy/helm/minio/values.yaml`) to change the storage size:
-```yaml
-persistence:
-  size: 20Gi  # Change as needed
-```
-
-### Adding More Tenants
-Edit `tempo-multitenant.yaml` to add additional tenants:
-```yaml
-tenants:
-  mode: openshift
-  authentication:
-    - tenantName: dev
-      tenantId: "1610b0c3-c509-4592-a256-a1871353dbfa"
-    - tenantName: prod
-      tenantId: "2610b0c3-c509-4592-a256-a1871353dbfb"
-```
-
-### Resource Limits
-Adjust resources in `tempo-multitenant.yaml`:
-```yaml
-resources:
-  total:
-    limits:
-      memory: 20Gi  # Increase for higher throughput
-      cpu: 8000m
-```
-
-## Troubleshooting
-
-### Shared MinIO Not Available
-Check if the shared MinIO instance is running:
 ```bash
-kubectl get pods -n observability-hub | grep minio-observability-storage
-kubectl get pvc -n observability-hub | grep minio
+oc get deployment s4 -n ai-observability
+oc get pvc s4-data -n ai-observability
+oc get tempostack -n observability-hub
+oc get secret s4-tempo-credentials -n observability-hub
 ```
 
-### TempoStack Not Ready
-Check operator logs:
+OpenShift Console users can view traces under **Observe → Traces** when the Cluster Observability Operator UI plugin is installed.
+
+## Troubleshoot
+
+Check Tempo and S4 separately:
+
 ```bash
-kubectl logs -n openshift-tempo-operator deployment/tempo-operator-controller
+oc get pods -n observability-hub
+oc logs -n observability-hub deployment/tempo-tempostack-gateway --tail=50
+oc get pods,pvc -n ai-observability | grep s4
 ```
 
-Check TempoStack status:
-```bash
-kubectl get tempostack tempostack -n observability-hub -o yaml
-```
-
-### Storage Secret Issues
-Verify the MinIO secret is properly configured:
-```bash
-kubectl get secret minio-observability-storage -n observability-hub -o yaml
-```
-
-## Integration with Applications
-
-To send traces to this Tempo instance, configure your applications to send traces to the gateway endpoint. The operator will create the necessary services and routes.
-
-Example OpenTelemetry configuration:
-```yaml
-exporters:
-  otlp:
-    endpoint: "http://tempostack-gateway.observability-hub.svc.cluster.local:8080"
+If Tempo reports S3 authentication or connection errors, compare `s4-tempo-credentials` with `s4-credentials` and verify that the S4 Service is reachable on port `7480`. The S4 UI Route is disabled by default; enable it only after changing the demo UI credentials. The S3 API Route remains disabled.

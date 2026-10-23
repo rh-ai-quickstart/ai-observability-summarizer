@@ -87,7 +87,7 @@ Without this project, teams typically:
 - **OpenTelemetry Collector**: collects traces and enables auto-instrumentation flows
 - **Tempo**: trace storage/query (integrated into OpenShift Console via UI plugin)
 - **Loki**: log aggregation/query (integrated into OpenShift Console via UI plugin)
-- **MinIO**: object storage backend for traces/logs persistence
+- **aws-compatible-storage (S4)**: S3-compatible object storage for traces and logs, deployed in `ai-observability`
 
 **Application components**
 
@@ -101,7 +101,34 @@ Without this project, teams typically:
 
 ### Architecture diagrams
 
-![Architecture](docs/images/arch-openshift.jpg)
+```mermaid
+flowchart LR
+  subgraph app["Application namespace"]
+    UI["OpenShift Console plugin or React UI"] --> MCP["MCP server"]
+    MCP --> RAG["LlamaStack / LLM"]
+  end
+  subgraph hub["observability-hub"]
+    OTEL["OpenTelemetry Collector"] --> Tempo["TempoStack"]
+  end
+  subgraph logging["openshift-logging"]
+    Loki["LokiStack"]
+  end
+  subgraph storage["ai-observability"]
+    S4["aws-compatible-storage (S4)<br/>S3 :7480, UI :5000"]
+  end
+  MCP --> Prometheus["Prometheus / Thanos"]
+  MCP --> Tempo
+  MCP --> Loki
+  MCP --> OTEL
+  Tempo -->|tempo bucket| S4
+  Loki -->|loki bucket| S4
+```
+
+S4 uses a 10Gi PVC. The [shared aws-compatible-storage chart](https://github.com/rh-ai-quickstart/ai-architecture-charts/tree/main/aws-compatible-storage) packages the [upstream S4 runtime](https://github.com/rh-aiservices-bu/s4). The parent chart's regular boto3 Job creates the `tempo` and `loki` buckets and checks a temporary S3 write/read/delete in each. The S3 API stays inside the cluster at `http://s4.ai-observability.svc.cluster.local:7480`. The credentials Secret is `s4-credentials`; Tempo and Loki use mirrored Secrets in their namespaces. A Supervisor ConfigMap raises RGW's inherited file-descriptor limit to 65536 for the pinned S4 0.3.2 image.
+
+This quickstart keeps the S4 Web UI Route **disabled by default** because its values include demo UI credentials. Before enabling it, set `S4_UI_USERNAME` and `S4_UI_PASSWORD` to unique values from a protected source, then run `make S4_UI_ROUTE_ENABLED=true install-s4`. For an operator or umbrella install, override `aws-compatible-storage.auth.username` and `aws-compatible-storage.auth.password` and set `aws-compatible-storage.route.enabled=true` in the deployment values. Keep the S3 API Route disabled. Do not commit real credentials to Git.
+
+The Make and operator/umbrella install paths manage that Supervisor ConfigMap differently. Use one install path per namespace; migrate the existing release before switching paths. Loki also has its own WAL PVC, whose capacity depends on log volume and is separate from the S4 PVC.
 
 #### Simple flow
 
@@ -146,6 +173,8 @@ Without this project, teams typically:
 make install NAMESPACE=your-namespace
 ```
 
+On an existing installation, this also upgrades the Tempo and Loki Helm releases to reference their S4 credential Secrets. The new buckets start empty: this command does **not** copy historical traces or logs from MinIO. Decide whether that history must be retained or copied, verify new ingestion and queries against S4, and keep the old MinIO release and PVC until that decision is complete.
+
 **Want to install with existing LLMs?**
 
 - **No Hugging Face / no local model download** (use an already-running model endpoint):
@@ -153,6 +182,10 @@ make install NAMESPACE=your-namespace
 ```bash
 make install NAMESPACE=your-namespace LLM_URL=http://your-llm-endpoint
 ```
+
+You can pass a complete HTTPS `/v1` endpoint as `LLM_URL`. For a protected
+endpoint, export `LLM_API_TOKEN` before running `make install`; LlamaStack reads
+it from the `llama-stack-env` Secret through a config placeholder.
 
 **For developers - Standalone (development/standalone): React UI route**
 
@@ -376,7 +409,7 @@ make uninstall NAMESPACE=your-namespace UNINSTALL_OBSERVABILITY=true
 
 This removes everything including:
 - Application components (MCP, Console Plugin, RAG)
-- Observability infrastructure (Tempo, Loki, OTEL, Korrel8r, MinIO)
+- Observability infrastructure (S4, Tempo, Loki, OTEL, Korrel8r)
 - Distributed Tracing Console Plugin (Observe → Traces menu)
 - Logging Console Plugin (Observe → Logs menu)
 

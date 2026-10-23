@@ -1,6 +1,6 @@
 dependencies:
-- name: minio-observability-storage
-  repository: file://../minio
+- name: aws-compatible-storage
+  repository: https://rh-ai-quickstart.github.io/ai-architecture-charts
   version: 0.1.0
 - name: tempo-stack
   repository: file://../observability/tempo
@@ -26,5 +26,5 @@ dependencies:
 - name: rag
   repository: file://../rag
   version: 0.1.0
-digest: sha256:ef982f1365d8f1419c736936198146b7b399a252873418c2e6b305a10356907f
-generated: "2026-03-31T12:50:29.849096-04:00"
+digest: sha256:7d02b6b44213764cd633b5b55e0833e1ad5c2c536c25a158e6a70d2f1aa78f52
+generated: "2026-10-09T16:21:55.21687-04:00"

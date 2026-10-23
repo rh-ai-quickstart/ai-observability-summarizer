@@ -1,6 +1,6 @@
 apiVersion: v2
 name: loki-stack
-description: A Helm chart for LokiStack with MinIO storage integration for OpenShift AI Observability
+description: A Helm chart for LokiStack with S4-backed S3 storage for OpenShift AI Observability
 type: application
 version: 0.1.0
 appVersion: "2.9.0"
@@ -11,7 +11,7 @@ keywords:
   - observability
   - openshift
   - lokistack
-  - minio
+  - s3
   - storage
   - opentelemetry
 
@@ -22,4 +22,4 @@ dependencies: []
 
 annotations:
   category: Observability
-  description: "LokiStack deployment with shared MinIO storage backend"
+  description: "LokiStack deployment with shared S4-backed S3 storage"
