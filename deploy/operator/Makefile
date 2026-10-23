@@ -107,15 +107,15 @@ prepare-build: ## Copy helm charts from deploy/helm for container build
 	@sed -i.bak '/repository:.*mcp-server/{n;s|tag: .*|tag: $(VERSION)|;}' ../helm/aiobs-stack/values.yaml && rm -f ../helm/aiobs-stack/values.yaml.bak
 	@sed -i.bak '/repository:.*aiobs-console-plugin/s|repository: .*|repository: $(CONSOLE_PLUGIN_IMAGE)|' ../helm/aiobs-stack/values.yaml && rm -f ../helm/aiobs-stack/values.yaml.bak
 	@sed -i.bak '/repository:.*aiobs-console-plugin/{n;s|tag: .*|tag: $(VERSION)|;}' ../helm/aiobs-stack/values.yaml && rm -f ../helm/aiobs-stack/values.yaml.bak
-	@sed -i.bak '/repository:.*metric-alerting/s|repository: .*|repository: $(METRICS_ALERTING_IMAGE)|' ../helm/aiobs-stack/values.yaml && rm -f ../helm/aiobs-stack/values.yaml.bak
-	@sed -i.bak '/repository:.*metric-alerting/{n;s|tag: .*|tag: $(VERSION)|;}' ../helm/aiobs-stack/values.yaml && rm -f ../helm/aiobs-stack/values.yaml.bak
+	@sed -i.bak '/repository:.*metrics-alerting/s|repository: .*|repository: $(METRICS_ALERTING_IMAGE)|' ../helm/aiobs-stack/values.yaml && rm -f ../helm/aiobs-stack/values.yaml.bak
+	@sed -i.bak '/repository:.*metrics-alerting/{n;s|tag: .*|tag: $(VERSION)|;}' ../helm/aiobs-stack/values.yaml && rm -f ../helm/aiobs-stack/values.yaml.bak
 	@# Update child charts in source - both repository and tag
 	@sed -i.bak '/repository:.*mcp-server/s|repository: .*|repository: $(MCP_SERVER_IMAGE)|' ../helm/mcp-server/values.yaml && rm -f ../helm/mcp-server/values.yaml.bak
 	@sed -i.bak '/repository:.*mcp-server/{n;s|tag: .*|tag: $(VERSION)|;}' ../helm/mcp-server/values.yaml && rm -f ../helm/mcp-server/values.yaml.bak
 	@sed -i.bak '/repository:.*aiobs-console-plugin/s|repository: .*|repository: $(CONSOLE_PLUGIN_IMAGE)|' ../helm/openshift-console-plugin/values.yaml && rm -f ../helm/openshift-console-plugin/values.yaml.bak
 	@sed -i.bak '/repository:.*aiobs-console-plugin/{n;s|tag: .*|tag: $(VERSION)|;}' ../helm/openshift-console-plugin/values.yaml && rm -f ../helm/openshift-console-plugin/values.yaml.bak
-	@sed -i.bak '/repository:.*metric-alerting/s|repository: .*|repository: $(METRICS_ALERTING_IMAGE)|' ../helm/alerting/values.yaml && rm -f ../helm/alerting/values.yaml.bak
-	@sed -i.bak '/repository:.*metric-alerting/{n;s|tag: .*|tag: $(VERSION)|;}' ../helm/alerting/values.yaml && rm -f ../helm/alerting/values.yaml.bak
+	@sed -i.bak '/repository:.*metrics-alerting/s|repository: .*|repository: $(METRICS_ALERTING_IMAGE)|' ../helm/alerting/values.yaml && rm -f ../helm/alerting/values.yaml.bak
+	@sed -i.bak '/repository:.*metrics-alerting/{n;s|tag: .*|tag: $(VERSION)|;}' ../helm/alerting/values.yaml && rm -f ../helm/alerting/values.yaml.bak
 	@sed -i.bak '/repository:.*aiobs-react-ui/s|repository: .*|repository: $(REACT_UI_IMAGE)|' ../helm/react-ui-app/values.yaml && rm -f ../helm/react-ui-app/values.yaml.bak
 	@sed -i.bak '/repository:.*aiobs-react-ui/{n;s|tag: .*|tag: $(VERSION)|;}' ../helm/react-ui-app/values.yaml && rm -f ../helm/react-ui-app/values.yaml.bak
 	@echo "✅ Source charts updated with repositories and tags"
