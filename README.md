@@ -150,6 +150,7 @@ The Make and operator/umbrella install paths manage that Supervisor ConfigMap di
 ### Minimum software requirements
 
 - **OpenShift**: 4.18.33+
+  - **OpenShift 4.22+**: the console plugin renders unstyled. Use the standalone React UI with the Helm installation (`DEV_MODE=true`). See [Troubleshooting](docs/TROUBLESHOOTING.md#3-console-plugin-ui-is-unstyled-on-openshift-422).
 - **OpenShift AI**: 2.16.2+
 - **CLI tools**:
   - `oc`
@@ -420,6 +421,8 @@ This removes everything including:
 ### Option 2: Install via Operator (Optional)
 
 For production environments requiring OLM-managed lifecycle and automatic dependency management, an operator-based installation is available.
+
+> **OpenShift 4.22+:** The operator deploys only the console plugin, which renders unstyled on OpenShift 4.22+. It does not deploy the standalone React UI. On these clusters, use the Helm installation with `DEV_MODE=true`. See [Troubleshooting](docs/TROUBLESHOOTING.md#3-console-plugin-ui-is-unstyled-on-openshift-422).
 
 **When to use the Operator:**
 - Production deployments requiring centralized operator management

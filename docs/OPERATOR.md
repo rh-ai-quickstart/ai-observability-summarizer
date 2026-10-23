@@ -7,6 +7,7 @@ A Helm-based Kubernetes Operator for deploying the complete AI Observability sta
 ### Prerequisites
 
 - OpenShift 4.18+
+  - **OpenShift 4.22+**: The console plugin renders unstyled, and the operator does not deploy the standalone React UI. Use the Helm installation with `DEV_MODE=true` instead. See [Troubleshooting](TROUBLESHOOTING.md#3-console-plugin-ui-is-unstyled-on-openshift-422).
 - Cluster admin access
 - **OpenShift AI (RHOAI) Operator**: Required only if enabling RAG with local LLM deployment
   - **RHOAI 3.x**: Required for LlamaStack operator mode (`managedByOperator`)

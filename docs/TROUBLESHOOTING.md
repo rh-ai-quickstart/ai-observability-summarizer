@@ -277,6 +277,29 @@ oc exec -n your-namespace deployment/aiobs-mcp-server -- curl -v http://llama-st
 
 ---
 
+### 3. Console Plugin UI Is Unstyled on OpenShift 4.22+
+
+**Symptoms**: The **AI Observability** console page renders as one long, unstyled vertical column. The browser console shows `aiobs-console-plugin@1.0.0 was built for an older version of Console`.
+
+**Root Cause**: The console plugin is built with PatternFly 5 and relies on the OpenShift Console to provide PatternFly's base styles. The OpenShift 4.22 console ships only PatternFly 6 styles, so the plugin's components render without layout CSS. This was observed on OpenShift 4.22.6; the exact release that stopped shipping PatternFly 5 styles has not been confirmed. The fix is to migrate the plugin to PatternFly 6, which is tracked separately.
+
+**Workaround**: Use the standalone React UI, which bundles its own PatternFly styles and uses the same MCP server. It is available only with the Helm (non-operator) installation:
+
+```bash
+# New installation
+make install NAMESPACE=your-namespace DEV_MODE=true
+
+# Existing Helm installation: add the standalone UI
+make install-react-ui NAMESPACE=your-namespace
+
+# Find the UI address
+oc get route aiobs-react-ui -n your-namespace -o jsonpath='{.spec.host}'
+```
+
+The operator installation does not deploy the standalone React UI. On OpenShift 4.22+, use the Helm installation until the console plugin supports PatternFly 6.
+
+---
+
 ## Diagnostic Commands
 
 ### Loki Stack Health Check
