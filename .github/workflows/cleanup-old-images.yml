@@ -125,6 +125,14 @@ jobs:
               continue
             fi
 
+            # Skip bare release tags (e.g., 3.2.0) that have a matching v-prefixed release tag.
+            # Released operator bundles reference the bare tag, so deleting it breaks operator installs.
+            if echo "$TAGS" | grep -qxF "v$TAG"; then
+              echo "🔒 Protecting tag: $TAG (official release - bare tag referenced by operator)"
+              PROTECTED_COUNT=$((PROTECTED_COUNT + 1))
+              continue
+            fi
+
             # Skip user-specified protected tags
             if [ -n "$PROTECTED_TAGS" ]; then
               # Convert comma-separated string to array
