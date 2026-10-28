@@ -250,9 +250,11 @@ The UI does not discover models running elsewhere in the cluster, such as models
 3. Select **Model as a Service (MaaS)**.
 4. Enter the model resource name, for example `granite`.
 5. Enter the API key.
-6. Enter the model's external endpoint, for example `https://granite-granite-test.apps.<cluster-domain>`.
+6. Enter the model's external endpoint **followed by `/v1`**, for example `https://granite-granite-test.apps.<cluster-domain>/v1`.
 
 You can find the model name, API key (the model's authentication token), and external endpoint in the OpenShift AI dashboard, in the model's deployment details. The model must have an external route enabled. The API key is stored in a Kubernetes Secret in the quickstart's namespace.
+
+> **Note:** The OpenShift AI dashboard shows the external endpoint without `/v1`. If you enter it without `/v1`, the model is saved, but chat and summaries fail with `Error code: 404 - {'detail': 'Not Found'}`. To fix an existing entry, delete the model in **Settings** and add it again with `/v1`.
 
 #### Using the UI
 
