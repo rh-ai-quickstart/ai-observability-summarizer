@@ -21,6 +21,7 @@ Create an interactive dashboard to analyze AI model performance and OpenShift cl
    - [Deprecated: Operator and OpenShift Console plugin](#deprecated-operator-and-openshift-console-plugin)
    - [Quick Start - Local Development](#quick-start---local-development)
    - [Usage](#usage)
+     - [Use a model deployed in the same cluster](#use-a-model-deployed-in-the-same-cluster)
    - [Configuration](#configuration)
      - [Model as a Service (MaaS) Setup](#model-as-a-service-maas-setup)
      - [DEV Mode Workflow](#dev-mode-workflow)
@@ -239,6 +240,19 @@ Once the model configuration is set, select your model from the dropdown:
 ![Dropdown page](docs/images/dropdown.png)
 
 > **For detailed setup instructions**, see the [Configuration](#configuration) section below, which covers MAAS setup, DEV mode workflow, and per-model API key configuration.
+
+##### Use a model deployed in the same cluster
+
+The UI does not discover models running elsewhere in the cluster, such as models deployed with OpenShift AI in another project. To use one, add it as a Model as a Service (MaaS) model:
+
+1. Click **Settings** in the **Overview** tab of the UI.
+2. Click **Add Model**.
+3. Select **Model as a Service (MaaS)**.
+4. Enter the model resource name, for example `granite`.
+5. Enter the API key.
+6. Enter the model's external endpoint, for example `https://granite-granite-test.apps.<cluster-domain>`.
+
+You can find the model name, API key (the model's authentication token), and external endpoint in the OpenShift AI dashboard, in the model's deployment details. The model must have an external route enabled. The API key is stored in a Kubernetes Secret in the quickstart's namespace.
 
 #### Using the UI
 
