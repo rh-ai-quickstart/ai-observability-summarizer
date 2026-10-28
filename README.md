@@ -462,7 +462,23 @@ The AI Observability operator (OperatorHub) and the OpenShift Console plugin UI 
 - `make install` no longer installs the console plugin, and `make install-console-plugin` fails with a deprecation message. The plugin is built with PatternFly 5 and renders unstyled on OpenShift 4.22 and later.
 - The operator and plugin source code remain in the repository for reference ([docs/OPERATOR.md](docs/OPERATOR.md), [deploy/operator](deploy/operator)).
 
-**Migrating from an operator installation:** uninstall the operator as described below, then run `make install NAMESPACE=<namespace>`. Do not run both installation methods on the same cluster.
+**Migrating from an operator installation:**
+
+1. Uninstall the operator as described below.
+2. Remove the console plugin entry that the operator leaves registered in the OpenShift Console:
+   ```bash
+   make uninstall-console-plugin NAMESPACE=ai-observability
+   ```
+3. Install with `make install NAMESPACE=<namespace>`. It replaces the Loki, Logging, Tempo, and OpenTelemetry operators that the operator installation added to `openshift-operators` with its own subscriptions.
+4. If the Cluster Observability Operator was already installed in its own namespace, the operator installation may have left a second, **Failed** copy in `openshift-operators` (`InterOperatorGroupOwnerConflict`). Remove that copy:
+   ```bash
+   oc get csv -n openshift-operators | grep cluster-observability-operator
+   oc delete subscriptions.operators.coreos.com,csv -n openshift-operators \
+     -l operators.coreos.com/cluster-observability-operator.openshift-operators
+   ```
+   Only do this if the copy in `openshift-operators` is the Failed one.
+
+Do not run both installation methods on the same cluster.
 
 #### Uninstall (Operator)
 
