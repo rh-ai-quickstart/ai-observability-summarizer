@@ -47,6 +47,11 @@ oauth:
   # Cookie configuration
   cookieSecret: ""  # Auto-generated if empty
   cookieExpire: "24h"
+  # Authorization check applied after OpenShift login (oauth-proxy --openshift-sar).
+  # The UI shows cluster-wide metrics, logs and traces through the MCP server's service account,
+  # so by default only users who can list all namespaces may sign in. Set to "" to allow any
+  # authenticated OpenShift user (not recommended).
+  openshiftSar: '{"resource":"namespaces","verb":"list"}'
 
 # MCP Server connection
 mcpServer:

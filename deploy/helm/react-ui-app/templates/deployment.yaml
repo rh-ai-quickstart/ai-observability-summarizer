@@ -39,6 +39,9 @@ spec:
         - --tls-key=/etc/tls/private/tls.key
         - --cookie-secret={{ .Values.oauth.cookieSecret | default (randAlphaNum 32 | b64enc) }}
         - --cookie-expire={{ .Values.oauth.cookieExpire }}
+        {{- with .Values.oauth.openshiftSar }}
+        - {{ printf "--openshift-sar=%s" . | quote }}
+        {{- end }}
         - --skip-auth-regex=^/health
         volumeMounts:
         - name: proxy-tls

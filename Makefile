@@ -17,6 +17,8 @@ IMAGE_PREFIX ?= aiobs
 VERSION ?= 3.3.0
 PLATFORM ?= linux/amd64
 DEV_MODE ?= false
+# Expose the MCP server on an OpenShift Route. Off by default: the route is unauthenticated.
+MCP_SERVER_ROUTE_ENABLED ?= false
 USE_LLAMA_STACK_OPERATOR ?= false
 
 # GPU Metrics Discovery - custom prefix overrides (comma-separated, additive)
@@ -309,14 +311,14 @@ help:
 	@echo "  push-alert-example  - Push alert-example test image"
 	@echo ""
 	@echo "Deployment:"
-	@echo "  install            - Deploy to OpenShift using Helm (DEV_MODE=false: Console Plugin only, DEV_MODE=true: React UI only)"
+	@echo "  install            - Deploy to OpenShift using Helm, with the standalone React UI"
 	@echo "  install-with-alerts - Deploy with alerting enabled"
 	@echo "  install-local      - Set up local development environment"
 	@echo "  install-rag        - Install RAG backend services only (uses Helm chart by default, operator with USE_LLAMA_STACK_OPERATOR=true)"
 	@echo "  enable-llamastack-operator - Enable LlamaStack operator in DataScienceCluster (auto-detected if already Managed)"
 	@echo "  install-mcp-server - Install MCP server only"
-	@echo "  install-console-plugin - Install OpenShift Console Plugin"
-	@echo "  uninstall-console-plugin - Uninstall OpenShift Console Plugin"
+	@echo "  install-console-plugin - (Deprecated) OpenShift Console Plugin; disabled, use install-react-ui"
+	@echo "  uninstall-console-plugin - Remove a previously installed (deprecated) Console Plugin"
 	@echo "  install-react-ui   - Install React UI standalone application"
 	@echo "  uninstall-react-ui - Uninstall React UI standalone application"
 	@echo "  uninstall          - what from OpenShift"
@@ -394,7 +396,8 @@ help:
 	@echo "  PLATFORM           - Target platform (default: linux/amd64)"
 	@echo "  BUILD_TOOL         - Build tool: docker or podman (auto-detected)"
 	@echo "  NAMESPACE          - OpenShift namespace for deployment"
-	@echo "  DEV_MODE           - Set to 'true' to deploy React UI only, 'false' for Console Plugin only (default: false)"
+	@echo "  DEV_MODE           - Set to 'true' to keep API keys/model settings in browser session storage instead of Kubernetes Secrets (local development only; default: false)"
+	@echo "  MCP_SERVER_ROUTE_ENABLED - Expose the MCP server on a Route (default: false). The route is unauthenticated; secure it yourself before enabling"
 	@echo "  HF_TOKEN           - Hugging Face Token (will prompt if not provided and LLM_URL not set)"
 	@echo "  DEVICE             - Deploy models on cpu or gpu (default)"
 	@echo "  LLM                - Model id (eg. llama-3-1-8b-instruct)"
@@ -535,6 +538,7 @@ install-mcp-server: namespace
 			--set rbac.createGrafanaRole=false \
 			--set LLM_PREDICTOR=$(LLM)-predictor \
 			--set env.DEV_MODE=$(DEV_MODE) \
+			--set route.enabled=$(MCP_SERVER_ROUTE_ENABLED) \
 			$(if $(MCP_SERVER_ROUTE_HOST),--set route.host='$(MCP_SERVER_ROUTE_HOST)',) \
 			$(if $(LLAMA_STACK_URL),--set llm.url='$(LLAMA_STACK_URL)',$(if $(filter true,$(USE_LLAMA_STACK_OPERATOR)),--set llm.url='http://$(LLAMA_STACK_SVC_NAME).$(NAMESPACE).svc.cluster.local:8321/v1',)) \
 			$(if $(GPU_PREFIX_NVIDIA),--set env.GPU_METRICS_PREFIX_NVIDIA='$(GPU_PREFIX_NVIDIA)',) \
@@ -549,6 +553,7 @@ install-mcp-server: namespace
 			--set rbac.createGrafanaRole=true \
 			--set LLM_PREDICTOR=$(LLM)-predictor \
 			--set env.DEV_MODE=$(DEV_MODE) \
+			--set route.enabled=$(MCP_SERVER_ROUTE_ENABLED) \
 			$(if $(MCP_SERVER_ROUTE_HOST),--set route.host='$(MCP_SERVER_ROUTE_HOST)',) \
 			$(if $(LLAMA_STACK_URL),--set llm.url='$(LLAMA_STACK_URL)',$(if $(filter true,$(USE_LLAMA_STACK_OPERATOR)),--set llm.url='http://$(LLAMA_STACK_SVC_NAME).$(NAMESPACE).svc.cluster.local:8321/v1',)) \
 			$(if $(GPU_PREFIX_NVIDIA),--set env.GPU_METRICS_PREFIX_NVIDIA='$(GPU_PREFIX_NVIDIA)',) \
@@ -566,9 +571,20 @@ check-console-plugin-namespace:
 		echo "   Consider uninstalling the old release or set NAMESPACE=$$existing_ns"; \
 	fi
 
+.PHONY: console-plugin-deprecated-guard
+console-plugin-deprecated-guard:
+	@if [ "$(ALLOW_DEPRECATED_CONSOLE_PLUGIN)" != "true" ]; then \
+		echo ""; \
+		echo "🛑 The OpenShift Console plugin is deprecated and no longer supported."; \
+		echo "   Use the standalone React UI instead: make install-react-ui NAMESPACE=<namespace>"; \
+		echo "   (Maintainers only: set ALLOW_DEPRECATED_CONSOLE_PLUGIN=true to override.)"; \
+		echo ""; \
+		exit 1; \
+	fi
+
 .PHONY: install-console-plugin
-install-console-plugin: namespace check-console-plugin-namespace
-	@echo "Deploying OpenShift Console Plugin"
+install-console-plugin: console-plugin-deprecated-guard namespace check-console-plugin-namespace
+	@echo "Deploying OpenShift Console Plugin (deprecated)"
 	@cd deploy/helm && helm upgrade --install $(CONSOLE_PLUGIN_RELEASE_NAME) $(CONSOLE_PLUGIN_CHART_PATH) -n $(NAMESPACE) \
 		--set plugin.image.repository=$(CONSOLE_PLUGIN_IMAGE) \
 		--set plugin.image.tag=$(VERSION) \
@@ -587,15 +603,15 @@ install-console-plugin: namespace check-console-plugin-namespace
 uninstall-console-plugin:
 	@echo "Uninstalling OpenShift Console Plugin"
 	@echo "→ Disabling plugin in OpenShift Console..."
-	-@if oc get console.operator.openshift.io cluster -o jsonpath='{.spec.plugins}' 2>/dev/null | grep -q "openshift-ai-observability"; then \
-		PLUGIN_INDEX=$$(oc get console.operator.openshift.io cluster -o json | jq '.spec.plugins | to_entries | .[] | select(.value=="openshift-ai-observability") | .key'); \
+	@# The chart registers the plugin as aiobs-console-plugin; older installs used openshift-ai-observability.
+	-@for PLUGIN in aiobs-console-plugin openshift-ai-observability; do \
+		PLUGIN_INDEX=$$(oc get console.operator.openshift.io cluster -o json 2>/dev/null | jq --arg p "$$PLUGIN" '.spec.plugins // [] | to_entries | .[] | select(.value==$$p) | .key'); \
 		if [ -n "$$PLUGIN_INDEX" ]; then \
-			oc patch console.operator.openshift.io cluster --type=json -p="[{\"op\": \"remove\", \"path\": \"/spec/plugins/$$PLUGIN_INDEX\"}]" 2>/dev/null; \
-			echo "  → Plugin disabled from console"; \
-		fi \
-	else \
-		echo "  → Plugin was not enabled in console"; \
-	fi
+			oc patch console.operator.openshift.io cluster --type=json \
+				-p="[{\"op\": \"test\", \"path\": \"/spec/plugins/$$PLUGIN_INDEX\", \"value\": \"$$PLUGIN\"}, {\"op\": \"remove\", \"path\": \"/spec/plugins/$$PLUGIN_INDEX\"}]" 2>/dev/null \
+				&& echo "  → Plugin $$PLUGIN disabled in console"; \
+		fi; \
+	done
 	@echo "→ Uninstalling Helm release..."
 	-@helm -n $(NAMESPACE) uninstall $(CONSOLE_PLUGIN_RELEASE_NAME) --ignore-not-found
 	@echo "✅ Console plugin uninstalled"
@@ -702,13 +718,16 @@ pre-install-checks:
 
 .PHONY: install
 install: namespace pre-install-checks enable-user-workload-monitoring depend validate-llm install-operators install-observability-stack install-mcp-server delete-jobs
-	@echo "DEV_MODE is set to: $(DEV_MODE)"
+	@echo "→ Installing the standalone React UI"
 	@if [ "$(DEV_MODE)" = "true" ]; then \
-		echo "→ DEV_MODE=true: Installing React UI standalone application only"; \
-		$(MAKE) install-react-ui NAMESPACE=$(NAMESPACE); \
+		echo "⚠️  DEV_MODE=true: API keys and model settings are kept in browser session storage. Do not use on shared clusters."; \
 	else \
-		echo "→ DEV_MODE=false: Installing OpenShift Console Plugin only"; \
-		$(MAKE) install-console-plugin NAMESPACE=$(NAMESPACE); \
+		echo "  → API keys and model settings are stored in Kubernetes Secrets/ConfigMaps (DEV_MODE=false)"; \
+	fi
+	@$(MAKE) install-react-ui NAMESPACE=$(NAMESPACE)
+	@if helm status $(CONSOLE_PLUGIN_RELEASE_NAME) -n $(NAMESPACE) >/dev/null 2>&1; then \
+		echo "⚠️  The deprecated console plugin ($(CONSOLE_PLUGIN_RELEASE_NAME)) is still installed. Remove it with:"; \
+		echo "     make uninstall-console-plugin NAMESPACE=$(NAMESPACE)"; \
 	fi
 	@if [ "$(RAG_ENABLED)" != "false" ]; then \
 		echo "Installing RAG backend services (set RAG_ENABLED=false to skip)..."; \
@@ -1611,7 +1630,18 @@ OPERATOR_MAKE_ARGS := VERSION=$(VERSION) IMAGE_TAG_BASE=$(OPERATOR_IMAGE_TAG_BAS
 	MCP_SERVER_IMAGE=$(MCP_SERVER_IMAGE) CONSOLE_PLUGIN_IMAGE=$(CONSOLE_PLUGIN_IMAGE) \
 	METRICS_ALERTING_IMAGE=$(METRICS_ALERTING_IMAGE) REACT_UI_IMAGE=$(REACT_UI_IMAGE)
 
-.PHONY: operator-build operator-push operator-bundle-build operator-bundle-push operator-catalog-build operator-catalog-push operator-build-all operator-push-all operator-deploy operator-config
+.PHONY: operator-build operator-push operator-bundle-build operator-bundle-push operator-catalog-build operator-catalog-push operator-build-all operator-push-all operator-deploy operator-config operator-deprecated-guard
+
+# The operator install path is deprecated; deploy with `make install` (standalone React UI) instead.
+operator-deprecated-guard:
+	@if [ "$(ALLOW_DEPRECATED_OPERATOR)" != "true" ]; then \
+		echo ""; \
+		echo "🛑 The AI Observability operator is deprecated and its images are no longer released."; \
+		echo "   Deploy the quickstart with: make install NAMESPACE=<namespace>"; \
+		echo "   (Maintainers only: set ALLOW_DEPRECATED_OPERATOR=true to override.)"; \
+		echo ""; \
+		exit 1; \
+	fi
 
 operator-config:
 	@echo "🔧 Operator Build Configuration:"
@@ -1624,37 +1654,37 @@ operator-config:
 	@echo "  Bundle Image: $(OPERATOR_IMAGE_TAG_BASE)-bundle:v$(VERSION)"
 	@echo "  Catalog Image: $(OPERATOR_IMAGE_TAG_BASE)-catalog:v$(VERSION)"
 
-operator-build:
+operator-build: operator-deprecated-guard
 	@echo "🔨 Building operator image..."
 	$(MAKE) -C $(OPERATOR_DIR) docker-build $(OPERATOR_MAKE_ARGS)
 
-operator-push:
+operator-push: operator-deprecated-guard
 	@echo "📤 Pushing operator image..."
 	$(MAKE) -C $(OPERATOR_DIR) docker-push $(OPERATOR_MAKE_ARGS)
 
-operator-bundle-build:
+operator-bundle-build: operator-deprecated-guard
 	@echo "📦 Building bundle image..."
 	$(MAKE) -C $(OPERATOR_DIR) bundle-build $(OPERATOR_MAKE_ARGS)
 
-operator-bundle-push:
+operator-bundle-push: operator-deprecated-guard
 	@echo "📤 Pushing bundle image..."
 	$(MAKE) -C $(OPERATOR_DIR) bundle-push $(OPERATOR_MAKE_ARGS)
 
-operator-catalog-build:
+operator-catalog-build: operator-deprecated-guard
 	@echo "📚 Building catalog image..."
 	$(MAKE) -C $(OPERATOR_DIR) catalog-build $(OPERATOR_MAKE_ARGS)
 
-operator-catalog-push:
+operator-catalog-push: operator-deprecated-guard
 	@echo "📤 Pushing catalog image..."
 	$(MAKE) -C $(OPERATOR_DIR) catalog-push $(OPERATOR_MAKE_ARGS)
 
-operator-build-all: operator-build operator-bundle-build operator-catalog-build
+operator-build-all: operator-deprecated-guard operator-build operator-bundle-build operator-catalog-build
 	@echo "✅ All operator images built"
 
-operator-push-all: operator-push operator-bundle-push operator-catalog-push
+operator-push-all: operator-deprecated-guard operator-push operator-bundle-push operator-catalog-push
 	@echo "✅ All operator images pushed"
 
-operator-deploy: operator-build operator-push operator-bundle-build operator-bundle-push operator-catalog-build operator-catalog-push
+operator-deploy: operator-deprecated-guard operator-build operator-push operator-bundle-build operator-bundle-push operator-catalog-build operator-catalog-push
 	@echo "✅ All operator images built and pushed"
 
 # -- Operator Installation targets --

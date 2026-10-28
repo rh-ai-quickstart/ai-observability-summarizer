@@ -20,7 +20,10 @@ service:
 
 route:
   name: aiobs-mcp-server-route
-  enabled: true # Allows local testing with MCP server inspector
+  # Off by default: the route has no authentication, and the MCP server runs with cluster-wide
+  # read access. The React UI reaches the MCP server through its in-cluster Service instead.
+  # Enable only if you secure the route yourself (e.g. an authenticating proxy or network restrictions).
+  enabled: false
   host: ""
   tls:
     termination: reencrypt
