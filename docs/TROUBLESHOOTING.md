@@ -281,22 +281,33 @@ oc exec -n your-namespace deployment/aiobs-mcp-server -- curl -v http://llama-st
 
 **Symptoms**: The **AI Observability** console page renders as one long, unstyled vertical column. The browser console shows `aiobs-console-plugin@1.0.0 was built for an older version of Console`.
 
-**Root Cause**: The console plugin is built with PatternFly 5 and relies on the OpenShift Console to provide PatternFly's base styles. The OpenShift 4.22 console ships only PatternFly 6 styles, so the plugin's components render without layout CSS. This was observed on OpenShift 4.22.6; the exact release that stopped shipping PatternFly 5 styles has not been confirmed. The fix is to migrate the plugin to PatternFly 6, which is tracked separately.
+**Root Cause**: The console plugin is built with PatternFly 5. It bundles PatternFly's component styles but relies on the OpenShift Console for PatternFly's global styles (design tokens, fonts, and resets). The OpenShift 4.22 console ships only PatternFly 6's global styles, so the plugin's components render without them. A 4.21 console still provides the PatternFly 5 global styles.
 
-**Workaround**: Use the standalone React UI, which bundles its own PatternFly styles and uses the same MCP server. It is available only with the Helm (non-operator) installation:
+**Resolution**: The console plugin is deprecated and no longer installed. The quickstart now deploys the standalone React UI, which bundles its own styles and works on all supported OpenShift versions. Remove the old plugin and install the standalone UI:
 
 ```bash
-# New installation
-make install NAMESPACE=your-namespace DEV_MODE=true
-
-# Existing Helm installation: add the standalone UI
+make uninstall-console-plugin NAMESPACE=your-namespace
 make install-react-ui NAMESPACE=your-namespace
 
 # Find the UI address
 oc get route aiobs-react-ui -n your-namespace -o jsonpath='{.spec.host}'
 ```
 
-The operator installation does not deploy the standalone React UI. On OpenShift 4.22+, use the Helm installation until the console plugin supports PatternFly 6.
+---
+
+### 4. Signed In to the UI but Access Is Refused
+
+**Symptoms**: After signing in with an OpenShift account, the UI returns `403 Forbidden` or a permission error instead of loading.
+
+**Root Cause**: The UI shows cluster-wide data, so its OAuth proxy also checks a permission after sign-in (`oauth.openshiftSar` in `deploy/helm/react-ui-app/values.yaml`). By default, a user must be able to list all namespaces.
+
+**Diagnostic Steps**:
+```bash
+# Check whether a user passes the default check
+oc auth can-i list namespaces --as=<username>
+```
+
+**Solution**: Grant the user a role that allows listing namespaces cluster-wide, such as `cluster-reader`, or change `oauth.openshiftSar` as described in the README's [Access control](../README.md#access-control) section.
 
 ---
 

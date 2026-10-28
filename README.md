@@ -15,8 +15,10 @@ Create an interactive dashboard to analyze AI model performance and OpenShift cl
    - [Minimum software requirements](#minimum-software-requirements)
    - [Required user permissions](#required-user-permissions)
 3. [Deploy](#deploy)
-   - [Option 1: Install via Helm](#option-1-install-via-helm-recommended)
-   - [Option 2: Install via Operator](#option-2-install-via-operator-optional)
+   - [Install via Helm](#install-via-helm)
+   - [Access control](#access-control)
+   - [MCP server route (disabled by default)](#mcp-server-route-disabled-by-default)
+   - [Deprecated: Operator and OpenShift Console plugin](#deprecated-operator-and-openshift-console-plugin)
    - [Quick Start - Local Development](#quick-start---local-development)
    - [Usage](#usage)
    - [Configuration](#configuration)
@@ -95,16 +97,14 @@ Without this project, teams typically:
 - **LLM runtime**:
   - Local model deployment by default (or connect to an existing model via `LLM_URL`)
   - External AI providers: OpenAI, Anthropic, Google, Meta, Model as a Service (MaaS)
-- **UI**
-  - **OpenShift Console Plugin** (default, `DEV_MODE=false`)
-  - **Standalone React UI** (`DEV_MODE=true`)
+- **UI**: standalone React UI, served on its own Route and protected by OpenShift sign-in
 
 ### Architecture diagrams
 
 ```mermaid
 flowchart LR
   subgraph app["Application namespace"]
-    UI["OpenShift Console plugin or React UI"] --> MCP["MCP server"]
+    UI["Standalone React UI"] --> MCP["MCP server"]
     MCP --> RAG["LlamaStack / LLM"]
   end
   subgraph hub["observability-hub"]
@@ -132,7 +132,7 @@ The Make and operator/umbrella install paths manage that Supervisor ConfigMap di
 
 #### Simple flow
 
-1. **Access the AI Observability experience** in OpenShift—either embedded in the OpenShift Console or via the standalone UI.
+1. **Open the AI Observability web UI** and sign in with your OpenShift account.
 2. **Choose your analysis context** (cluster, namespace, or model view and a time range), or **ask a question** using the chat interface.
 3. The platform **gathers the relevant observability signals** from your environment, covering both the current state and how it has changed over time.
 4. It **synthesizes those signals into actionable insights**, highlighting what appears healthy or unhealthy, the most likely contributors, and recommended next checks.
@@ -150,7 +150,6 @@ The Make and operator/umbrella install paths manage that Supervisor ConfigMap di
 ### Minimum software requirements
 
 - **OpenShift**: 4.18.33+
-  - **OpenShift 4.22+**: the console plugin renders unstyled. Use the standalone React UI with the Helm installation (`DEV_MODE=true`). See [Troubleshooting](docs/TROUBLESHOOTING.md#3-console-plugin-ui-is-unstyled-on-openshift-422).
 - **OpenShift AI**: 2.16.2+
 - **CLI tools**:
   - `oc`
@@ -160,15 +159,16 @@ The Make and operator/umbrella install paths manage that Supervisor ConfigMap di
 
 ### Required user permissions
 
-- **OpenShift**: cluster-admin (or equivalent privileges for installing console plugins, cluster-wide observability components, and required RBAC).
+- **Installing**: cluster-admin (or equivalent privileges for installing cluster-wide observability components and required RBAC).
+- **Using the UI**: by default, only users who can list all namespaces can sign in. See [Access control](#access-control).
 
 ## Deploy
 
-### Option 1: Install via Helm (Recommended)
+### Install via Helm
+
+The quickstart is installed with `make` and Helm. It deploys the standalone React UI as the web interface.
 
 #### Quick Start - OpenShift Deployment
-
-**Default (production-style): OpenShift Console Plugin UI**
 
 ```bash
 make install NAMESPACE=your-namespace
@@ -188,16 +188,23 @@ You can pass a complete HTTPS `/v1` endpoint as `LLM_URL`. For a protected
 endpoint, export `LLM_API_TOKEN` before running `make install`; LlamaStack reads
 it from the `llama-stack-env` Secret through a config placeholder.
 
-**For developers - Standalone (development/standalone): React UI route**
-
-```bash
-make install NAMESPACE=your-namespace DEV_MODE=true
-```
-
 **Access**
 
-- **Console Plugin (default)**: OpenShift Console → left navigation → **AI Observability**
-- **React UI (DEV_MODE=true)**: OpenShift Console → **Networking → Routes** (route name typically `aiobs-react-ui`)
+The UI is served on its own Route, `aiobs-react-ui`, and you sign in with your OpenShift account:
+
+```bash
+oc get route aiobs-react-ui -n your-namespace -o jsonpath='{.spec.host}'
+```
+
+Open `https://<host>` in a browser. You can also find the route in the OpenShift Console under **Networking → Routes**.
+
+**Upgrading from the console plugin**
+
+Earlier versions installed an OpenShift Console plugin. It is deprecated and is no longer installed. If it is still present, remove it:
+
+```bash
+make uninstall-console-plugin NAMESPACE=your-namespace
+```
 
 **Optional console menus**
 
@@ -233,9 +240,9 @@ Once the model configuration is set, select your model from the dropdown:
 
 > **For detailed setup instructions**, see the [Configuration](#configuration) section below, which covers MAAS setup, DEV mode workflow, and per-model API key configuration.
 
-#### OpenShift Console Plugin (default)
+#### Using the UI
 
-Open the OpenShift Console and navigate to **AI Observability** from the left navigation.
+Open the UI route (see [Access](#quick-start---openshift-deployment)) and sign in with your OpenShift account.
 
 ![Overview page](docs/images/overview.png)
 
@@ -305,11 +312,9 @@ env:
 
 #### DEV Mode Workflow
 
-DEV mode allows developers to test external AI models using browser sessionStorage instead of Kubernetes Secrets and ConfigMaps. This is ideal for:
+By default, API keys and model settings entered in the UI are stored in Kubernetes Secrets and a ConfigMap in the application namespace, through the MCP server.
 
-- Local development without cluster permissions
-- Testing different models quickly
-- Avoiding secrets management overhead
+DEV mode instead keeps them in the browser's sessionStorage. It is intended for local development and quick model testing only. **Do not use DEV mode on shared clusters**: API keys held in the browser are exposed to anything running in that page, and they are lost when the tab closes.
 
 **Enabling DEV Mode:**
 
@@ -326,7 +331,7 @@ make install NAMESPACE=your-namespace DEV_MODE=true
 **DEV Mode Workflow:**
 
 1. Install with `DEV_MODE=true`
-2. Open the React UI (check Routes for `aiobs-react-ui`)
+2. Open the UI (Route `aiobs-react-ui`)
 3. Navigate to **Settings → API Keys** or **Settings → Add Model**
 4. Configure your models and API keys (saved to browser only)
 5. Test your models immediately—no cluster resources modified
@@ -343,7 +348,7 @@ A "Clear Cache" button is available in DEV mode to remove all cached credentials
 | Model Configs | ConfigMap | Browser sessionStorage |
 | Persistence | Permanent (cluster-wide) | Session only (tab close = reset) |
 | Permissions | Requires RBAC | No cluster permissions needed |
-| UI | Console Plugin | Standalone React UI |
+| Intended for | All deployments (default) | Local development only |
 
 #### Per-Model API Key Configuration
 
@@ -400,7 +405,7 @@ If enabled in your cluster, use:
 make uninstall NAMESPACE=your-namespace
 ```
 
-This removes the console plugin, MCP server, and RAG stack from your namespace.
+This removes the React UI, MCP server, and RAG stack from your namespace (and the deprecated console plugin, if present).
 
 **Full Uninstall** (including observability stack):
 
@@ -409,7 +414,7 @@ make uninstall NAMESPACE=your-namespace UNINSTALL_OBSERVABILITY=true
 ```
 
 This removes everything including:
-- Application components (MCP, Console Plugin, RAG)
+- Application components (React UI, MCP server, RAG)
 - Observability infrastructure (S4, Tempo, Loki, OTEL, Korrel8r)
 - Distributed Tracing Console Plugin (Observe → Traces menu)
 - Logging Console Plugin (Observe → Logs menu)
@@ -418,72 +423,50 @@ This removes everything including:
 
 ---
 
-### Option 2: Install via Operator (Optional)
+### Access control
 
-For production environments requiring OLM-managed lifecycle and automatic dependency management, an operator-based installation is available.
+The UI shows cluster-wide metrics, logs, and traces. It reads them through the MCP server, which runs with cluster-wide read access. Signing in therefore requires more than an OpenShift account: by default, the UI's OAuth proxy only admits users who can list all namespaces (`oauth.openshiftSar` in `deploy/helm/react-ui-app/values.yaml`):
 
-> **OpenShift 4.22+:** The operator deploys only the console plugin, which renders unstyled on OpenShift 4.22+. It does not deploy the standalone React UI. On these clusters, use the Helm installation with `DEV_MODE=true`. See [Troubleshooting](docs/TROUBLESHOOTING.md#3-console-plugin-ui-is-unstyled-on-openshift-422).
-
-**When to use the Operator:**
-- Production deployments requiring centralized operator management
-- Environments where OLM manages all infrastructure components
-- Need for automatic dependency operator installation (Loki, Tempo, OTEL, etc.)
-- Cluster-wide singleton deployment pattern required
-
-**Quick Install:**
-1. **Install CatalogSource:** 
-   ```bash
-   oc apply -f deploy/operator/catalog-source.yaml
-   # Verify ready: oc wait --for=condition=READY catalogsource/aiobs-operator-catalog -n openshift-marketplace --timeout=300s
-   ```
-
-2. **Create ai-observability namespace:**
-   ```bash
-   oc new-project ai-observability
-   ```
-
-3. **Install Operator:**
-   - OperatorHub → Search "AI Observability" → Install
-   - Installed Namespace: `openshift-operators`
-   - Installation mode: All namespaces on the cluster
-   - Click Install
-
-4. **Create AIObservabilitySummarizer CR:**
-   - Switch to `ai-observability` namespace (namespace dropdown)
-   - Installed Operators → AI Observability Summarizer
-   - Create AIObservabilitySummarizer
-   - Configure and click Create
-
-**What the Operator Provides:**
-- **Automatic dependency management**: OLM installs Cluster Observability, OpenTelemetry, Tempo, Logging, and Loki operators
-- **Multi-namespace deployment**: Components automatically deployed to appropriate namespaces (ai-observability, observability-hub, openshift-logging, etc.)
-- **Cluster auto-configuration**: User Workload Monitoring, Alertmanager, and Console Plugin registration
-- **Lifecycle management**: OLM handles upgrades, dependencies, and version compatibility
-
-**📚 Full Documentation:**
-- **User Guide:** [docs/OPERATOR.md](docs/OPERATOR.md) - Complete installation, configuration, and troubleshooting
-- **Technical Reference:** [deploy/operator/README.md](deploy/operator/README.md) - Architecture, development, building operator images
-
-**Development:**
-```bash
-# Show current operator configuration
-make operator-config
-
-# Build and push all operator images (runs 6 steps in order):
-make operator-deploy
-
-# Or run individual steps:
-make operator-build           # 1. Build operator image
-make operator-push            # 2. Push operator image
-make operator-bundle-build    # 3. Build OLM bundle image
-make operator-bundle-push     # 4. Push OLM bundle image
-make operator-catalog-build   # 5. Build catalog image
-make operator-catalog-push    # 6. Push catalog image
+```yaml
+oauth:
+  openshiftSar: '{"resource":"namespaces","verb":"list"}'
 ```
 
-> **Note:** The operator and Helm installation methods are mutually exclusive. Choose one approach for your cluster.
+Users without that permission are refused after signing in. To use a different check, put your own `oauth.openshiftSar` in a values file and upgrade the release:
+
+```bash
+helm upgrade aiobs-react-ui deploy/helm/react-ui-app -n your-namespace --reuse-values -f my-ui-values.yaml
+```
+
+Setting `openshiftSar: ""` admits any authenticated OpenShift user, who would then see data for the whole cluster. This is not recommended.
+
+### MCP server route (disabled by default)
+
+The UI reaches the MCP server through its in-cluster Service, so no Route is needed. Earlier versions also exposed the MCP server on a public Route for testing with MCP clients. That Route has **no authentication**, and the MCP server can read observability data for the whole cluster and save API keys.
+
+The Route is now disabled by default. To enable it:
+
+```bash
+make install NAMESPACE=your-namespace MCP_SERVER_ROUTE_ENABLED=true
+```
+
+> **⚠️ Security:** If you enable the MCP server route, you are responsible for securing it, for example with an authenticating proxy or network restrictions. Without such measures, anyone who can reach the cluster's routes can use it. This is not safe on a publicly reachable cluster.
+
+---
+
+### Deprecated: Operator and OpenShift Console plugin
+
+The AI Observability operator (OperatorHub) and the OpenShift Console plugin UI are **deprecated and no longer supported**. Install the quickstart with [`make install`](#install-via-helm), which deploys the standalone React UI.
+
+- The operator images are no longer released. The Makefile `operator-*` targets fail with a deprecation message.
+- `make install` no longer installs the console plugin, and `make install-console-plugin` fails with a deprecation message. The plugin is built with PatternFly 5 and renders unstyled on OpenShift 4.22 and later.
+- The operator and plugin source code remain in the repository for reference ([docs/OPERATOR.md](docs/OPERATOR.md), [deploy/operator](deploy/operator)).
+
+**Migrating from an operator installation:** uninstall the operator as described below, then run `make install NAMESPACE=<namespace>`. Do not run both installation methods on the same cluster.
 
 #### Uninstall (Operator)
+
+For existing operator installations:
 
 **Quick Uninstall:**
 

@@ -242,7 +242,7 @@ oc port-forward svc/mcp-server 8085:8085 -n <DEFAULT_NAMESPACE>
 - `make build-mcp-server` - Build MCP server
 
 ### Deployment
-- `make install` - Deploy to OpenShift (Console Plugin by default, React UI with DEV_MODE=true)
+- `make install` - Deploy to OpenShift with the standalone React UI (`DEV_MODE=true` keeps API keys in browser storage; local development only)
 - `make install-with-alerts` - Deploy with alerting
 - `make install-mcp-server` - Deploy MCP server only
 - `make status` - Check deployment status

@@ -117,8 +117,10 @@ podman push quay.io/your-org/aiobs-console-plugin:latest
 
 ### Deploy to OpenShift
 
+> **⚠️ Deprecated:** The console plugin is deprecated and no longer supported. `make install` deploys the standalone React UI instead, and `make install-console-plugin` now fails with a deprecation message. The steps below are kept for reference.
+
 ```bash
-# Using Makefile (recommended)
+# Using Makefile
 make install-console-plugin NAMESPACE=your-namespace
 
 # Or using Helm directly

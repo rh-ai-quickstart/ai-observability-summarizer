@@ -1,5 +1,7 @@
 # AI Observability Summarizer Operator
 
+> **⚠️ Deprecated:** The AI Observability operator is deprecated and no longer supported, and its images are no longer released. Install the quickstart with `make install` instead; see [Install via Helm](../../README.md#install-via-helm). This page is kept for reference and for uninstalling existing operator installations.
+
 A Helm-based Kubernetes Operator for deploying the AI Observability Summarizer stack on OpenShift with full OLM (Operator Lifecycle Manager) support.
 
 ## Overview
